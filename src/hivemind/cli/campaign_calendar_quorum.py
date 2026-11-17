@@ -25,6 +25,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ICS_PATH = (
     REPO_ROOT / "docs" / "calendar" / "hivemind_polyglot_singularity_128_campaign.ics"
 )
+DEFAULT_CROWDGPT_WEEKEND_ICS_PATH = (
+    REPO_ROOT / "docs" / "calendar" / "hivemind_crowdgpt_weekend_nov14_15_2026.ics"
+)
 DEFAULT_QUORUM_REPORT_PATH = (
     REPO_ROOT / "artifacts" / "campaign_quorum_schedule_report.json"
 )
@@ -229,6 +232,87 @@ SEASON9_10_GPU_QUORUM_EVENTS: tuple[dict[str, Any], ...] = (
     },
 )
 
+CROWDGPT_WEEKEND_NOV14_15_EVENTS: tuple[dict[str, Any], ...] = (
+    {
+        "event_id": "EVT-CROWDGPT-WE-00-PREFLIGHT",
+        "title": "Wave 0 Pre-Flight: CrowdGPT-MoE 8x Shard Prefetch, VRAM Floor Check & GCP Spot T4 Warmup",
+        "dtstart_utc": "20261113T180000Z",
+        "dtend_utc": "20261113T210000Z",
+        "human_readable_utc": "Friday, Nov 13, 2026 · 18:00–21:00 UTC",
+        "timezones": "19:00 CET (Paris) | 13:00 EST (New York) | 10:00 PST (SF) | 03:00+1 JST (Tokyo)",
+        "target_quorum_tier": "TIER_1_MIN_BYZANTINE_QUORUM",
+        "target_audience": "All HiveMinder Producers, Trainers & Prosumers + @Vxtzq",
+        "command": "python scripts/gcp_t4_crowd_diloco_worker.py --mode budget-check",
+        "discussion_url": "https://github.com/xaviercallens/HiveMind/discussions",
+        "symbolic_points_pts": "1,000 HMT (Compute Reciprocity Only)",
+    },
+    {
+        "event_id": "EVT-CROWDGPT-WE-01-MOE-UPCYCLE-KICKOFF",
+        "title": "Wave 1 Kickoff (Sat Morning): 8-Expert CrowdGPT Sparse MoE Upcycling & APAC/EU Rounds 1–12",
+        "dtstart_utc": "20261114T090000Z",
+        "dtend_utc": "20261114T130000Z",
+        "human_readable_utc": "Saturday, Nov 14, 2026 · 09:00–13:00 UTC",
+        "timezones": "10:00 CET (Paris) | 04:00 EST (New York) | 18:00 JST (Tokyo)",
+        "target_quorum_tier": "TIER_2_FULL_8DOMAIN_MOE_QUORUM",
+        "target_audience": "APAC & Europe Trainers + Prosumers (E0..E7 Zero-Shock MoE Split)",
+        "command": "python scripts/gcp_t4_crowd_diloco_worker.py --mode moe-opendiloco-round --rounds 3 --submit-opentrainer",
+        "discussion_url": "https://github.com/xaviercallens/HiveMind/discussions",
+        "symbolic_points_pts": "2,500 HMT (Compute Reciprocity Only)",
+    },
+    {
+        "event_id": "EVT-CROWDGPT-WE-02-GLOBAL-OPENDILOCO-PEAK",
+        "title": "Wave 2 Global Peak (Sat Afternoon/Evening): Decoupled OpenDiLoCo + RDA Quorum (GCP T4 + RTX 2070 + Swarm)",
+        "dtstart_utc": "20261114T160000Z",
+        "dtend_utc": "20261114T220000Z",
+        "human_readable_utc": "Saturday, Nov 14, 2026 · 16:00–22:00 UTC",
+        "timezones": "17:00 CET (Paris) | 11:00 EST (New York) | 08:00 PST (SF) | 01:00+1 JST (Tokyo)",
+        "target_quorum_tier": "TIER_3_GLOBAL_SUPER_RING_RAID",
+        "target_audience": "All 55+ Producers, OpenTrainer GPUs, Prosumers, GCP Spot T4 & XAVGAMSRV RTX 2070",
+        "command": "python scripts/gcp_t4_crowd_diloco_worker.py --mode moe-opendiloco-round --rounds 6 --submit-opentrainer",
+        "discussion_url": "https://github.com/xaviercallens/HiveMind/discussions",
+        "symbolic_points_pts": "5,000 HMT (Compute Reciprocity Only)",
+    },
+    {
+        "event_id": "EVT-CROWDGPT-WE-03-NOCTURNAL-BOINC-SOAK",
+        "title": "Wave 3 Nocturnal Soak (Sat Night): BOINC & Home GPU PA-CGAD Straggler-Safe Co-Training",
+        "dtstart_utc": "20261114T220000Z",
+        "dtend_utc": "20261115T070000Z",
+        "human_readable_utc": "Sat Nov 14 22:00 – Sun Nov 15 07:00 UTC",
+        "timezones": "23:00–08:00 CET (Paris) | 17:00–02:00 EST (New York)",
+        "target_quorum_tier": "TIER_2_FULL_8DOMAIN_MOE_QUORUM",
+        "target_audience": "Nocturnal Gamer GPUs (Steam <1.5s auto-pause) & OpenTrainer HTTPS Relay Nodes",
+        "command": "python scripts/hivemind_opentrainer_agent.py --campaign CROWDGPT-WE-NOV14-15-2026-MOE-OPENDILOCO --network-mode outbound-https-relay --once",
+        "discussion_url": "https://github.com/xaviercallens/HiveMind/discussions",
+        "symbolic_points_pts": "3,000 HMT (Compute Reciprocity Only)",
+    },
+    {
+        "event_id": "EVT-CROWDGPT-WE-04-ARENA-BENCHMARK",
+        "title": "Wave 4 Blind A/B Arena (Sun Afternoon): FoMoE Sigma-Router Calibration & Crowd-v1 vs Crowd-MoE-v1 Eval",
+        "dtstart_utc": "20261115T130000Z",
+        "dtend_utc": "20261115T170000Z",
+        "human_readable_utc": "Sunday, Nov 15, 2026 · 13:00–17:00 UTC",
+        "timezones": "14:00 CET (Paris) | 08:00 EST (New York) | 22:00 JST (Tokyo)",
+        "target_quorum_tier": "TIER_2_FULL_8DOMAIN_MOE_QUORUM",
+        "target_audience": "@Vxtzq (105,000 HMT), Prosumers & Serving-First Producers",
+        "command": "python scripts/hivemind_connect.py check",
+        "discussion_url": "https://github.com/xaviercallens/HiveMind/discussions",
+        "symbolic_points_pts": "2,500 HMT (Compute Reciprocity Only)",
+    },
+    {
+        "event_id": "EVT-CROWDGPT-WE-05-FINALE-RELEASE",
+        "title": "Wave 5 Grand Finale (Sun Evening): Loss-Ratchet Sign-Off, Safetensors Merge & Live OpenRouter Release",
+        "dtstart_utc": "20261115T170000Z",
+        "dtend_utc": "20261115T210000Z",
+        "human_readable_utc": "Sunday, Nov 15, 2026 · 17:00–21:00 UTC",
+        "timezones": "18:00 CET (Paris) | 12:00 EST (New York) | 09:00 PST (SF) | 02:00+1 JST (Tokyo)",
+        "target_quorum_tier": "TIER_3_GLOBAL_SUPER_RING_RAID",
+        "target_audience": "All HiveMinders (Producers, Trainers, Prosumers) & CrowdGPT Community",
+        "command": "python scripts/gcp_t4_crowd_diloco_worker.py --mode moe-opendiloco-round --rounds 2 --submit-opentrainer",
+        "discussion_url": "https://github.com/xaviercallens/HiveMind/discussions",
+        "symbolic_points_pts": "5,000 HMT (Compute Reciprocity Only)",
+    },
+)
+
 
 def evaluate_quorum_readiness(
     human_participants: Sequence[str],
@@ -236,6 +320,15 @@ def evaluate_quorum_readiness(
     covered_domains: Sequence[str],
 ) -> dict[str, Any]:
     """Compute Byzantine quorum (`n >= 2f + 3`) and 8-domain MoE coverage status."""
+    for name, seq in (
+        ("human_participants", human_participants),
+        ("ai_agent_participants", ai_agent_participants),
+        ("covered_domains", covered_domains),
+    ):
+        if isinstance(seq, (str, bytes)) or not isinstance(seq, Sequence):
+            raise ValueError(f"{name} must be a sequence of strings, not {type(seq).__name__}")
+        if any(not isinstance(item, str) for item in seq):
+            raise ValueError(f"{name} elements must all be strings")
     humans = sorted(set(h.strip() for h in human_participants if isinstance(h, str) and h.strip()))
     agents = sorted(set(a.strip() for a in ai_agent_participants if isinstance(a, str) and a.strip()))
     domains = sorted(set(d.strip() for d in covered_domains if isinstance(d, str) and d.strip()))
@@ -306,6 +399,8 @@ def evaluate_quorum_readiness(
 
 def generate_campaign_ics_calendar(output_path: Path | None = DEFAULT_ICS_PATH) -> str:
     """Generate a standard RFC 5545 `.ics` calendar file for all Campaign Quorum Events."""
+    if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
+        raise ValueError("output_path must be a Path or None")
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
@@ -363,11 +458,61 @@ def generate_campaign_ics_calendar(output_path: Path | None = DEFAULT_ICS_PATH) 
     return ics_text
 
 
+def generate_crowdgpt_weekend_ics_calendar(
+    output_path: Path | None = DEFAULT_CROWDGPT_WEEKEND_ICS_PATH,
+) -> str:
+    """Generate a standard RFC 5545 `.ics` calendar for the Nov 14-15, 2026 CrowdGPT x HiveMind Weekend Raid."""
+    if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
+        raise ValueError("output_path must be a Path or None")
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Project HiveMind x CrowdGPT//Weekend Nov 14-15 2026 MoE OpenDiLoCo Raid//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "X-WR-CALNAME:HiveMind x CrowdGPT Weekend Raid (14-15 Nov 2026)",
+        "X-WR-TIMEZONE:UTC",
+    ]
+    for evt in CROWDGPT_WEEKEND_NOV14_15_EVENTS:
+        desc = (
+            f"{evt['title']}\\n"
+            f"Timezones: {evt['timezones']}\\n"
+            f"Target Quorum: {evt['target_quorum_tier']}\\n"
+            f"Audience: {evt['target_audience']}\\n"
+            f"Command: {evt['command']}\\n"
+            f"NON-MONETARY CHARTER: Symbolic HMT Reflexion Points ({evt['symbolic_points_pts']}) confer only reciprocal shared compute quota."
+        )
+        lines.extend(
+            [
+                "BEGIN:VEVENT",
+                f"UID:{evt['event_id']}@hivemind.open-science.org",
+                "DTSTAMP:20261111T080000Z",
+                f"DTSTART:{evt['dtstart_utc']}",
+                f"DTEND:{evt['dtend_utc']}",
+                f"SUMMARY:[HiveMind x CrowdGPT] {evt['title']}",
+                f"DESCRIPTION:{desc}",
+                f"URL:{evt['discussion_url']}",
+                "STATUS:CONFIRMED",
+                "END:VEVENT",
+            ]
+        )
+    lines.append("END:VCALENDAR")
+    ics_text = "\r\n".join(lines) + "\r\n"
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(ics_text, encoding="utf-8")
+    return ics_text
+
+
 def build_campaign_quorum_schedule_report(
     output_path: Path | None = DEFAULT_QUORUM_REPORT_PATH,
     ics_output_path: Path | None = DEFAULT_ICS_PATH,
 ) -> dict[str, Any]:
     """Build the complete Campaign Calendar & Quorum Readiness JSON report and export `.ics`."""
+    if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
+        raise ValueError("output_path must be a Path or None")
+    if ics_output_path is not None and (isinstance(ics_output_path, bool) or not isinstance(ics_output_path, Path)):
+        raise ValueError("ics_output_path must be a Path or None")
     ics_content = generate_campaign_ics_calendar(output_path=ics_output_path)
 
     # Current baseline quorum roster (core contributors + active AI agents)
@@ -447,6 +592,8 @@ def verify_campaign_quorum_schedule_report(report: Mapping[str, Any]) -> bool:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entrypoint for the Campaign Calendar & Quorum Coordinator."""
+    if argv is not None and (isinstance(argv, (str, bytes)) or not isinstance(argv, Sequence)):
+        raise ValueError("argv must be a sequence of strings or None")
     parser = argparse.ArgumentParser(
         description="Manage the Project HiveMind Campaign Calendar, .ics export, and Quorum Readiness."
     )

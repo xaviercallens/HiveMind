@@ -49,6 +49,20 @@ class WorkReceipt:
     delta_sha256: str
     validator_node_id: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.node_id, str) or not self.node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(self.steam_id64, str) or not self.steam_id64.strip():
+            raise ValueError("steam_id64 must be a non-empty string")
+        if not isinstance(self.branch_name, str) or not self.branch_name.strip():
+            raise ValueError("branch_name must be a non-empty string")
+        if not isinstance(self.delta_sha256, str) or not self.delta_sha256.strip():
+            raise ValueError("delta_sha256 must be a non-empty string")
+        if not isinstance(self.spot_check_passed, bool):
+            raise ValueError("spot_check_passed must be a boolean")
+        if not isinstance(self.multikrum_accepted, bool):
+            raise ValueError("multikrum_accepted must be a boolean")
+
 
 @dataclass
 class StorageProofReceipt:
@@ -62,6 +76,22 @@ class StorageProofReceipt:
     verified: bool
     validator_node_id: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.node_id, str) or not self.node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(self.shard_cid, str) or not self.shard_cid.strip():
+            raise ValueError("shard_cid must be a non-empty string")
+        if (
+            isinstance(self.challenged_chunk_index, bool)
+            or not isinstance(self.challenged_chunk_index, int)
+            or self.challenged_chunk_index < 0
+        ):
+            raise ValueError("challenged_chunk_index must be a non-negative integer")
+        if not isinstance(self.merkle_proof_hash, str) or not self.merkle_proof_hash.strip():
+            raise ValueError("merkle_proof_hash must be a non-empty string")
+        if not isinstance(self.verified, bool):
+            raise ValueError("verified must be a boolean")
+
 
 @dataclass
 class InferenceSettlementReceipt:
@@ -73,6 +103,23 @@ class InferenceSettlementReceipt:
     verified_tokens: int
     rtt_speedup: Optional[float]
     fee_paid_hive: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.consumer_node_id, str) or not self.consumer_node_id.strip():
+            raise ValueError("consumer_node_id must be a non-empty string")
+        if not isinstance(self.expert_provider_nodes, list) or len(self.expert_provider_nodes) == 0:
+            raise ValueError("expert_provider_nodes must be a non-empty list")
+        if not isinstance(self.domain_expert, str) or not self.domain_expert.strip():
+            raise ValueError("domain_expert must be a non-empty string")
+        if isinstance(self.verified_tokens, bool) or not isinstance(self.verified_tokens, int) or self.verified_tokens < 1:
+            raise ValueError("verified_tokens must be a positive integer")
+        if (
+            isinstance(self.fee_paid_hive, bool)
+            or not isinstance(self.fee_paid_hive, (int, float))
+            or not math.isfinite(float(self.fee_paid_hive))
+            or float(self.fee_paid_hive) < 0.0
+        ):
+            raise ValueError("fee_paid_hive must be a finite number >= 0.0")
 
 
 @dataclass
@@ -89,6 +136,22 @@ class HivePoUWBlock:
     reward_allocations: Dict[str, float]
     slashed_nodes: List[str]
     block_hash: str = ""
+
+    def __post_init__(self) -> None:
+        if isinstance(self.block_height, bool) or not isinstance(self.block_height, int) or self.block_height < 0:
+            raise ValueError("block_height must be a non-negative integer")
+        if not isinstance(self.prev_block_hash, str) or not self.prev_block_hash.strip():
+            raise ValueError("prev_block_hash must be a non-empty string")
+        if isinstance(self.outer_step, bool) or not isinstance(self.outer_step, int) or self.outer_step < 0:
+            raise ValueError("outer_step must be a non-negative integer")
+        if not isinstance(self.expert_cid, str) or not self.expert_cid.strip():
+            raise ValueError("expert_cid must be a non-empty string")
+        if not isinstance(self.merkle_root, str) or not self.merkle_root.strip():
+            raise ValueError("merkle_root must be a non-empty string")
+        if not isinstance(self.reward_allocations, dict):
+            raise ValueError("reward_allocations must be a dictionary")
+        if not isinstance(self.slashed_nodes, list):
+            raise ValueError("slashed_nodes must be a list")
 
     def compute_hash(self) -> str:
         payload = {
@@ -288,6 +351,10 @@ class HiveSwarmLedger:
         storage_receipts: List[StorageProofReceipt],
         validator_node_ids: List[str],
     ) -> HivePoUWBlock:
+        if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
+            raise ValueError("outer_step must be a non-negative integer")
+        if not isinstance(expert_cid, str) or not expert_cid.strip():
+            raise ValueError("expert_cid must be a non-empty string")
         height = len(self.chain)
         reward = self.block_reward_at_height(height)
         allocations: Dict[str, float] = {}
@@ -297,11 +364,26 @@ class HiveSwarmLedger:
         dedup_work: List[WorkReceipt] = []
         seen_workers: set[str] = set()
         for w in work_receipts:
-            if not math.isfinite(float(w.flops_contributed)) or float(w.flops_contributed) < 0.0:
+            if (
+                isinstance(w.flops_contributed, bool)
+                or not isinstance(w.flops_contributed, (int, float))
+                or not math.isfinite(float(w.flops_contributed))
+                or float(w.flops_contributed) < 0.0
+            ):
                 raise SwarmSecurityViolationError(
                     "LEDGER-03",
                     "INVALID_NEGATIVE_OR_NAN_FLOPS_RECEIPT",
                     f"Worker '{w.node_id}' submitted invalid flops_contributed={w.flops_contributed}.",
+                )
+            if (
+                isinstance(w.cosine_alignment, bool)
+                or not isinstance(w.cosine_alignment, (int, float))
+                or not math.isfinite(float(w.cosine_alignment))
+            ):
+                raise SwarmSecurityViolationError(
+                    "LEDGER-03",
+                    "INVALID_NAN_OR_INF_COSINE_ALIGNMENT",
+                    f"Worker '{w.node_id}' submitted non-finite cosine_alignment={w.cosine_alignment}.",
                 )
             if w.node_id in seen_workers:
                 raise SwarmSecurityViolationError(
@@ -427,14 +509,26 @@ class HiveSwarmLedger:
         rtt_speedup: Optional[float],
         rate_per_token: float = 0.005,
     ) -> InferenceSettlementReceipt:
+        if not isinstance(consumer_node_id, str) or not consumer_node_id.strip():
+            raise SwarmSecurityViolationError(
+                "LEDGER-01",
+                "EMPTY_CONSUMER_NODE_ID",
+                "consumer_node_id must be a non-empty string.",
+            )
         # Rule LEDGER-01: Prevent negative token / negative rate balance minting exploit
-        if int(verified_tokens) <= 0:
+        if isinstance(verified_tokens, bool) or not isinstance(verified_tokens, int) or verified_tokens <= 0:
             raise SwarmSecurityViolationError(
                 "LEDGER-01",
                 "NEGATIVE_OR_ZERO_INFERENCE_TOKENS",
                 f"verified_tokens ({verified_tokens}) must be a positive integer >= 1.",
             )
-        if not math.isfinite(float(rate_per_token)) or float(rate_per_token) <= 0.0 or float(rate_per_token) > 10.0:
+        if (
+            isinstance(rate_per_token, bool)
+            or not isinstance(rate_per_token, (int, float))
+            or not math.isfinite(float(rate_per_token))
+            or float(rate_per_token) <= 0.0
+            or float(rate_per_token) > 10.0
+        ):
             raise SwarmSecurityViolationError(
                 "LEDGER-01",
                 "INVALID_INFERENCE_FEE_RATE",
@@ -447,6 +541,12 @@ class HiveSwarmLedger:
                 "provider_node_ids must contain at least one active expert provider node.",
             )
         for pid in provider_node_ids:
+            if not isinstance(pid, str) or not pid.strip():
+                raise SwarmSecurityViolationError(
+                    "LEDGER-01",
+                    "EMPTY_PROVIDER_NODE_ID",
+                    "Every provider_node_id must be a non-empty string.",
+                )
             if pid in self.slashed_registry:
                 raise SwarmSecurityViolationError(
                     "LEDGER-01",
@@ -507,7 +607,12 @@ class HiveSwarmLedger:
                 "SLASHED_NODE_REWARD_BLOCKED",
                 f"Node '{node_id}' is in the Byzantine slashed_registry and cannot receive rewards.",
             )
-        if not math.isfinite(float(amount_hive)) or float(amount_hive) <= 0.0:
+        if (
+            isinstance(amount_hive, bool)
+            or not isinstance(amount_hive, (int, float))
+            or not math.isfinite(float(amount_hive))
+            or float(amount_hive) <= 0.0
+        ):
             raise SwarmSecurityViolationError(
                 "LEDGER-02",
                 "NON_POSITIVE_OR_NON_FINITE_REWARD",
@@ -527,9 +632,16 @@ class HiveSwarmLedger:
 
     def slash(self, node_id: str, fraction: float = 1.0, *, persist: bool = True) -> float:
         """Slash a dishonest node's balance and reputation, record it in `slashed_registry`, and persist."""
-        if not node_id or not str(node_id).strip():
+        if not isinstance(node_id, str) or not node_id.strip():
             raise ValueError("node_id must be non-empty")
-        frac = min(1.0, max(0.0, float(fraction)))
+        if (
+            isinstance(fraction, bool)
+            or not isinstance(fraction, (int, float))
+            or not math.isfinite(float(fraction))
+            or not (0.0 <= float(fraction) <= 1.0)
+        ):
+            raise ValueError("fraction must be a finite number in [0.0, 1.0]")
+        frac = float(fraction)
         if node_id not in self.slashed_registry:
             self.slashed_registry.append(node_id)
         if frac >= 1.0:
@@ -547,6 +659,8 @@ class HiveSwarmLedger:
 
     def get_balance(self, node_id: str) -> float:
         """Return the current `$HIVE` balance for `node_id`."""
+        if not isinstance(node_id, str) or not node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
         return round(self.balances.get(node_id, 0.0), 6)
 
     def verify_chain_integrity(self) -> bool:
@@ -631,6 +745,33 @@ class IndemnityReceipt:
     stake_surplus_to_reserve: float
     settlement_ms: float
 
+    def __post_init__(self) -> None:
+        for field_name in ("fault_id", "commitment_root", "fault_reason", "faulty_peer_id", "consumer_node_id"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            isinstance(self.claimed_hive, bool)
+            or not isinstance(self.claimed_hive, (int, float))
+            or not math.isfinite(float(self.claimed_hive))
+            or float(self.claimed_hive) <= 0.0
+        ):
+            raise ValueError("claimed_hive must be a positive finite number")
+        if (
+            isinstance(self.indemnified_hive, bool)
+            or not isinstance(self.indemnified_hive, (int, float))
+            or not math.isfinite(float(self.indemnified_hive))
+            or float(self.indemnified_hive) < 0.0
+        ):
+            raise ValueError("indemnified_hive must be a finite number >= 0.0")
+        if (
+            isinstance(self.shortfall_hive, bool)
+            or not isinstance(self.shortfall_hive, (int, float))
+            or not math.isfinite(float(self.shortfall_hive))
+            or float(self.shortfall_hive) < 0.0
+        ):
+            raise ValueError("shortfall_hive must be a finite number >= 0.0")
+
 
 class GuildSlashingInsurancePool:
     """HM-S6-03: cross-guild stake pool that indemnifies consumers when a batch fault is proven.
@@ -655,10 +796,13 @@ class GuildSlashingInsurancePool:
 
     @staticmethod
     def _require_amount(amount_hive: float, category: str) -> float:
-        try:
-            value = float(amount_hive)
-        except (TypeError, ValueError):
+        if isinstance(amount_hive, bool):
             value = float("nan")
+        else:
+            try:
+                value = float(amount_hive)
+            except (TypeError, ValueError):
+                value = float("nan")
         if not math.isfinite(value) or value <= 0.0:
             raise SwarmSecurityViolationError(
                 "LEDGER-05", category, f"amount ({amount_hive}) must be finite and > 0.0"

@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import os
 import platform
 import re
@@ -75,6 +76,12 @@ DEFAULT_RTX_DOMAINS: tuple[str, ...] = (
 
 def current_boinc_platform(sys_platform: str | None = None) -> str:
     """Return the canonical BOINC platform string for the current OS."""
+    if sys_platform is not None and (
+        isinstance(sys_platform, bool)
+        or not isinstance(sys_platform, str)
+        or not sys_platform.strip()
+    ):
+        raise ValueError("sys_platform must be a non-empty string or None")
     plat = (sys_platform or sys.platform).lower()
     if plat.startswith("win"):
         return PLATFORM_WINDOWS
@@ -108,6 +115,29 @@ class RTXBoincHardwareProfile:
     segment_steps: int
     vram_headroom_ok: bool
 
+    def __post_init__(self) -> None:
+        for b_name in ("gpu_detected", "cuda_available", "vram_headroom_ok"):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
+        for s_name in ("gpu_name", "driver_version", "boinc_platform", "profile_name", "plan_class", "app_name"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for i_nonneg in (
+            "vram_total_mib",
+            "vram_free_mib",
+            "min_gpu_ram_mb",
+            "wddm_ceiling_mib",
+            "min_free_vram_mib",
+        ):
+            val = getattr(self, i_nonneg)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_nonneg} must be a non-negative integer")
+        for i_pos in ("qlora_rank", "qlora_alpha", "seq_len", "micro_batch", "inner_steps", "segment_steps"):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -120,6 +150,12 @@ def detect_rtx_boinc_profile(
     sys_platform: str | None = None,
 ) -> RTXBoincHardwareProfile:
     """Auto-detect NVIDIA RTX GPU capabilities and select the matching BOINC profile & VRAM guards."""
+    if override_vram_total_mib is not None and (isinstance(override_vram_total_mib, bool) or not isinstance(override_vram_total_mib, int) or override_vram_total_mib < 0):
+        raise ValueError("override_vram_total_mib must be a non-negative integer")
+    if override_vram_free_mib is not None and (isinstance(override_vram_free_mib, bool) or not isinstance(override_vram_free_mib, int) or override_vram_free_mib < 0):
+        raise ValueError("override_vram_free_mib must be a non-negative integer")
+    if override_vram_total_mib is not None and override_vram_free_mib is not None and override_vram_free_mib > override_vram_total_mib:
+        raise ValueError("override_vram_free_mib cannot exceed override_vram_total_mib")
     boinc_plat = current_boinc_platform(sys_platform)
     gpu_name = override_gpu_name or "CPU-Fallback"
     vram_total = int(override_vram_total_mib or 0)
@@ -427,6 +463,12 @@ class RTXBoincServer:
             )
 
     def sign_workunit(self, wu_id: str, domain: str, rng_seed: int) -> str:
+        if not isinstance(wu_id, str) or not wu_id.strip():
+            raise ValueError("wu_id must be a non-empty string")
+        if not isinstance(domain, str) or not domain.strip():
+            raise ValueError("domain must be a non-empty string")
+        if isinstance(rng_seed, bool) or not isinstance(rng_seed, int):
+            raise ValueError("rng_seed must be an integer")
         msg = f"{wu_id}:{domain}:{rng_seed}".encode("utf-8")
         return hmac.new(self.hmac_secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
 
@@ -667,11 +709,15 @@ class RTXBoincServer:
                 reasons.append("HMAC signature mismatch")
             if self.require_cuda and not sub.cuda_verified:
                 reasons.append("CUDA hardware verification required (CPU fallback rejected)")
-            if sub.eval_loss_after > sub.eval_loss_before:
+            if not math.isfinite(sub.eval_loss_before) or not math.isfinite(sub.eval_loss_after) or sub.eval_loss_before <= 0.0 or sub.eval_loss_after < 0.0:
+                reasons.append("eval_loss_before (> 0) and eval_loss_after (>= 0) must be finite")
+            elif sub.eval_loss_after > sub.eval_loss_before:
                 reasons.append(
                     f"Monotone validation ratchet failed: eval_loss_after ({sub.eval_loss_after:.6f}) "
                     f"> eval_loss_before ({sub.eval_loss_before:.6f})"
                 )
+            if not math.isfinite(sub.flops_claimed) or sub.flops_claimed <= 0.0:
+                reasons.append("flops_claimed must be a positive finite float")
             if not sub.state_sha256 and not sub.ptx_sha256:
                 reasons.append("Missing cryptographic state_sha256 or ptx_sha256 digest")
 
@@ -684,6 +730,8 @@ class RTXBoincServer:
             )
             cobblestones = round(max(1.0, float(sub.flops_claimed) / 1.0e11), 2) if valid else 0.0
             hmt_awarded = int(DEFAULT_POINTS_PER_ACCEPTED_ROUND) if valid else 0
+            safe_loss_before = float(sub.eval_loss_before) if math.isfinite(sub.eval_loss_before) else 0.0
+            safe_loss_after = float(sub.eval_loss_after) if math.isfinite(sub.eval_loss_after) else 0.0
 
             conn.execute(
                 """
@@ -701,11 +749,11 @@ class RTXBoincServer:
                 """,
                 (
                     "validated" if valid else "invalid",
-                    json.dumps(sub.model_dump(), sort_keys=True),
+                    json.dumps(sub.model_dump(), sort_keys=True, allow_nan=False) if (math.isfinite(sub.eval_loss_before) and math.isfinite(sub.eval_loss_after) and math.isfinite(sub.flops_claimed)) else "{}",
                     1 if valid else 0,
                     reason,
-                    float(sub.eval_loss_before),
-                    float(sub.eval_loss_after),
+                    safe_loss_before,
+                    safe_loss_after,
                     cobblestones,
                     hmt_awarded,
                     now,
@@ -809,6 +857,8 @@ class RTXBoincServer:
 
     def status_summary(self, limit: int = 20) -> dict[str, Any]:
         """Return live SQLite telemetry for the RTX BOINC Server."""
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0 or limit > 1000:
+            raise ValueError("limit must be an integer in [1, 1000]")
         with self._connect() as conn:
             counts = conn.execute(
                 """
@@ -869,6 +919,8 @@ class RTXBoincServer:
 
 def build_rtx_boinc_fastapi_router(server: RTXBoincServer) -> APIRouter:
     """Create a FastAPI `APIRouter` exposing both BOINC XML RPC and RTX JSON endpoints."""
+    if not isinstance(server, RTXBoincServer):
+        raise ValueError("server must be an RTXBoincServer instance")
     router = APIRouter(tags=["rtx-boinc"])
 
     @router.get("/get_project_config.php")
@@ -921,6 +973,10 @@ def execute_rtx_boinc_workunit(
     device: str = "auto",
 ) -> dict[str, Any]:
     """Execute a leased RTX BOINC workunit on the local NVIDIA RTX GPU (real CUDA QLoRA + PTX fold)."""
+    if not isinstance(spec, dict) or not str(spec.get("wu_id") or "").strip():
+        raise ValueError("spec must be a dict with a non-empty wu_id")
+    if isinstance(device, bool) or not isinstance(device, str) or device not in ("auto", "cuda", "cpu"):
+        raise ValueError("device must be one of ('auto', 'cuda', 'cpu')")
     import torch
     import torch.nn as nn
 
@@ -1044,6 +1100,14 @@ def deploy_rtx_boinc_client_files(
     profile: RTXBoincHardwareProfile | None = None,
 ) -> dict[str, Any]:
     """Generate cross-platform BOINC client XML files, anonymous-platform `app_info.xml`, and service manifests."""
+    if isinstance(install_dir, bool) or not isinstance(install_dir, (Path, str)) or not str(install_dir).strip():
+        raise ValueError("install_dir must be a non-empty Path or str")
+    if isinstance(server_url, bool) or not isinstance(server_url, str) or not server_url.strip():
+        raise ValueError("server_url must be a non-empty string")
+    if isinstance(handle, bool) or not isinstance(handle, str) or not handle.strip():
+        raise ValueError("handle must be a non-empty string")
+    if isinstance(authenticator, bool) or not isinstance(authenticator, str) or not authenticator.strip():
+        raise ValueError("authenticator must be a non-empty string")
     install_dir = Path(install_dir)
     install_dir.mkdir(parents=True, exist_ok=True)
     prof = profile or detect_rtx_boinc_profile()
@@ -1216,6 +1280,16 @@ def run_rtx_boinc_client_cycle(
     device: str = "auto",
 ) -> dict[str, Any]:
     """Lease one workunit from the RTX BOINC server over HTTP(S), execute on the RTX GPU, and submit."""
+    if not isinstance(server_url, str) or not server_url.strip().startswith(("http://", "https://")):
+        raise ValueError("server_url must be a non-empty http:// or https:// URL")
+    if not isinstance(handle, str) or not handle.strip():
+        raise ValueError("handle must be a non-empty string")
+    if node_id is not None and (not isinstance(node_id, str) or not node_id.strip()):
+        raise ValueError("node_id must be None or a non-empty string")
+    if preferred_domain is not None and (not isinstance(preferred_domain, str) or not preferred_domain.strip()):
+        raise ValueError("preferred_domain must be None or a non-empty string")
+    if not isinstance(device, str) or not device.strip():
+        raise ValueError("device must be a non-empty string")
     prof = detect_rtx_boinc_profile()
     resolved_node_id = node_id or f"rtx-{platform.node() or 'node'}-{prof.plan_class}"
     base = server_url.rstrip("/")

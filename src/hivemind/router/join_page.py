@@ -39,6 +39,12 @@ _URL_OK = re.compile(r"^https://[a-z0-9.-]+(?::\d+)?(?:/[A-Za-z0-9._~%/-]*)?$")
 
 def pick_language(query_lang: str | None, accept_language: str | None, default: str = "fr") -> str:
     """``?lang=fr|en|es|de|zh`` wins; otherwise the first supported language in ``Accept-Language`` by quality; otherwise ``default`` (``fr``)."""
+    if query_lang is not None and (isinstance(query_lang, bool) or not isinstance(query_lang, str)):
+        raise ValueError("query_lang must be a string or None")
+    if accept_language is not None and (isinstance(accept_language, bool) or not isinstance(accept_language, str)):
+        raise ValueError("accept_language must be a string or None")
+    if isinstance(default, bool) or not isinstance(default, str) or default not in LANGS:
+        raise ValueError("default must be one of 'fr', 'en', 'es', 'de', 'zh'")
     if query_lang in LANGS:
         return str(query_lang)
     best: tuple[float, int, str] | None = None
@@ -57,6 +63,8 @@ def pick_language(query_lang: str | None, accept_language: str | None, default: 
 
 
 def join_content_security_policy(nonce: str) -> str:
+    if not isinstance(nonce, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):
+        raise ValueError("nonce must be 8-64 URL-safe characters")
     return "; ".join([
         "default-src 'none'", f"style-src 'nonce-{nonce}'", "img-src 'self' data:", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'",
     ])
@@ -104,6 +112,10 @@ class Flags:
 
     google: bool = False  # "Sign in with Google" (or another provider) is enabled
     handles: bool = True  # registering with a handle through the API is open
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.google, bool) or not isinstance(self.handles, bool):
+            raise ValueError("google and handles flags must be booleans")
 
 
 _HANDLE_RULE: Pair = (
@@ -378,6 +390,8 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
             ("Producers see the questions sent to them. Do not run a producer on a machine that holds secrets, and do not send confidential text to the network.",
              "Les producteurs voient les questions qui leur sont envoyées. N'exploitez pas un producteur sur une machine qui contient des secrets, et "
              "n'envoyez pas de texte confidentiel au réseau."),
+            ("What you upload per hour, at most (declared budgets in the `NODE_EGRESS` receipt): sharing a GPU 10 MiB, night training with BOINC 16 MiB, the OpenTrainer agent 0.5 MiB. Training Crowd-v1 with CrowdGPT's client uploads about 0.9 GB per finished round, about 1.5 GB per hour (measured), within a 2 GiB budget: check your data plan.",
+             'Ce que vous envoyez par heure, au maximum (budgets déclarés dans le reçu `NODE_EGRESS`) : partage de GPU 10 Mio, entraînement de nuit avec BOINC 16 Mio, agent OpenTrainer 0,5 Mio. Entraîner Crowd-v1 avec le client de CrowdGPT envoie environ 0,9 Go par round terminé, environ 1,5 Go par heure (mesuré), dans un budget de 2 Gio : vérifiez votre forfait.'),
             ("Points have no cash value and are not a payment.", "Les points n'ont aucune valeur monétaire et ne sont pas un paiement."),
             ("Sharing uses electricity while your GPU answers. Measure your card with `nvidia-smi --query-gpu=power.draw --format=csv` and multiply by "
              "the hours it works.",
@@ -728,6 +742,11 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "de": "Produzenten sehen die an sie gesendeten Fragen. Betreiben Sie keinen Produzenten auf einem Rechner mit geheimen Daten und senden Sie keine vertraulichen Texte an das Netzwerk.",
         "zh": "生产者节点可以看到发送给它们的问题。请勿在存有机密数据的机器上运行生产者节点，也不要向网络发送机密文本。",
     },
+    "What you upload per hour, at most (declared budgets in the `NODE_EGRESS` receipt): sharing a GPU 10 MiB, night training with BOINC 16 MiB, the OpenTrainer agent 0.5 MiB. Training Crowd-v1 with CrowdGPT's client uploads about 0.9 GB per finished round, about 1.5 GB per hour (measured), within a 2 GiB budget: check your data plan.": {
+        "es": 'Lo que envía por hora, como máximo (presupuestos declarados en el recibo `NODE_EGRESS`): compartir una GPU 10 MiB, entrenamiento nocturno con BOINC 16 MiB, el agente OpenTrainer 0,5 MiB. Entrenar Crowd-v1 con el cliente de CrowdGPT envía unos 0,9 GB por ronda terminada, unos 1,5 GB por hora (medido), dentro de un presupuesto de 2 GiB: revise su plan de datos.',
+        "de": 'Was Sie pro Stunde höchstens hochladen (deklarierte Budgets im Beleg `NODE_EGRESS`): GPU teilen 10 MiB, nächtliches Training mit BOINC 16 MiB, der OpenTrainer-Agent 0,5 MiB. Crowd-v1 mit dem CrowdGPT-Client zu trainieren lädt etwa 0,9 GB pro abgeschlossener Runde hoch, etwa 1,5 GB pro Stunde (gemessen), innerhalb eines Budgets von 2 GiB: prüfen Sie Ihren Datentarif.',
+        "zh": '您每小时最多上传的数据（`NODE_EGRESS` 回执中声明的预算）：共享 GPU 10 MiB，夜间 BOINC 训练 16 MiB，OpenTrainer 代理 0.5 MiB。使用 CrowdGPT 客户端训练 Crowd-v1，每完成一轮约上传 0.9 GB，约每小时 1.5 GB（实测），在 2 GiB 预算之内：请检查您的流量套餐。',
+    },
     "Points have no cash value and are not a payment.": {
         "es": "Los puntos no tienen valor monetario y no constituyen un pago.",
         "de": "Punkte haben keinen Geldwert und sind keine Bezahlung.",
@@ -905,11 +924,22 @@ def render_join_page(lang: str = "fr", nonce: str = "abcdefgh12345678", *, tiers
                      live_telemetry: Mapping[str, Any] | None = None) -> str:
     """The complete multilingual page (FR default, EN, ES, DE, ZH). ``tiers`` is the ``tiers`` list of ``/v1/hivemind/catalog``."""
     flags = Flags(google=google_enabled, handles=handle_registration)
+    if tiers is not None and (isinstance(tiers, (str, bytes)) or not isinstance(tiers, Sequence)):
+        raise ValueError("tiers must be a sequence of mappings or None")
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     if lang not in LANGS:
         raise ValueError("lang must be one of 'fr', 'en', 'es', 'de', 'zh'")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):
+    if not isinstance(nonce, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):
         raise ValueError("nonce must be 8-64 URL-safe characters")
-    if not _URL_OK.match(api_url) or not _URL_OK.match(repo_url) or not re.fullmatch(r"/[a-z-]*", path):
+    if (
+        not isinstance(api_url, str)
+        or not isinstance(repo_url, str)
+        or not isinstance(path, str)
+        or not _URL_OK.match(api_url)
+        or not _URL_OK.match(repo_url)
+        or not re.fullmatch(r"/[a-z-]*", path)
+    ):
         raise ValueError("api_url and repo_url must be plain https URLs and path a simple absolute path")
     subs = {"API": api_url.rstrip("/"), "REPO": repo_url.rstrip("/")}
     esc = html.escape

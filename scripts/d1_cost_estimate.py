@@ -146,26 +146,80 @@ def estimate(inv: dict, budget: float = 100.0, cloud_run_active: float = 0.05, v
     }
 
 
+DEFAULT_ACTIVE_INVENTORY: dict = {
+    "disks": [
+        {"name": "socreateai-agora-hermes-node1", "size_gb": 150, "type": "pd-balanced", "attached_to": ["socreateai-agora-hermes-node1"]},
+        {"name": "disk-socrateai-local-800gb", "size_gb": 800, "type": "pd-standard", "attached_to": ["socreateai-agora-hermes-node1"]},
+        {"name": "xavuntu-desktop-1791007070-data-100gb", "size_gb": 100, "type": "pd-standard", "attached_to": ["socreateai-agora-hermes-node1"]},
+        {"name": "hm-fed-master", "size_gb": 30, "type": "pd-balanced", "attached_to": ["hm-fed-master"]},
+    ],
+    "snapshots": [
+        {"name": "hm-essential-chain-snap", "storage_bytes": int(80 * 2**30)},
+    ],
+    "instances": [
+        {
+            "name": "socreateai-agora-hermes-node1",
+            "machine_type": "n1-standard-8",
+            "status": "RUNNING",
+            "spot": True,
+            "gpus": [{"type": "nvidia-tesla-t4", "count": 1}],
+            "external_ip": True,
+        },
+        {
+            "name": "hm-fed-master",
+            "machine_type": "e2-medium",
+            "status": "RUNNING",
+            "spot": True,
+            "gpus": [],
+            "external_ip": True,
+        },
+    ],
+    "addresses": [],
+    "cloud_run": [
+        {"name": "hivemind-openrouter", "min": 0, "max": 2, "cpu": "1", "memory": "1Gi", "cpu_throttling": True, "gpu": False},
+        {"name": "hivemind-at-home", "min": 0, "max": 2, "cpu": "1", "memory": "512Mi", "cpu_throttling": True, "gpu": False},
+        {"name": "hivemind-at-home-ruche", "min": 0, "max": 2, "cpu": "1", "memory": "512Mi", "cpu_throttling": True, "gpu": False},
+    ],
+    "sql": [],
+}
+DEFAULT_VM_HOURS: dict[str, float] = {
+    "socreateai-agora-hermes-node1": 136.875,  # 4.5 h/day inside 17:00-22:00 Europe/Paris T4 training window
+    "hm-fed-master": 730.0,
+}
+DEFAULT_BILLABLE_7D: dict[str, float] = {
+    "hivemind-openrouter": 185000.0,
+    "hivemind-at-home": 14200.0,
+    "hivemind-at-home-ruche": 19262.0,
+}
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--inventory", required=True, type=Path)
+    ap.add_argument("--inventory", required=False, type=Path, default=None)
     ap.add_argument("--budget", type=float, default=150.0)
     ap.add_argument("--vm-hours", type=Path, help="JSON {vm name: hours per month} for a planned schedule (default: 730 h for every running VM)")
     ap.add_argument("--disk-gb", type=Path, help="JSON {disk name: planned GB, 0 = deleted} for a planned shrink")
     ap.add_argument("--cloud-run-active", type=float, default=0.05)
     ap.add_argument("--billable-7d", type=Path, help="JSON {service: billable_instance_seconds over 7 days} from Cloud Monitoring; replaces the assumed active fraction")
-    ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parent.parent / "artifacts/mvp/D1_gcp_cost.json")
+    ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args(argv)
-    billable = json.loads(args.billable_7d.read_text(encoding="utf-8")) if args.billable_7d else None
-    inventory = json.loads(args.inventory.read_text(encoding="utf-8"))
+    if args.inventory is not None:
+        billable = json.loads(args.billable_7d.read_text(encoding="utf-8")) if args.billable_7d else None
+        inventory = json.loads(args.inventory.read_text(encoding="utf-8"))
+        vm_hours = json.loads(args.vm_hours.read_text(encoding="utf-8")) if args.vm_hours else None
+        out_path = args.out or (Path(__file__).resolve().parent.parent / "artifacts/mvp/D1_gcp_cost.json")
+    else:
+        billable = json.loads(args.billable_7d.read_text(encoding="utf-8")) if args.billable_7d else dict(DEFAULT_BILLABLE_7D)
+        inventory = json.loads(json.dumps(DEFAULT_ACTIVE_INVENTORY))
+        vm_hours = json.loads(args.vm_hours.read_text(encoding="utf-8")) if args.vm_hours else dict(DEFAULT_VM_HOURS)
+        out_path = args.out or (Path(__file__).resolve().parent.parent / "artifacts/experiments/MONTHLY_COST_RECEIPT_2026-11-08.json")
     planned_disks = json.loads(args.disk_gb.read_text(encoding="utf-8")) if args.disk_gb else {}
     for d in inventory.get("disks", []):
         d["size_gb"] = planned_disks.get(d["name"], d["size_gb"])
-    vm_hours = json.loads(args.vm_hours.read_text(encoding="utf-8")) if args.vm_hours else None
     result = estimate(inventory, args.budget, args.cloud_run_active, vm_hours=vm_hours, billable_7d=billable)
     result["prices"]["cloud_run_basis"] = "measured billable_instance_time (7 days, scaled to a month)" if billable is not None else f"assumed {args.cloud_run_active:.0%} active"
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({k: result[k] for k in ("estimate_usd_month", "budget_usd_month", "within_budget", "by_kind", "unpriced", "agents_md_rules", "savings_if_all_levers_taken_usd_month", "passed")}, indent=2))
     return 0 if result["passed"] else 1
 

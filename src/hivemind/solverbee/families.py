@@ -31,6 +31,8 @@ DEFAULT_ATOL = 1e-10
 
 
 def _state(name: str, meaning: str, unit: str) -> Dict[str, str]:
+    if not isinstance(name, str) or not name.strip() or not isinstance(meaning, str) or not meaning.strip() or not isinstance(unit, str) or not unit.strip():
+        raise ValueError("name, meaning, and unit must be non-empty strings")
     return {"name": name, "meaning": meaning, "unit": unit}
 
 
@@ -187,9 +189,11 @@ def list_families() -> List[str]:
 
 def family_dim(family: str, params: Optional[Dict[str, Any]] = None) -> Optional[int]:
     """State dimension of a named family (stiff_chain: the n parameter, default 10)."""
-    entry = FAMILIES.get(family)
-    if entry is None:
+    if not isinstance(family, str) or family not in FAMILIES:
         raise FamilyError(f"unknown family {family!r}")
+    if params is not None and not isinstance(params, Mapping):
+        raise FamilyError("params must be an object or None")
+    entry = FAMILIES[family]
     if entry["dim"] is not None:
         return int(entry["dim"])
     n = (params or {}).get("n", entry["params"]["n"][0])
@@ -215,10 +219,38 @@ def check_params(family: str, params: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if family == "pendulum" and k == "damping" and val < 0:
             raise FamilyError("params.damping must be >= 0")
-        if (family, k) in {("pendulum", "g_over_l"), ("projectile_drag", "g"), ("kepler", "mu"), ("logistic", "K"), ("harmonic", "omega")} and not val > 0:
+        if (
+            (family, k)
+            in {
+                ("pendulum", "g_over_l"),
+                ("projectile_drag", "g"),
+                ("kepler", "mu"),
+                ("logistic", "K"),
+                ("harmonic", "omega"),
+                ("lotka_volterra", "alpha"),
+                ("lotka_volterra", "beta"),
+                ("lotka_volterra", "delta"),
+                ("lotka_volterra", "gamma"),
+            }
+            and not val > 0
+        ):
             raise FamilyError(f"params.{k} must be > 0")
-        if (family, k) in {("projectile_drag", "k")} and val < 0:
-            raise FamilyError("params.k must be >= 0")
+        if (
+            (family, k)
+            in {
+                ("projectile_drag", "k"),
+                ("harmonic", "zeta"),
+                ("robertson", "k1"),
+                ("robertson", "k2"),
+                ("robertson", "k3"),
+                ("stiff_chain", "k"),
+                ("brusselator", "a"),
+                ("brusselator", "b"),
+                ("van_der_pol", "mu"),
+            }
+            and val < 0
+        ):
+            raise FamilyError(f"params.{k} must be >= 0")
         out[k] = val
     return out
 
@@ -226,6 +258,8 @@ def check_params(family: str, params: Dict[str, Any]) -> Dict[str, Any]:
 def named_spec(family: str, params: Optional[Dict[str, Any]], y0: Sequence[float], t_out: Sequence[float], *, spec_id: str = "science-bee", t0: float = 0.0,
                rtol: Optional[float] = None, atol: Optional[float] = None, method: Optional[str] = None) -> Dict[str, Any]:
     """A named-family spec after checking parameter names, values and the length of y0."""
+    if params is not None and not isinstance(params, Mapping):
+        raise FamilyError("params must be an object or None")
     clean = check_params(family, dict(params or {}))
     dim = family_dim(family, clean)
     if not isinstance(y0, (list, tuple)) or (dim is not None and len(y0) != dim):
@@ -257,6 +291,8 @@ def logistic_spec(n0: float, t_out: Sequence[float], *, r: float = 1.0, K: float
 def mass_action_spec(species: Sequence[str], reactions: Sequence[Dict[str, Any]], y0: Sequence[float], t_out: Sequence[float], *, spec_id: str = "science-bee",
                      t0: float = 0.0, rtol: Optional[float] = None, atol: Optional[float] = None, method: Optional[str] = None) -> Dict[str, Any]:
     """Generic mass-action spec (<= 20 species, <= 50 reactions, small positive integer stoichiometry, k >= 0)."""
+    if not isinstance(species, (list, tuple)) or not isinstance(reactions, (list, tuple)) or not isinstance(y0, (list, tuple)):
+        raise FamilyError("species, reactions and y0 must be lists or tuples")
     sp = list(species)
     if not 1 <= len(sp) <= 20 or len(set(sp)) != len(sp) or not all(isinstance(s, str) and 1 <= len(s) <= 64 for s in sp):
         raise FamilyError("species must be 1..20 distinct strings")
@@ -292,8 +328,9 @@ def _fractions(values: Sequence[float], names: Sequence[str]) -> List[float]:
 def sir_spec(beta: float, gamma: float, s0: float, i0: float, t_out: Sequence[float], *, r0: Optional[float] = None, spec_id: str = "science-bee", **kw: Any) -> Dict[str, Any]:
     """SIR epidemic on population fractions: S+I->2I (k=beta), I->R (k=gamma)."""
     b, g = _num(beta, "beta", nonneg=True), _num(gamma, "gamma", nonneg=True)
-    rr = (1.0 - s0 - i0) if r0 is None else r0
-    y0 = _fractions([s0, i0, rr], ["s0", "i0", "r0"])
+    s_v, i_v = _num(s0, "s0", nonneg=True, hi=1.0), _num(i0, "i0", nonneg=True, hi=1.0)
+    rr = (1.0 - s_v - i_v) if r0 is None else r0
+    y0 = _fractions([s_v, i_v, rr], ["s0", "i0", "r0"])
     rx = [{"reactants": {"S": 1, "I": 1}, "products": {"I": 2}, "k": b}, {"reactants": {"I": 1}, "products": {"R": 1}, "k": g}]
     return mass_action_spec(["S", "I", "R"], rx, y0, t_out, spec_id=spec_id, **kw)
 
@@ -302,8 +339,9 @@ def seir_spec(beta: float, sigma: float, gamma: float, s0: float, e0: float, i0:
               spec_id: str = "science-bee", **kw: Any) -> Dict[str, Any]:
     """SEIR epidemic: S+I->E+I (k=beta), E->I (k=sigma), I->R (k=gamma)."""
     b, s, g = _num(beta, "beta", nonneg=True), _num(sigma, "sigma", nonneg=True), _num(gamma, "gamma", nonneg=True)
-    rr = (1.0 - s0 - e0 - i0) if r0 is None else r0
-    y0 = _fractions([s0, e0, i0, rr], ["s0", "e0", "i0", "r0"])
+    s_v, e_v, i_v = _num(s0, "s0", nonneg=True, hi=1.0), _num(e0, "e0", nonneg=True, hi=1.0), _num(i0, "i0", nonneg=True, hi=1.0)
+    rr = (1.0 - s_v - e_v - i_v) if r0 is None else r0
+    y0 = _fractions([s_v, e_v, i_v, rr], ["s0", "e0", "i0", "r0"])
     rx = [{"reactants": {"S": 1, "I": 1}, "products": {"E": 1, "I": 1}, "k": b}, {"reactants": {"E": 1}, "products": {"I": 1}, "k": s},
           {"reactants": {"I": 1}, "products": {"R": 1}, "k": g}]
     return mass_action_spec(["S", "E", "I", "R"], rx, y0, t_out, spec_id=spec_id, **kw)
@@ -321,8 +359,10 @@ def decay_chain_spec(rates: Sequence[float], y0: Sequence[float], t_out: Sequenc
 # ------------------------------------------------------------------ linear presets
 def linear_spec(A: Sequence[Sequence[float]], b: Sequence[float], y0: Sequence[float], t_out: Sequence[float], *, spec_id: str = "science-bee", t0: float = 0.0,  # noqa: N803
                 rtol: Optional[float] = None, atol: Optional[float] = None, method: Optional[str] = None) -> Dict[str, Any]:
+    if not isinstance(A, (list, tuple)) or not isinstance(b, (list, tuple)) or not isinstance(y0, (list, tuple)):
+        raise FamilyError("A, b and y0 must be lists or tuples")
     n = len(A)
-    if not 1 <= n <= 20 or any(len(row) != n for row in A) or len(b) != n or len(y0) != n:
+    if not 1 <= n <= 20 or any(not isinstance(row, (list, tuple)) or len(row) != n for row in A) or len(b) != n or len(y0) != n:
         raise FamilyError("A must be n x n (n <= 20) and b, y0 of length n")
     mat = [[_num(v, f"A[{i}][{j}]") for j, v in enumerate(row)] for i, row in enumerate(A)]
     bb = [_num(v, f"b[{i}]") for i, v in enumerate(b)]
@@ -344,6 +384,8 @@ def spring_mass_damper_spec(m: float, c: float, k: float, F: float, x0: float, v
 
 # ------------------------------------------------------------------ catalogue text for prompts and explanations
 def describe_family(name: str) -> str:
+    if not isinstance(name, str) or name not in FAMILIES:
+        raise FamilyError(f"unknown family {name!r}")
     e = FAMILIES[name]
     params = ", ".join(f"{k} (default {d:g}: {m})" for k, (d, m) in e["params"].items())
     state = ", ".join(f"{s['name']} = {s['meaning']} [{s['unit']}]" for s in e["state"]) or "n cells, each an amount"
@@ -352,6 +394,8 @@ def describe_family(name: str) -> str:
 
 
 def catalogue_text(only_new: bool = False) -> str:
+    if not isinstance(only_new, bool):
+        raise FamilyError("only_new must be a boolean")
     names = [n for n in FAMILIES if (n in NEW_FAMILIES or not only_new)]
     return "\n".join(describe_family(n) for n in names)
 
@@ -482,6 +526,10 @@ def bao_cosmology_spec(
 
 
 def _slot_time_grid(raw: Mapping[str, Any], slots: Mapping[str, Any], conversions: List[str]) -> List[float]:
+    if not isinstance(raw, Mapping) or not isinstance(slots, Mapping):
+        raise FamilyError("raw and slots must be Mappings")
+    if not isinstance(conversions, list):
+        raise FamilyError("conversions must be a list")
     for src_name, scale, unit_desc in (
         ("t_out", 1.0, None),
         ("t_out_ms", 1e-3, "ms -> s (/ 1000)"),
@@ -512,6 +560,8 @@ def compile_slot_spec(
     orbit speed, damper force/speed) so the LLM only fills named slots instead of doing
     mental arithmetic.
     """
+    if not isinstance(return_trace, bool):
+        raise FamilyError("return_trace must be a boolean")
     if not isinstance(slot_obj, Mapping):
         raise FamilyError("slot_obj must be a JSON object")
     schema = slot_obj.get("schema")
@@ -843,18 +893,26 @@ def compile_slot_spec(
 
     elif slot_family in ("decay_chain", "chain", "stiff"):
         if "rates" in slots and slots["rates"] is not None:
+            if not isinstance(slots["rates"], (list, tuple)) or not slots["rates"]:
+                raise FamilyError("rates must be a list of 1..10 numbers")
             rates = [_num(r, f"rates[{i}]", nonneg=True) for i, r in enumerate(slots["rates"])]
         elif "rates_per_min" in slots and slots["rates_per_min"] is not None:
+            if not isinstance(slots["rates_per_min"], (list, tuple)) or not slots["rates_per_min"]:
+                raise FamilyError("rates_per_min must be a list of 1..10 numbers")
             rpm = [_num(r, f"rates_per_min[{i}]", nonneg=True) for i, r in enumerate(slots["rates_per_min"])]
             rates = [r / 60.0 for r in rpm]
             conversions.append(f"rates_per_min={rpm} /min -> rates={rates} /s")
         elif "time_constants_s" in slots and slots["time_constants_s"] is not None:
+            if not isinstance(slots["time_constants_s"], (list, tuple)) or not slots["time_constants_s"]:
+                raise FamilyError("time_constants_s must be a list of 1..10 numbers")
             taus = [_num(t_c, f"time_constants_s[{i}]", positive=True) for i, t_c in enumerate(slots["time_constants_s"])]
             rates = [1.0 / t_c for t_c in taus]
             derived.append(f"rates = [1/tau for tau in {taus}] = {rates} /s")
         else:
             raise FamilyError("decay_chain slot requires rates, rates_per_min, or time_constants_s")
         if "y0" in slots and slots["y0"] is not None:
+            if not isinstance(slots["y0"], (list, tuple)):
+                raise FamilyError("y0 must be a list of numbers")
             y0_vec = [_num(v, f"y0[{i}]") for i, v in enumerate(slots["y0"])]
         else:
             a0 = _num(slots.get("a0", 1.0), "a0")

@@ -1,0 +1,18 @@
+{
+  "criterion": "E1",
+  "what": "One-command onboarding + preflight VRAM/driver checks + GPU yield within seconds",
+  "environment": "CPU host with deterministic nvidia-smi stubs for GPU queries + real child-process SIGTERM yield",
+  "yield_elapsed_s": 0.0687,
+  "checks": {
+    "join_script_syntax_ok": true,
+    "join_script_help_ok": true,
+    "preflight_8gb_ready": true,
+    "preflight_2gb_refused": true,
+    "agent_crowdgpt_8gb_dry_run_ok": true,
+    "agent_crowdgpt_low_vram_refused": true,
+    "governor_yield_terminated": true,
+    "governor_yield_under_1_5s": true
+  },
+  "passed": true,
+  "reason": ""
+}

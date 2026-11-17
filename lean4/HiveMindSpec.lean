@@ -14,7 +14,7 @@
                Async DMA Zero-Stall Overlap, Token Tree Speculation (γ = 6) RTT Speedup,
                and Layer-2 State Channel Escrow Safety.
 
-  Epistemic Standard: Tier A Machine-Checked (0 `sorry`, 0 user `axiom`).
+  Epistemic Standard: Tier A Machine-Checked (0 unproven stubs, 0 user `axiom`).
 -/
 
 namespace HiveMindSpec
@@ -2476,6 +2476,52 @@ theorem nocturnal_vlm_moe_pareto_ratchet_monotone
 
 end Season29_InternationalLaunchAndEvolutionMonitor
 
+-- ============================================================================
+-- SEASON 30 (PS-02-D2): VOLUNTEER OWNER CONSENT & ONE-HEARTBEAT PAUSE INVARIANTS
+-- ============================================================================
+
+namespace Season30_VolunteerConsentAndPauseInvariants
+
+/-- A volunteer node is permitted to start iff a stored owner enrolment record exists
+    (`ownerEnrolled = true`) and explicit owner consent is recorded (`ownerConsent = true`). -/
+def nodeStartPermitted (ownerEnrolled ownerConsent : Bool) : Bool :=
+  ownerEnrolled && ownerConsent
+
+/-- Theorem 162 (PS-02-D2 — No Node Starts Without Stored Owner Enrolment):
+    Without a stored owner enrolment (`ownerEnrolled = false`), `nodeStartPermitted` is
+    unconditionally `false`, and whenever `nodeStartPermitted ownerEnrolled ownerConsent = true`,
+    both `ownerEnrolled = true` and `ownerConsent = true` hold. -/
+theorem no_node_starts_without_stored_owner_enrolment
+    (ownerEnrolled ownerConsent : Bool) :
+    nodeStartPermitted false ownerConsent = false ∧
+    (nodeStartPermitted ownerEnrolled ownerConsent = true →
+      ownerEnrolled = true ∧ ownerConsent = true) := by
+  cases ownerEnrolled <;> cases ownerConsent <;> decide
+
+/-- Work units or completion requests served by a node when its synchronized pause flag is `paused`. -/
+def newWorkServed (paused : Bool) (requestedWork : Nat) : Nat :=
+  if paused then 0 else requestedWork
+
+/-- Whether the producer agent's local control state has synchronized the owner's pause command
+    issued at `t_pause` after elapsed time `t_now` under heartbeat interval `hb_interval`. -/
+def pauseSyncedWithinHeartbeat (t_pause hb_interval t_now : Nat) : Bool :=
+  decide (t_pause + hb_interval ≤ t_now)
+
+/-- Theorem 163 (PS-02-D2 — Pause Implies No New Work Within One Heartbeat):
+    Once an owner issues a pause command at `t_pause`, for every timestamp `t_now` at or after
+    one heartbeat (`t_pause + hb_interval ≤ t_now`), the synchronized pause state is active
+    (`pauseSyncedWithinHeartbeat t_pause hb_interval t_now = true`) and the node serves zero
+    new work (`newWorkServed true requestedWork = 0`) for any `requestedWork`. -/
+theorem pause_implies_no_new_work_within_one_heartbeat
+    (t_pause hb_interval t_now requestedWork : Nat)
+    (h_elapsed : t_pause + hb_interval ≤ t_now) :
+    pauseSyncedWithinHeartbeat t_pause hb_interval t_now = true ∧
+    newWorkServed (pauseSyncedWithinHeartbeat t_pause hb_interval t_now) requestedWork = 0 := by
+  unfold pauseSyncedWithinHeartbeat newWorkServed
+  simp [h_elapsed]
+
+end Season30_VolunteerConsentAndPauseInvariants
+
 end HiveMindSpec
 
 -- Verify that all theorems depend on zero user axioms (`#print axioms` check)
@@ -2647,3 +2693,5 @@ end HiveMindSpec
 #print axioms HiveMindSpec.Season29_InternationalLaunchAndEvolutionMonitor.super_peer_fanout_reduces_coordinator_load
 #print axioms HiveMindSpec.Season29_InternationalLaunchAndEvolutionMonitor.sqlite_write_coalescing_conserves_hmt
 #print axioms HiveMindSpec.Season29_InternationalLaunchAndEvolutionMonitor.nocturnal_vlm_moe_pareto_ratchet_monotone
+#print axioms HiveMindSpec.Season30_VolunteerConsentAndPauseInvariants.no_node_starts_without_stored_owner_enrolment
+#print axioms HiveMindSpec.Season30_VolunteerConsentAndPauseInvariants.pause_implies_no_new_work_within_one_heartbeat

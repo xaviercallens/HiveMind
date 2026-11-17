@@ -8,6 +8,8 @@ to the central ``OpenTrainer`` component on ``hivemind-openrouter`` over **outbo
   - Zero ``0.0.0.0`` listeners
   - Signed Aglet task-offer verification (``dispatch`` -> ``arrival`` -> ``clone`` -> ``result`` -> ``retract``)
   - Optional Stage-2 QLoRA / DiLoCo delta submission
+  - ``--crowdgpt``: lend the GPU to CrowdGPT's Crowd-v1 through CrowdGPT's signed client, with
+    automatic pause/stop (see docs/OPENTRAINER_CROWDGPT_CONTRIBUTOR.md)
 
 Usage:
   export HIVEMIND_API_KEY=<your hm-... trainer key>
@@ -38,7 +40,7 @@ DEFAULT_GATEWAY = "https://hivemind-openrouter-1003063861791.us-central1.run.app
 
 
 def detect_local_gpu() -> tuple[str, int, int]:
-    """Query ``nvidia-smi`` for GPU name, total VRAM (MiB), and free VRAM (MiB); fall back cleanly if absent."""
+    """Query ``nvidia-smi`` for GPU name, total VRAM (MiB), and free VRAM (MiB); return ``('', 0, 0)`` if absent."""
     try:
         proc = subprocess.run(
             [
@@ -55,10 +57,13 @@ def detect_local_gpu() -> tuple[str, int, int]:
             first_line = proc.stdout.strip().splitlines()[0]
             parts = [p.strip() for p in first_line.split(",")]
             if len(parts) >= 3:
-                return parts[0], max(512, int(float(parts[1]))), max(0, int(float(parts[2])))
+                total_mib = int(float(parts[1]))
+                free_mib = int(float(parts[2]))
+                if total_mib > 0 and free_mib >= 0:
+                    return parts[0], max(512, total_mib), min(max(512, total_mib), max(0, free_mib))
     except (OSError, ValueError, subprocess.SubprocessError):
         pass
-    return "NVIDIA GeForce RTX 2070", 8192, 6400
+    return "", 0, 0
 
 
 def verify_firewall_traversal(gateway: str, network_mode: str) -> dict[str, Any]:
@@ -212,7 +217,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="HiveMind OpenTrainer Agent — Firewall-Friendly Outbound GPU Co-Training (BOINC + AMCP + Kafka + Aglets)."
     )
-    parser.add_argument("--gateway", default=os.environ.get("HIVEMIND_GATEWAY_URL", DEFAULT_GATEWAY), help="OpenTrainer gateway URL")
+    parser.add_argument(
+        "--gateway",
+        "--server-url",
+        dest="gateway",
+        default=os.environ.get("HIVEMIND_GATEWAY_URL", DEFAULT_GATEWAY),
+        help="OpenTrainer gateway URL (also accepts --server-url)",
+    )
     parser.add_argument(
         "--network-mode",
         default="outbound-https-relay",
@@ -224,6 +235,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gpu-name", default="", help="Override detected GPU model name")
     parser.add_argument("--vram-total-mib", type=int, default=0, help="Override total GPU VRAM in MiB")
     parser.add_argument("--vram-free-mib", type=int, default=0, help="Override free GPU VRAM in MiB")
+    parser.add_argument(
+        "--max-vram-gb",
+        type=float,
+        default=0.0,
+        help="Optional VRAM ceiling in GiB for training allocation (e.g. 5.5 on an 8 GB GPU)",
+    )
     parser.add_argument("--training-stack", default="qlora-moe+diloco+amcp-aglet+boinc", help="Active training stack descriptor")
     parser.add_argument("--campaign-id", default="E8-STAGE2-TINY-GRANITE-MOE-QLORA", help="Active co-training campaign ID")
     parser.add_argument("--submit-delta", action="store_true", help="Submit a measured round delta after heartbeat (requires --round-report)")
@@ -237,11 +254,84 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--inner-steps", type=int, default=8, help="Inner optimizer steps completed")
     parser.add_argument("--once", action="store_true", help="Run a single heartbeat/round and exit")
     parser.add_argument("--interval-s", type=float, default=60.0, help="Heartbeat interval in seconds when running continuously")
+    crowd = parser.add_argument_group(
+        "CrowdGPT contributor mode",
+        "Lend this GPU to CrowdGPT's shared model Crowd-v1 through CrowdGPT's own signed client.py, "
+        "paused or stopped automatically when you need the GPU (automatic guards are NVIDIA-only).",
+    )
+    crowd.add_argument("--crowdgpt", action="store_true", help="Run the CrowdGPT client under the HiveMind GPU guard")
+    crowd.add_argument("--crowdgpt-dir", default=os.environ.get("CROWDGPT_DIR", ""), help="Path to a CrowdGPT checkout (contains client.py)")
+    crowd.add_argument("--reserve-mib", type=int, default=1500, help="GPU memory always left free for other programs (Tesla T4: 4300)")
+    crowd.add_argument("--vram-gb", type=float, default=0.0, help="Client VRAM budget in GB (default: auto from free memory; required on non-NVIDIA GPUs)")
+    crowd.add_argument("--backend", default="auto", choices=("auto", "cuda", "rocm", "xpu", "directml", "cpu", "mps"), help="CrowdGPT client backend")
+    crowd.add_argument("--pause-for", default="", help="Comma-separated process names (e.g. games) that pause training while running")
+    crowd.add_argument("--ignore-app", default="", help="Comma-separated name fragments of always-on GPU apps to tolerate (e.g. llama-server,ollama); the free-memory reserve still stops the client")
+    crowd.add_argument("--hot-c", type=float, default=82.0, help="Pause at or above this GPU temperature (C)")
+    crowd.add_argument("--cool-c", type=float, default=74.0, help="Resume only at or below this GPU temperature (C)")
+    crowd.add_argument("--stop-at", default="", help="Stop contributing at this local time, HH:MM")
+    crowd.add_argument("--data-dir", default=os.environ.get("HIVEMIND_CROWDGPT_DATA", os.path.join(os.path.expanduser("~"), ".hivemind", "crowdgpt")), help="Where receipts, the client log and HF_HOME live")
+    crowd.add_argument("--dry-run", action="store_true", help="With --crowdgpt: preflight and plan only, start nothing")
+    crowd.add_argument("--crowdgpt-python", default=sys.executable, help="Python interpreter that has CrowdGPT's requirements installed")
+    crowd.add_argument("--crowdgpt-heartbeat", action="store_true", help="With --crowdgpt: also send one existing OpenTrainer heartbeat (needs HIVEMIND_API_KEY)")
     return parser
+
+
+def _import_crowdgpt_contributor() -> Any:
+    try:
+        from hivemind.opentrainer import crowdgpt_contributor
+    except ImportError:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+        from hivemind.opentrainer import crowdgpt_contributor
+    return crowdgpt_contributor
+
+
+def run_crowdgpt_mode(args: argparse.Namespace) -> int:
+    """``--crowdgpt``: supervise CrowdGPT's client; no HiveMind delta submission, no HMT."""
+    cc = _import_crowdgpt_contributor()
+    if args.crowdgpt_heartbeat and not args.dry_run:
+        api_key = os.environ.get("HIVEMIND_API_KEY", "").strip()
+        gpu_name, total_mib, free_mib = detect_local_gpu()
+        if not api_key or total_mib <= 0:
+            print("Heartbeat skipped: needs HIVEMIND_API_KEY and an nvidia-smi GPU.", file=sys.stderr)
+        else:
+            try:
+                send_heartbeat(
+                    gateway=args.gateway, api_key=api_key, host_label=args.host_label, gpu_name=gpu_name,
+                    vram_total_mib=total_mib, vram_free_mib=free_mib, network_mode=args.network_mode,
+                    training_stack="crowdgpt-contributor", active_campaign="CROWDGPT-CROWD-V1",
+                )
+                print("OpenTrainer heartbeat sent.")
+            except (urllib.error.URLError, ValueError) as exc:
+                print(f"Heartbeat failed (continuing): {exc}", file=sys.stderr)
+    return cc.run_contributor(
+        cc.ContributorArgs(
+            crowdgpt_dir=args.crowdgpt_dir,
+            data_dir=args.data_dir,
+            reserve_mib=args.reserve_mib,
+            vram_gb=args.vram_gb,
+            backend=args.backend,
+            pause_for=tuple(p.strip() for p in args.pause_for.split(",") if p.strip()),
+            ignore_apps=tuple(p.strip() for p in args.ignore_app.split(",") if p.strip()),
+            hot_c=args.hot_c,
+            cool_c=args.cool_c,
+            stop_at=args.stop_at,
+            once=args.once,
+            dry_run=args.dry_run,
+            python=args.crowdgpt_python,
+        )
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.crowdgpt:
+        return run_crowdgpt_mode(args)
+    if not math.isfinite(float(args.interval_s)) or float(args.interval_s) <= 0.0:
+        print("Error: --interval-s must be a finite positive number.", file=sys.stderr)
+        return 2
+    if not math.isfinite(float(args.max_vram_gb)) or float(args.max_vram_gb) < 0.0:
+        print("Error: --max-vram-gb must be a finite non-negative number.", file=sys.stderr)
+        return 2
     round_report: dict[str, Any] | None = None
     if args.submit_delta:
         if not args.round_report:
@@ -253,9 +343,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Error: {exc}; no delta was submitted.", file=sys.stderr)
             return 2
     detected_gpu, detected_total, detected_free = detect_local_gpu()
-    gpu_name = args.gpu_name or detected_gpu
+    gpu_name = args.gpu_name or detected_gpu or ("custom-gpu" if args.vram_total_mib > 0 else "")
     vram_total = args.vram_total_mib if args.vram_total_mib > 0 else detected_total
     vram_free = args.vram_free_mib if args.vram_free_mib > 0 else min(detected_free, vram_total)
+    if float(args.max_vram_gb) > 0.0 and vram_free > 0:
+        cap_mib = max(512, int(round(float(args.max_vram_gb) * 1024.0)))
+        vram_free = min(vram_free, cap_mib)
 
     if args.check_firewall:
         try:
@@ -270,6 +363,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.check_firewall and args.once:
             return 0
         print("Error: HIVEMIND_API_KEY environment variable is required for OpenTrainer heartbeats.", file=sys.stderr)
+        return 2
+
+    if vram_total <= 0 or not gpu_name:
+        print(
+            "Error: No readable NVIDIA GPU detected via nvidia-smi (and --vram-total-mib was not specified); "
+            "refusing to send fabricated GPU telemetry.",
+            file=sys.stderr,
+        )
         return 2
 
     while True:

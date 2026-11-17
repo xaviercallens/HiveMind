@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import platform
 import sys
@@ -43,7 +44,7 @@ from hivemind.swarm.amcp_kafka_transport import (
     EnvelopeVerifier,
     HMACKeyring,
     TransportRecord,
-     VerifiedEvent,
+    VerifiedEvent,
     sign_envelope,
 )
 
@@ -60,6 +61,8 @@ FEDERATION_TOPIC = KAFKA_TOPICS["federation"]
 def resolve_opentrainer_keyring(keyring: HMACKeyring | None = None) -> HMACKeyring:
     """Resolve the AMCP HMAC keyring from environment or deterministic local fallback."""
     if keyring is not None:
+        if not isinstance(keyring, HMACKeyring):
+            raise TypeError("keyring must be an HMACKeyring instance or None")
         return keyring
     if os.environ.get("HIVEMIND_AMCP_HMAC_KEYS", "").strip():
         return HMACKeyring.from_env()
@@ -72,6 +75,10 @@ def resolve_opentrainer_keyring(keyring: HMACKeyring | None = None) -> HMACKeyri
 
 def verify_federation_envelope(verifier: EnvelopeVerifier, envelope: Mapping[str, Any]) -> VerifiedEvent:
     """Verify a CloudEvents 1.0 JSON envelope dict on the federation topic using EnvelopeVerifier."""
+    if not isinstance(verifier, EnvelopeVerifier):
+        raise TypeError("verifier must be an EnvelopeVerifier")
+    if not isinstance(envelope, Mapping):
+        raise TypeError("envelope must be a Mapping")
     raw = json.dumps(dict(envelope), sort_keys=True, separators=(",", ":")).encode("utf-8")
     rec = TransportRecord(
         topic=FEDERATION_TOPIC,
@@ -87,6 +94,34 @@ PIN_FILES: tuple[Path, ...] = (
     SCRIPTS_DIR / "e8_amcp_round.py",
     REPO_ROOT / "src" / "hivemind" / "swarm" / "federation_agents.py",
 )
+
+
+def multi_krum_round_selection(
+    learner_ids: Sequence[str],
+    deltas: Sequence[Mapping[str, torch.Tensor]],
+    tokens: Sequence[int | float],
+    *,
+    f_byzantine: int,
+) -> dict[str, Any]:
+    """Pick the learners whose deltas enter the outer step (Multi-Krum, m = n - f).
+
+    Multi-Krum is only meaningful with n >= 2f + 3 deltas. Below that, every delta is kept and the result says so
+    (``active`` False with the reason) instead of silently lowering f, so the round ledger shows when a round was
+    not protected.
+    """
+    ids = list(learner_ids)
+    n, f = len(ids), int(f_byzantine)
+    need = 2 * f + 3
+    if f == 0 or n < need:
+        reason = "byzantine_f is 0" if f == 0 else f"{n} accepted deltas < 2f+3 = {need} needed for f={f}"
+        return {"active": False, "reason": reason, "f": f, "selected": ids, "excluded": [], "scores": {}}
+    from hivemind.swarm.crowdgpt_bridge import multi_krum_select_and_aggregate
+
+    result = multi_krum_select_and_aggregate(list(deltas), f_byzantine=f, m_select=n - f, token_weights=list(tokens))
+    selected = [ids[i] for i in sorted(result.selected_indices)]
+    excluded = [ids[i] for i in sorted(result.rejected_indices)]
+    return {"active": True, "reason": "", "f": f, "selected": selected, "excluded": excluded,
+            "scores": {ids[i]: round(float(s), 6) for i, s in enumerate(result.krum_scores)}}
 
 
 @dataclass(frozen=True)
@@ -112,6 +147,42 @@ class LowCostVMProfile:
     keepalive_scheduler_job: str = "hm-opentrainer-1-keepalive"
     keepalive_cron: str = "*/5 * * * *"
     systemd_unit: str = "hivemind-opentrainer.service"
+
+    def __post_init__(self) -> None:
+        for str_field in (
+            "vm_name",
+            "project_id",
+            "zone",
+            "machine_type",
+            "provisioning_model",
+            "termination_action",
+            "vpc_private_ip",
+            "wireguard_overlay_ip",
+            "boot_disk_type",
+            "keepalive_scheduler_job",
+            "keepalive_cron",
+            "systemd_unit",
+        ):
+            val = getattr(self, str_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{str_field} must be a non-empty string")
+        if isinstance(self.vcpus, bool) or not isinstance(self.vcpus, int) or self.vcpus < 1:
+            raise ValueError("vcpus must be an integer >= 1")
+        if isinstance(self.memory_mib, bool) or not isinstance(self.memory_mib, int) or self.memory_mib < 256:
+            raise ValueError("memory_mib must be an integer >= 256")
+        if isinstance(self.accelerators_count, bool) or not isinstance(self.accelerators_count, int) or self.accelerators_count < 0:
+            raise ValueError("accelerators_count must be an integer >= 0")
+        if isinstance(self.boot_disk_gb, bool) or not isinstance(self.boot_disk_gb, int) or self.boot_disk_gb < 1:
+            raise ValueError("boot_disk_gb must be an integer >= 1")
+        if not isinstance(self.requires_t4_gpu, bool) or not isinstance(self.static_external_ip_reserved, bool):
+            raise ValueError("requires_t4_gpu and static_external_ip_reserved must be booleans")
+        if (
+            isinstance(self.estimated_monthly_cost_usd, bool)
+            or not isinstance(self.estimated_monthly_cost_usd, (int, float))
+            or not math.isfinite(float(self.estimated_monthly_cost_usd))
+            or float(self.estimated_monthly_cost_usd) < 0.0
+        ):
+            raise ValueError("estimated_monthly_cost_usd must be a finite non-negative number")
 
     def validate_governance(self) -> dict[str, Any]:
         """Verify strict compliance with AGENTS.md GCP cost governance rules."""
@@ -145,7 +216,12 @@ class OpenTrainerConfig:
     shard_size: int = 32
     outer_lr: float = 0.5
     outer_mu: float = 0.5
-    max_delta_l2: float = 50.0
+    max_delta_l2: float = 25.0  # same cap as router/opentrainer.DEFAULT_MAX_DELTA_L2 (see the evidence there)
+    # Multi-Krum: tolerate up to byzantine_f bad deltas per round. It needs n >= 2f + 3 accepted deltas; below that
+    # the round averages all deltas and records that the filter was inactive, or is re-offered when
+    # refuse_below_multi_krum_minimum is set.
+    byzantine_f: int = 1
+    refuse_below_multi_krum_minimum: bool = False
     round_deadline_s: float = 120.0
     cpu_sentinel_when_t4_offline: bool = True
     cpu_sentinel_learner_id: str = "l0"
@@ -153,9 +229,46 @@ class OpenTrainerConfig:
     checkpoint_path: Path | None = None
     report_path: Path | None = None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.run_id, str) or not self.run_id.strip():
+            raise ValueError("run_id must be a non-empty string")
+        if not isinstance(self.cpu_sentinel_learner_id, str) or not self.cpu_sentinel_learner_id.strip():
+            raise ValueError("cpu_sentinel_learner_id must be a non-empty string")
+        if isinstance(self.learners, (str, bytes)) or not isinstance(self.learners, Sequence) or len(self.learners) == 0:
+            raise ValueError("learners must be a non-empty sequence of learner IDs")
+        self.learners = tuple(self.learners)
+        if not all(isinstance(lid, str) and bool(lid.strip()) for lid in self.learners) or len(set(self.learners)) != len(self.learners):
+            raise ValueError("learners must be unique non-empty strings")
+        if isinstance(self.byzantine_f, bool) or not isinstance(self.byzantine_f, int) or self.byzantine_f < 0:
+            raise ValueError("byzantine_f must be a non-negative integer")
+        if isinstance(self.quorum, bool) or not isinstance(self.quorum, int) or not 1 <= self.quorum <= len(self.learners):
+            raise ValueError(f"quorum must be an integer in [1, {len(self.learners)}]")
+        for int_field, min_val in (
+            ("rounds", 1),
+            ("seed", 0),
+            ("inner_steps", 1),
+            ("batch_size", 1),
+            ("shard_size", 1),
+            ("cpu_sentinel_inner_steps", 1),
+        ):
+            val = getattr(self, int_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < min_val:
+                raise ValueError(f"{int_field} must be an integer >= {min_val}")
+        for pos_float_field in ("inner_lr", "outer_lr", "max_delta_l2", "round_deadline_s"):
+            fval = getattr(self, pos_float_field)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)) or float(fval) <= 0.0:
+                raise ValueError(f"{pos_float_field} must be a finite number > 0")
+        if isinstance(self.outer_mu, bool) or not isinstance(self.outer_mu, (int, float)) or not math.isfinite(float(self.outer_mu)) or not 0.0 <= float(self.outer_mu) < 1.0:
+            raise ValueError("outer_mu must be in [0.0, 1.0)")
+        if not isinstance(self.cpu_sentinel_when_t4_offline, bool):
+            raise ValueError("cpu_sentinel_when_t4_offline must be a boolean")
+
 
 def _atomic_write_bytes(target: Path, data: bytes) -> None:
     """Write bytes atomically via a sibling temporary file + fsync + os.replace (IP-08)."""
+    if not isinstance(data, (bytes, bytearray)):
+        raise TypeError("data must be bytes or bytearray")
+    target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = target.with_suffix(target.suffix + f".tmp.{os.getpid()}.{threading.get_ident()}")
     with open(tmp_path, "wb") as fh:
@@ -167,8 +280,23 @@ def _atomic_write_bytes(target: Path, data: bytes) -> None:
 
 def _atomic_write_json(target: Path, payload: Mapping[str, Any]) -> None:
     """Serialize JSON and persist atomically."""
+    if not isinstance(payload, Mapping):
+        raise TypeError("payload must be a Mapping")
     raw = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
     _atomic_write_bytes(target, raw)
+
+
+def _validate_optional_now(now: float | None) -> float:
+    if now is None:
+        return time.time()
+    if (
+        isinstance(now, bool)
+        or not isinstance(now, (int, float))
+        or not math.isfinite(float(now))
+        or float(now) <= 0.0
+    ):
+        raise ValueError("now must be a finite positive timestamp")
+    return float(now)
 
 
 class PermanentOpenTrainerOrchestrator:
@@ -182,6 +310,10 @@ class PermanentOpenTrainerOrchestrator:
         vm_profile: LowCostVMProfile | None = None,
         bus: Any | None = None,
     ) -> None:
+        if not isinstance(config, OpenTrainerConfig):
+            raise TypeError("config must be an OpenTrainerConfig")
+        if vm_profile is not None and not isinstance(vm_profile, LowCostVMProfile):
+            raise TypeError("vm_profile must be a LowCostVMProfile or None")
         if config.quorum < 1 or config.quorum > len(config.learners):
             raise ValueError(f"quorum must be in [1, {len(config.learners)}], got {config.quorum}")
         self.config = config
@@ -249,7 +381,7 @@ class PermanentOpenTrainerOrchestrator:
         _atomic_write_bytes(ckpt, buf.getvalue())
 
     def _open_new_round_offer(self, now: float | None = None) -> AMCPKafkaEvent:
-        now_ts = time.time() if now is None else float(now)
+        now_ts = _validate_optional_now(now)
         deadline = now_ts + self.config.round_deadline_s
         offer = fed.build_offer(
             run_id=self.config.run_id,
@@ -288,6 +420,8 @@ class PermanentOpenTrainerOrchestrator:
 
     def get_signed_offer_envelope(self, ttl_s: float = 900.0) -> dict[str, Any]:
         """Return the current round's task_offer wrapped in an HMAC-signed AMCP envelope."""
+        if isinstance(ttl_s, bool) or not isinstance(ttl_s, (int, float)) or not math.isfinite(float(ttl_s)) or float(ttl_s) <= 0.0:
+            raise ValueError("ttl_s must be a finite number > 0")
         with self._lock:
             if self.is_completed:
                 abort_ev = fed.build_abort(
@@ -329,6 +463,8 @@ class PermanentOpenTrainerOrchestrator:
 
     def submit_result_envelope(self, envelope: Mapping[str, Any], *, now: float | None = None) -> dict[str, Any]:
         """Verify a signed task_result envelope, add it to the active RoundBook, and advance if ready."""
+        if now is not None:
+            _validate_optional_now(now)
         verified = verify_federation_envelope(self.verifier, envelope)
         if verified.event.event_type != fed.RESULT:
             raise ValueError(f"Expected {fed.RESULT}, got {verified.event.event_type!r}")
@@ -361,6 +497,8 @@ class PermanentOpenTrainerOrchestrator:
 
     def run_cpu_sentinel_step_if_needed(self, *, now: float | None = None) -> dict[str, Any]:
         """Execute a lightweight CPU sentinel learner step on the low-cost VM when the T4 learner is absent."""
+        if now is not None:
+            _validate_optional_now(now)
         with self._lock:
             if self.is_completed or self.current_book is None or self.current_offer_event is None:
                 return {"ran_sentinel": False, "reason": "no_open_round"}
@@ -418,6 +556,10 @@ class PermanentOpenTrainerOrchestrator:
 
     def tick(self, *, now: float | None = None, run_sentinel_if_t4_absent: bool = False) -> dict[str, Any]:
         """Advance round state on deadline expiry and optionally run the T4-offline CPU sentinel."""
+        if not isinstance(run_sentinel_if_t4_absent, bool):
+            raise ValueError("run_sentinel_if_t4_absent must be a boolean")
+        if now is not None:
+            _validate_optional_now(now)
         sentinel_info: dict[str, Any] | None = None
         if run_sentinel_if_t4_absent:
             sentinel_info = self.run_cpu_sentinel_step_if_needed(now=now)
@@ -455,7 +597,19 @@ class PermanentOpenTrainerOrchestrator:
 
         # Status is either 'complete' (all learners answered) or 'quorum' (deadline passed with >= quorum learners)
         book = self.current_book
-        ids = sorted(book.accepted)
+        accepted_ids = sorted(book.accepted)
+        byzantine = multi_krum_round_selection(
+            accepted_ids,
+            [book.accepted[i]["delta"] for i in accepted_ids],
+            [book.accepted[i]["tokens"] for i in accepted_ids],
+            f_byzantine=int(self.config.byzantine_f),
+        )
+        if not byzantine["active"] and self.config.refuse_below_multi_krum_minimum:
+            self.retries_in_round += 1
+            self._open_new_round_offer(now=now)
+            return {"round_advanced": False, "round_status": "reoffered_below_multi_krum_minimum",
+                    "byzantine_filter": byzantine}
+        ids = list(byzantine["selected"])
         deltas = [book.accepted[i]["delta"] for i in ids]
         tokens = [book.accepted[i]["tokens"] for i in ids]
         self.global_state, self.velocity = qlora_round.outer_step(
@@ -474,8 +628,10 @@ class PermanentOpenTrainerOrchestrator:
         round_entry = {
             "round": self.current_round,
             "status": status,
-            "accepted": ids,
-            "hosts": {i: book.accepted[i]["host"] for i in ids},
+            "accepted": accepted_ids,
+            "aggregated": ids,
+            "byzantine_filter": byzantine,
+            "hosts": {i: book.accepted[i]["host"] for i in accepted_ids},
             "claims": sorted(book.claims),
             "retries": self.retries_in_round,
             "rejected": [list(r) for r in book.rejected],
@@ -568,6 +724,19 @@ def execute_http_learner_round(
 ) -> dict[str, Any]:
     """Pull one signed task_offer from an OpenTrainer HTTP endpoint, train QLoRA inner steps, and push task_result."""
     import urllib.request
+
+    if not isinstance(orchestrator_url, str) or not (orchestrator_url.startswith("http://") or orchestrator_url.startswith("https://")):
+        raise ValueError("orchestrator_url must start with http:// or https://")
+    if not isinstance(learner_id, str) or not learner_id.strip():
+        raise ValueError("learner_id must be a non-empty string")
+    if isinstance(learner_index, bool) or not isinstance(learner_index, int) or learner_index < 0:
+        raise ValueError("learner_index must be a non-negative integer")
+    if not isinstance(keyring, HMACKeyring):
+        raise TypeError("keyring must be an HMACKeyring")
+    if isinstance(min_free_mib, bool) or not isinstance(min_free_mib, (int, float)) or not math.isfinite(float(min_free_mib)) or float(min_free_mib) <= 0.0:
+        raise ValueError("min_free_mib must be a finite number > 0")
+    if isinstance(need_mib, bool) or not isinstance(need_mib, (int, float)) or not math.isfinite(float(need_mib)) or float(need_mib) <= 0.0:
+        raise ValueError("need_mib must be a finite number > 0")
 
     verifier = EnvelopeVerifier(keyring)
     pin = fed.code_pin(PIN_FILES)
@@ -673,6 +842,8 @@ def execute_http_learner_round(
 
 def create_opentrainer_router(orchestrator: PermanentOpenTrainerOrchestrator) -> APIRouter:
     """Create a FastAPI APIRouter exposing `/v1/opentrainer/*` endpoints."""
+    if not isinstance(orchestrator, PermanentOpenTrainerOrchestrator):
+        raise TypeError("orchestrator must be a PermanentOpenTrainerOrchestrator")
     router = APIRouter(prefix="/v1/opentrainer", tags=["opentrainer"])
 
     @router.get("/status")
@@ -716,6 +887,10 @@ def create_opentrainer_app(
     config: OpenTrainerConfig | None = None,
 ) -> FastAPI:
     """Create a standalone FastAPI application for the low-cost VM OpenTrainer orchestrator."""
+    if orchestrator is not None and not isinstance(orchestrator, PermanentOpenTrainerOrchestrator):
+        raise TypeError("orchestrator must be a PermanentOpenTrainerOrchestrator or None")
+    if config is not None and not isinstance(config, OpenTrainerConfig):
+        raise TypeError("config must be an OpenTrainerConfig or None")
     orch = orchestrator or PermanentOpenTrainerOrchestrator(config or OpenTrainerConfig())
     app = FastAPI(
         title="HiveMind Permanent Low-Cost VM OpenTrainer Orchestrator",

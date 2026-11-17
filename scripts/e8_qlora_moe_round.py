@@ -77,10 +77,48 @@ def free_vram_mib() -> Optional[float]:
     return None
 
 
-def vram_guard(min_free_mib: float, need_mib: float, device: str, free_fn: Callable[[], Optional[float]] = free_vram_mib) -> Optional[float]:
-    """Refuse GPU work that would leave less than ``min_free_mib`` free. An unreadable GPU is a refusal, never a pass."""
+T4_FREE_FLOOR_MIB = 4300  # AGENTS.md: always keep >= 4,300 MiB free on the Tesla T4; a rule for that card, not a tuning knob
+
+
+def gpu_name() -> Optional[str]:
+    """The first GPU's name from nvidia-smi, or None when it cannot be read."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True, timeout=10, check=False)
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip().splitlines()[0].strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def t4_floor_refusal(min_free_mib: float, name: Optional[str]) -> Optional[str]:
+    """Why a floor below 4,300 MiB is refused here, or None if it is allowed.
+
+    The rule covers the Tesla T4. A GPU that cannot be identified is treated as a T4 (fail closed); any other card keeps the
+    floor its owner set (the volunteer kit sets one per profile)."""
+    if min_free_mib >= T4_FREE_FLOOR_MIB:
+        return None
+    if name is None:
+        return f"cannot identify the GPU, and a free-VRAM floor of {min_free_mib:.0f} MiB is below the T4 rule of {T4_FREE_FLOOR_MIB} MiB"
+    if "T4" in name.upper().split() or "TESLA T4" in name.upper():
+        return f"a free-VRAM floor of {min_free_mib:.0f} MiB on a {name} is below the AGENTS.md rule of {T4_FREE_FLOOR_MIB} MiB"
+    return None
+
+
+def vram_guard(
+    min_free_mib: float,
+    need_mib: float,
+    device: str,
+    free_fn: Callable[[], Optional[float]] = free_vram_mib,
+    name_fn: Callable[[], Optional[str]] = gpu_name,
+) -> Optional[float]:
+    """Refuse GPU work that would leave less than ``min_free_mib`` free. An unreadable GPU is a refusal, never a pass.
+    On a Tesla T4 (or a GPU that cannot be identified) a floor below 4,300 MiB is itself refused."""
     if device != "cuda":
         return None
+    refusal = t4_floor_refusal(min_free_mib, name_fn()) if min_free_mib < T4_FREE_FLOOR_MIB else None
+    if refusal is not None:
+        raise GuardError(refusal)
     free = free_fn()
     if free is None:
         raise GuardError("cannot read the free VRAM (nvidia-smi); refusing to start GPU work")

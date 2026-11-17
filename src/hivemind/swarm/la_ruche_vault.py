@@ -147,6 +147,71 @@ class RucheHoneycombCell:
     # covers the adapter checks made here (finite tensors, non-silent, SVD rank/energy), not these figures.
     nll_source: str = "CALLER_REPORTED_UNVERIFIED"
 
+    def __post_init__(self) -> None:
+        for s_field in (
+            "cell_id",
+            "domain_name",
+            "display_title",
+            "accent_hex",
+            "contributor_handle",
+            "hardware_device",
+            "dataset_shard_cid",
+            "expert_cas_cid",
+            "safetensors_rel_path",
+            "safetensors_sha256",
+            "wire_codec",
+            "nll_source",
+        ):
+            sval = getattr(self, s_field)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        for coord_field in ("hex_q", "hex_r"):
+            cval = getattr(self, coord_field)
+            if isinstance(cval, bool) or not isinstance(cval, int):
+                raise ValueError(f"{coord_field} must be an integer")
+        for pos_int_field in ("safetensors_bytes", "source_rank_r", "canonical_rank_r"):
+            ival = getattr(self, pos_int_field)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{pos_int_field} must be a positive integer")
+        if (
+            isinstance(self.spectral_energy_retained, bool)
+            or not isinstance(self.spectral_energy_retained, (int, float))
+            or not math.isfinite(float(self.spectral_energy_retained))
+            or not (0.0 <= float(self.spectral_energy_retained) <= 1.0 + 1e-6)
+        ):
+            raise ValueError("spectral_energy_retained must be a finite number in [0.0, 1.0]")
+        for pos_flt_field in (
+            "train_nll_before",
+            "train_nll_after",
+            "holdout_nll_before",
+            "holdout_nll_after",
+            "holdout_perplexity_before",
+            "holdout_perplexity_after",
+        ):
+            fval = getattr(self, pos_flt_field)
+            if (
+                isinstance(fval, bool)
+                or not isinstance(fval, (int, float))
+                or not math.isfinite(float(fval))
+                or float(fval) <= 0.0
+            ):
+                raise ValueError(f"{pos_flt_field} must be a finite positive number")
+        if (
+            isinstance(self.perplexity_reduction_pct, bool)
+            or not isinstance(self.perplexity_reduction_pct, (int, float))
+            or not math.isfinite(float(self.perplexity_reduction_pct))
+        ):
+            raise ValueError("perplexity_reduction_pct must be a finite number")
+        if (
+            isinstance(self.deposited_at_epoch, bool)
+            or not isinstance(self.deposited_at_epoch, (int, float))
+            or not math.isfinite(float(self.deposited_at_epoch))
+            or float(self.deposited_at_epoch) < 0.0
+        ):
+            raise ValueError("deposited_at_epoch must be a finite non-negative number")
+        if not isinstance(self.verified, bool):
+            raise ValueError("verified must be a boolean")
+
 
 @dataclass
 class RucheCommunityMoERelease:
@@ -179,8 +244,73 @@ class RucheCommunityMoERelease:
         "All experts and MoE weights are openly shared under reciprocal community compute."
     )
 
+    def __post_init__(self) -> None:
+        for s_field in (
+            "release_id",
+            "release_version",
+            "base_architecture",
+            "router_type",
+            "combined_safetensors_path",
+            "combined_safetensors_sha256",
+            "model_card_path",
+            "manifest_path",
+            "charter_notice",
+        ):
+            sval = getattr(self, s_field)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        for i_field, min_val in (
+            ("num_domains", 1),
+            ("top_k_active", 1),
+            ("canonical_rank_r", 1),
+            ("hidden_size", 4),
+            ("vocab_size", 2),
+            ("combined_safetensors_bytes", 1),
+        ):
+            ival = getattr(self, i_field)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < min_val:
+                raise ValueError(f"{i_field} must be an integer >= {min_val}")
+        if not isinstance(self.three_tier_enabled, bool) or not isinstance(self.ortho_inj_enabled, bool):
+            raise ValueError("three_tier_enabled and ortho_inj_enabled must be booleans")
+        for p_field in ("mean_holdout_perplexity_before", "mean_holdout_perplexity_after"):
+            pval = getattr(self, p_field)
+            if (
+                isinstance(pval, bool)
+                or not isinstance(pval, (int, float))
+                or not math.isfinite(float(pval))
+                or float(pval) <= 0.0
+            ):
+                raise ValueError(f"{p_field} must be a finite positive number")
+        if (
+            isinstance(self.mean_perplexity_reduction_pct, bool)
+            or not isinstance(self.mean_perplexity_reduction_pct, (int, float))
+            or not math.isfinite(float(self.mean_perplexity_reduction_pct))
+        ):
+            raise ValueError("mean_perplexity_reduction_pct must be a finite number")
+        if (
+            isinstance(self.created_at_epoch, bool)
+            or not isinstance(self.created_at_epoch, (int, float))
+            or not math.isfinite(float(self.created_at_epoch))
+            or float(self.created_at_epoch) < 0.0
+        ):
+            raise ValueError("created_at_epoch must be a finite non-negative number")
+        if (
+            not isinstance(self.contributors, list)
+            or not self.contributors
+            or any(not isinstance(c, str) or not c.strip() for c in self.contributors)
+        ):
+            raise ValueError("contributors must be a non-empty list of non-empty strings")
+        if (
+            not isinstance(self.cells, list)
+            or not self.cells
+            or any(not isinstance(cell, RucheHoneycombCell) for cell in self.cells)
+        ):
+            raise ValueError("cells must be a non-empty list of RucheHoneycombCell")
+
 
 def _serialize_tensors_safetensors(tensors: Dict[str, torch.Tensor]) -> bytes:
+    if not isinstance(tensors, dict) or not tensors:
+        raise ValueError("tensors must be a non-empty dict")
     clean = {
         str(k): v.detach().cpu().to(dtype=torch.float32).contiguous().clone()
         for k, v in sorted(tensors.items())
@@ -193,6 +323,8 @@ def _verify_and_measure_adapter_svd(
     canonical_rank_r: int = 4,
 ) -> Tuple[int, float]:
     """Validate finite non-zero adapter tensors and compute SVD spectral energy retention."""
+    if isinstance(canonical_rank_r, bool) or not isinstance(canonical_rank_r, int) or canonical_rank_r < 1:
+        raise ValueError("canonical_rank_r must be a positive integer")
     if not adapter_tensors:
         raise ValueError("adapter_tensors cannot be empty")
 
@@ -231,6 +363,17 @@ class LaRucheModelVault:
         vocab_size: int = 259,
         canonical_rank_r: int = 4,
     ) -> None:
+        if (
+            isinstance(hidden_size, bool)
+            or not isinstance(hidden_size, int)
+            or hidden_size < 4
+            or hidden_size % 4 != 0
+        ):
+            raise ValueError("hidden_size must be an integer >= 4 divisible by 4")
+        if isinstance(vocab_size, bool) or not isinstance(vocab_size, int) or vocab_size < 2:
+            raise ValueError("vocab_size must be an integer >= 2")
+        if isinstance(canonical_rank_r, bool) or not isinstance(canonical_rank_r, int) or canonical_rank_r < 1:
+            raise ValueError("canonical_rank_r must be a positive integer")
         self.vault_dir = Path(vault_dir)
         self.cells_dir = self.vault_dir / "cells"
         self.release_dir = self.vault_dir / "community_moe_release"
@@ -268,6 +411,14 @@ class LaRucheModelVault:
             raise ValueError(
                 f"Unknown La Ruche domain '{domain_name}'. Expected one of {sorted(self._layout_by_domain)}"
             )
+        for field_name, field_val in (
+            ("contributor_handle", contributor_handle),
+            ("hardware_device", hardware_device),
+            ("dataset_shard_cid", dataset_shard_cid),
+            ("wire_codec", wire_codec),
+        ):
+            if not isinstance(field_val, str) or not field_val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
         # NaN compares False against everything, so `after >= before` let a NaN loss through the gate (IP-163):
         # every reported figure must be a finite, positive number before any comparison.
         for figure_name, figure in (
@@ -359,6 +510,12 @@ class LaRucheModelVault:
         seed: int = 20261024,
     ) -> Tuple[UpcycledSparseMoEModel, RucheCommunityMoERelease]:
         """Merge all deposited Honeycomb Cells into a Community BTM Sparse MoE Model & export bundle."""
+        if not isinstance(release_version, str) or not release_version.strip():
+            raise ValueError("release_version must be a non-empty string")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be a positive integer")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         if not self.cells:
             raise ValueError("Cannot assemble Community MoE: La Ruche has no deposited cells")
 
@@ -515,13 +672,21 @@ def load_community_moe_from_ruche(
     seed: int = 20261024,
 ) -> Tuple[UpcycledSparseMoEModel, Dict[str, Any]]:
     """Load the merged Community BTM Sparse MoE model and manifest from a La Ruche vault directory."""
-    vault_path = Path(vault_dir)
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    vault_path = Path(vault_dir).resolve()
     manifest_path = vault_path / "community_moe_release" / "ruche_manifest.json"
     if not manifest_path.exists():
         raise FileNotFoundError(f"La Ruche manifest not found at {manifest_path}")
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    safetensors_path = vault_path / str(manifest["combined_safetensors_path"])
+    rel_st_path = str(manifest["combined_safetensors_path"])
+    rel_candidate = Path(rel_st_path)
+    if rel_candidate.is_absolute() or ".." in rel_candidate.parts:
+        raise ValueError(f"Unsafe combined_safetensors_path in manifest: {rel_st_path!r}")
+    safetensors_path = (vault_path / rel_candidate).resolve()
+    if not safetensors_path.is_relative_to(vault_path) or safetensors_path == vault_path:
+        raise ValueError(f"combined_safetensors_path escapes vault_dir: {rel_st_path!r}")
     raw_bytes = safetensors_path.read_bytes()
     actual_sha256 = hashlib.sha256(raw_bytes).hexdigest()
     if actual_sha256 != manifest["combined_safetensors_sha256"]:
@@ -603,6 +768,10 @@ def load_community_moe_from_gcs_or_https(
     import re
     import urllib.request
 
+    if not isinstance(gcs_public_base_url, str) or not gcs_public_base_url.strip():
+        raise ValueError("gcs_public_base_url must be a non-empty string")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     cache_path = Path(cache_dir).resolve()
     release_dir = cache_path / "community_moe_release"
     release_dir.mkdir(parents=True, exist_ok=True)

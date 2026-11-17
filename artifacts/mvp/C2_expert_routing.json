@@ -1,0 +1,20 @@
+{
+  "criterion": "C2",
+  "what": "Registered adapter is routed by domain; failed-gate and unregistered adapters refused in gateway router",
+  "transport": "FastAPI TestClient + httpx.MockTransport upstream producer stub",
+  "real_failed_gate_tested": "artifacts/experiments/GRANITE_ADAPTER_hmq_00147_gate_f16.json",
+  "checks": {
+    "heartbeat_ok": true,
+    "register_shadow_ok": true,
+    "failed_gate_refused": true,
+    "wrong_sha_gate_refused": true,
+    "shadow_expert_request_refused": true,
+    "unregistered_adapter_refused": true,
+    "auto_skips_unpromoted_shadow_expert": true,
+    "passing_gate_promotes_live": true,
+    "auto_routes_domain_prompt_to_live_expert": true,
+    "unrelated_prompt_does_not_hit_domain_expert": true
+  },
+  "passed": true,
+  "reason": ""
+}

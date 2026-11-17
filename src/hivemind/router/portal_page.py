@@ -16,6 +16,8 @@ strictly enforces nonce-pinned scripts and styles.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+import re
 from typing import Any
 
 from hivemind.router.catalog import TIERS
@@ -23,9 +25,13 @@ from hivemind.router.google_auth import CLIENT_ID_RE
 from hivemind.router.life_as_a_bee import render_life_as_a_bee_section
 from hivemind.router.telemetry_figures import shown_figure
 
+_PORTAL_NONCE_RE = re.compile(r"^[A-Za-z0-9+/=_-]{1,128}$")
+
 
 def portal_content_security_policy(nonce: str) -> str:
     """Strict Content-Security-Policy for the OpenRouter portal and playground."""
+    if isinstance(nonce, bool) or not isinstance(nonce, str) or not _PORTAL_NONCE_RE.fullmatch(nonce):
+        raise ValueError("nonce must be a 1-128 char URL/base64-safe token")
     return "; ".join([
         "default-src 'none'",
         f"script-src 'nonce-{nonce}'",
@@ -1222,9 +1228,11 @@ PORTAL_I18N_BANNERS: dict[str, dict[str, str]] = {
 
 def normalize_portal_lang(lang: str | None) -> str:
     """Normalize a portal language code to one of ('fr', 'en', 'es', 'de', 'zh'), defaulting to 'en'."""
+    if lang is not None and (isinstance(lang, bool) or not isinstance(lang, str)):
+        raise ValueError("lang must be a string or None")
     if not lang:
         return "en"
-    code = str(lang).strip().lower()[:2]
+    code = lang.strip().lower()[:2]
     return code if code in PORTAL_SUPPORTED_LANGS else "en"
 
 
@@ -1236,6 +1244,16 @@ def render_portal_page(
     live_telemetry: dict[str, Any] | None = None,
 ) -> str:
     """Render the full OpenRouter Portal and Playground HTML page."""
+    portal_content_security_policy(nonce)
+    if client_id is not None:
+        if isinstance(client_id, bool) or not isinstance(client_id, str):
+            raise ValueError("client_id must be a string or None")
+        if client_id == "":
+            client_id = None
+        elif not CLIENT_ID_RE.match(client_id):
+            raise ValueError("invalid Google client id")
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     clean_lang = normalize_portal_lang(lang)
     i18n_banner = PORTAL_I18N_BANNERS[clean_lang]
     life_as_a_bee_html = render_life_as_a_bee_section(live_telemetry=live_telemetry)
@@ -1341,6 +1359,7 @@ def render_portal_page(
         <a href="#integrations" class="nav-link">Editor Config</a>
         <a href="#steam-free-game" class="nav-link">&#x1F3AE; Free Steam Game</a>
         <a href="#contributive-community-hub" class="nav-link" style="color:var(--green);font-weight:700;">&#x1F91D; Contributive &amp; Help</a>
+        <a href="/raid" class="nav-link" style="color:var(--amber);font-weight:700;">&#x1F680; v3.4 Pioneer Raid (14&ndash;15 Nov)</a>
         <a href="#opentrainer" class="nav-link" style="color:var(--cyan);font-weight:700;">&#x1F525; Trainer (OpenTrainer)</a>
         <a href="#producers" class="nav-link">Share GPU</a>
         <a href="/signup" class="nav-link">&#x1F511; Sign In</a>
@@ -1363,6 +1382,25 @@ def render_portal_page(
         <a href="#life-as-a-bee" class="btn btn-outline" style="border-color:var(--amber);color:var(--amber);">&#x1F41D; Life as a Bee (15 Scenarios)</a>
         {signup_cta}
         <a href="https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/" target="_blank" rel="noopener" class="btn btn-outline">&#x1F36F; HiveMind@home Portal</a>
+      </div>
+    </section>
+
+    <!-- HiveMind v3.4 Pioneer Thank-You & Nov 14-15 CrowdGPT Massive Swarm Raid Callout -->
+    <section id="weekend-raid" class="card" style="margin-bottom:1.5rem;border-color:rgba(251,191,36,0.55);background:linear-gradient(180deg, rgba(245,158,11,0.12), rgba(13,19,38,0.96));">
+      <div class="card-header" style="margin-bottom:0.65rem;padding-bottom:0.5rem;">
+        <div class="card-title" style="color:var(--amber);font-size:1rem;">
+          &#x1F41D; Thank You Pioneers! HiveMind v3.4 + Rebuilt EN/FR Web UI + CrowdGPT Massive Swarm Raid (14&ndash;15 Nov 2026)
+        </div>
+        <a href="/raid" class="pill" style="border-color:var(--amber);color:var(--amber);text-decoration:none;margin:0;">Open Raid Hub (/raid)</a>
+      </div>
+      <p style="font-size:0.88rem;color:var(--text);margin-bottom:0.85rem;">
+        Personal thank-you from <strong>Xavier Callens (<code>callensxavier@gmail.com</code>)</strong> to our first <strong>55 registered contributors &amp; adopters</strong>! Your existing <code>hm-...</code> API key and <code>HMT</code> balance are 100% preserved. Join as a <strong>GPU Producer</strong> (<code>:8787</code> Shield, <code>&lt; 1.5s</code> game preemption) or <strong>OpenDiLoCo Sparse-MoE Trainer</strong> (<code>hivemind/crowd-moe-v1</code> with <code>@Vxtzq</code>) this weekend to validate <strong>both</strong> open-source concepts live!
+      </p>
+      <div style="display:flex;gap:0.65rem;flex-wrap:wrap;">
+        <a href="/raid" class="btn btn-primary" style="padding:0.5rem 0.95rem;font-size:0.82rem;">&#x1F680; Pioneer Reconnect &amp; Raid Guide</a>
+        <a href="/calendar/crowdgpt-weekend-raid.ics" class="btn btn-outline" style="padding:0.5rem 0.95rem;font-size:0.82rem;border-color:var(--cyan);color:var(--cyan);">&#x1F4C5; Download 6-Wave .ICS</a>
+        <a href="https://github.com/xaviercallens/HiveMind/issues/new?template=04_crowdgpt_weekend_moe_raid.yml" target="_blank" rel="noopener" class="btn btn-outline" style="padding:0.5rem 0.95rem;font-size:0.82rem;border-color:var(--amber);color:var(--amber);">&#x26A1; Register Raid GPU (E0..E7)</a>
+        <a href="https://discord.gg/ZeFtZpKHf" target="_blank" rel="noopener" class="btn btn-outline" style="padding:0.5rem 0.95rem;font-size:0.82rem;border-color:var(--purple);color:var(--purple);">&#x1F4AC; Discord (#weekend-swarm-raid)</a>
       </div>
     </section>
 

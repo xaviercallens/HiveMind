@@ -1,0 +1,18 @@
+# Serving-first GCP Spot Tesla T4 DiLoCo trainer for GCPCrowd (Vxtzq/Crowd-v1 x HiveMind).
+# Writes strictly to /mnt/disks/disk-socrateai-local-1/gcpcrowd (never /opt/hivemind/t4/).
+[Unit]
+Description=HiveMind GCP T4 DiLoCo Co-Trainer for GCPCrowd (>= 4300 MiB free VRAM guard)
+After=hivemind-t4-governor.service nginx.service
+
+[Service]
+NoNewPrivileges=yes
+ProtectSystem=full
+User=callensxavier_gmail_com
+Environment=PYTHONPATH=/opt/hivemind/HiveMind/src
+ExecStartPre=/usr/bin/install -d -m 0755 /mnt/disks/disk-socrateai-local-1/gcpcrowd
+ExecStart=/mnt/disks/disk-socrateai-local-1/boinc/venv/bin/python /opt/hivemind/HiveMind/scripts/gcp_t4_crowd_diloco_worker.py --mode daemon --work-dir /mnt/disks/disk-socrateai-local-1/gcpcrowd --governor-state /mnt/disks/disk-socrateai-local-1/hivemind_telemetry/governor_state.json --hold-file /mnt/disks/disk-socrateai-local-1/hivemind_telemetry/HOLD --nginx-status-url http://127.0.0.1:8091/nginx_status --min-free-vram-mib 4300 --check-spot-preemption
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

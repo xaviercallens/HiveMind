@@ -27,7 +27,7 @@ import math
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import torch
@@ -54,9 +54,31 @@ def multi_krum_select(
     num_select: int,
 ) -> list[int]:
     """Byzantine-resilient Multi-Krum selection over flat delta vectors."""
+    if not isinstance(vectors, (list, tuple)) or not vectors:
+        raise ValueError("vectors must be non-empty")
     n = len(vectors)
+    first_shape: tuple[int, ...] | None = None
+    for idx, vec in enumerate(vectors):
+        if (
+            not isinstance(vec, np.ndarray)
+            or vec.dtype == np.bool_
+            or not np.issubdtype(vec.dtype, np.number)
+            or vec.ndim != 1
+            or vec.size == 0
+        ):
+            raise ValueError(f"vectors[{idx}] must be a non-empty 1D numpy ndarray")
+        if first_shape is None:
+            first_shape = vec.shape
+        elif vec.shape != first_shape:
+            raise ValueError(f"vectors[{idx}] shape {vec.shape} does not match {first_shape}")
+    if isinstance(num_byzantine, bool) or not isinstance(num_byzantine, int) or num_byzantine < 0:
+        raise ValueError("num_byzantine must be a non-negative integer")
+    if isinstance(num_select, bool) or not isinstance(num_select, int) or num_select < 1 or num_select > n:
+        raise ValueError(f"num_select must be an integer in [1, {n}]")
     k_neighbors = max(1, n - num_byzantine - 2)
     mat = np.stack(vectors, axis=0).astype(np.float64)
+    if not np.all(np.isfinite(mat)):
+        raise ValueError("vectors must contain finite values")
     scores: list[tuple[float, int]] = []
     for i in range(n):
         dists = np.sum((mat - mat[i]) ** 2, axis=1)
@@ -389,6 +411,22 @@ class CodingSubtaskNode:
     depends_on: list[str]
     verification_benchmark: str
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("subtask_id", self.subtask_id),
+            ("role_slug", self.role_slug),
+            ("assigned_cluster_id", self.assigned_cluster_id),
+            ("target_language", self.target_language),
+            ("description", self.description),
+            ("verification_benchmark", self.verification_benchmark),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.depends_on, list) or not all(
+            isinstance(d, str) and d.strip() for d in self.depends_on
+        ):
+            raise ValueError("depends_on must be a list of non-empty strings")
+
 
 @dataclass(frozen=True)
 class BigGPUNodeCodingSpec:
@@ -407,6 +445,46 @@ class BigGPUNodeCodingSpec:
     lora_alpha: float
     throughput_weight: int
     region: str
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("node_id", self.node_id),
+            ("handle", self.handle),
+            ("hardware_name", self.hardware_name),
+            ("pool_role", self.pool_role),
+            ("region", self.region),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (
+            ("total_vram_mib", self.total_vram_mib),
+            ("training_budget_vram_mib", self.training_budget_vram_mib),
+            ("lora_alpha", self.lora_alpha),
+        ):
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) <= 0.0
+            ):
+                raise ValueError(f"{field_name} must be a positive finite number")
+        for field_name, val in (
+            ("lora_rank", self.lora_rank),
+            ("throughput_weight", self.throughput_weight),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        for seq_name, seq_val in (
+            ("assigned_cluster_ids", self.assigned_cluster_ids),
+            ("assigned_bee_ids", self.assigned_bee_ids),
+            ("primary_backbones", self.primary_backbones),
+        ):
+            if (
+                not isinstance(seq_val, tuple)
+                or not seq_val
+                or any(not isinstance(s, str) or not s.strip() for s in seq_val)
+            ):
+                raise ValueError(f"{seq_name} must be a non-empty tuple of non-empty strings")
 
 
 BIG_GPU_CODING_FLEET: tuple[BigGPUNodeCodingSpec, ...] = (
@@ -576,6 +654,34 @@ class CodingQualityLoopIteration:
     all_node_vram_within_budget: bool
     polyglot_loop_benchmarks: dict[str, dict[str, float]]
 
+    def __post_init__(self) -> None:
+        for i_pos in ("loop_index", "distributed_nodes_active", "inner_steps_executed"):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+        for s_name in ("loop_title", "refinement_strategy"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for f_name in (
+            "heldout_hard_eval_loss",
+            "heldout_hard_routing_acc",
+            "heldout_top2_expert_acc",
+            "delta_energy_vs_prev_loop",
+            "mean_bee_sqnr_db",
+            "mean_wire_compression_x",
+        ):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        if float(self.heldout_hard_eval_loss) <= 0.0 or float(self.mean_wire_compression_x) <= 0.0:
+            raise ValueError("heldout_hard_eval_loss and mean_wire_compression_x must be positive")
+        for b_name in ("monotone_ratchet_accepted", "all_zk_opoi_verified", "all_node_vram_within_budget"):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
+        if not isinstance(self.polyglot_loop_benchmarks, dict) or not self.polyglot_loop_benchmarks:
+            raise ValueError("polyglot_loop_benchmarks must be a non-empty dict")
+
 
 @dataclass(frozen=True)
 class NocturnalCodingMoEReport:
@@ -617,12 +723,77 @@ class NocturnalCodingMoEReport:
     overall_gate_passed: bool
     report_sha256: str
 
+    def __post_init__(self) -> None:
+        for s_name in ("campaign_id", "execution_device", "report_sha256"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for i_pos in (
+            "inner_diloco_steps",
+            "lora_rank",
+            "num_quality_loops",
+            "expert_clusters_count",
+            "specialist_bees_count",
+            "big_gpu_nodes_count",
+        ):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+        for f_name in (
+            "timestamp_utc",
+            "lora_alpha",
+            "stage2_mean_loss_reduction_pct",
+            "stage2_max_consumer_vram_mib",
+            "stage3_mean_compression_ratio",
+            "stage3_mean_sqnr_db",
+            "stage4_poison_rejection_rate_pct",
+            "stage4_replay_cosine_similarity",
+            "stage4_replay_l2_drift",
+            "stage5_cluster_routing_accuracy",
+            "stage5_single_model_baseline_loss",
+            "stage5_upcycled_moe_loss",
+            "stage5_moe_vs_baseline_gain_pct",
+            "t4_free_vram_mib",
+        ):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        for b_name in (
+            "monotone_3loop_ratchet_passed",
+            "stage1_all_base_frozen",
+            "stage2_invariant_i1_satisfied",
+            "t4_vram_floor_satisfied",
+            "overall_gate_passed",
+        ):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
+        for l_name in (
+            "supported_languages",
+            "big_gpu_node_allocations",
+            "quality_loop_iterations",
+            "bee_training_results",
+            "stage3_dht_keys_published",
+            "sample_epic_dag_plan",
+        ):
+            lst = getattr(self, l_name)
+            if not isinstance(lst, list) or not lst:
+                raise ValueError(f"{l_name} must be a non-empty list")
+        if not isinstance(self.polyglot_loop_benchmarks if hasattr(self, "polyglot_loop_benchmarks") else self.polyglot_benchmark_scores, dict) or not self.polyglot_benchmark_scores:
+            raise ValueError("polyglot_benchmark_scores must be a non-empty dict")
+
 
 def decompose_engineering_epic_to_dag(
     epic_title: str,
     target_languages: tuple[str, ...] = SUPPORTED_CODING_LANGUAGES,
 ) -> list[CodingSubtaskNode]:
     """Deterministically split a polyglot software engineering epic across the 8 MoE specialist roles."""
+    if not isinstance(epic_title, str) or not epic_title.strip() or any(ord(c) < 32 for c in epic_title):
+        raise ValueError("epic_title must be a non-empty printable string")
+    if not isinstance(target_languages, Sequence) or isinstance(target_languages, (str, bytes)):
+        raise ValueError("target_languages must be a sequence of language strings")
+    for lang in target_languages:
+        if not isinstance(lang, str) or not lang.strip() or any(ord(c) < 32 for c in lang):
+            raise ValueError("target_languages must contain non-empty printable strings")
     langs = list(target_languages) if target_languages else list(SUPPORTED_CODING_LANGUAGES)
     lang_arch = "Rust" if "Rust" in langs else langs[0]
     lang_orch = "Python" if "Python" in langs else langs[0]
@@ -717,6 +888,18 @@ class PolyglotCodingBeeAdapter(nn.Module):
         seed: int = 42,
     ) -> None:
         super().__init__()
+        for field_name, val in (
+            ("d_model", d_model),
+            ("d_ff", d_ff),
+            ("num_classes", num_classes),
+            ("lora_rank", lora_rank),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
+        if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or lora_alpha <= 0:
+            raise ValueError("lora_alpha must be a positive finite number")
         gen = torch.Generator().manual_seed(seed)
         self.d_model = d_model
         self.d_ff = d_ff
@@ -752,6 +935,15 @@ class PolyglotCodingBeeAdapter(nn.Module):
         )
 
     def forward_hidden(self, x: torch.Tensor) -> torch.Tensor:
+        if (
+            not isinstance(x, torch.Tensor)
+            or x.dtype == torch.bool
+            or x.ndim != 2
+            or x.shape[0] < 1
+            or x.shape[1] != self.d_model
+            or not bool(torch.isfinite(x).all().item())
+        ):
+            raise ValueError(f"x must be a finite 2D tensor of shape [batch, {self.d_model}]")
         rms = torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + 1e-6)
         normed = x * rms * self.rms_weight
         up_base = F.linear(normed, self.base_up)
@@ -997,8 +1189,15 @@ def run_nocturnal_coding_moe_campaign(
     output_json_path: str | Path | None = None,
 ) -> NocturnalCodingMoEReport:
     """Execute the Distributed Big-GPU 3-Loop Nocturnal Polyglot Coding MoE Training Campaign."""
-    if num_quality_loops < 1:
-        raise ValueError("num_quality_loops must be >= 1")
+    for field_name, val in (
+        ("inner_steps", inner_steps),
+        ("lora_rank", lora_rank),
+        ("num_quality_loops", num_quality_loops),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            raise ValueError(f"{field_name} must be >= 1")
+    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or lora_alpha <= 0:
+        raise ValueError("lora_alpha must be a positive finite number")
 
     torch.manual_seed(20261030)
     np.random.seed(20261030)

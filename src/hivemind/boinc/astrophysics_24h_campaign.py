@@ -148,6 +148,12 @@ def _load_6domain_astrophysics_cosmology_examples(
     num_samples: int = 24,
 ) -> List[str]:
     """Load real astrophysics or cosmology observation strings for any of the 6 campaign branches."""
+    if not isinstance(branch_name, str) or not branch_name.strip():
+        raise ValueError("branch_name must be a non-empty string")
+    if not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0:
+        raise ValueError("num_samples must be a positive integer")
     if branch_name in COSMOLOGY_CURATED_CORPORA:
         base_list = COSMOLOGY_CURATED_CORPORA[branch_name]
         samples: List[str] = []
@@ -169,6 +175,18 @@ def create_signed_6domain_parquet_shard(
     secret_key: bytes = DEFAULT_COORDINATOR_SECRET,
 ) -> Tuple[Path, str, str, List[str], Dict[str, Any]]:
     """Screen via Phase S-2 guard, encode into deterministic Parquet shard, and HMAC-SHA256 sign."""
+    if not isinstance(shard_path, (Path, str)) or not str(shard_path).strip():
+        raise ValueError("shard_path must be a non-empty Path or string")
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int) or rng_seed < 0:
+        raise ValueError("rng_seed must be a non-negative integer")
+    if isinstance(num_sequences, bool) or not isinstance(num_sequences, int) or num_sequences <= 0:
+        raise ValueError("num_sequences must be a positive integer")
+    if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 4:
+        raise ValueError("seq_len must be an integer >= 4")
+    if isinstance(vocab_size, bool) or not isinstance(vocab_size, int) or vocab_size < 64:
+        raise ValueError("vocab_size must be an integer >= 64")
+    if not isinstance(secret_key, (bytes, bytearray)) or len(secret_key) < 8:
+        raise ValueError("secret_key must be bytes of length >= 8")
     path = Path(shard_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -222,6 +240,10 @@ def create_signed_6domain_parquet_shard(
 
 @torch.no_grad()
 def _eval_loss(model: torch.nn.Module, token_sequences: torch.Tensor, device: torch.device) -> float:
+    if not isinstance(model, torch.nn.Module):
+        raise TypeError("model must be a torch.nn.Module")
+    if not isinstance(token_sequences, torch.Tensor) or token_sequences.ndim != 2 or token_sequences.size(0) < 1:
+        raise ValueError("token_sequences must be a non-empty 2D Tensor")
     model.eval()
     batch = token_sequences[: min(8, token_sequences.size(0))].to(device, dtype=torch.long)
     out = model(input_ids=batch, labels=batch)
@@ -242,6 +264,12 @@ COSMOLOGY_PARAMETERS_SOURCE = "fixed input constants, not a fit"
 
 def _insert_after_key(entry: Dict[str, Any], after: str, key: str, value: Any) -> Dict[str, Any]:
     """Return `entry` with `key` placed directly after `after` (or appended when `after` is absent)."""
+    if not isinstance(entry, dict):
+        raise TypeError("entry must be a dict")
+    if not isinstance(after, str) or not after.strip():
+        raise ValueError("after must be a non-empty string")
+    if not isinstance(key, str) or not key.strip():
+        raise ValueError("key must be a non-empty string")
     if after not in entry:
         out = dict(entry)
         out[key] = value
@@ -261,6 +289,8 @@ def annotate_discovery_catalog_provenance(catalog: Dict[str, Any]) -> Dict[str, 
 
     The notice keys are placed first so they lead the block in the JSON report.
     """
+    if not isinstance(catalog, dict):
+        raise ValueError("catalog must be a dict")
     exo = [
         _insert_after_key(e, "moe_biosignature_confidence", "confidence_basis", CONFIDENCE_BASIS_ILLUSTRATIVE)
         for e in catalog.get("exoplanet_biosignature_candidates", [])
@@ -293,6 +323,8 @@ def annotate_campaign_report_provenance(report: Dict[str, Any]) -> Dict[str, Any
     `schedule_basis` is placed directly after `campaign` so it is the first thing a reader of the JSON sees
     after the title. Every measured field is left untouched.
     """
+    if not isinstance(report, dict):
+        raise ValueError("report must be a dict")
     compute = report.get("compute_summary", {})
     schedule_basis = {
         "note": (
@@ -482,6 +514,10 @@ def render_astrophysics_24h_dashboard_png(
     output_path: Path,
 ) -> Path:
     """Render a 1920x1240 6-panel dark-mode scientific dashboard PNG directly from GPU campaign data."""
+    if not isinstance(report, dict) or not report:
+        raise ValueError("report must be a non-empty dict")
+    if isinstance(output_path, bool) or not isinstance(output_path, Path):
+        raise ValueError("output_path must be a Path")
     Image, ImageDraw, ImageFilter, ImageFont = _require_pil()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     W, H = 1920, 1240
@@ -736,6 +772,10 @@ def render_cosmology_deep_field_discovery_png(
     output_path: Path,
 ) -> Path:
     """Render a 1920x1240 4-panel Deep Cosmology & JWST Spectroscopy Discovery Figure."""
+    if not isinstance(report, dict) or not report:
+        raise ValueError("report must be a non-empty dict")
+    if isinstance(output_path, bool) or not isinstance(output_path, Path):
+        raise ValueError("output_path must be a Path")
     Image, ImageDraw, ImageFilter, ImageFont = _require_pil()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     W, H = 1920, 1240
@@ -971,6 +1011,19 @@ def run_24h_astrophysics_gpu_campaign(
     The cycle labels 01:00..24:00 are schedule labels only; the report records the measured wall time in
     `elapsed_wall_seconds` and the `scientific_discoveries` block is an illustrative example catalog.
     """
+    for name, val in (
+        ("num_cycles", num_cycles),
+        ("inner_steps_per_cycle", inner_steps_per_cycle),
+        ("spot_check_interval_s", spot_check_interval_s),
+        ("lora_rank_r", lora_rank_r),
+        ("num_sequences", num_sequences),
+        ("seq_len", seq_len),
+        ("vocab_size", vocab_size),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int) or val <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    if spot_check_interval_s > inner_steps_per_cycle:
+        raise ValueError("spot_check_interval_s must be <= inner_steps_per_cycle")
     t0 = time.perf_counter()
     configure_deterministic_runtime(2026)
     hw_info = detect_local_hardware()

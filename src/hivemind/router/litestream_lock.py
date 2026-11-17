@@ -11,6 +11,7 @@ so only the lock holder can mutate the ledger.
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import time
@@ -31,6 +32,20 @@ class LockGenerationRecord:
     acquired_utc: float
     lease_expires_utc: float
 
+    def __post_init__(self) -> None:
+        for field_name in ("replica_url", "owner_id"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip() or any(c in val for c in ("\r", "\n", "\x00")):
+                raise ValueError(f"{field_name} must be a non-empty string without control characters")
+        if isinstance(self.generation, bool) or not isinstance(self.generation, int) or self.generation < 0:
+            raise ValueError("generation must be a non-negative integer")
+        for field_name in ("acquired_utc", "lease_expires_utc"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if float(self.lease_expires_utc) < float(self.acquired_utc):
+            raise ValueError("lease_expires_utc must be >= acquired_utc")
+
 
 class InMemoryGenerationStore:
     """Thread-safe atomic generation-precondition store modeling GCS ``ifGenerationMatch`` semantics."""
@@ -47,6 +62,12 @@ class InMemoryGenerationStore:
         *,
         if_generation_match: int,
     ) -> int:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be a dict")
+        if isinstance(if_generation_match, bool) or not isinstance(if_generation_match, int) or if_generation_match < 0:
+            raise ValueError("if_generation_match must be a non-negative integer")
         with self._lock:
             current = self._objects.get(key)
             current_gen = 0 if current is None else current[0]
@@ -60,6 +81,8 @@ class InMemoryGenerationStore:
             return new_gen
 
     def get_record(self, key: str) -> tuple[int, dict[str, Any]] | None:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
         with self._lock:
             entry = self._objects.get(key)
             if entry is None:
@@ -67,6 +90,10 @@ class InMemoryGenerationStore:
             return entry[0], dict(entry[1])
 
     def delete_if_generation_match(self, key: str, *, if_generation_match: int) -> bool:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
+        if isinstance(if_generation_match, bool) or not isinstance(if_generation_match, int) or if_generation_match < 0:
+            raise ValueError("if_generation_match must be a non-negative integer")
         with self._lock:
             current = self._objects.get(key)
             current_gen = 0 if current is None else current[0]
@@ -84,11 +111,15 @@ class FileGenerationStore:
     """Filesystem-backed generation-precondition store for single-host / shared-volume Litestream locks."""
 
     def __init__(self, root_dir: Path | str) -> None:
+        if not isinstance(root_dir, (Path, str)) or not str(root_dir).strip():
+            raise ValueError("root_dir must be a non-empty Path or string")
         self._root = Path(root_dir)
         self._root.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
     def _path_for(self, key: str) -> Path:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
         safe = "".join(ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in key)
         return self._root / f"{safe}.lock.json"
 
@@ -99,6 +130,12 @@ class FileGenerationStore:
         *,
         if_generation_match: int,
     ) -> int:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be a dict")
+        if isinstance(if_generation_match, bool) or not isinstance(if_generation_match, int) or if_generation_match < 0:
+            raise ValueError("if_generation_match must be a non-negative integer")
         path = self._path_for(key)
         with self._lock:
             if path.exists():
@@ -118,6 +155,8 @@ class FileGenerationStore:
             return new_gen
 
     def get_record(self, key: str) -> tuple[int, dict[str, Any]] | None:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
         path = self._path_for(key)
         with self._lock:
             if not path.exists():
@@ -126,6 +165,10 @@ class FileGenerationStore:
             return int(data["generation"]), dict(data.get("payload") or {})
 
     def delete_if_generation_match(self, key: str, *, if_generation_match: int) -> bool:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
+        if isinstance(if_generation_match, bool) or not isinstance(if_generation_match, int) or if_generation_match < 0:
+            raise ValueError("if_generation_match must be a non-negative integer")
         path = self._path_for(key)
         with self._lock:
             if not path.exists():
@@ -158,8 +201,22 @@ class LitestreamWriterLock:
         lease_ttl_s: float = 300.0,
         fail_closed: bool = False,
     ) -> None:
+        if not isinstance(replica_url, str) or any(c in replica_url for c in ("\r", "\n", "\x00")):
+            raise ValueError("replica_url must be a string without control characters")
+        if not isinstance(owner_id, str) or not owner_id.strip() or any(c in owner_id for c in ("\r", "\n", "\x00")):
+            raise ValueError("owner_id must be a non-empty string without control characters")
+        if (
+            not hasattr(backend, "put_if_generation_match")
+            or not hasattr(backend, "get_record")
+            or not hasattr(backend, "delete_if_generation_match")
+        ):
+            raise ValueError("backend must implement GenerationBackend methods")
+        if isinstance(lease_ttl_s, bool) or not isinstance(lease_ttl_s, (int, float)) or not math.isfinite(float(lease_ttl_s)) or float(lease_ttl_s) <= 0.0:
+            raise ValueError("lease_ttl_s must be a finite positive number")
+        if not isinstance(fail_closed, bool):
+            raise ValueError("fail_closed must be a boolean")
         self.replica_url = str(replica_url).strip()
-        self.owner_id = str(owner_id).strip()
+        self.owner_id = owner_id.strip()
         self._backend = backend
         self.lease_ttl_s = max(1.0, float(lease_ttl_s))
         self.fail_closed = bool(fail_closed)
@@ -184,6 +241,13 @@ class LitestreamWriterLock:
 
     def acquire(self, now_utc: float | None = None) -> bool:
         """Attempt to claim single-writer ownership via ``if_generation_match=0`` (or expired lease takeover)."""
+        if now_utc is not None and (
+            isinstance(now_utc, bool)
+            or not isinstance(now_utc, (int, float))
+            or not math.isfinite(float(now_utc))
+            or float(now_utc) < 0.0
+        ):
+            raise ValueError("now_utc must be a finite number >= 0 when provided")
         if not self.replica_url:
             # Ephemeral canary with empty replica URL does not contend on a shared replica
             self._generation = 0

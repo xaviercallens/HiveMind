@@ -271,9 +271,9 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert r_redeem.status_code == 200
     redeem_json = r_redeem.json()
     assert redeem_json["status"] == "COMPUTE_POINTS_REDEEMED"
-    assert redeem_json["points_balance_before"] == 30000
+    assert redeem_json["points_balance_before"] == 100000
     assert redeem_json["points_spent"] == 50
-    assert redeem_json["points_balance_after"] == 29950
+    assert redeem_json["points_balance_after"] == 99950
     assert redeem_json["monetary_cost_eur_usd"] == 0.0
     assert "La Ruche Top-2 Sparse MoE Routing" in redeem_json["domain_output"]
 
@@ -494,18 +494,9 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         == 404
     )
 
-    r_sso = client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"})
-    assert r_sso.status_code == 200
-    sso_token = r_sso.json()["token"]
-    # an unverified handle hint must not reopen an existing account; its token does
-    assert client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code == 401
-    assert (
-        client.post(
-            "/api/v1/auth/sso/google", headers={"Authorization": f"Bearer {sso_token}"}, json={"handle_hint": "sso-user-01"}
-        ).status_code
-        == 200
-    )
-    assert client.post("/api/v1/auth/sso/unsupported_idp", json={"handle_hint": "sso-user-01"}).status_code == 400
+    # the sandbox SSO is deleted (v3.3): no route creates or opens an account without verification by a provider
+    assert client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code == 410
+    sso_token = r_up.json()["token"]
 
     # linking a provider needs the account's token; a handle in the body is not enough (GHSA-gjc6-74f9-wmrr)
     assert client.post("/api/v1/auth/link-provider", json={"handle": "sso-user-01", "provider": "github"}).status_code == 401
@@ -734,7 +725,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         assert (
             client.post(
                 "/api/v1/compute-points/redeem",
-                json={"contributor_handle": "@sso-user-01", "service_id": svc, "prompt": "test", "points_balance_before": 500},
+                json={"contributor_handle": "@upgraded-user-01", "service_id": svc, "prompt": "test", "points_balance_before": 500},
             ).status_code
             == 200
         )

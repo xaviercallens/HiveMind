@@ -54,7 +54,7 @@ class FeePolicy:
     def __post_init__(self) -> None:
         for name in ("validator_share", "burn_share", "posted_margin"):
             value = getattr(self, name)
-            if not math.isfinite(value) or value < 0.0:
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0.0:
                 raise ValueError(f"{name} must be finite and >= 0, got {value!r}")
         if self.validator_share + self.burn_share >= 1.0:
             raise ValueError("validator_share + burn_share must be < 1 so producers keep a positive share")
@@ -115,6 +115,27 @@ class Certificate:
     max_deviation_gain: float  # largest unilateral gain found on the deviation grids, in HMT (>= 0)
     win_win: bool
 
+    def __post_init__(self) -> None:
+        for field_name in (
+            "individually_rational_consumers",
+            "individually_rational_producers",
+            "producer_nash",
+            "conserved",
+            "win_win",
+        ):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
+        if self.consumer_nash is not None and not isinstance(self.consumer_nash, bool):
+            raise ValueError("consumer_nash must be a boolean or None")
+        if (
+            isinstance(self.max_deviation_gain, bool)
+            or not isinstance(self.max_deviation_gain, (int, float))
+            or math.isnan(float(self.max_deviation_gain))
+            or float(self.max_deviation_gain) < 0.0
+        ):
+            raise ValueError("max_deviation_gain must be a non-negative number (or +inf when uncertified)")
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "individually_rational_consumers": self.individually_rational_consumers,
@@ -133,12 +154,16 @@ class Certificate:
 
 
 def _clean_bids(bids: Sequence[ConsumerBid]) -> list[tuple[str, float]]:
+    if isinstance(bids, (str, bytes)) or not isinstance(bids, Sequence):
+        raise ValueError("bids must be a sequence of ConsumerBid instances")
     seen: set[str] = set()
     out: list[tuple[str, float]] = []
     for b in bids:
-        if not b.account_id or b.account_id in seen:
+        if not isinstance(b, ConsumerBid):
+            raise ValueError("bids must contain ConsumerBid instances")
+        if isinstance(b.account_id, bool) or not isinstance(b.account_id, str) or not b.account_id.strip() or b.account_id in seen:
             raise ValueError(f"consumer account ids must be non-empty and unique, got {b.account_id!r}")
-        if not math.isfinite(b.max_price_per_1k) or b.max_price_per_1k < 0.0:
+        if isinstance(b.max_price_per_1k, bool) or not isinstance(b.max_price_per_1k, (int, float)) or not math.isfinite(b.max_price_per_1k) or b.max_price_per_1k < 0.0:
             raise ValueError(f"max_price_per_1k must be finite and >= 0 for {b.account_id!r}")
         seen.add(b.account_id)
         out.append((b.account_id, float(b.max_price_per_1k)))
@@ -146,14 +171,18 @@ def _clean_bids(bids: Sequence[ConsumerBid]) -> list[tuple[str, float]]:
 
 
 def _clean_offers(offers: Sequence[ProducerOffer]) -> list[tuple[str, float, float]]:
+    if isinstance(offers, (str, bytes)) or not isinstance(offers, Sequence):
+        raise ValueError("offers must be a sequence of ProducerOffer instances")
     seen: set[str] = set()
     out: list[tuple[str, float, float]] = []
     for o in offers:
-        if not o.account_id or o.account_id in seen:
+        if not isinstance(o, ProducerOffer):
+            raise ValueError("offers must contain ProducerOffer instances")
+        if isinstance(o.account_id, bool) or not isinstance(o.account_id, str) or not o.account_id.strip() or o.account_id in seen:
             raise ValueError(f"producer account ids must be non-empty and unique, got {o.account_id!r}")
-        if not math.isfinite(o.cost_per_1k) or o.cost_per_1k < 0.0:
+        if isinstance(o.cost_per_1k, bool) or not isinstance(o.cost_per_1k, (int, float)) or not math.isfinite(o.cost_per_1k) or o.cost_per_1k < 0.0:
             raise ValueError(f"cost_per_1k must be finite and >= 0 for {o.account_id!r}")
-        if not math.isfinite(o.capacity_1k) or o.capacity_1k < 0.0:
+        if isinstance(o.capacity_1k, bool) or not isinstance(o.capacity_1k, (int, float)) or not math.isfinite(o.capacity_1k) or o.capacity_1k < 0.0:
             raise ValueError(f"capacity_1k must be finite and >= 0 for {o.account_id!r}")
         seen.add(o.account_id)
         out.append((o.account_id, float(o.cost_per_1k), float(o.capacity_1k)))
@@ -221,6 +250,12 @@ def clear_market(
     unspecified) if it leaves a producer willing to supply, else a posted reserve price at the cheapest producer's
     break-even price plus ``fee.posted_margin`` when capacity is idle (``measured_load_1k < posted_supply_1k``),
     else no trade."""
+    if isinstance(model_id, bool) or not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be non-empty")
+    if not isinstance(fee, FeePolicy):
+        raise ValueError("fee must be a FeePolicy")
+    if measured_load_1k is not None and (isinstance(measured_load_1k, bool) or not isinstance(measured_load_1k, (int, float)) or not math.isfinite(float(measured_load_1k)) or float(measured_load_1k) < 0.0):
+        raise ValueError("measured_load_1k must be finite and >= 0")
     consumers = _clean_bids(bids)
     producers = _clean_offers(offers)
     live = [(a, c, k) for a, c, k in producers if k > 0.0]
@@ -248,10 +283,12 @@ def clear_market(
 
 def split_payment(price_per_1k: float, tokens: int, fee: FeePolicy) -> tuple[float, float, float, float]:
     """Split one request's charge: returns (charge, producer, validators, burn); charge = price * tokens / 1000."""
-    if not math.isfinite(price_per_1k) or price_per_1k < 0.0:
+    if isinstance(price_per_1k, bool) or not isinstance(price_per_1k, (int, float)) or not math.isfinite(price_per_1k) or price_per_1k < 0.0:
         raise ValueError("price_per_1k must be finite and >= 0")
-    if tokens < 0:
+    if isinstance(tokens, bool) or not isinstance(tokens, int) or tokens < 0:
         raise ValueError("tokens must be >= 0")
+    if not isinstance(fee, FeePolicy):
+        raise ValueError("fee must be a FeePolicy")
     charge = price_per_1k * tokens / 1000.0
     validators = charge * fee.validator_share
     burn = charge * fee.burn_share
@@ -270,24 +307,33 @@ def _tol(*scales: float) -> float:
 
 def _consumers_rational(eq: MarketEquilibrium, values: Mapping[str, float]) -> bool:
     p, supply = eq.price_per_1k, eq.supply_1k
+    if not math.isfinite(p) or p < 0.0 or not math.isfinite(supply) or supply < 0.0:
+        return False
     if set(eq.consumer_shares) != set(values) or set(eq.consumer_surplus) != set(values):
         return False
     for a, v in values.items():
         x = eq.consumer_shares[a]
+        surplus_a = eq.consumer_surplus[a]
+        if not math.isfinite(x) or not math.isfinite(surplus_a):
+            return False
         if x < 0.0 or x > 1.0 + _REL_TOL:
             return False
         expected = (v - p) * x * supply if x > 0.0 else 0.0
         tol = _tol(v, p * supply)
         if x > 0.0 and (v < p - tol or expected < -tol):
             return False
-        if abs(expected - eq.consumer_surplus[a]) > tol:
+        if abs(expected - surplus_a) > tol:
             return False
     return True
 
 
 def _producers_rational(eq: MarketEquilibrium, costs: Mapping[str, tuple[float, float]]) -> bool:
     keep, p = eq.fee.producer_share, eq.price_per_1k
+    if not math.isfinite(p) or p < 0.0 or not math.isfinite(eq.producer_revenue_per_1k):
+        return False
     if set(eq.producer_profit) != set(costs) or not set(eq.active_producers) <= set(costs):
+        return False
+    if any(not math.isfinite(pr) for pr in eq.producer_profit.values()):
         return False
     active = set(eq.active_producers)
     if len(active) != len(eq.active_producers):
@@ -363,6 +409,15 @@ def _consumer_nash(eq: MarketEquilibrium, values: Mapping[str, float]) -> tuple[
 
 def _conserved(eq: MarketEquilibrium, costs: Mapping[str, tuple[float, float]]) -> bool:
     p, supply, fee = eq.price_per_1k, eq.supply_1k, eq.fee
+    if (
+        not math.isfinite(p)
+        or p < 0.0
+        or not math.isfinite(supply)
+        or supply < 0.0
+        or not math.isfinite(eq.producer_revenue_per_1k)
+        or any(not math.isfinite(x) for x in eq.consumer_shares.values())
+    ):
+        return False
     if eq.mechanism == MECHANISM_NO_TRADE:
         return supply == 0.0 and all(x == 0.0 for x in eq.consumer_shares.values()) and not eq.active_producers
     if any(a not in costs for a in eq.active_producers):
@@ -389,9 +444,13 @@ def certify(
     measured_load_1k: float | None = None,
 ) -> Certificate:
     """Recompute the win-win properties of `eq` from the raw bids and offers (never trusting the stored numbers)."""
+    if not isinstance(eq, MarketEquilibrium):
+        raise ValueError("eq must be a MarketEquilibrium")
+    if measured_load_1k is not None and (isinstance(measured_load_1k, bool) or not isinstance(measured_load_1k, (int, float)) or not math.isfinite(float(measured_load_1k)) or float(measured_load_1k) < 0.0):
+        raise ValueError("measured_load_1k must be finite and >= 0")
     values = dict(_clean_bids(bids))
     costs = {a: (c, k) for a, c, k in _clean_offers(offers)}
-    if eq.mechanism not in _MECHANISMS:
+    if eq.mechanism not in _MECHANISMS or not math.isfinite(eq.price_per_1k) or not math.isfinite(eq.supply_1k):
         return Certificate(False, False, False, None, False, math.inf, False)
     rational_consumers = _consumers_rational(eq, values)
     rational_producers = _producers_rational(eq, costs)

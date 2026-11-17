@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import signal
 import socket
@@ -59,8 +60,12 @@ class ModelCache:
         sizer: Callable[[Any], int] = lambda obj: 0,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        if max_entries < 1:
+        if isinstance(max_entries, bool) or not isinstance(max_entries, int) or max_entries < 1:
             raise ValueError("max_entries must be >= 1")
+        if max_bytes is not None and (isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1):
+            raise ValueError("max_bytes must be a positive integer when provided")
+        if not callable(loader) or not callable(unloader) or not callable(sizer) or not callable(clock):
+            raise ValueError("loader, unloader, sizer, and clock must be callable")
         self._loader, self._unloader, self._sizer, self._clock = loader, unloader, sizer, clock
         self.max_entries, self.max_bytes = max_entries, max_bytes
         self._lock = threading.RLock()
@@ -193,6 +198,12 @@ class ModelCache:
 # ----------------------------------------------------------------------------------------------------- real model hooks
 def model_key(spec: dict[str, Any], device: str = "cuda:0") -> tuple[str, str, str]:
     """Cache key of the validator's base model: model id, quantisation + LoRA-init signature, device."""
+    if not isinstance(spec, dict) or not all(k in spec for k in ("model_id", "rank", "alpha", "init_seed")):
+        raise ValueError("spec must be a dict containing model_id, rank, alpha, and init_seed")
+    if not isinstance(spec["model_id"], str) or not spec["model_id"].strip():
+        raise ValueError("spec['model_id'] must be a non-empty string")
+    if not isinstance(device, str) or not device.strip():
+        raise ValueError("device must be a non-empty string")
     sig = f"nf4-dq-fp16|r{spec['rank']}|a{spec['alpha']}|s{spec['init_seed']}"
     return (str(spec["model_id"]), sig, device)
 
@@ -220,6 +231,10 @@ def _real_sizer(bundle: Any) -> int:  # pragma: no cover - needs a GPU stack
 
 def _make_validator(cache: ModelCache, on_spec: Callable[[Hashable, dict[str, Any]], None] | None = None) -> Any:
     """A ``MoEValidator`` whose model is taken from ``cache`` (and pinned while in use) instead of being loaded per process."""
+    if not isinstance(cache, ModelCache):
+        raise TypeError("cache must be a ModelCache")
+    if on_spec is not None and not callable(on_spec):
+        raise TypeError("on_spec must be callable or None")
     from hivemind.boinc.real_client.moe_bridge import MoEValidator
 
     class CachedMoEValidator(MoEValidator):
@@ -242,6 +257,10 @@ def _make_validator(cache: ModelCache, on_spec: Callable[[Hashable, dict[str, An
 
 def default_cache(max_entries: int = 1, max_bytes: int | None = None) -> ModelCache:  # pragma: no cover - needs a GPU stack
     """Cache backed by the real loader; the spec is recovered from a side table filled by the validator."""
+    if isinstance(max_entries, bool) or not isinstance(max_entries, int) or max_entries < 1:
+        raise ValueError("max_entries must be >= 1")
+    if max_bytes is not None and (isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1):
+        raise ValueError("max_bytes must be a positive integer when provided")
     holder: dict[Hashable, dict[str, Any]] = {}
 
     def loader(key: Hashable) -> Any:
@@ -263,6 +282,10 @@ class ProtocolError(Exception):
 
 
 def send_msg(sock: socket.socket, obj: dict[str, Any], limit: int = MAX_MESSAGE_BYTES) -> None:
+    if not isinstance(obj, dict):
+        raise ProtocolError("message must be a dict")
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("limit must be a positive integer")
     data = json.dumps(obj, sort_keys=True).encode()
     if len(data) > limit:
         raise ProtocolError(f"message of {len(data)} bytes exceeds the limit of {limit}")
@@ -270,6 +293,8 @@ def send_msg(sock: socket.socket, obj: dict[str, Any], limit: int = MAX_MESSAGE_
 
 
 def _recv_exact(sock: socket.socket, n: int) -> bytes:
+    if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+        raise ValueError("n must be a non-negative integer")
     buf = bytearray()
     while len(buf) < n:
         chunk = sock.recv(min(65536, n - len(buf)))
@@ -280,6 +305,8 @@ def _recv_exact(sock: socket.socket, n: int) -> bytes:
 
 
 def recv_msg(sock: socket.socket, limit: int = MAX_MESSAGE_BYTES) -> dict[str, Any]:
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("limit must be a positive integer")
     (n,) = struct.unpack(">I", _recv_exact(sock, 4))
     if n > limit:
         raise ProtocolError(f"message of {n} bytes exceeds the limit of {limit}")  # body is never read
@@ -335,6 +362,20 @@ class ResidentValidatorServer:
         io_timeout_s: float = 30.0,
         max_message_bytes: int = MAX_MESSAGE_BYTES,
     ) -> None:
+        if isinstance(request_timeout_s, bool) or not isinstance(request_timeout_s, (int, float)) or not math.isfinite(float(request_timeout_s)) or float(request_timeout_s) <= 0.0:
+            raise ValueError("request_timeout_s must be a finite positive number")
+        if isinstance(io_timeout_s, bool) or not isinstance(io_timeout_s, (int, float)) or not math.isfinite(float(io_timeout_s)) or float(io_timeout_s) <= 0.0:
+            raise ValueError("io_timeout_s must be a finite positive number")
+        if isinstance(max_message_bytes, bool) or not isinstance(max_message_bytes, int) or max_message_bytes < 1:
+            raise ValueError("max_message_bytes must be a positive integer")
+        if not isinstance(socket_path, (str, os.PathLike)) or not str(socket_path).strip():
+            raise ValueError("socket_path must be a non-empty path")
+        if not isinstance(work_root, (str, os.PathLike)) or not str(work_root).strip():
+            raise ValueError("work_root must be a non-empty path")
+        if cache is not None and not isinstance(cache, ModelCache):
+            raise ValueError("cache must be a ModelCache or None")
+        if validate_fn is not None and not callable(validate_fn):
+            raise ValueError("validate_fn must be callable or None")
         self.socket_path = Path(socket_path)
         self.work_root = Path(work_root).resolve()
         self.cache = cache
@@ -415,6 +456,8 @@ class ResidentValidatorServer:
         return files
 
     def dispatch(self, req: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(req, dict):
+            raise ValueError("req must be a dict")
         op = req.get("op")
         if op == "ping":
             return {"ok": True, "pong": True, "pid": os.getpid()}
@@ -466,6 +509,12 @@ class ResidentValidatorServer:
 # -------------------------------------------------------------------------------------------------------------- client
 class ResidentValidatorClient:
     def __init__(self, socket_path: str | os.PathLike[str], timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S + 60.0, max_message_bytes: int = MAX_MESSAGE_BYTES) -> None:
+        if not str(socket_path).strip():
+            raise ValueError("socket_path must be non-empty")
+        if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+            raise ValueError("timeout_s must be a finite positive number")
+        if isinstance(max_message_bytes, bool) or not isinstance(max_message_bytes, int) or max_message_bytes < 1:
+            raise ValueError("max_message_bytes must be a positive integer")
         self.socket_path, self.timeout_s, self.max_message_bytes = str(socket_path), timeout_s, max_message_bytes
 
     def _call(self, req: dict[str, Any]) -> dict[str, Any]:
@@ -491,6 +540,10 @@ class ResidentValidatorClient:
 def forward_validate(socket_path: str, args: list[str]) -> int | None:
     """Ask a resident server to validate ``args`` (the ``hivemind_validate`` arguments). Returns its exit status, or ``None`` after
     a single warning line when the server is unreachable or fails, so the caller falls back to the one-shot path."""
+    if not isinstance(socket_path, str) or not socket_path.strip():
+        raise ValueError("socket_path must be a non-empty string")
+    if not isinstance(args, list) or any(not isinstance(a, str) for a in args):
+        raise ValueError("args must be a list of strings")
     try:
         resp = ResidentValidatorClient(socket_path, float(os.environ.get("HIVEMIND_RESIDENT_TIMEOUT_S", DEFAULT_REQUEST_TIMEOUT_S + 60.0))).validate(args)
     except (OSError, ProtocolError) as exc:

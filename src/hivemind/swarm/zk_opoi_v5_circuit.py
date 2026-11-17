@@ -31,10 +31,14 @@ MAX_CPU_VERIFY_MS: float = 10.0
 
 
 def _field_mod(x: int) -> int:
+    if isinstance(x, bool) or not isinstance(x, int):
+        raise ValueError("x must be an integer")
     return x % MERSENNE_PRIME_61
 
 
 def _derive_fiat_shamir_challenge(seed_text: str) -> int:
+    if not isinstance(seed_text, str) or not seed_text.strip():
+        raise ValueError("seed_text must be a non-empty string")
     digest = hashlib.sha256(seed_text.encode("utf-8")).digest()
     val = int.from_bytes(digest[:8], "big") & ((1 << 61) - 1)
     return max(2, val % MERSENNE_PRIME_61)
@@ -42,9 +46,15 @@ def _derive_fiat_shamir_challenge(seed_text: str) -> int:
 
 def _poly_eval_field(vec_q: Sequence[int], challenge_r: int) -> int:
     """Horner evaluation `sum_{i} vec_q[i] * r^{i+1} mod (2^61 - 1)`."""
+    if isinstance(challenge_r, bool) or not isinstance(challenge_r, int):
+        raise ValueError("challenge_r must be an integer")
+    if isinstance(vec_q, (str, bytes)) or not isinstance(vec_q, Sequence) or not vec_q:
+        raise ValueError("vec_q must be a non-empty sequence of integers")
     acc = 0
     r_pow = challenge_r % MERSENNE_PRIME_61
     for v in vec_q:
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise ValueError("vec_q elements must be integers")
         term = ((v % MERSENNE_PRIME_61) * r_pow) % MERSENNE_PRIME_61
         acc = (acc + term) % MERSENNE_PRIME_61
         r_pow = (r_pow * challenge_r) % MERSENNE_PRIME_61
@@ -93,6 +103,19 @@ class ZKOPoIV5VerificationResult:
     commitment_scheme: str = "fiat_shamir_horner_hmac_sha256"
     zero_knowledge: bool = False
 
+    def __post_init__(self) -> None:
+        for b_field in ("valid", "shard_commitment_ok", "r1cs_transition_ok", "norm_bounds_ok", "zero_knowledge"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        for s_field in ("reason", "commitment_scheme"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if isinstance(self.verify_cpu_ms, bool) or not isinstance(self.verify_cpu_ms, (int, float)) or not math.isfinite(float(self.verify_cpu_ms)) or float(self.verify_cpu_ms) < 0.0:
+            raise ValueError("verify_cpu_ms must be a finite non-negative number")
+        if isinstance(self.proof_size_bytes, bool) or not isinstance(self.proof_size_bytes, int) or self.proof_size_bytes < 0:
+            raise ValueError("proof_size_bytes must be a non-negative integer")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -111,8 +134,37 @@ class ZKOPoIV5FixedPointCircuit:
         max_spectral_bound: float = 8.0,
         coordinator_secret: str | None = None,
     ) -> None:
-        if quantization_bits not in (4, 8):
+        if isinstance(quantization_bits, bool) or quantization_bits not in (4, 8):
             raise ValueError("quantization_bits must be 4 or 8")
+        if isinstance(fixed_point_scale, bool) or not isinstance(fixed_point_scale, int) or fixed_point_scale < 1:
+            raise ValueError("fixed_point_scale must be an integer >= 1")
+        if (
+            isinstance(lr_num, bool)
+            or not isinstance(lr_num, int)
+            or lr_num < 1
+            or isinstance(lr_den, bool)
+            or not isinstance(lr_den, int)
+            or lr_den < 1
+        ):
+            raise ValueError("lr_num and lr_den must be integers >= 1")
+        if (
+            isinstance(max_delta_l2_norm, bool)
+            or not isinstance(max_delta_l2_norm, (int, float))
+            or not math.isfinite(float(max_delta_l2_norm))
+            or float(max_delta_l2_norm) <= 0.0
+        ):
+            raise ValueError("max_delta_l2_norm must be a finite number > 0")
+        if (
+            isinstance(max_spectral_bound, bool)
+            or not isinstance(max_spectral_bound, (int, float))
+            or not math.isfinite(float(max_spectral_bound))
+            or float(max_spectral_bound) <= 0.0
+        ):
+            raise ValueError("max_spectral_bound must be a finite number > 0")
+        if coordinator_secret is not None and (
+            not isinstance(coordinator_secret, str) or not coordinator_secret.strip()
+        ):
+            raise ValueError("coordinator_secret must be a non-empty string when provided")
         self.fixed_point_scale = int(fixed_point_scale)
         self.quantization_bits = int(quantization_bits)
         self.lr_num = int(lr_num)
@@ -159,6 +211,8 @@ class ZKOPoIV5FixedPointCircuit:
         scale_step = max(1, self.fixed_point_scale // max(1, qmax))
         out: list[int] = []
         for v in values:
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                raise ValueError("Cannot quantize non-finite float value in ZK-OPoI v5 circuit")
             fv = float(v)
             if not math.isfinite(fv):
                 raise ValueError("Cannot quantize non-finite float value in ZK-OPoI v5 circuit")
@@ -175,6 +229,10 @@ class ZKOPoIV5FixedPointCircuit:
         step_gradients_float: Sequence[Sequence[float]],
     ) -> tuple[ZKOPoIV5ProofReceipt, list[int]]:
         """Execute H quantized local steps and emit a succinct ZK-OPoI v5 proof receipt."""
+        if not isinstance(node_id, str) or not node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(assigned_shard_sha256, str) or not assigned_shard_sha256.strip():
+            raise ValueError("assigned_shard_sha256 must be a non-empty string")
         if not theta0_float or not step_gradients_float:
             raise ValueError("theta0_float and step_gradients_float must be non-empty")
         d = len(theta0_float)
@@ -262,6 +320,12 @@ class ZKOPoIV5FixedPointCircuit:
         expected_theta0_commitment: str,
     ) -> ZKOPoIV5VerificationResult:
         """Verify a ZK-OPoI v5 receipt in O(1) field operations on CPU without GPU replay."""
+        if not isinstance(receipt, ZKOPoIV5ProofReceipt):
+            raise TypeError("receipt must be a ZKOPoIV5ProofReceipt")
+        if not isinstance(expected_shard_sha256, str) or not expected_shard_sha256.strip():
+            raise ValueError("expected_shard_sha256 must be a non-empty string")
+        if not isinstance(expected_theta0_commitment, str) or not expected_theta0_commitment.strip():
+            raise ValueError("expected_theta0_commitment must be a non-empty string")
         t0 = time.perf_counter()
 
         shard_ok = (

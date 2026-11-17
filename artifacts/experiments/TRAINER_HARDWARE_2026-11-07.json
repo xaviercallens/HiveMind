@@ -1,4 +1,8 @@
 {
+  "evidence": "placeholder",
+  "not_a_measurement": true,
+  "evidence_note": "hard-coded rows; these GPUs were not measured",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md",
   "schema": "hivemind.trainer_hardware_receipt.v1",
   "deliverable_id": "PS-04-D2",
   "generated_at_utc": "2026-11-07T22:46:29Z",

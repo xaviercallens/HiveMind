@@ -268,6 +268,84 @@ def _build_token_shards(vocab_size: int, shard_tokens: int = 512) -> tuple[torch
     return shard_t4, shard_2070, held_out
 
 
+
+def append_round_record(work_dir: str | os.PathLike[str] | None, record: dict) -> None:
+    """Append one round's result to <work_dir>/rounds.jsonl as soon as the round ends.
+
+    The full report is printed only when the worker finishes; a SIGTERM (floor watchdog, stop time) used to lose every
+    round's accept/reject and losses (2026-11-16 night run: 250 rounds, no report). One flushed line per round fixes that.
+    """
+    if not work_dir:
+        return
+    path = Path(work_dir) / "rounds.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, sort_keys=True, default=str) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
+def next_outer_lr(current: float, accepted: bool, *, initial: float, decay: float, growth: float, floor: float) -> float:
+    """Outer learning rate for the next round (IP-293): back off after a rejected round, recover after an accepted one.
+
+    ``decay`` multiplies the rate after a rejection (1.0 = off), never below ``floor``; ``growth`` multiplies it after an
+    acceptance, never above ``initial``. Measured on 2026-11-16: at outer lr 0.2 the loss fell 1.05 % in 17 rounds, then
+    eight rounds in a row overshot the new best (outer delta norms 24-38).
+    """
+    if accepted:
+        return min(float(initial), float(current) * float(growth))
+    return max(float(floor), float(current) * float(decay))
+
+
+def load_init_buckets(path: str | os.PathLike[str], template: dict) -> dict:
+    """Buckets from a saved round checkpoint, checked against the freshly upcycled model's buckets.
+
+    Lets a run continue from an accepted state instead of the upcycled start. Every name and shape must match the
+    template; values come back as float32 (checkpoints are stored in bf16).
+    """
+    from safetensors.torch import load_file
+
+    saved = load_file(str(path))
+    if set(saved) != set(template):
+        missing, extra = sorted(set(template) - set(saved)), sorted(set(saved) - set(template))
+        raise ValueError(f"--init-buckets {path}: bucket names differ (missing {missing[:4]}, extra {extra[:4]})")
+    for k, v in template.items():
+        if tuple(saved[k].shape) != tuple(v.shape):
+            raise ValueError(f"--init-buckets {path}: {k} has shape {tuple(saved[k].shape)}, expected {tuple(v.shape)}")
+    return {k: saved[k].to(dtype=torch.float32) for k in template}
+
+
+CUDA_CONTEXT_MARGIN_MIB = 700  # CUDA context and allocator slack: outside set_per_process_memory_fraction
+
+
+def resolve_cuda_mem_cap_mib(spec: str, free_mib: int, min_free_mib: int,
+                             margin_mib: int = CUDA_CONTEXT_MARGIN_MIB) -> tuple[int, str]:
+    """Hard cap for this process's CUDA allocations, from ``--cuda-mem-cap-mib``.
+
+    ``"0"`` (default): no cap. ``"auto"``: free memory at start minus the floor minus the context margin, so the worker
+    can never push free VRAM below the floor while other programs stay where they are. ``N``: N MiB, refused when it
+    would leave less than the floor free. Returns ``(cap_mib, "")`` or ``(0, reason)`` when the worker must not start;
+    ``cap_mib == 0`` with an empty reason means "no cap".
+    """
+    s = str(spec).strip().lower()
+    headroom = int(free_mib) - int(min_free_mib) - int(margin_mib)
+    if s in ("", "0", "off", "none"):
+        return 0, ""
+    if s == "auto":
+        cap = headroom
+    else:
+        try:
+            cap = int(float(s))
+        except ValueError:
+            return 0, f"--cuda-mem-cap-mib must be 0, auto or a number of MiB, not {spec!r}"
+        if cap > headroom:
+            return 0, (f"--cuda-mem-cap-mib {cap} would leave less than {min_free_mib} MiB free "
+                       f"({free_mib} MiB free now, {margin_mib} MiB context margin): use at most {max(headroom, 0)}")
+    if cap < 512:
+        return 0, f"only {cap} MiB of headroom above the {min_free_mib} MiB floor ({free_mib} MiB free): not starting"
+    return cap, ""
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="GCP Spot Tesla T4 DiLoCo Co-Trainer for GCPCrowd")
     ap.add_argument(
@@ -294,6 +372,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--require-governor-training", action="store_true")
     ap.add_argument("--check-spot-preemption", action="store_true")
     ap.add_argument("--min-free-vram-mib", type=int, default=DEFAULT_MIN_FREE_VRAM_MIB_T4)
+    ap.add_argument("--local-data", action="store_true",
+                    help="Read cached datasets from the local Hugging Face cache first, and add local extra sources per expert")
+    ap.add_argument("--max-rows-per-source", type=int, default=600, help="Training rows read per source at most")
+    ap.add_argument("--outer-lr-decay", type=float, default=1.0,
+                    help="Multiply the outer lr by this after a rejected round (1.0 = off, e.g. 0.5)")
+    ap.add_argument("--outer-lr-growth", type=float, default=1.0,
+                    help="Multiply the outer lr by this after an accepted round, up to --outer-lr (1.0 = off)")
+    ap.add_argument("--outer-lr-min", type=float, default=0.02, help="Floor for the adaptive outer lr")
+    ap.add_argument("--init-buckets", default=None,
+                    help="Start from a saved round checkpoint (crowd_moe_opendiloco_round_N.safetensors) instead of the upcycled start")
+    ap.add_argument("--start-data-offset", type=int, default=0,
+                    help="Token position where both learners start in their shards (to continue after a resumed run)")
+    ap.add_argument("--stop-after-rejections", type=int, default=0,
+                    help="Stop after this many consecutive rounds rejected by the loss ratchet (0 = never)")
+    ap.add_argument("--cuda-mem-cap-mib", default="0",
+                    help="Hard cap on this process's CUDA allocations: 0 (off), auto (free - floor - 700 MiB) or MiB")
     ap.add_argument(
         "--recipe",
         choices=("auto", "full_trunk_8bit_ckpt", "block_window_diloco", "qlora_graft_diloco", "cpu_fp32"),
@@ -360,6 +454,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"refused: --min-free-vram-mib {eff_min_free} is below the 4300 MiB T4 floor", file=sys.stderr)
         return 2
 
+    if prefer_cuda and torch.cuda.is_available():
+        free_b, total_b = torch.cuda.mem_get_info(0)
+        cap_mib, why = resolve_cuda_mem_cap_mib(args.cuda_mem_cap_mib, int(free_b // 2**20), eff_min_free)
+        if why:
+            print(f"refused: {why}", file=sys.stderr)
+            return 2
+        if cap_mib:
+            # a hard cap: an allocation beyond it fails in THIS process instead of taking memory that inference needs
+            torch.cuda.set_per_process_memory_fraction(min(1.0, cap_mib / (total_b / 2**20)), 0)
+            print(f"cuda memory cap: {cap_mib} MiB (free at start {free_b // 2**20} MiB, floor {eff_min_free} MiB)",
+                  file=sys.stderr)
+
     guard = T4GovernorYieldGuard(
         hold_file=args.hold_file,
         governor_state_file=args.governor_state,
@@ -392,16 +498,22 @@ def main(argv: list[str] | None = None) -> int:
         from tokenizers import Tokenizer
 
         from hivemind.swarm.crowdgpt_moe_opendiloco import load_crowdgpt_moe_dataset_plan
-        from hivemind.swarm.crowdgpt_real_shards import build_real_expert_shards
+        from hivemind.swarm.crowdgpt_real_shards import LocalHFCacheFetcher, build_real_expert_shards, with_local_extra_sources
 
         tok = Tokenizer.from_file(str(args.tokenizer_json))
+        plan = load_crowdgpt_moe_dataset_plan()
+        extra_kw: dict[str, Any] = {"max_rows_per_source": int(args.max_rows_per_source)}
+        if args.local_data:
+            plan = with_local_extra_sources(plan)
+            extra_kw["fetch"] = LocalHFCacheFetcher()
         shard_t4, shard_2070, held_out, data_manifest = build_real_expert_shards(
-            load_crowdgpt_moe_dataset_plan(),
+            plan,
             lambda s: tok.encode(s).ids,
             model.cfg.vocab_size,
             cache_dir=Path(args.data_cache_dir) if args.data_cache_dir else Path(args.work_dir) / "rows",
             train_tokens_per_expert=args.train_tokens_per_expert,
             heldout_tokens_per_expert=args.heldout_tokens_per_expert,
+            **extra_kw,
         )
         Path(args.work_dir).mkdir(parents=True, exist_ok=True)
         (Path(args.work_dir) / "real_data_manifest.json").write_text(json.dumps(data_manifest, indent=2) + "\n", encoding="utf-8")
@@ -443,6 +555,10 @@ def main(argv: list[str] | None = None) -> int:
             resident_expert_indices=res_experts,
         )
         init_buckets = extract_moe_trainable_buckets(model, num_router_fragments=4)
+        if args.init_buckets:
+            init_buckets = load_init_buckets(args.init_buckets, init_buckets)
+            load_moe_trainable_buckets(model, init_buckets, num_router_fragments=4)
+            print(f"resumed buckets from {args.init_buckets}", file=sys.stderr)
         coord = CrowdOpenDiLoCoCoordinator(
             init_buckets,
             min_quorum_k=2,
@@ -454,9 +570,14 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         win_len = min(model.cfg.max_position_embeddings, max(4, min(args.seq_len, 64)))
-        n_win = min(max(1, int(args.eval_windows)), max(1, (int(held_out.numel()) - 1) // win_len))
+        avail_win = max(1, (int(held_out.numel()) - 1) // win_len)
+        n_win = min(max(1, int(args.eval_windows)), avail_win)
+        # spread the windows over the WHOLE held-out stream: it concatenates every expert's held-out rows, and taking
+        # the first n_win windows only measured the first expert (E0)
+        win_idx = sorted({round(i * (avail_win - 1) / max(1, n_win - 1)) for i in range(n_win)}) if n_win > 1 else [0]
+        n_win = len(win_idx)
         eval_windows = torch.stack(
-            [held_out[i * win_len : (i + 1) * win_len] for i in range(n_win)]
+            [held_out[i * win_len : (i + 1) * win_len] for i in win_idx]
         ).to(device=exec_dev, dtype=torch.long)
 
         def _eval_buckets(cand_buckets: dict[str, torch.Tensor]) -> float:
@@ -477,6 +598,9 @@ def main(argv: list[str] | None = None) -> int:
             return sum(losses) / max(1, len(losses))
 
         moe_rounds: list[dict[str, Any]] = []
+        cursor_t4 = int(args.start_data_offset)  # each round continues through the shard (IP-293)
+        cursor_2070 = int(args.start_data_offset)
+        consecutive_rejections = 0
         for rnd in range(max(1, args.rounds)):
             master_snap = coord.export_buckets()
 
@@ -492,6 +616,7 @@ def main(argv: list[str] | None = None) -> int:
                 lr=args.lr,
                 device=exec_dev,
                 yield_guard=guard,
+                start_offset=cursor_t4,
             )
             dt_t4 = max(0.02, time.monotonic() - t0)
 
@@ -507,14 +632,36 @@ def main(argv: list[str] | None = None) -> int:
                 lr=args.lr,
                 device=exec_dev,
                 yield_guard=guard,
+                start_offset=cursor_2070,
             )
             dt_2070 = max(0.03, time.monotonic() - t1)
             yielded = out_t4.get("yielded") or out_2070.get("yielded")
             if yielded:
                 # HOLD file, live traffic, Spot preemption or the VRAM floor: stop training, do not aggregate a partial round
                 moe_rounds.append({"round": rnd + 1, "yielded": yielded})
+                append_round_record(args.work_dir, moe_rounds[-1])
                 print(f"yielded before round {rnd + 1} completed: {yielded}", file=sys.stderr)
                 break
+
+            if out_t4.get("non_finite") or out_2070.get("non_finite"):
+                # a non-finite step (fp16 overflow, router refused NaN logits): reject the round, keep the master state,
+                # move past the bad window and back off the outer lr like any rejection
+                load_moe_trainable_buckets(model, master_snap, num_router_fragments=4)
+                moe_rounds.append({"round_index": rnd + 1, "device": exec_dev, "accepted_by_loss_ratchet": False,
+                                   "non_finite": True, "outer_lr": float(coord.outer_lr),
+                                   "data_offsets": {"learner0": out_t4.get("start_offset", cursor_t4),
+                                                    "learner1": out_2070.get("start_offset", cursor_2070)}})
+                append_round_record(args.work_dir, moe_rounds[-1])
+                print(f"round {rnd + 1}: non-finite step, round rejected", file=sys.stderr)
+                cursor_t4 = int(out_t4.get("next_offset", cursor_t4))
+                cursor_2070 = int(out_2070.get("next_offset", cursor_2070))
+                consecutive_rejections += 1
+                coord.outer_lr = next_outer_lr(coord.outer_lr, False, initial=args.outer_lr, decay=args.outer_lr_decay,
+                                               growth=args.outer_lr_growth, floor=args.outer_lr_min)
+                if args.stop_after_rejections and consecutive_rejections >= args.stop_after_rejections:
+                    print(f"stopping: {consecutive_rejections} consecutive rounds rejected", file=sys.stderr)
+                    break
+                continue
 
             subs: dict[str, list[tuple[LearnerArrival, torch.Tensor, float]]] = {}
             for b_key in master_snap:
@@ -573,8 +720,19 @@ def main(argv: list[str] | None = None) -> int:
                     "fragments_synced": list(receipt.fragments_synced),
                     "checkpoint_sha256": ckpt_sha,
                     "opentrainer_submission": ot_resp,
+                    "data_offsets": {"learner0": out_t4.get("start_offset", cursor_t4), "learner1": out_2070.get("start_offset", cursor_2070)},
+                    "outer_lr": float(coord.outer_lr),
                 }
             )
+            append_round_record(args.work_dir, moe_rounds[-1])
+            cursor_t4 = int(out_t4.get("next_offset", cursor_t4))
+            cursor_2070 = int(out_2070.get("next_offset", cursor_2070))
+            consecutive_rejections = 0 if receipt.accepted_by_loss_ratchet else consecutive_rejections + 1
+            coord.outer_lr = next_outer_lr(coord.outer_lr, bool(receipt.accepted_by_loss_ratchet), initial=args.outer_lr,
+                                           decay=args.outer_lr_decay, growth=args.outer_lr_growth, floor=args.outer_lr_min)
+            if args.stop_after_rejections and consecutive_rejections >= args.stop_after_rejections:
+                print(f"stopping: {consecutive_rejections} consecutive rounds rejected by the loss ratchet", file=sys.stderr)
+                break
 
         print(
             json.dumps(

@@ -95,3 +95,36 @@ def test_row_to_text_keeps_content_and_drops_metadata_and_long_arrays() -> None:
     t = row_to_text({"problem": "2+2?", "generated_solution": "4", "id": 7, "flux": list(range(500)), "tags": ["a", "b"]})
     assert "problem: 2+2?" in t and "generated_solution: 4" in t and "tags: a, b" in t
     assert "id:" not in t and "flux" not in t
+
+
+
+def test_local_cache_fetcher_reads_cached_files_in_order_and_falls_back(tmp_path) -> None:
+    """--local-data: cached files are read like the datasets-server (same offsets), other datasets fall back."""
+    import json as _json
+
+    from hivemind.swarm import crowdgpt_real_shards as rs
+
+    snap = tmp_path / "datasets--sahil2801--CodeAlpaca-20k" / "snapshots" / "abc"
+    snap.mkdir(parents=True)
+    (snap / "code_alpaca_20k.json").write_text(_json.dumps([{"instruction": f"task {i}", "output": f"code {i}"} for i in range(50)]))
+    calls = []
+    fetch = rs.LocalHFCacheFetcher(roots=[tmp_path], fallback=lambda *a: calls.append(a) or [{"text": "remote"}])
+    rows = fetch("sahil2801/CodeAlpaca-20k", "default", "train", 40, 5)
+    assert [r["instruction"] for r in rows] == [f"task {i}" for i in range(40, 45)]
+    assert fetch("sahil2801/CodeAlpaca-20k", "default", "train", 48, 10)[-1]["instruction"] == "task 49"
+    assert fetch.origin_of("sahil2801/CodeAlpaca-20k") == "local_hf_cache"
+    assert fetch("bigcode/self-oss-instruct-sc2-exec-filter-50k", "default", "train", 0, 3) == [{"text": "remote"}]
+    assert calls and fetch.origin_of("bigcode/self-oss-instruct-sc2-exec-filter-50k") == "datasets_server"
+
+
+def test_local_extra_sources_come_first_and_carry_a_licence() -> None:
+    from hivemind.swarm import crowdgpt_real_shards as rs
+
+    plan = {"experts": [{"expert_id": "E2_math_reasoning", "accepted_sources": [{"dataset_id": "nvidia/OpenMathInstruct-2"}]},
+                        {"expert_id": "E0_general_fineweb", "accepted_sources": [{"dataset_id": "HuggingFaceFW/fineweb-edu"}]}]}
+    out = rs.with_local_extra_sources(plan)
+    assert [s["dataset_id"] for s in out["experts"][0]["accepted_sources"]] == ["AI-MO/NuminaMath-CoT", "nvidia/OpenMathInstruct-2"]
+    assert out["experts"][0]["accepted_sources"][0]["license"] == "apache-2.0"
+    assert out["experts"][1]["accepted_sources"] == plan["experts"][1]["accepted_sources"]
+    assert plan["experts"][0]["accepted_sources"] == [{"dataset_id": "nvidia/OpenMathInstruct-2"}]  # input not mutated
+    assert not any("gsm8k" in d or "sciq" in d or "proofnet" in d for d in rs.LOCAL_DATASET_FILES)

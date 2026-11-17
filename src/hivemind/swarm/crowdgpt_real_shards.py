@@ -81,6 +81,93 @@ def row_to_text(row: Mapping[str, Any]) -> str:
     return "\n".join(parts)
 
 
+# Datasets that may already sit in a local Hugging Face cache, with the licence we can state for them. Only permissive
+# licences that allow redistributing weights trained on them are listed; benchmarks never are (decontamination).
+LOCAL_DATASET_FILES: dict[str, tuple[str, str]] = {
+    "HuggingFaceFW/fineweb-edu": ("sample/10BT/*.parquet", "odc-by"),
+    "sahil2801/CodeAlpaca-20k": ("code_alpaca_20k.json", "cc-by-4.0"),
+    "AI-MO/NuminaMath-CoT": ("data/train-*.parquet", "apache-2.0"),
+    "CyberNative/Code_Vulnerability_Security_DPO": ("default/train/*.parquet", "apache-2.0"),
+}
+# Extra local sources per expert, read BEFORE the plan's own sources when --local-data is on.
+LOCAL_EXTRA_SOURCES: dict[str, tuple[str, ...]] = {
+    "E1_python_systems_code": ("sahil2801/CodeAlpaca-20k",),
+    "E2_math_reasoning": ("AI-MO/NuminaMath-CoT",),
+}
+DEFAULT_HF_CACHE_ROOTS: tuple[Path, ...] = (Path.home() / ".cache" / "huggingface" / "hub",)
+
+
+def find_local_dataset_files(dataset_id: str, roots: Sequence[Path] = DEFAULT_HF_CACHE_ROOTS) -> list[Path]:
+    """Files of ``dataset_id`` in a Hugging Face hub cache (``datasets--org--name/snapshots/*/<pattern>``), sorted."""
+    entry = LOCAL_DATASET_FILES.get(dataset_id)
+    if entry is None:
+        return []
+    pattern = entry[0]
+    found: list[Path] = []
+    for root in roots:
+        snap = Path(root) / f"datasets--{dataset_id.replace('/', '--')}" / "snapshots"
+        if snap.is_dir():
+            found.extend(p for p in snap.glob(f"*/{pattern}") if p.is_file())
+    return sorted(set(found))
+
+
+class LocalHFCacheFetcher:
+    """A ``RowFetcher`` that reads train rows from local cached files and falls back to the datasets-server.
+
+    Rows are read in file order, so offsets mean the same thing as on the datasets-server: the builder's rule
+    (held-out rows first, training rows after) still holds.
+    """
+
+    def __init__(self, roots: Sequence[Path] = DEFAULT_HF_CACHE_ROOTS, fallback: RowFetcher = fetch_rows_datasets_server):
+        self.roots = tuple(Path(r) for r in roots)
+        self.fallback = fallback
+        self._rows: dict[str, list[Mapping[str, Any]]] = {}
+        self._done: set[str] = set()
+        self._iters: dict[str, Any] = {}
+
+    def origin_of(self, dataset_id: str) -> str:
+        return "local_hf_cache" if find_local_dataset_files(dataset_id, self.roots) else "datasets_server"
+
+    def _row_iter(self, files: Sequence[Path]):
+        for f in files:
+            if f.suffix == ".parquet":
+                import pyarrow.parquet as pq
+
+                for batch in pq.ParquetFile(f).iter_batches(batch_size=512):
+                    yield from batch.to_pylist()
+            elif f.suffix == ".jsonl":
+                with f.open(encoding="utf-8") as fh:
+                    for line in fh:
+                        if line.strip():
+                            yield json.loads(line)
+            elif f.suffix == ".json":
+                data = json.loads(f.read_text(encoding="utf-8"))
+                yield from (data if isinstance(data, list) else data.get("rows", []))
+
+    def __call__(self, dataset_id: str, config: str, split: str, offset: int, length: int) -> list[Mapping[str, Any]]:
+        files = find_local_dataset_files(dataset_id, self.roots) if split == "train" else []
+        if not files:
+            return list(self.fallback(dataset_id, config, split, offset, length))
+        rows = self._rows.setdefault(dataset_id, [])
+        it = self._iters.setdefault(dataset_id, self._row_iter(files))
+        while len(rows) < offset + length and dataset_id not in self._done:
+            try:
+                rows.append(next(it))
+            except StopIteration:
+                self._done.add(dataset_id)
+        return rows[offset: offset + length]
+
+
+def with_local_extra_sources(plan: Mapping[str, Any]) -> dict[str, Any]:
+    """Copy of ``plan`` whose experts list LOCAL_EXTRA_SOURCES first (benchmarks stay excluded by the builder)."""
+    out = json.loads(json.dumps(plan))
+    for expert in out.get("experts", []):
+        extra = [{"dataset_id": ds, "config": "default", "license": LOCAL_DATASET_FILES[ds][1], "origin": "local_extra"}
+                 for ds in LOCAL_EXTRA_SOURCES.get(str(expert.get("expert_id")), ())]
+        expert["accepted_sources"] = extra + list(expert.get("accepted_sources", []))
+    return out
+
+
 @dataclass
 class ExpertSample:
     expert_id: str
@@ -142,6 +229,7 @@ def build_real_expert_shards(
         for src in sources:
             ds, cfg = str(src["dataset_id"]), str(src.get("config") or "default")
             used = {"dataset_id": ds, "config": cfg, "split": split, "license": src.get("license"),
+                    "origin": getattr(fetch, "origin_of", lambda _d: "datasets_server")(ds),
                     "heldout_rows": [0, 0], "train_rows": [heldout_rows, heldout_rows]}
             try:
                 for off in range(0, heldout_rows, ROWS_PER_REQUEST):
@@ -181,7 +269,7 @@ def build_real_expert_shards(
     manifest = {
         "schema": "hivemind.crowdgpt.real_shards.v1",
         "evidence": "measured",
-        "data": "real rows from the S21 dataset plan via datasets-server (read-only)",
+        "data": "real rows from the S21 dataset plan (each source lists its origin: local Hugging Face cache or datasets-server)",
         "decontamination_excluded": sorted(banned),
         "split_rule": "held-out rows precede training rows in every source; no row is shared",
         "learner_assignment": "learner 0 = experts in a Tesla T4 cohort, learner 1 = the others",

@@ -313,9 +313,22 @@ def test_xavier_v2_auth_password_login_and_restore_on_portal_and_router(tmp_path
     r_no_pwd = dash_client.post("/api/v1/auth/login", json={"handle_or_email": "callensxavier@gmail.com"})
     assert r_no_pwd.status_code == 401
 
-    # 2. User enters 15-char previous password on #auth and logs in / registers as callensxavier@gmail.com
+    # 2. A password the account never had does not open it, and is not bound to it (that was an account takeover: the
+    #    first caller chose the owner's password). The owner proves the account with its token and sets the password.
     user_pwd_15 = "XavierSecret#15"
     assert len(user_pwd_15) == 15
+    r_stranger = dash_client.post(
+        "/api/v1/auth/login",
+        json={"handle_or_email": "callensxavier@gmail.com", "password": user_pwd_15},
+    )
+    assert r_stranger.status_code == 401
+    owner_token = dash_client.app.state.auth_state["users"]["xavier_callens"]["token"]
+    r_set = dash_client.post(
+        "/api/v1/auth/change-password",
+        json={"new_password": user_pwd_15},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert r_set.status_code == 200 and r_set.json()["old_key_revoked"] is True
     r_login = dash_client.post(
         "/api/v1/auth/login",
         json={"handle_or_email": "callensxavier@gmail.com", "password": user_pwd_15},

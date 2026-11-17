@@ -36,6 +36,9 @@ DEFAULT_OUT = REPO_ROOT / "artifacts" / "experiments" / "E21_verification_cost_r
 NODE_COUNTS = (100, 1000, 10000)
 
 
+EVIDENCE_LABEL = {"evidence": "simulated", "not_a_measurement": True, "evidence_note": "analytic cost model with constants and numpy-generated poisoners; no real nodes", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def compute_verification_cost_schedule(
     node_counts: tuple[int, ...] = NODE_COUNTS,
     *,
@@ -268,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     fractions = [float(x.strip()) for x in args.poison.split(",") if x.strip()]
     report = build_e21_report(planted_fractions=fractions)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **report}, indent=2) + "\n", encoding="utf-8")
     print(
         json.dumps(
             {

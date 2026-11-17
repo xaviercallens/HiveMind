@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
-from hivemind.router.accounts import RouterStore
+from hivemind.router.accounts import VXTZQ_MODEL_TESTING_TARGET_HMT, RouterStore
 from hivemind.router.gateway import create_router_app
 from hivemind.router.signup_page import render_signup_page
 
@@ -45,7 +45,7 @@ def test_vxtzq_aliases_and_emails_resolve_to_vxtzq(ident: str) -> None:
     resolved = store._resolve_legacy_user(ident)
     assert resolved is not None
     assert resolved["handle"] == "vxtzq"
-    assert resolved["starter_hmt"] == 30000.0
+    assert resolved["starter_hmt"] == VXTZQ_MODEL_TESTING_TARGET_HMT
 
 
 def test_ensure_legacy_hiveminders_tops_up_existing_depleted_vxtzq_account() -> None:
@@ -54,15 +54,16 @@ def test_ensure_legacy_hiveminders_tops_up_existing_depleted_vxtzq_account() -> 
     assert store.balance(aid) == 0.0
 
     store.ensure_legacy_hiveminders_registered()
-    assert store.balance(aid) == pytest.approx(30000.0)
+    assert store.balance(aid) == pytest.approx(VXTZQ_MODEL_TESTING_TARGET_HMT)
+    # reset mail goes only to the primary address; aliases are sign-in names, never reset destinations
+    assert store.account_id_for_email("vxtzq@github.com") == aid
     for email_alias in (
-        "vxtzq@github.com",
         "116555319+vxtzq@users.noreply.github.com",
         "vxtzq@crowdgpt.net",
         "contact@crowdgpt.net",
         "vxtzq@hivemind.network",
     ):
-        assert store.account_id_for_email(email_alias) == aid
+        assert store.account_id_for_email(email_alias) is None
 
 
 def test_admin_reset_password_provisions_vxtzq_and_enables_login_and_self_service_reset() -> None:
@@ -102,7 +103,7 @@ def test_admin_reset_password_provisions_vxtzq_and_enables_login_and_self_servic
     assert body["email"] == "vxtzq@github.com"
     assert "116555319+vxtzq@users.noreply.github.com" in body["email_aliases"]
     assert "vxtzq@crowdgpt.net" in body["email_aliases"]
-    assert body["balance"] == pytest.approx(30000.0)
+    assert body["balance"] == pytest.approx(VXTZQ_MODEL_TESTING_TARGET_HMT)
     assert body["api_key"].startswith("hm-")
     assert body["reset_token"]
     assert "/auth/reset#token=" in body["reset_url"]
@@ -114,7 +115,7 @@ def test_admin_reset_password_provisions_vxtzq_and_enables_login_and_self_servic
     me = client.get("/v1/hivemind/me", headers={"Authorization": f"Bearer {initial_key}"})
     assert me.status_code == 200
     assert me.json()["handle"] == "vxtzq"
-    assert me.json()["balance"] == pytest.approx(30000.0)
+    assert me.json()["balance"] == pytest.approx(VXTZQ_MODEL_TESTING_TARGET_HMT)
 
     # Login with handle and email aliases works with the initial password
     for ident in (
@@ -129,7 +130,7 @@ def test_admin_reset_password_provisions_vxtzq_and_enables_login_and_self_servic
         )
         assert login_res.status_code == 200, (ident, login_res.text)
         assert login_res.json()["handle"] == "vxtzq"
-        assert login_res.json()["balance"] == pytest.approx(30000.0)
+        assert login_res.json()["balance"] == pytest.approx(VXTZQ_MODEL_TESTING_TARGET_HMT)
 
     # Self-service password reset using the single-use reset_token works and rotates the API key
     confirm = client.post(
@@ -212,3 +213,22 @@ def test_dashboard_vxtzq_emails_and_change_password(tmp_path: Path) -> None:
         )
         assert login.status_code == 200, (ident, login.text)
         assert login.json()["token"] == new_tok
+
+
+def test_a_reset_request_for_an_alias_sends_no_mail() -> None:
+    """Regression: a reset link must never be sent to a legacy alias address (it would hand over the account)."""
+    from fastapi.testclient import TestClient
+
+    from hivemind.router.gateway import create_router_app
+
+    store = RouterStore(":memory:", SECRET)
+    store.ensure_legacy_hiveminders_registered()
+    sent: list[tuple[str, str]] = []
+    client = TestClient(create_router_app(store, reset_email_sender=lambda to, token: sent.append((to, token)),
+                                          reset_email_enabled=lambda: True))
+    for alias in ("contact@crowdgpt.net", "vxtzq@crowdgpt.net", "vxtzq@hivemind.network"):
+        r = client.post("/api/v1/auth/password-reset/request", json={"email": alias})
+        assert r.status_code == 202  # same answer as for any address
+    assert sent == [], f"reset mail sent to an alias: {sent}"
+    client.post("/api/v1/auth/password-reset/request", json={"email": "vxtzq@github.com"})
+    assert [to for to, _ in sent] == ["vxtzq@github.com"]

@@ -1,0 +1,71 @@
+name: "🐝 CrowdGPT x HiveMind Weekend MoE + Decoupled OpenDiLoCo Raid (14–15 Nov 2026)"
+description: "Register a Producer, Trainer, or Prosumer GPU node or claim an expert shard for the Nov 14–15, 2026 CrowdGPT-MoE Weekend Raid"
+title: "[CrowdGPT Weekend Raid] <Handle> — <Role: Producer/Trainer/Prosumer> (<GPU Model> · Expert E<0-7>)"
+labels: ["crowdgpt-weekend-raid", "moe-opendiloco", "domain-expert"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🐝 Massive Weekend Swarm Training Raid — Saturday 14 & Sunday 15 November 2026
+        Join **Project HiveMind x `@Vxtzq` (`Vxtzq/Crowd-v1` → `hivemind/crowd-moe-v1`)** as a **Producer**, **Trainer**, or **Prosumer**!
+        - **Calendar (`.ics`)**: [`docs/calendar/hivemind_crowdgpt_weekend_nov14_15_2026.ics`](../blob/main/docs/calendar/hivemind_crowdgpt_weekend_nov14_15_2026.ics)
+        - **Raid & Announcements Kit**: [`docs/CROWDGPT_WE_NOV14_15_2026_MASSIVE_TRAINING_KIT.md`](../blob/main/docs/CROWDGPT_WE_NOV14_15_2026_MASSIVE_TRAINING_KIT.md)
+        - **Non-Monetary Charter**: Symbolic `HMT` Reflexion Points confer **zero financial payment** — strictly reciprocal shared inference & training compute quota across the swarm.
+
+  - type: input
+    id: hiveminder_handle
+    attributes:
+      label: "HiveMinder Handle & CrowdGPT Handle (if linked)"
+      description: "Your HiveMind OpenRouter handle (from https://hivemind-openrouter-1003063861791.us-central1.run.app/signup)"
+      placeholder: "e.g., vxtzq, xavgamsrv, gcp-t4-hermes"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: swarm_role
+    attributes:
+      label: "HiveMinder Participation Role"
+      options:
+        - "Prosumer (Serve live hivemind/crowd-v1 inference + run idle Sparse-MoE OpenDiLoCo inner steps)"
+        - "Trainer (Dedicated GPU running Decoupled OpenDiLoCo + FoMoE sigma-MoE inner steps)"
+        - "Producer (Low-latency OpenAI-compatible Crowd-v1 / Crowd-MoE-v1 inference + Sunday Blind A/B Arena)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: gpu_tier
+    attributes:
+      label: "GPU Hardware & VRAM Safety Tier"
+      options:
+        - "8 GB Consumer GPU (RTX 2070 / 3060 Ti / 4060 — >= 1,536 MiB free VRAM, 2 resident experts)"
+        - "10–12 GB Consumer GPU (RTX 3060 12GB / 3080 / 4070 — >= 2,048 MiB free VRAM, 4 resident experts)"
+        - "16 GB Cloud/Workstation GPU (GCP Spot Tesla T4 / RTX 4080 / A4000 — >= 4,300 MiB free VRAM, all 8 experts)"
+        - "24+ GB Enthusiast/Server GPU (RTX 3090 / 4090 / L4 / A100 — full 8-expert fine_grained_width_split)"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: expert_cohorts
+    attributes:
+      label: "Preferred CrowdGPT-MoE 8-Expert S21 Domain Shards (AGPL-3.0 Allowlisted)"
+      options:
+        - label: "E0_general_fineweb — FineWeb-Edu bilingual FR/EN pretrain anchor (ODC-By)"
+        - label: "E1_python_systems_code — OpenCodeInstruct + Magicoder + StarCoder2 unit-test verified code"
+        - label: "E2_math_reasoning — OpenMathInstruct-2 + NuminaMath-CoT + MetaMathQA"
+        - label: "E3_formal_logic_arc — AI2 ARC-Challenge deductive formal logic"
+        - label: "E4_physics_stem — PhysicsQA + quantitative multi-step STEM derivations"
+        - label: "E5_exoplanet_transit — NASA Kepler exoplanet transit vetting"
+        - label: "E6_stellar_spectroscopy — SDSS DR9 stellar spectral classification"
+        - label: "E7_defensive_cyber — Defensive vulnerability remediation & NIST controls"
+
+  - type: checkboxes
+    id: raid_waves
+    attributes:
+      label: "Weekend Raid Waves Joining (14–15 Nov 2026 UTC / CET)"
+      options:
+        - label: "Wave 0 (Fri 13 Nov 18:00–20:00 UTC / 19:00–21:00 CET) — Dry-Run & S21 Shard Prefetch"
+        - label: "Wave 1 (Sat 14 Nov 09:00–13:00 UTC / 10:00–14:00 CET) — MoE 8x Split & Router Warm-Start"
+        - label: "Wave 2 (Sat 14 Nov 13:00–21:00 UTC / 14:00–22:00 CET) — Peak EU+Americas T4 Spot + Swarm Sprint"
+        - label: "Wave 3 (Sat 14 Nov 22:00–Sun 15 Nov 08:00 UTC) — Nocturnal Prosumer & APAC PA-CGAD Relay"
+        - label: "Wave 4 (Sun 15 Nov 13:00–18:00 UTC / 14:00–19:00 CET) — Second Peak Quorum & RDA Consolidation"
+        - label: "Wave 5 (Sun 15 Nov 18:00–21:00 UTC / 19:00–22:00 CET) — Blind A/B Arena & Crowd-MoE-v1 Freeze"

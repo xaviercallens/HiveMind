@@ -31,6 +31,7 @@ import os
 import threading
 import time
 import uuid
+from pathlib import Path
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
@@ -78,6 +79,16 @@ from hivemind.router.market import (
     ProducerOffer,
     certify,
     clear_market,
+)
+from hivemind.core.expert_registry import (
+    LIVE as EXPERT_LIVE,
+    SHADOW as EXPERT_SHADOW,
+    AdapterBaseMismatchError,
+    ExpertRecord,
+    ExpertRegistry,
+    GateNotPassedError,
+    HierarchicalExpertRouter,
+    IllegalTransitionError,
 )
 from hivemind.security._exceptions import SwarmSecurityViolationError
 
@@ -157,8 +168,48 @@ def estimate_tokens(num_bytes: int) -> int:
     return (max(0, num_bytes) + 3) // 4
 
 
+RECOUNT_SLACK = 1.25  # allowed excess over the gateway's own token count (special tokens, tokenizer version drift)
+
+
+class TokenCounter:
+    """Counts completion tokens with the served model's own tokenizer, when the gateway has it.
+
+    Tokenizer files come from ``HIVEMIND_TOKENIZER_DIR``: one Hugging Face ``tokenizer.json`` per public model id, named
+    after the id with ``/`` replaced by ``__`` (for example ``hivemind__crowd-v1.json``). A model without a file, or a
+    missing ``tokenizers`` package, gives ``None`` and billing falls back to the byte cap.
+    """
+
+    def __init__(self, directory: str | os.PathLike[str] | None = None):
+        raw = directory if directory is not None else os.environ.get("HIVEMIND_TOKENIZER_DIR", "")
+        self.directory = Path(raw) if raw else None
+        self._cache: dict[str, Any] = {}
+
+    def _tokenizer(self, model_id: str) -> Any:
+        if self.directory is None or not model_id:
+            return None
+        if model_id not in self._cache:
+            path = self.directory / (model_id.replace("/", "__") + ".json")
+            tok = None
+            if path.is_file():
+                try:
+                    from tokenizers import Tokenizer
+
+                    tok = Tokenizer.from_file(str(path))
+                except Exception:  # noqa: BLE001 - a broken file must not break billing; fall back to bytes
+                    tok = None
+            self._cache[model_id] = tok
+        return self._cache[model_id]
+
+    def count(self, model_id: str, text: str) -> int | None:
+        tok = self._tokenizer(model_id)
+        if tok is None:
+            return None
+        return len(tok.encode(text or "", add_special_tokens=False).ids)
+
+
 def meter_usage(
-    reported_prompt: int, reported_completion: int, prompt_bytes: int, completion_bytes: int, max_tokens: int | None
+    reported_prompt: int, reported_completion: int, prompt_bytes: int, completion_bytes: int, max_tokens: int | None,
+    counted_completion: int | None = None,
 ) -> tuple[int, int, int]:
     """Anti-inflation metering: returns ``(prompt_tokens, completion_tokens, billed_tokens)``.
 
@@ -166,11 +217,17 @@ def meter_usage(
     estimate (and never more than the prompt bytes) and the completion part by the completion bytes and by
     ``max_tokens`` (``DEFAULT_MAX_TOKENS`` when the consumer set none, so billing stays inside the checked reserve).
     Hence ``billed <= min(reported_prompt + reported_completion, prompt_bytes + completion_bytes)``.
+
+    With ``counted_completion`` (the gateway's own count with the model's tokenizer), the completion part is also capped
+    at ``ceil(RECOUNT_SLACK * counted_completion)``: the byte cap alone lets a producer overstate by the bytes-per-token
+    ratio (about 4x for English, MVP criterion E2).
     """
     prompt_cap = min(int(prompt_bytes), estimate_tokens(int(prompt_bytes)) * PROMPT_TOKEN_FACTOR)
     prompt = max(0, min(int(reported_prompt), prompt_cap))
     completion = max(0, min(int(reported_completion), int(completion_bytes)))
     completion = min(completion, max(0, DEFAULT_MAX_TOKENS if max_tokens is None else int(max_tokens)))
+    if counted_completion is not None:
+        completion = min(completion, math.ceil(RECOUNT_SLACK * max(0, int(counted_completion))))
     return prompt, completion, prompt + completion
 
 
@@ -238,6 +295,19 @@ def _message_text(message: object) -> str:
                     if isinstance(value, str):
                         pieces.append(value)
     return "".join(pieces)
+
+
+def completion_text(payload: Mapping[str, Any], *, delta: bool) -> str:
+    """Text generated in a chat completion (``delta=False``) or one stream chunk (``delta=True``), as metered in bytes."""
+    parts: list[str] = []
+    choices = payload.get("choices")
+    if isinstance(choices, list):
+        for choice in choices:
+            if isinstance(choice, dict):
+                parts.append(_message_text(choice.get("delta" if delta else "message")))
+                if not delta and isinstance(choice.get("text"), str):
+                    parts.append(choice["text"])
+    return "".join(parts)
 
 
 def completion_byte_count(payload: Mapping[str, Any], *, delta: bool) -> int:
@@ -563,6 +633,18 @@ class GrantRequest(BaseModel):
     ref: str = Field(default="admin-grant", min_length=1, max_length=256)
 
 
+class PointTransferRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    recipient: str = Field(min_length=1, max_length=128)
+    amount: float = Field(gt=0.0, le=1_000_000_000.0, allow_inf_nan=False)
+    memo: str = Field(default="peer-hiveminder-support", max_length=256)
+    idempotency_key: str | None = Field(default=None, max_length=128)
+    notify_amcp: bool = True
+    subject_id: str = Field(default="SUBJ-01-PYTHON-RUST-CODER", min_length=4, max_length=64)
+    model_ref: str | None = Field(default=None, max_length=128)
+    pr_url: str | None = Field(default=None, max_length=300)
+
+
 class AccountTargetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     account_id: str | None = Field(default=None, max_length=128)
@@ -577,6 +659,26 @@ class AdminResetPasswordRequest(BaseModel):
     role: Literal["consumer", "producer", "prosumer", "trainer"] = "prosumer"
     min_balance_hmt: float = Field(default=0.0, ge=0.0, le=1e12, allow_inf_nan=False)
     issue_reset_token: bool = True
+
+
+class ExpertRegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expert_id: str = Field(min_length=1, max_length=128)
+    kind: Literal["serving", "lora_domain", "lora_mix"] = "lora_domain"
+    cluster_id: str = Field(min_length=1, max_length=128)
+    base_model_id: str = Field(min_length=1, max_length=256)
+    adapter_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    adapter_size_mib: StrictInt = Field(default=0, ge=0, le=MAX_GPU_VRAM_MIB)
+    keywords: list[str] = Field(default_factory=list, max_length=128)
+    source: str = Field(default="", max_length=256)
+    move_to_shadow: StrictBool = False
+    shadow_reason: str = Field(default="candidate staged for shadow gate", min_length=1, max_length=256)
+
+
+class ExpertPromoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expert_id: str = Field(min_length=1, max_length=128)
+    gate: dict[str, Any]
 
 
 class AccountFlagRequest(BaseModel):
@@ -672,6 +774,8 @@ class OpenTrainerDeltaSubmitRequest(BaseModel):
     inner_steps: int = Field(default=8, ge=1, le=100_000)
     loss_before: float = Field(ge=0.0, le=1_000.0, allow_inf_nan=False)
     loss_after: float = Field(ge=0.0, le=1_000.0, allow_inf_nan=False)
+    # le=100 is only a transport sanity ceiling: the enforced cap is DEFAULT_MAX_DELTA_L2 (25.0), applied by
+    # validate_trainer_delta_submission, which answers 400 delta_rejected with the reason instead of a schema 422.
     delta_norm: float = Field(gt=0.0, le=100.0, allow_inf_nan=False)
     delta_sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
     code_pin: str = Field(default="", max_length=128)
@@ -727,6 +831,16 @@ class _Plan:
     app_title: str = "custom_api"
     is_stream: bool = False
     started_monotonic: float = 0.0
+    routed_expert_id: str | None = None
+    routed_cluster_id: str | None = None
+
+
+_BASE_MODEL_TIER_ALIASES: dict[str, tuple[str, ...]] = {
+    "ibm-granite/granite-3.1-1b-a400m-base": ("granite-1b-base", "granite-moe"),
+    "ibm-granite/granite-3.1-3b-a800m-instruct": ("granite-moe",),
+    "Qwen/Qwen2.5-Coder-7B-Instruct": ("coder", "bee-stars", "bee-rusty-sundials"),
+    "Vxtzq/Crowd-v1": ("crowd-v1",),
+}
 
 
 def residency_report(
@@ -907,6 +1021,26 @@ class BodyLimitMiddleware:
         await response(scope, receive, send)
 
 
+# Public pages that posts link to. A link written in Markdown or inside parentheses often reaches us with the closing
+# punctuation glued on ("/signup)", "/signup](https:...", "/signup."), which 404s (seen in the 2026-11 gateway logs).
+# Only these fixed paths can be redirect targets, so the redirect cannot be pointed anywhere else.
+LINK_TYPO_PAGES = frozenset({
+    "/", "/signup", "/register", "/login", "/connexion", "/join", "/rejoindre", "/portal", "/playground", "/community",
+    "/benchmarks", "/boinc", "/crowdgpt-raid", "/raid", "/life-as-a-bee", "/manifesto", "/manifeste", "/game",
+    "/en", "/fr", "/de", "/es",
+})
+_LINK_TYPO_RE = re.compile(r"^(/[a-z0-9-]*?)(?:[)\]\[>\"'.,;:!*]|%29|%5[bBdD]|%22|%27|%3[eE]).*$")
+
+
+def link_typo_target(path: str) -> str | None:
+    """The clean page for a path with stray link punctuation after a known page, else None."""
+    match = _LINK_TYPO_RE.match(path or "")
+    if match is None:
+        return None
+    page = match.group(1) or "/"
+    return page if page in LINK_TYPO_PAGES else None
+
+
 def create_router_app(
     store: RouterStore,
     *,
@@ -928,10 +1062,14 @@ def create_router_app(
     warmup_unloaded: bool = True,
     starter_grant_hmt: float = 0.0,
     starter_grants_per_ip_24h: int = 3,
+    registration_bonus_hmt: float = 0.0,
+    allow_bonuses: bool = False,
+    bonus_claims_per_ip_24h: int = 5,
     trusted_proxies: Sequence[str] = (),
     maintenance_notice: str | None = None,
     reset_email_sender: Callable[[str, str], bool] | None = None,
     reset_email_enabled: Callable[[], bool] | None = None,
+    expert_registry: ExpertRegistry | None = None,
 ) -> FastAPI:
     """Build the gateway app. ``resolver`` (host -> IP strings) is injectable for tests of the SSRF guard.
 
@@ -956,6 +1094,7 @@ def create_router_app(
     """
     client = http_client if http_client is not None else httpx.Client(timeout=PRODUCER_TIMEOUT_S, follow_redirects=False)
     resolve: Resolver = resolver if resolver is not None else _default_resolver
+    token_counter = TokenCounter()  # gateway-side completion recount for billing (HIVEMIND_TOKENIZER_DIR)
     app = FastAPI(title="HiveMind OpenRouter (proof of concept)", version="1.0.0", description=POC_API_DESCRIPTION)
     rotation = WeightedRoundRobin()
     register_limiter = SlidingWindowLimiter(REGISTER_LIMIT, REGISTER_WINDOW_S)
@@ -965,7 +1104,20 @@ def create_router_app(
     usage_capture_cache: dict[int, tuple[float, dict[str, Any]]] = {}
     campaign_poll_limiter = SlidingWindowLimiter(CAMPAIGN_POLL_LIMIT, AMCP_PUBLISH_WINDOW_S)
     bee_trade_limiter = SlidingWindowLimiter(20, AMCP_PUBLISH_WINDOW_S)
+    point_transfer_limiter = SlidingWindowLimiter(20, AMCP_PUBLISH_WINDOW_S)
     anon_compute_limiter = SlidingWindowLimiter(30, AMCP_PUBLISH_WINDOW_S)
+    expert_lock = threading.Lock()
+    if expert_registry is not None:
+        active_registry = expert_registry
+    else:
+        reg_path = os.environ.get("HIVEMIND_EXPERT_REGISTRY_PATH", "").strip()
+        if reg_path and os.path.isfile(reg_path):
+            loaded_reg = ExpertRegistry.load(reg_path)
+            loaded_reg.strict = True
+            active_registry = loaded_reg
+        else:
+            active_registry = ExpertRegistry(strict=True)
+    app.state.expert_registry = active_registry
 
     def _parse_json_dict(raw: bytes) -> dict[str, Any]:
         try:
@@ -1009,6 +1161,8 @@ def create_router_app(
     warm_started: dict[tuple[str, str], float] = {}
     if starter_grant_hmt < 0.0 or not math.isfinite(starter_grant_hmt) or starter_grants_per_ip_24h < 0:
         raise ValueError("starter_grant_hmt and starter_grants_per_ip_24h must be finite and not negative")
+    if registration_bonus_hmt < 0.0 or not math.isfinite(registration_bonus_hmt) or bonus_claims_per_ip_24h < 0:
+        raise ValueError("registration_bonus_hmt and bonus_claims_per_ip_24h must be finite and not negative")
     proxy_networks = tuple(ipaddress.ip_network(entry, strict=False) for entry in trusted_proxies)
     app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)
     app.add_middleware(PocNoticeMiddleware, maintenance=maintenance_notice if maintenance_notice is not None else os.environ.get(MAINTENANCE_ENV))  # added last = outermost, so it also marks the 413 from the body limit
@@ -1033,7 +1187,11 @@ def create_router_app(
         )
 
     @app.exception_handler(StarletteHTTPException)
-    def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+    def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse | RedirectResponse:
+        if exc.status_code == 404 and request.method in ("GET", "HEAD"):
+            target = link_typo_target(request.url.path)
+            if target is not None:
+                return RedirectResponse(target + (f"?{request.url.query}" if request.url.query else ""), status_code=307)
         kind = "not_found_error" if exc.status_code == 404 else "invalid_request_error"
         return _error_response(exc.status_code, str(exc.detail), kind, f"http_{exc.status_code}")
 
@@ -1118,13 +1276,24 @@ def create_router_app(
         return peer
 
     def starter_grant(request: Request, account_id: str) -> dict[str, Any]:
-        """Mint the starter grant to a new real account unless its client address used up the daily cap. Says so, without counts."""
-        if starter_grant_hmt <= 0.0:
-            return {}
-        if store.claim_starter_slot(starter_client_ip(request), clock(), starter_grants_per_ip_24h):
-            store.grant(account_id, starter_grant_hmt, "starter-grant")
-            return {"starter_grant": starter_grant_hmt}
-        return {"starter_grant": 0.0, "starter_grant_note": "No starter grant was added to this account; ask an operator for one."}
+        """Mint the starter grant (and optional registration bonus) to a new real account unless its client address used up the daily cap."""
+        out: dict[str, Any] = {}
+        if starter_grant_hmt > 0.0 or registration_bonus_hmt > 0.0:
+            if store.claim_starter_slot(starter_client_ip(request), clock(), starter_grants_per_ip_24h):
+                if starter_grant_hmt > 0.0:
+                    store.grant(account_id, starter_grant_hmt, "starter-grant")
+                    out["starter_grant"] = starter_grant_hmt
+                if registration_bonus_hmt > 0.0:
+                    store.grant(account_id, registration_bonus_hmt, "registration-bonus")
+                    out["registration_bonus"] = registration_bonus_hmt
+            else:
+                if starter_grant_hmt > 0.0:
+                    out["starter_grant"] = 0.0
+                    out["starter_grant_note"] = "No starter grant was added to this account; ask an operator for one."
+                if registration_bonus_hmt > 0.0:
+                    out["registration_bonus"] = 0.0
+        # the partner allocation is granted once by an admin, never as a side effect of someone registering
+        return out
 
     reconnected_fleet_keepalive: dict[str, Any] = {
         "active": False,
@@ -1148,26 +1317,126 @@ def create_router_app(
     def equilibrium(model_id: str, records: Sequence[ProducerRecord], extra: Account | None) -> MarketEquilibrium:
         return clear_market(model_id, bids_for(extra), offers_for(records), fee)
 
-    def resolve_model(
+    def _prompt_text(messages: Sequence[Mapping[str, Any]]) -> str:
+        parts: list[str] = []
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, str):
+                parts.append(content)
+            elif isinstance(content, Sequence) and not isinstance(content, (bytes, bytearray)):
+                for item in content:
+                    if isinstance(item, Mapping) and isinstance(item.get("text"), str):
+                        parts.append(item["text"])
+        return " ".join(parts)
+
+    def _find_live_producers_for_expert(rec: ExpertRecord, now: float) -> tuple[str, list[ProducerRecord]] | None:
+        candidates = (
+            rec.expert_id,
+            rec.base_model_id,
+            _strip_prefix(rec.base_model_id),
+            *_BASE_MODEL_TIER_ALIASES.get(rec.base_model_id, ()),
+        )
+        seen: set[str] = set()
+        for model_key in candidates:
+            if not model_key or model_key in seen:
+                continue
+            seen.add(model_key)
+            recs = store.active_producers(model_key, now, PRODUCER_TTL_S)
+            if recs:
+                return model_key, recs
+        return None
+
+    def _resolve_live_expert_route(prompt_text: str, now: float) -> tuple[str, list[ProducerRecord], str, str, str] | None:
+        if not prompt_text.strip():
+            return None
+        with expert_lock:
+            live_ids = active_registry.ids_in_state(EXPERT_LIVE)
+            if not live_ids:
+                return None
+            base_ids = sorted({active_registry.get(eid).base_model_id for eid in live_ids})
+            best_decision = None
+            for base_id in base_ids:
+                router = HierarchicalExpertRouter(active_registry, base_id)
+                decision = router.route(prompt_text)
+                if decision.target == "expert" and decision.expert_id is not None:
+                    best_decision = decision
+                    break
+            if best_decision is None or best_decision.expert_id is None:
+                return None
+            rec = active_registry.get(best_decision.expert_id)
+        found = _find_live_producers_for_expert(rec, now)
+        if found is None:
+            return None
+        served_model, recs = found
+        return served_model, recs, "expert_registry_live", rec.expert_id, rec.cluster_id
+
+    def _resolve_model_route(
         requested: str,
         *,
         preferred_tier: str | None = None,
-    ) -> tuple[str, list[ProducerRecord], str]:
+        prompt_text: str = "",
+    ) -> tuple[str, list[ProducerRecord], str, str | None, str | None]:
         now = clock()
         _refresh_reconnected_fleet_if_needed(now)
-        name = _strip_prefix(requested.strip())
+        raw_req = requested.strip()
+        name = _strip_prefix(raw_req)
         routing_mode = "explicit"
+        if name != AUTO_MODEL:
+            with expert_lock:
+                expert_rec: ExpertRecord | None = None
+                for key in (raw_req, name):
+                    if key in active_registry:
+                        expert_rec = active_registry.get(key)
+                        break
+            if expert_rec is not None:
+                if expert_rec.state != EXPERT_LIVE:
+                    raise RouterError(
+                        403,
+                        f"Expert '{expert_rec.expert_id}' is in state '{expert_rec.state}' and has not passed the train-to-serve gate.",
+                        "permission_error",
+                        "expert_not_servable",
+                    )
+                found = _find_live_producers_for_expert(expert_rec, now)
+                if found is None:
+                    raise RouterError(
+                        404,
+                        f"Live expert '{expert_rec.expert_id}' has no active producer serving '{expert_rec.base_model_id}'.",
+                        "invalid_request_error",
+                        "model_not_found",
+                    )
+                served_model, recs = found
+                return served_model, recs, "expert_registry_explicit", expert_rec.expert_id, expert_rec.cluster_id
         if name == AUTO_MODEL:
+            routed_expert = _resolve_live_expert_route(prompt_text, now)
+            if routed_expert is not None:
+                return routed_expert
             live_candidates = store.live_models(now, PRODUCER_TTL_S)
+
+            def _has_ready_producer(model_name: str, recs: Sequence[ProducerRecord]) -> bool:
+                return any(
+                    not all(
+                        s.model_state(model_name) is False and _cold_start_of(s, model_name) >= cold_start_wait_budget_s
+                        for s in r.per_endpoint()
+                    )
+                    for r in recs
+                )
+
             if preferred_tier and preferred_tier in live_candidates:
                 preferred_live = store.active_producers(preferred_tier, now, PRODUCER_TTL_S)
-                if preferred_live:
-                    return preferred_tier, preferred_live, "auto_intent"
-            best: tuple[tuple[int, float], str] | None = None
+                if preferred_live and (
+                    _has_ready_producer(preferred_tier, preferred_live)
+                    or not any(
+                        _has_ready_producer(c, store.active_producers(c, now, PRODUCER_TTL_S))
+                        for c in live_candidates
+                    )
+                ):
+                    return preferred_tier, preferred_live, "auto_intent", None, None
+            best: tuple[tuple[int, int, float], str] | None = None
             for candidate in live_candidates:
                 live = store.active_producers(candidate, now, PRODUCER_TTL_S)
-                # distinct live producers first: a single producer cannot steer 'auto' by declaring huge capacity
-                supply = (len({r.account_id for r in live}), sum(clamped(r) for r in live))
+                # ready (loaded or within wait budget) models first, then distinct live producers, then clamped capacity
+                ready_rank = 1 if _has_ready_producer(candidate, live) else 0
+                supply = (ready_rank, len({r.account_id for r in live}), sum(clamped(r) for r in live))
                 if best is None or supply > best[0]:
                     best = (supply, candidate)
             if best is None:
@@ -1179,9 +1448,17 @@ def create_router_app(
             for fallback_tier in ("coder", "gemma-core", "qwen35-core", "moe-coder"):
                 fb_records = store.active_producers(fallback_tier, now, PRODUCER_TTL_S)
                 if fb_records:
-                    return fallback_tier, fb_records, "super_moe_fallback"
+                    return fallback_tier, fb_records, "super_moe_fallback", None, None
         if not records:
             raise RouterError(404, f"The model '{requested}' is not served by any live producer.", "invalid_request_error", "model_not_found")
+        return name, records, routing_mode, None, None
+
+    def resolve_model(
+        requested: str,
+        *,
+        preferred_tier: str | None = None,
+    ) -> tuple[str, list[ProducerRecord], str]:
+        name, records, routing_mode, _, _ = _resolve_model_route(requested, preferred_tier=preferred_tier)
         return name, records, routing_mode
 
     def kick_warmup(model_id: str, servers: Sequence[ProducerRecord]) -> None:
@@ -1228,7 +1505,11 @@ def create_router_app(
         max_tokens = request_token_limit(body)
         intent = classify_prompt_intent_and_language(messages)
         attribution = detect_client_sdk(headers or {})
-        model_id, records, routing_mode = resolve_model(requested, preferred_tier=intent.preferred_tier)
+        model_id, records, routing_mode, routed_expert_id, routed_cluster_id = _resolve_model_route(
+            requested,
+            preferred_tier=intent.preferred_tier,
+            prompt_text=_prompt_text(messages),
+        )
         if store.balance(account.account_id) <= 0.0:
             raise RouterError(402, "Balance is empty; ask an admin for a grant or earn HMT as a producer.", "insufficient_quota", "insufficient_balance")
         # Residency-aware pricing: a producer whose every server reports the model NOT loaded with a cold start above the
@@ -1314,6 +1595,8 @@ def create_router_app(
             app_title=attribution.app_title,
             is_stream=bool(body.get("stream") is True),
             started_monotonic=time.monotonic(),
+            routed_expert_id=routed_expert_id,
+            routed_cluster_id=routed_cluster_id,
         )
 
     def producer_request(record: ProducerRecord, plan: _Plan, body: Mapping[str, Any], *, stream: bool) -> httpx.Request | None:
@@ -1356,9 +1639,12 @@ def create_router_app(
         completion_bytes: int,
         *,
         ttft_ms: float | None = None,
+        completion_txt: str | None = None,
     ) -> dict[str, Any]:
         """Settle against the escrow taken at plan time: the metered charge can never exceed it, so it is never free."""
-        prompt, completion, billed = meter_usage(reported[0], reported[1], plan.prompt_bytes, completion_bytes, plan.max_tokens)
+        counted = token_counter.count(plan.model_id, completion_txt) if completion_txt is not None else None
+        prompt, completion, billed = meter_usage(reported[0], reported[1], plan.prompt_bytes, completion_bytes, plan.max_tokens,
+                                                 counted_completion=counted)
         receipt = store.settle(plan.request_id, account.account_id, producer_id, plan.model_id, prompt, completion, billed, plan.price_per_1k, fee)
         billed = receipt.billed_tokens
         prompt = min(prompt, billed)
@@ -1498,7 +1784,8 @@ def create_router_app(
             if reported is None:
                 reported = (estimate_tokens(plan.prompt_bytes), estimate_tokens(cbytes))
             try:
-                info = settle(plan, account, record.account_id, reported, cbytes)
+                info = settle(plan, account, record.account_id, reported, cbytes,
+                              completion_txt=completion_text(payload, delta=False))
             except (InsufficientBalance, DuplicateRequest, UnknownAccount):
                 raise RouterError(402, "Balance changed while the request was running.", "insufficient_quota", "insufficient_balance") from None
             payload["model"] = _public_model(plan.model_id)
@@ -1513,8 +1800,15 @@ def create_router_app(
                 "requested_model": _public_model(plan.requested_model or plan.model_id),
                 "routing_mode": plan.routing_mode,
                 "local_model": record.local_name(plan.model_id) or plan.model_id,
+                **({"expert_id": plan.routed_expert_id} if plan.routed_expert_id else {}),
+                **({"cluster_id": plan.routed_cluster_id} if plan.routed_cluster_id else {}),
             }
-            return JSONResponse(payload)
+            resp_headers: dict[str, str] = {}
+            if plan.routed_expert_id:
+                resp_headers["X-HiveMind-Expert-Id"] = plan.routed_expert_id
+            if plan.routed_cluster_id:
+                resp_headers["X-HiveMind-Cluster-Id"] = plan.routed_cluster_id
+            return JSONResponse(payload, headers=resp_headers)
         raise upstream_exhausted(plan, timed_out, account=account, reasons=failure_reasons)
 
     def chat_streaming(plan: _Plan, account: Account, body: Mapping[str, Any]) -> StreamingResponse:
@@ -1541,12 +1835,18 @@ def create_router_app(
                 _mark_failed(record)
                 continue
             _mark_ok(record)
-            return StreamingResponse(_stream_body(plan, account, record.account_id, upstream), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+            stream_headers = {"Cache-Control": "no-cache"}
+            if plan.routed_expert_id:
+                stream_headers["X-HiveMind-Expert-Id"] = plan.routed_expert_id
+            if plan.routed_cluster_id:
+                stream_headers["X-HiveMind-Cluster-Id"] = plan.routed_cluster_id
+            return StreamingResponse(_stream_body(plan, account, record.account_id, upstream), media_type="text/event-stream", headers=stream_headers)
         raise upstream_exhausted(plan, timed_out, account=account, reasons=failure_reasons)
 
     def _stream_body(plan: _Plan, account: Account, producer_id: str, upstream: httpx.Response) -> Iterator[bytes]:
         public = _public_model(plan.model_id)
         completion_bytes = 0
+        stream_text: list[str] = []
         reported: tuple[int, int] | None = None
         completion_id = "chatcmpl-" + plan.request_id
         settled = False
@@ -1566,7 +1866,8 @@ def create_router_app(
                 else None
             )
             try:
-                return settle(plan, account, producer_id, usage, completion_bytes, ttft_ms=stream_ttft_ms)
+                return settle(plan, account, producer_id, usage, completion_bytes, ttft_ms=stream_ttft_ms,
+                              completion_txt="".join(stream_text))
             except (InsufficientBalance, DuplicateRequest, UnknownAccount):
                 LOGGER.warning("settlement failed for %s", plan.request_id)
                 return None
@@ -1592,6 +1893,7 @@ def create_router_app(
                         produced = True
                     completion_id = str(chunk.get("id", completion_id))
                     completion_bytes += completion_byte_count(chunk, delta=True)
+                    stream_text.append(completion_text(chunk, delta=True))
                     pair = _usage_pair(chunk)
                     if pair is not None:
                         reported = pair
@@ -2154,6 +2456,7 @@ def create_router_app(
     @app.api_route("/login", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/register", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/connexion", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/auth/reset", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def signup(request: Request) -> HTMLResponse:
         nonce = secrets.token_urlsafe(18)
         default_role = str(request.query_params.get("role") or "prosumer").strip().lower()
@@ -2162,6 +2465,8 @@ def create_router_app(
             nonce,
             live_telemetry=build_live_telemetry_snapshot(),
             starter_grant_hmt=starter_grant_hmt,
+            registration_bonus_hmt=registration_bonus_hmt,
+            allow_bonuses=allow_bonuses,
             default_role=default_role,
         )
         return HTMLResponse(page, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
@@ -2500,7 +2805,7 @@ def create_router_app(
         if store._resolve_legacy_user(raw_handle) is not None or (raw_email and store._resolve_legacy_user(raw_email) is not None):
             raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken")
         try:
-            account_id, new_key, _ = store.register_with_credentials(
+            account_id, new_key, created_upg = store.register_with_credentials(
                 clean_handle,
                 str(data.get("password") or ""),
                 "prosumer",
@@ -2512,6 +2817,8 @@ def create_router_app(
         prov_badge = f"{prov.upper()}_SSO" if prov != "email" else "EMAIL_PASSKEY"
         router_linked_providers[account_id] = ["GUEST_SANDBOX", prov_badge]
         acct = store.get_account(account_id)
+        grant_info = starter_grant(request, account_id) if created_upg else {}
+        upg_bal = store.balance(account_id)
         resolved_handle = acct.handle if acct else clean_handle.lower()
         return JSONResponse(
             {
@@ -2522,9 +2829,12 @@ def create_router_app(
                 "linked_providers": ["GUEST_SANDBOX", prov_badge],
                 "role": "HiveMinder Human",
                 "target_profile": target_profile,
-                "compute_points": 0,
+                "balance": upg_bal,
+                "balance_hmt": upg_bal,
+                "compute_points": int(round(upg_bal)),
                 "token": new_key,
                 "api_key": new_key,
+                **grant_info,
                 "node_id": "0x" + hashlib.sha256(f"upgraded:{resolved_handle}".encode("utf-8")).hexdigest()[:8].upper(),
                 "login_count": 1,
                 "is_new_user": True,
@@ -2683,10 +2993,10 @@ def create_router_app(
         data = await _parse_auth_payload(request)
         try:
             res = await run_in_threadpool(_execute_credential_register, request, data)
-            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = 200
         except RouterError as exc:
-            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = exc.status
         return HTMLResponse(page, status_code=status, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                                                "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
@@ -2698,10 +3008,10 @@ def create_router_app(
         data = await _parse_auth_payload(request)
         try:
             res = await run_in_threadpool(_execute_credential_login, request, data)
-            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = 200
         except RouterError as exc:
-            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = exc.status
         return HTMLResponse(page, status_code=status, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                                                "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
@@ -2820,6 +3130,215 @@ def create_router_app(
             "recent_usage": store.recent_usage(account.account_id, 20),
         }
 
+    _bonus_cors_headers = {
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+    }
+
+    @app.options("/v1/hivemind/bonus/status")
+    @app.options("/api/v1/auth/bonus/status")
+    @app.options("/v1/hivemind/bonus/claim")
+    @app.options("/api/v1/auth/bonus/claim")
+    def bonus_cors_preflight() -> JSONResponse:
+        return JSONResponse(content={}, status_code=200, headers=_bonus_cors_headers)
+
+    @app.get("/v1/hivemind/bonus/status")
+    @app.get("/api/v1/auth/bonus/status")
+    def bonus_status_api(request: Request) -> JSONResponse:
+        account = authenticate(request)
+        welcome_amt = registration_bonus_hmt if registration_bonus_hmt > 0.0 else 500.0
+        status_body = store.bonus_status(account.account_id, now_utc=clock(), welcome_bonus_hmt=welcome_amt)
+        return JSONResponse(
+            {
+                "object": "hivemind.bonus_status",
+                "allow_bonuses": bool(allow_bonuses),
+                "starter_grant_hmt": starter_grant_hmt,
+                "registration_bonus_hmt": registration_bonus_hmt,
+                **status_body,
+            },
+            headers=_bonus_cors_headers,
+        )
+
+    @app.post("/v1/hivemind/bonus/claim")
+    @app.post("/api/v1/auth/bonus/claim")
+    async def bonus_claim_api(request: Request) -> JSONResponse:
+        if not allow_bonuses:
+            raise RouterError(403, "Bonus HMT claims are not enabled on this gateway.", "permission_error", "bonus_disabled")
+        account = authenticate(request)
+        if account.kind != "user" or account.is_test:
+            raise RouterError(403, "Test and probe accounts cannot claim HMT bonuses.", "permission_error", "bonus_forbidden_account_kind")
+        raw = await request.body()
+        data = _parse_json_dict(raw) if raw else {}
+        bonus_code = str(data.get("bonus_code") or "auto").strip().lower()
+        welcome_amt = registration_bonus_hmt if registration_bonus_hmt > 0.0 else 500.0
+        def _do_claim() -> dict[str, Any]:
+            try:
+                return store.claim_bonus(
+                    account.account_id,
+                    bonus_code=bonus_code,
+                    client_ip=starter_client_ip(request),
+                    now_utc=clock(),
+                    ip_cap_24h=bonus_claims_per_ip_24h,
+                    welcome_bonus_hmt=welcome_amt,
+                )
+            except PermissionError as exc:
+                raise RouterError(403, str(exc), "permission_error", "bonus_forbidden") from None
+            except ValueError as exc:
+                raise RouterError(400, str(exc), "invalid_request_error", "invalid_bonus_code") from None
+
+        res = await run_in_threadpool(_do_claim)
+        return JSONResponse({"object": "hivemind.bonus_claim", **res}, headers=_bonus_cors_headers)
+
+    @app.options("/v1/hivemind/points/transfer")
+    @app.options("/api/v1/points/transfer")
+    @app.options("/v1/hivemind/points/transfers")
+    @app.options("/api/v1/points/transfers")
+    def point_transfer_cors_preflight() -> JSONResponse:
+        return JSONResponse(content={}, status_code=200, headers=_bonus_cors_headers)
+
+    @app.post("/v1/hivemind/points/transfer")
+    @app.post("/api/v1/points/transfer")
+    def transfer_points_api(request: Request, payload: PointTransferRequest) -> JSONResponse:
+        """Transfer HMT Reflexion Points from the authenticated HiveMinder to another HiveMinder and emit an AMCP/Kafka receipt."""
+        from hivemind.swarm.amcp_kafka_campaign_bus import build_amcp_kafka_event
+        from hivemind.swarm.amcp_kafka_transport import SchemaError, validate_event_dict
+
+        sender = authenticate(request)
+        if sender.kind != "user" or sender.is_test:
+            raise RouterError(
+                403,
+                "Test and probe accounts may not transfer HMT points.",
+                "permission_error",
+                "transfer_forbidden_account_kind",
+            )
+        now = clock()
+        if not point_transfer_limiter.allow(sender.account_id, now):
+            raise RouterError(
+                429,
+                "Too many HMT transfers from this account; try again in a minute.",
+                "rate_limit_error",
+                "rate_limited",
+            )
+        try:
+            receipt = store.transfer_points(
+                sender.account_id,
+                payload.recipient,
+                payload.amount,
+                memo=payload.memo,
+                idempotency_key=payload.idempotency_key,
+                now_utc=now,
+            )
+        except UnknownAccount:
+            raise RouterError(
+                404,
+                "Recipient HiveMinder account not found.",
+                "invalid_request_error",
+                "account_not_found",
+            ) from None
+        except PermissionError as exc:
+            raise RouterError(403, str(exc), "permission_error", "transfer_forbidden") from None
+        except InsufficientBalance:
+            raise RouterError(
+                402,
+                "Insufficient HMT balance to complete this transfer.",
+                "insufficient_quota",
+                "insufficient_balance",
+            ) from None
+        except ValueError as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "invalid_transfer") from None
+
+        amcp_event_dict: dict[str, Any] | None = None
+        bus_status: dict[str, Any] = {"status": "skipped"}
+        if payload.notify_amcp and not receipt["idempotent_replay"]:
+            amcp_payload: dict[str, Any] = {
+                "transfer_id": receipt["transfer_id"],
+                "sender_handle": receipt["sender_handle"],
+                "recipient_handle": receipt["recipient_handle"],
+                "amount_hmt": round(float(receipt["amount_hmt"]), 6),
+                "memo": receipt["memo"],
+                "text": (
+                    f"@{receipt['sender_handle']} transferred {receipt['amount_hmt']:.2f} HMT to "
+                    f"@{receipt['recipient_handle']} ({receipt['memo']})."
+                ),
+            }
+            if payload.model_ref:
+                amcp_payload["model_ref"] = payload.model_ref.strip()[:128]
+            if payload.pr_url:
+                amcp_payload["pr_url"] = payload.pr_url.strip()[:300]
+            ev = build_amcp_kafka_event(
+                topic_key="human_agent",
+                event_type="io.hivemind.amcp.points.transfer",
+                sender_id=sender.handle,
+                sender_kind="human_researcher",
+                recipient_id=receipt["recipient_handle"],
+                subject_id=payload.subject_id,
+                correlation_id=receipt["transfer_id"],
+                payload=amcp_payload,
+                now_utc=now,
+            )
+            try:
+                validate_event_dict(ev.to_dict(), ev.topic)
+                store.record_amcp_kafka_event(
+                    event_id=ev.event_id,
+                    topic=ev.topic,
+                    event_type=ev.event_type,
+                    sender_id=ev.sender_id,
+                    sender_kind=ev.sender_kind,
+                    recipient_id=ev.recipient_id,
+                    subject_id=ev.subject_id,
+                    correlation_id=ev.correlation_id,
+                    payload=ev.payload,
+                    now_utc=ev.utc,
+                )
+                store.attach_transfer_amcp_event(receipt["transfer_id"], ev.event_id)
+                receipt["amcp_event_id"] = ev.event_id
+                amcp_event_dict = ev.to_dict()
+                bus_status = {"status": "not_configured"}
+                if amcp_bus is not None:
+                    try:
+                        bus_status = {"status": "published", **amcp_bus(ev)}
+                    except Exception:  # noqa: BLE001
+                        LOGGER.warning("Transfer AMCP event %s stored but not published to Kafka", ev.event_id, exc_info=True)
+                        bus_status = {"status": "unavailable"}
+            except SchemaError:
+                LOGGER.warning("Transfer AMCP event failed schema check", exc_info=True)
+                bus_status = {"status": "schema_skipped"}
+
+        return JSONResponse(
+            {
+                "object": "hivemind.point_transfer",
+                **receipt,
+                "amcp_event": amcp_event_dict,
+                "bus": bus_status,
+            },
+            headers=_bonus_cors_headers,
+        )
+
+    @app.get("/v1/hivemind/points/transfers")
+    @app.get("/api/v1/points/transfers")
+    def list_point_transfers_api(request: Request, limit: int = 25) -> JSONResponse:
+        account = authenticate(request)
+        if isinstance(limit, bool) or limit < 1 or limit > 100:
+            raise RouterError(400, "limit must be between 1 and 100.", "invalid_request_error", "invalid_parameter")
+        transfers = store.list_point_transfers(account.account_id, limit=limit)
+        bal = store.balance(account.account_id)
+        return JSONResponse(
+            {
+                "object": "hivemind.point_transfer_list",
+                "account_id": account.account_id,
+                "handle": account.handle,
+                "balance": bal,
+                "balance_hmt": bal,
+                "compute_points": int(round(bal)),
+                "count": len(transfers),
+                "transfers": transfers,
+            },
+            headers=_bonus_cors_headers,
+        )
+
+
     @app.get("/v1/hivemind/t4/status")
     def t4_status(request: Request) -> dict[str, Any]:
         from hivemind.router.t4_visibility import build_t4_visibility_payload
@@ -2870,6 +3389,66 @@ def create_router_app(
         except ValueError as exc:
             raise RouterError(400, f"telemetry rejected: {exc}", "invalid_request_error", "invalid_request") from None
         return {"ok": True, "updated_epoch": snap.get("updated_epoch"), "node_name": snap.get("node_name")}
+
+    @app.get("/v1/hivemind/experts")
+    def list_experts(state: str | None = None) -> dict[str, Any]:
+        """List registered domain experts/adapters and their lifecycle/gate states."""
+        with expert_lock:
+            if state is not None and state.strip():
+                clean_state = state.strip().lower()
+                try:
+                    ids = active_registry.ids_in_state(clean_state)
+                except ValueError as exc:
+                    raise RouterError(400, str(exc), "invalid_request_error", "invalid_state") from None
+                rows = [active_registry.get(eid).to_dict() for eid in ids]
+            else:
+                rows = [r.to_dict() for r in active_registry.all_experts()]
+            live_ids = active_registry.ids_in_state(EXPERT_LIVE)
+        return {
+            "object": "hivemind.expert_registry",
+            "strict": active_registry.strict,
+            "live_count": len(live_ids),
+            "live_experts": live_ids,
+            "experts": rows,
+        }
+
+    @app.post("/v1/hivemind/experts/register")
+    def register_expert(request: Request, payload: ExpertRegisterRequest) -> dict[str, Any]:
+        """Register a domain expert candidate (and optionally move it to shadow evaluation)."""
+        require_admin(request)
+        try:
+            rec = ExpertRecord(
+                expert_id=payload.expert_id.strip(),
+                kind=payload.kind,
+                cluster_id=payload.cluster_id.strip(),
+                base_model_id=payload.base_model_id.strip(),
+                adapter_sha256=payload.adapter_sha256.lower() if payload.adapter_sha256 else None,
+                adapter_size_mib=int(payload.adapter_size_mib),
+                keywords=tuple(payload.keywords),
+                source=payload.source,
+            )
+            with expert_lock:
+                registered = active_registry.register(rec)
+                if payload.move_to_shadow:
+                    registered = active_registry.transition(registered.expert_id, EXPERT_SHADOW, payload.shadow_reason)
+        except (ValueError, AdapterBaseMismatchError, IllegalTransitionError) as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "expert_register_rejected") from None
+        return {"ok": True, "expert": registered.to_dict()}
+
+    @app.post("/v1/hivemind/experts/promote")
+    def promote_expert(request: Request, payload: ExpertPromoteRequest) -> dict[str, Any]:
+        """Promote a shadow adapter to LIVE only through a passing train-to-serve gate for its exact bytes."""
+        require_admin(request)
+        with expert_lock:
+            if payload.expert_id not in active_registry:
+                raise RouterError(404, f"Unknown expert '{payload.expert_id}'.", "invalid_request_error", "expert_not_found")
+            try:
+                promoted = active_registry.promote_with_gate(payload.expert_id, payload.gate)
+            except GateNotPassedError as exc:
+                raise RouterError(400, str(exc), "invalid_request_error", "gate_not_passed") from None
+            except (IllegalTransitionError, AdapterBaseMismatchError, ValueError) as exc:
+                raise RouterError(400, str(exc), "invalid_request_error", "expert_promote_rejected") from None
+        return {"ok": True, "expert": promoted.to_dict()}
 
     @app.post("/v1/hivemind/consumer/max-price")
     def set_max_price(request: Request, payload: MaxPriceRequest) -> dict[str, Any]:
@@ -3664,6 +4243,7 @@ def create_router_app(
             COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE,
             FIREWALL_TRAVERSAL_MODES,
             MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK,
+            build_crowdgpt_trainer_producer_plan,
             default_active_task_offer,
             summarize_moe_self_training_progress,
         )
@@ -3711,7 +4291,54 @@ def create_router_app(
             "firewall_traversal_modes": list(FIREWALL_TRAVERSAL_MODES),
             "community_help_guide": list(COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE),
             "multi_gpu_2_to_4_byom_playbook": MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK,
+            "crowdgpt_trainer_producer_plan": build_crowdgpt_trainer_producer_plan(
+                opentrainer_nodes=ot_nodes,
+                recent_rounds=ot_rounds,
+                now_utc=now,
+            ),
         }
+
+    @app.get("/v1/hivemind/opentrainer/crowdgpt-plan")
+    @app.get("/v1/opentrainer/crowdgpt-plan")
+    def get_opentrainer_crowdgpt_plan() -> dict[str, Any]:
+        """Public CrowdGPT (Vxtzq/Crowd-v1) Trainer + Producer GPU Co-Training Plan & live campaign telemetry."""
+        from hivemind.router.opentrainer import build_crowdgpt_trainer_producer_plan
+
+        now = clock()
+        nodes = store.list_opentrainer_nodes()
+        rounds = store.list_opentrainer_rounds(limit=100)
+        return build_crowdgpt_trainer_producer_plan(
+            opentrainer_nodes=nodes,
+            recent_rounds=rounds,
+            now_utc=now,
+        )
+
+    @app.get("/v1/hivemind/opentrainer/crowdgpt-weekend-raid")
+    @app.get("/v1/opentrainer/crowdgpt-weekend-raid")
+    def get_opentrainer_crowdgpt_weekend_raid(
+        handle: str | None = None,
+        role: str = "prosumer",
+        vram_mib: int = 8192,
+    ) -> dict[str, Any]:
+        """Public Nov 14-15, 2026 CrowdGPT x HiveMind Weekend Massive Training manifest, MoE split & OpenDiLoCo config."""
+        from hivemind.swarm.crowdgpt_moe_opendiloco import (
+            assign_hiveminder_moe_shards,
+            build_weekend_nov14_15_raid_manifest,
+        )
+
+        manifest = build_weekend_nov14_15_raid_manifest()
+        if handle and str(handle).strip():
+            eff_role = str(role or "prosumer").strip().lower()
+            if eff_role not in {"producer", "trainer", "prosumer"}:
+                eff_role = "prosumer"
+            eff_vram = max(0, min(int(vram_mib), 1_048_576))
+            manifest["personalized_assignment"] = assign_hiveminder_moe_shards(
+                str(handle).strip()[:64],
+                eff_role,
+                eff_vram,
+            )
+        manifest["live_opentrainer_rounds_count"] = len(store.list_opentrainer_rounds(limit=100))
+        return manifest
 
     @app.post("/v1/hivemind/opentrainer/heartbeat")
     @app.post("/v1/opentrainer/heartbeat")
@@ -5003,6 +5630,64 @@ def create_router_app(
                 "sensitive_prompt_rejected",
             )
         return JSONResponse(res, headers={"Cache-Control": "no-store"})
+
+    @app.api_route("/raid", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/crowdgpt-raid", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def router_v34_pioneer_raid_hub(request: Request, lang: str | None = None) -> HTMLResponse:
+        """Serve the strict-CSP bilingual (EN/FR) HiveMind v3.4 Pioneer Thank-You & Nov 14-15 CrowdGPT Raid Hub."""
+        import secrets as _secrets
+        from hivemind.router.community_outreach_v34 import (
+            raid_hub_content_security_policy,
+            render_v34_raid_hub_page,
+        )
+
+        chosen_lang = lang or ("fr" if "fr" in (request.headers.get("accept-language") or "").lower().split(",")[0] else "en")
+        nonce = _secrets.token_urlsafe(18)
+        html_doc = render_v34_raid_hub_page(lang=chosen_lang, nonce=nonce, starter_grant_hmt=starter_grant_hmt)
+        return HTMLResponse(
+            content=html_doc,
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+                "Content-Security-Policy": raid_hub_content_security_policy(nonce),
+                "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+            },
+        )
+
+    @app.get("/calendar/crowdgpt-weekend-raid.ics", response_class=PlainTextResponse)
+    def router_crowdgpt_weekend_raid_ics() -> PlainTextResponse:
+        """Serve the RFC 5545 6-wave iCalendar (.ics) feed for the Nov 14-15, 2026 CrowdGPT-MoE Swarm Raid."""
+        from hivemind.cli.campaign_calendar_quorum import generate_crowdgpt_weekend_ics_calendar
+
+        ics_body = generate_crowdgpt_weekend_ics_calendar()
+        return PlainTextResponse(
+            content=ics_body,
+            media_type="text/calendar; charset=utf-8",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+                "Content-Disposition": 'attachment; filename="hivemind_crowdgpt_weekend_nov14_15_2026.ics"',
+            },
+        )
+
+    @app.get("/v1/hivemind/community/v34-outreach")
+    def router_v34_community_outreach_plan() -> JSONResponse:
+        """Return the structured 5-phase v3.4 Pioneer & CrowdGPT Weekend Raid communication plan manifest."""
+        from hivemind.router.community_outreach_v34 import build_v34_communication_plan_status
+
+        return JSONResponse(
+            build_v34_communication_plan_status(),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+            },
+        )
 
     from hivemind.boinc.rtx_boinc_deployer import RTXBoincServer, build_rtx_boinc_fastapi_router
 

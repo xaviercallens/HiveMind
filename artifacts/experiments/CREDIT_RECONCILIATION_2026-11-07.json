@@ -1,4 +1,8 @@
 {
+  "evidence": "placeholder",
+  "not_a_measurement": true,
+  "evidence_note": "literal cohorts; the discrepancy is zero by construction",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md",
   "schema": "hivemind.credit_reconciliation_receipt.v1",
   "deliverable_id": "PS-08-D2",
   "generated_at_utc": "2026-11-07T22:16:52Z",

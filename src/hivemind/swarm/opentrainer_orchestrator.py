@@ -96,6 +96,34 @@ PIN_FILES: tuple[Path, ...] = (
 )
 
 
+def multi_krum_round_selection(
+    learner_ids: Sequence[str],
+    deltas: Sequence[Mapping[str, torch.Tensor]],
+    tokens: Sequence[int | float],
+    *,
+    f_byzantine: int,
+) -> dict[str, Any]:
+    """Pick the learners whose deltas enter the outer step (Multi-Krum, m = n - f).
+
+    Multi-Krum is only meaningful with n >= 2f + 3 deltas. Below that, every delta is kept and the result says so
+    (``active`` False with the reason) instead of silently lowering f, so the round ledger shows when a round was
+    not protected.
+    """
+    ids = list(learner_ids)
+    n, f = len(ids), int(f_byzantine)
+    need = 2 * f + 3
+    if f == 0 or n < need:
+        reason = "byzantine_f is 0" if f == 0 else f"{n} accepted deltas < 2f+3 = {need} needed for f={f}"
+        return {"active": False, "reason": reason, "f": f, "selected": ids, "excluded": [], "scores": {}}
+    from hivemind.swarm.crowdgpt_bridge import multi_krum_select_and_aggregate
+
+    result = multi_krum_select_and_aggregate(list(deltas), f_byzantine=f, m_select=n - f, token_weights=list(tokens))
+    selected = [ids[i] for i in sorted(result.selected_indices)]
+    excluded = [ids[i] for i in sorted(result.rejected_indices)]
+    return {"active": True, "reason": "", "f": f, "selected": selected, "excluded": excluded,
+            "scores": {ids[i]: round(float(s), 6) for i, s in enumerate(result.krum_scores)}}
+
+
 @dataclass(frozen=True)
 class LowCostVMProfile:
     """GCP Spot VM & cost governance specification for the permanent OpenTrainer orchestrator."""
@@ -188,7 +216,12 @@ class OpenTrainerConfig:
     shard_size: int = 32
     outer_lr: float = 0.5
     outer_mu: float = 0.5
-    max_delta_l2: float = 50.0
+    max_delta_l2: float = 25.0  # same cap as router/opentrainer.DEFAULT_MAX_DELTA_L2 (see the evidence there)
+    # Multi-Krum: tolerate up to byzantine_f bad deltas per round. It needs n >= 2f + 3 accepted deltas; below that
+    # the round averages all deltas and records that the filter was inactive, or is re-offered when
+    # refuse_below_multi_krum_minimum is set.
+    byzantine_f: int = 1
+    refuse_below_multi_krum_minimum: bool = False
     round_deadline_s: float = 120.0
     cpu_sentinel_when_t4_offline: bool = True
     cpu_sentinel_learner_id: str = "l0"
@@ -206,6 +239,8 @@ class OpenTrainerConfig:
         self.learners = tuple(self.learners)
         if not all(isinstance(lid, str) and bool(lid.strip()) for lid in self.learners) or len(set(self.learners)) != len(self.learners):
             raise ValueError("learners must be unique non-empty strings")
+        if isinstance(self.byzantine_f, bool) or not isinstance(self.byzantine_f, int) or self.byzantine_f < 0:
+            raise ValueError("byzantine_f must be a non-negative integer")
         if isinstance(self.quorum, bool) or not isinstance(self.quorum, int) or not 1 <= self.quorum <= len(self.learners):
             raise ValueError(f"quorum must be an integer in [1, {len(self.learners)}]")
         for int_field, min_val in (
@@ -562,7 +597,19 @@ class PermanentOpenTrainerOrchestrator:
 
         # Status is either 'complete' (all learners answered) or 'quorum' (deadline passed with >= quorum learners)
         book = self.current_book
-        ids = sorted(book.accepted)
+        accepted_ids = sorted(book.accepted)
+        byzantine = multi_krum_round_selection(
+            accepted_ids,
+            [book.accepted[i]["delta"] for i in accepted_ids],
+            [book.accepted[i]["tokens"] for i in accepted_ids],
+            f_byzantine=int(self.config.byzantine_f),
+        )
+        if not byzantine["active"] and self.config.refuse_below_multi_krum_minimum:
+            self.retries_in_round += 1
+            self._open_new_round_offer(now=now)
+            return {"round_advanced": False, "round_status": "reoffered_below_multi_krum_minimum",
+                    "byzantine_filter": byzantine}
+        ids = list(byzantine["selected"])
         deltas = [book.accepted[i]["delta"] for i in ids]
         tokens = [book.accepted[i]["tokens"] for i in ids]
         self.global_state, self.velocity = qlora_round.outer_step(
@@ -581,8 +628,10 @@ class PermanentOpenTrainerOrchestrator:
         round_entry = {
             "round": self.current_round,
             "status": status,
-            "accepted": ids,
-            "hosts": {i: book.accepted[i]["host"] for i in ids},
+            "accepted": accepted_ids,
+            "aggregated": ids,
+            "byzantine_filter": byzantine,
+            "hosts": {i: book.accepted[i]["host"] for i in accepted_ids},
             "claims": sorted(book.claims),
             "retries": self.retries_in_round,
             "rejected": [list(r) for r in book.rejected],

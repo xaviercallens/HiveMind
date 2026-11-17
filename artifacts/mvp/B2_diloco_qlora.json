@@ -1,7 +1,12 @@
 {
+  "evidence": "summary",
+  "criterion_met": false,
+  "not_a_measurement": false,
+  "evidence_note": "NOT MET for B2 (NF4 QLoRA, >= 5 rounds, >= 2 physical hosts): the two-host QLoRA run (crossA) has 4 rounds; the NF4 run is two processes on ONE RTX 2070; Stage 1 is RDA, not QLoRA. Hand-written summary, no generator. The cited runs are real; together they do not satisfy the criterion.",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md and the PR #871 review (2026-11-12)",
   "criterion": "B2",
-  "passed": true,
   "reason": "Stage 1 two-host RDA (T4 10.77.0.4 + RTX 2070 10.77.0.5, 3 seeds, paired diff +4.8e-07 +/- 8.3e-07, post-join p50=1.20s) + Stage 2 two-host AMCP QLoRA MoE (crossA: t4-l0 + hm-fed-val-1, 4.1709 -> 1.4808) + live RTX 2070 CUDA NF4 QLoRA MoE (4.1721 -> 1.3395 vs shuffled control 4.1563)",
   "evidence_path": "artifacts/experiments/e8_real/E8_two_host_live_verification.json",
-  "receipt_sha256": "a5ba6a6efd5996bbd8c30deaa4312ac16340cf22309326cb5ec16d48fb357ea4"
+  "receipt_sha256": "a5ba6a6efd5996bbd8c30deaa4312ac16340cf22309326cb5ec16d48fb357ea4",
+  "passed": false
 }

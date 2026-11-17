@@ -1,0 +1,79 @@
+{
+ "protocol": "scripts/crowdgpt_t4/autoresearch/program.md",
+ "metric": "val_ce (lower is better)",
+ "budget_s": 600,
+ "results_tsv": [
+  {
+   "commit": "0612a4c",
+   "val_ce": "2.503357",
+   "memory_gb": "2.1",
+   "status": "keep",
+   "description": "sft: far=3.3961 dev_acc300=0.0 steps=496 jepa_last=None",
+   "far_loss": "3.3961"
+  },
+  {
+   "commit": "6f8ad9f",
+   "val_ce": "2.734797",
+   "memory_gb": "2.2",
+   "status": "discard",
+   "description": "jepa: far=4.1588 dev_acc300=0.0 steps=385 jepa_last=0.0025235414505004883",
+   "far_loss": "4.1588"
+  },
+  {
+   "commit": "3688dd6",
+   "val_ce": "2.512846",
+   "memory_gb": "2.2",
+   "status": "discard",
+   "description": "h1_low_lam: far=3.4738 dev_acc300=0.0 steps=545 jepa_last=0.023441612720489502",
+   "far_loss": "3.4738"
+  },
+  {
+   "commit": "7950434",
+   "val_ce": "2.803019",
+   "memory_gb": "2.2",
+   "status": "discard",
+   "description": "h2_stopgrad: far=3.399 dev_acc300=0.0 steps=365 jepa_last=0.08142739534378052",
+   "far_loss": "3.399"
+  },
+  {
+   "commit": "e885d7d",
+   "val_ce": "2.962418",
+   "memory_gb": "2.2",
+   "status": "discard",
+   "description": "h3_center: far=3.3233 dev_acc300=0.0 steps=355 jepa_last=0.0070746541023254395",
+   "far_loss": "3.3233"
+  },
+  {
+   "commit": "2cf10c6",
+   "val_ce": "3.273818",
+   "memory_gb": "2.2",
+   "status": "discard",
+   "description": "h4_infonce: far=3.2527 dev_acc300=0.0 steps=305 jepa_last=0.107666015625",
+   "far_loss": "3.2527"
+  },
+  {
+   "commit": "7a31129",
+   "val_ce": "2.608495",
+   "memory_gb": "2.2",
+   "status": "discard",
+   "description": "h6_midlayer: far=4.3521 dev_acc300=0.0 steps=482 jepa_last=0.0017120838165283203",
+   "far_loss": "4.3521"
+  },
+  {
+   "commit": "a35f282",
+   "val_ce": "2.540331",
+   "memory_gb": "2.2",
+   "status": "discard",
+   "description": "x_h1h2: far=3.4298 dev_acc300=0.0 steps=546 jepa_last=0.17859500646591187",
+   "far_loss": "3.4298"
+  },
+  {
+   "commit": "87d0900",
+   "val_ce": "2.504795",
+   "memory_gb": "2.2",
+   "status": "discard",
+   "description": "x_h1h3: far=3.4521 dev_acc300=0.0 steps=572 jepa_last=0.1973239779472351",
+   "far_loss": "3.4521"
+  }
+ ]
+}

@@ -1,4 +1,8 @@
 {
+  "evidence": "estimate",
+  "not_a_measurement": true,
+  "evidence_note": "Monthly estimate, not a billing export. Changed from 393 to 120.62 USD without re-running scripts/d1_cost_estimate.py or committing its inventory (e.g. the ruche line falls 4.44 -> 2.11 USD with identical billable seconds); regenerate with the script before relying on it.",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md and the PR #871 review (2026-11-12)",
   "criterion": "D1",
   "prices": {
     "date": "2026-11 (approximate, from memory, not from a billing export)",

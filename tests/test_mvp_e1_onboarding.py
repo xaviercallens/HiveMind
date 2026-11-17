@@ -11,6 +11,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import mvp_e1_check as e1  # noqa: E402
 import push_t4_telemetry as tel  # noqa: E402
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _restore_t4_snapshot():
+    """update_t4_telemetry_snapshot mutates the module-level _LATEST_T4_SNAPSHOT; restore it so later tests
+    (test_t4_visibility) see the default single-GPU snapshot instead of this file's payload."""
+    import copy
+
+    from hivemind.router import t4_visibility
+
+    saved = copy.deepcopy(t4_visibility._LATEST_T4_SNAPSHOT)
+    yield
+    t4_visibility._LATEST_T4_SNAPSHOT.clear()
+    t4_visibility._LATEST_T4_SNAPSHOT.update(saved)
 
 
 def test_mvp_e1_onboarding_check_passes(tmp_path: Path) -> None:

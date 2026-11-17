@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 import tempfile
@@ -105,6 +106,8 @@ class CampaignRequest:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> CampaignRequest:
+        if not isinstance(data, Mapping):
+            raise TypeError("data must be a Mapping")
         return cls(
             action=str(data.get("action", "join")),
             participant_id=str(data["participant_id"]),
@@ -120,19 +123,29 @@ class CampaignRequest:
 
 def sign_campaign_request(request: CampaignRequest, secret: bytes) -> CampaignRequest:
     """Return a copy of ``request`` carrying a valid HMAC-SHA256 signature under ``secret``."""
-    sig = hmac.new(secret, request.canonical_bytes(), hashlib.sha256).hexdigest()
+    if not isinstance(request, CampaignRequest):
+        raise TypeError("request must be a CampaignRequest")
+    if not isinstance(secret, (bytes, bytearray)) or len(secret) < MIN_SECRET_BYTES:
+        raise ValueError(f"secret must be bytes of length >= {MIN_SECRET_BYTES}")
+    sig = hmac.new(bytes(secret), request.canonical_bytes(), hashlib.sha256).hexdigest()
     return CampaignRequest(**{**asdict(request), "signature": sig})
 
 
 def verify_campaign_request_signature(request: CampaignRequest, secret: bytes) -> bool:
+    if not isinstance(request, CampaignRequest):
+        raise TypeError("request must be a CampaignRequest")
+    if not isinstance(secret, (bytes, bytearray)) or len(secret) < MIN_SECRET_BYTES:
+        raise ValueError(f"secret must be bytes of length >= {MIN_SECRET_BYTES}")
     if not isinstance(request.signature, str) or not request.signature.isascii():
         return False
-    expected = hmac.new(secret, request.canonical_bytes(), hashlib.sha256).hexdigest()
+    expected = hmac.new(bytes(secret), request.canonical_bytes(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, request.signature)
 
 
 def parse_campaign_utc(stamp: str) -> float:
     """``20261028T180000Z`` (the iCalendar UTC form used by ``SubjectCampaign``) -> POSIX seconds."""
+    if not isinstance(stamp, str) or not stamp.strip():
+        raise ValueError("stamp must be a non-empty string")
     return datetime.strptime(stamp, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC).timestamp()
 
 
@@ -145,15 +158,42 @@ class CampaignPolicy:
     request_max_skew_s: float = 900.0
     join_lead_s: float = 0.0
 
+    def __post_init__(self) -> None:
+        if isinstance(self.max_members_per_campaign, bool) or not isinstance(self.max_members_per_campaign, int) or self.max_members_per_campaign < 1:
+            raise ValueError("max_members_per_campaign must be an integer >= 1")
+        if isinstance(self.max_active_campaigns_per_participant, bool) or not isinstance(self.max_active_campaigns_per_participant, int) or self.max_active_campaigns_per_participant < 1:
+            raise ValueError("max_active_campaigns_per_participant must be an integer >= 1")
+        if isinstance(self.request_max_skew_s, bool) or not isinstance(self.request_max_skew_s, (int, float)) or not math.isfinite(float(self.request_max_skew_s)) or float(self.request_max_skew_s) <= 0.0:
+            raise ValueError("request_max_skew_s must be a finite number > 0")
+        if isinstance(self.join_lead_s, bool) or not isinstance(self.join_lead_s, (int, float)) or not math.isfinite(float(self.join_lead_s)) or float(self.join_lead_s) < 0.0:
+            raise ValueError("join_lead_s must be a finite number >= 0")
+
 
 @dataclass(frozen=True)
 class JoinDecision:
-    decision: str  # ADMITTED | ALREADY_MEMBER | LEFT | NOT_MEMBER | REJECTED
+    decision: str  # ADMITTED | ALREADY_MEMBER | LEFT | NOT_MEMBER | REJECTED | EXPIRED
     reason: str
     campaign_id: str
     participant_id: str
     event: dict[str, Any] = field(default_factory=dict)
     delivery: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.decision, str) or self.decision not in (
+            "ADMITTED",
+            "ALREADY_MEMBER",
+            "LEFT",
+            "NOT_MEMBER",
+            "REJECTED",
+            "EXPIRED",
+        ):
+            raise ValueError(f"invalid decision {self.decision!r}")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+        if not isinstance(self.campaign_id, str) or not isinstance(self.participant_id, str):
+            raise TypeError("campaign_id and participant_id must be strings")
+        if not isinstance(self.event, dict) or not isinstance(self.delivery, dict):
+            raise TypeError("event and delivery must be dicts")
 
     @property
     def accepted(self) -> bool:
@@ -164,11 +204,18 @@ class JoinDecision:
 
 
 def _membership_key(campaign_id: str, participant_id: str) -> str:
+    if not isinstance(campaign_id, str) or not campaign_id.strip() or not isinstance(participant_id, str) or not participant_id.strip():
+        raise ValueError("campaign_id and participant_id must be non-empty strings")
     return f"{campaign_id}|{participant_id}"
 
 
 def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     """Write JSON so a reader sees either the old file or the new one, never a torn write."""
+    if not isinstance(path, (Path, str)) or not str(path).strip():
+        raise ValueError("path must be a non-empty Path or string")
+    if not isinstance(payload, Mapping):
+        raise TypeError("payload must be a Mapping")
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
     try:
@@ -197,6 +244,10 @@ class CampaignOrchestrator:
         keys = [secret] if isinstance(secret, bytes) else list(secret.values())
         if not keys or any(not isinstance(k, bytes) or len(k) < MIN_SECRET_BYTES for k in keys):
             raise ValueError(f"HMAC secret must be at least {MIN_SECRET_BYTES} bytes")
+        if not callable(publish):
+            raise TypeError("publish must be callable")
+        if policy is not None and not isinstance(policy, CampaignPolicy):
+            raise TypeError("policy must be a CampaignPolicy or None")
         self.state_path = Path(state_path)
         self._secret: bytes | dict[str, bytes] = secret if isinstance(secret, bytes) else dict(secret)
         self.publish = publish
@@ -223,14 +274,24 @@ class CampaignOrchestrator:
 
     # -- queries -------------------------------------------------------------------------------------------------------
     def campaign_window(self, campaign_id: str) -> tuple[float, float]:
+        if not isinstance(campaign_id, str) or not campaign_id.strip():
+            raise ValueError("campaign_id must be a non-empty string")
         c = self.campaigns[campaign_id]
         return parse_campaign_utc(c.dtstart_utc), parse_campaign_utc(c.dtend_utc)
 
     def is_open(self, campaign_id: str, now_utc: float) -> bool:
+        if not isinstance(campaign_id, str) or not campaign_id.strip():
+            raise ValueError("campaign_id must be a non-empty string")
+        if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+            raise ValueError("now_utc must be a finite number")
         start, end = self.campaign_window(campaign_id)
         return start - self.policy.join_lead_s <= now_utc < end
 
     def active_members(self, now_utc: float, campaign_id: str | None = None) -> list[dict[str, Any]]:
+        if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+            raise ValueError("now_utc must be a finite number")
+        if campaign_id is not None and (not isinstance(campaign_id, str) or not campaign_id.strip()):
+            raise ValueError("campaign_id must be a non-empty string when provided")
         out = [
             dict(m)
             for m in self.state["memberships"].values()
@@ -241,6 +302,8 @@ class CampaignOrchestrator:
     # -- transitions ---------------------------------------------------------------------------------------------------
     def expire(self, now_utc: float) -> list[JoinDecision]:
         """Mark memberships whose campaign has ended as expired and emit one event each."""
+        if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+            raise ValueError("now_utc must be a finite number")
         decisions: list[JoinDecision] = []
         for m in self.state["memberships"].values():
             if m["status"] == "active" and m["expires_at_utc"] <= now_utc:
@@ -255,6 +318,10 @@ class CampaignOrchestrator:
 
     def handle(self, request: CampaignRequest, now_utc: float) -> JoinDecision:
         """Decide a join or leave request, persist the outcome, and emit it as an AMCP event."""
+        if not isinstance(request, CampaignRequest):
+            raise TypeError("request must be a CampaignRequest")
+        if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+            raise ValueError("now_utc must be a finite number")
         self.expire(now_utc)
         self._prune_nonces(now_utc)
         problem = self._validate(request, now_utc)
@@ -278,18 +345,27 @@ class CampaignOrchestrator:
     def _validate(self, r: CampaignRequest, now_utc: float) -> str:
         if r.action not in ACTIONS:
             return f"unknown action {r.action!r}"
-        if not _PARTICIPANT_ID_RE.match(r.participant_id):
+        if not isinstance(r.participant_id, str) or not _PARTICIPANT_ID_RE.match(r.participant_id):
             return "participant_id is not a valid identifier"
         if r.participant_kind not in PARTICIPANT_KINDS:
             return f"unknown participant_kind {r.participant_kind!r}"
         if r.availability not in AVAILABILITY_SLOTS:
             return f"unknown availability slot {r.availability!r}"
-        if not 0 <= r.declared_vram_mib <= MAX_DECLARED_VRAM_MIB:
+        if (
+            isinstance(r.declared_vram_mib, bool)
+            or not isinstance(r.declared_vram_mib, int)
+            or not 0 <= r.declared_vram_mib <= MAX_DECLARED_VRAM_MIB
+        ):
             return f"declared_vram_mib {r.declared_vram_mib} outside [0, {MAX_DECLARED_VRAM_MIB}]"
-        if not _NONCE_RE.match(r.nonce):
+        if not isinstance(r.nonce, str) or not _NONCE_RE.match(r.nonce):
             return "nonce must be 8-64 characters of [A-Za-z0-9_-]"
-        if abs(now_utc - r.issued_at_utc) > self.policy.request_max_skew_s:
-            return f"request issued {now_utc - r.issued_at_utc:.0f} s from now; allowed skew is {self.policy.request_max_skew_s:.0f} s"
+        if (
+            isinstance(r.issued_at_utc, bool)
+            or not isinstance(r.issued_at_utc, (int, float))
+            or not math.isfinite(float(r.issued_at_utc))
+            or abs(now_utc - float(r.issued_at_utc)) > self.policy.request_max_skew_s
+        ):
+            return f"request issued {now_utc - float(r.issued_at_utc):.0f} s from now; allowed skew is {self.policy.request_max_skew_s:.0f} s"
         key = self._secret if isinstance(self._secret, bytes) else self._secret.get(r.participant_id)
         if key is None:
             return "invalid signature"  # no key on file for this participant: same answer as a bad signature
@@ -377,6 +453,16 @@ class NightWindow:
     end: datetime
     tz: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.start, datetime) or self.start.tzinfo is None:
+            raise ValueError("start must be a timezone-aware datetime")
+        if not isinstance(self.end, datetime) or self.end.tzinfo is None:
+            raise ValueError("end must be a timezone-aware datetime")
+        if self.end.astimezone(UTC) <= self.start.astimezone(UTC):
+            raise ValueError("end must be strictly after start")
+        if not isinstance(self.tz, str) or not self.tz.strip():
+            raise ValueError("tz must be a non-empty string")
+
     @property
     def start_utc(self) -> datetime:
         return self.start.astimezone(UTC)
@@ -406,7 +492,18 @@ class NightWindow:
 
 def night_window(now_utc: float, tz: str = NIGHT_TZ, start_h: int = NIGHT_START_H, end_h: int = NIGHT_END_H) -> NightWindow:
     """The night window containing ``now_utc``, or else the next one. Wraps past midnight when ``start_h > end_h``."""
-    if start_h == end_h or not (0 <= start_h <= 23 and 0 <= end_h <= 23):
+    if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+        raise ValueError("now_utc must be a finite number")
+    if not isinstance(tz, str) or not tz.strip():
+        raise ValueError("tz must be a non-empty string")
+    if (
+        isinstance(start_h, bool)
+        or not isinstance(start_h, int)
+        or isinstance(end_h, bool)
+        or not isinstance(end_h, int)
+        or start_h == end_h
+        or not (0 <= start_h <= 23 and 0 <= end_h <= 23)
+    ):
         raise ValueError(f"invalid night window {start_h}:00-{end_h}:00")
     zone = ZoneInfo(tz)
     local_day = datetime.fromtimestamp(now_utc, zone).date()
@@ -440,13 +537,23 @@ class DomainEvidence:
     task_kind: str = "label"  # "label" (classification-style) or "generative"
     consumed_verified: int = 0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.domain, str) or not _DOMAIN_RE.match(self.domain):
+            raise ValueError(f"invalid domain name {self.domain!r}")
+        if self.task_kind not in ("label", "generative"):
+            raise ValueError(f"{self.domain}: task_kind must be 'label' or 'generative'")
+        for count_name in ("verified_accept", "verified_reject", "unverified", "heldout_eval_items", "consumed_verified"):
+            cval = getattr(self, count_name)
+            if isinstance(cval, bool) or not isinstance(cval, int) or cval < 0:
+                raise ValueError(f"{self.domain}: counts must be non-negative")
+
     @property
     def new_verified(self) -> int:
         return max(0, self.verified_accept - self.consumed_verified)
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> DomainEvidence:
-        ev = cls(
+        return cls(
             domain=str(d["domain"]),
             verified_accept=int(d["verified_accept"]),
             verified_reject=int(d.get("verified_reject", 0)),
@@ -455,14 +562,6 @@ class DomainEvidence:
             task_kind=str(d.get("task_kind", "label")),
             consumed_verified=int(d.get("consumed_verified", 0)),
         )
-        if not _DOMAIN_RE.match(ev.domain):
-            raise ValueError(f"invalid domain name {ev.domain!r}")
-        if ev.task_kind not in ("label", "generative"):
-            raise ValueError(f"{ev.domain}: task_kind must be 'label' or 'generative'")
-        counts = (ev.verified_accept, ev.verified_reject, ev.unverified, ev.heldout_eval_items, ev.consumed_verified)
-        if min(counts) < 0:
-            raise ValueError(f"{ev.domain}: counts must be non-negative")
-        return ev
 
 
 def load_episode_ledger(path: Path | str) -> list[DomainEvidence]:
@@ -480,7 +579,16 @@ def load_episode_ledger(path: Path | str) -> list[DomainEvidence]:
 
 def max_unverified_rows(verified_rows: int, num: int = MAX_UNVERIFIED_NUM, den: int = MAX_UNVERIFIED_DEN) -> int:
     """Largest ``u`` with ``u / (verified_rows + u) <= num / den``, in exact integer arithmetic."""
-    if verified_rows < 0 or not 0 <= num < den:
+    if (
+        isinstance(verified_rows, bool)
+        or not isinstance(verified_rows, int)
+        or isinstance(num, bool)
+        or not isinstance(num, int)
+        or isinstance(den, bool)
+        or not isinstance(den, int)
+        or verified_rows < 0
+        or not 0 <= num < den
+    ):
         raise ValueError("need verified_rows >= 0 and 0 <= num < den")
     return (num * verified_rows) // (den - num)
 
@@ -503,12 +611,41 @@ class DreamPolicy:
     start_h: int = NIGHT_START_H
     end_h: int = NIGHT_END_H
 
+    def __post_init__(self) -> None:
+        for int_name in ("min_new_verified", "min_heldout_eval_items", "max_jobs"):
+            ival = getattr(self, int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{int_name} must be an integer >= 1")
+        for pos_f in ("train_cap_h", "eval_cap_h", "governor_max_age_s"):
+            fval = getattr(self, pos_f)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)) or float(fval) <= 0.0:
+                raise ValueError(f"{pos_f} must be a finite number > 0")
+        for nonneg_f in ("control_cap_h", "governor_max_future_s"):
+            fval = getattr(self, nonneg_f)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)) or float(fval) < 0.0:
+                raise ValueError(f"{nonneg_f} must be a finite number >= 0")
+        if not isinstance(self.eligible_availability, (set, frozenset)) or not self.eligible_availability or not set(self.eligible_availability) <= AVAILABILITY_SLOTS:
+            raise ValueError("eligible_availability must be a non-empty subset of AVAILABILITY_SLOTS")
+        if (
+            isinstance(self.start_h, bool)
+            or not isinstance(self.start_h, int)
+            or isinstance(self.end_h, bool)
+            or not isinstance(self.end_h, int)
+            or self.start_h == self.end_h
+            or not (0 <= self.start_h <= 23 and 0 <= self.end_h <= 23)
+        ):
+            raise ValueError("start_h and end_h must be distinct hours in 0..23")
+
     def job_budget_h(self, n_controls: int) -> float:
+        if isinstance(n_controls, bool) or not isinstance(n_controls, int) or n_controls < 0:
+            raise ValueError("n_controls must be a non-negative integer")
         return self.train_cap_h + n_controls * self.control_cap_h + (1 + n_controls) * self.eval_cap_h
 
 
 def check_hold_file(hold_file: Path | None) -> str:
-    if hold_file is not None and hold_file.exists():
+    if hold_file is not None and not isinstance(hold_file, (Path, str)):
+        raise TypeError("hold_file must be a Path, string, or None")
+    if hold_file is not None and Path(hold_file).exists():
         return f"operator HOLD file present at {hold_file}"
     return ""
 
@@ -517,10 +654,18 @@ def check_governor_state(
     path: Path | None, now_utc: float, max_age_s: float, max_future_s: float = 60.0
 ) -> tuple[str, dict[str, Any]]:
     """Return (blocking reason or "", what was read). Fail-closed: anything unreadable blocks."""
+    if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+        raise ValueError("now_utc must be a finite number")
+    if isinstance(max_age_s, bool) or not isinstance(max_age_s, (int, float)) or not math.isfinite(float(max_age_s)) or float(max_age_s) <= 0.0:
+        raise ValueError("max_age_s must be a positive finite number")
+    if isinstance(max_future_s, bool) or not isinstance(max_future_s, (int, float)) or not math.isfinite(float(max_future_s)) or float(max_future_s) < 0.0:
+        raise ValueError("max_future_s must be a non-negative finite number")
     if path is None:
         return "no producer governor state path given", {}
+    if not isinstance(path, (Path, str)):
+        raise TypeError("path must be a Path, string, or None")
     try:
-        snap = json.loads(path.read_text(encoding="utf-8"))
+        snap = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         return f"producer governor state not readable: {type(exc).__name__}", {}
     if not isinstance(snap, dict) or not isinstance(snap.get("state"), str):
@@ -540,6 +685,8 @@ def check_governor_state(
 
 
 def _seed(night_date: str, domain: str, salt: str) -> int:
+    if not isinstance(night_date, str) or not night_date.strip() or not isinstance(domain, str) or not domain.strip() or not isinstance(salt, str) or not salt.strip():
+        raise ValueError("night_date, domain, and salt must be non-empty strings")
     return int(hashlib.sha256(f"{night_date}:{domain}:{salt}".encode()).hexdigest()[:8], 16)
 
 
@@ -550,6 +697,10 @@ def _select_domains(
 
     The third list is the donor pool for cross-domain controls: a donor needs qualifying verified rows, not a job tonight, so a
     domain DEFERRED by ``max_jobs`` is still a valid donor."""
+    if not isinstance(policy, DreamPolicy):
+        raise TypeError("policy must be a DreamPolicy")
+    if isinstance(ledger, (str, bytes)) or not isinstance(ledger, Sequence) or not all(isinstance(e, DomainEvidence) for e in ledger):
+        raise TypeError("ledger must be a sequence of DomainEvidence")
     considered: list[dict[str, Any]] = []
     picked: list[DomainEvidence] = []
     qualified_names = {
@@ -586,6 +737,10 @@ def _select_domains(
 
 
 def _producers(members: Iterable[Mapping[str, Any]], policy: DreamPolicy, campaigns: Mapping[str, SubjectCampaign]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if not isinstance(policy, DreamPolicy):
+        raise TypeError("policy must be a DreamPolicy")
+    if not isinstance(campaigns, Mapping):
+        raise TypeError("campaigns must be a Mapping")
     by_id: dict[str, dict[str, Any]] = {}
     for m in members:
         if m.get("participant_kind") != "gpu_producer" or m.get("status", "active") != "active":
@@ -687,6 +842,10 @@ def plan_dream_phase(
 
 def select_dream_teacher_for_job(domain: str, vram_mib: int) -> dict[str, Any]:
     """Select the low-bit (1.58-bit / 2-bit / 3-bit) Dream Phase teacher for a job's domain and producer VRAM."""
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string")
+    if isinstance(vram_mib, bool) or not isinstance(vram_mib, int) or vram_mib < 0:
+        raise ValueError("vram_mib must be a non-negative integer")
     dom = domain.strip().lower()
     is_code = any(k in dom for k in ("code", "coding", "swe", "rust", "python", "cyber", "formal", "lean", "sys"))
     if is_code and vram_mib >= 14500:

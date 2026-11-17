@@ -146,6 +146,37 @@ class CutLayerDecision:
     vram_compliant: bool
     preemption_compliant: bool
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.node_id, str) or not self.node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(self.precision_cohort, str) or not self.precision_cohort.strip():
+            raise ValueError("precision_cohort must be a non-empty string")
+        if isinstance(self.cut_layer_index, bool) or self.cut_layer_index not in VALID_CUT_LAYERS:
+            raise ValueError(f"cut_layer_index must be one of {VALID_CUT_LAYERS}")
+        if isinstance(self.activation_bits, bool) or self.activation_bits not in (8, 16):
+            raise ValueError("activation_bits must be 8 or 16")
+        for field_name, num in (
+            ("client_prelude_vram_mib", self.client_prelude_vram_mib),
+            ("boundary_payload_kb", self.boundary_payload_kb),
+            ("prelude_compute_ms", self.prelude_compute_ms),
+            ("wan_transfer_ms", self.wan_transfer_ms),
+            ("edge_core_compute_ms", self.edge_core_compute_ms),
+            ("total_step_ms", self.total_step_ms),
+            ("monolithic_baseline_step_ms", self.monolithic_baseline_step_ms),
+            ("preemption_latency_ms", self.preemption_latency_ms),
+        ):
+            if isinstance(num, bool) or not isinstance(num, (int, float)) or not math.isfinite(float(num)) or float(num) <= 0.0:
+                raise ValueError(f"{field_name} must be a positive finite number")
+        if (
+            isinstance(self.step_time_reduction_pct, bool)
+            or not isinstance(self.step_time_reduction_pct, (int, float))
+            or not math.isfinite(float(self.step_time_reduction_pct))
+            or not (0.0 <= float(self.step_time_reduction_pct) <= 100.0)
+        ):
+            raise ValueError("step_time_reduction_pct must be a finite number in [0.0, 100.0]")
+        if not isinstance(self.vram_compliant, bool) or not isinstance(self.preemption_compliant, bool):
+            raise ValueError("vram_compliant and preemption_compliant must be booleans")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -240,6 +271,10 @@ class AdaptiveMultiSplitWANController:
         """Compute exact VRAM, wire payload, and step latency for a candidate cut-layer `L_c`."""
         if isinstance(cut_layer, bool) or cut_layer not in CUT_LAYER_PROFILES:
             raise ValueError(f"Unsupported cut_layer={cut_layer}; expected one of {VALID_CUT_LAYERS}")
+        if not isinstance(link, WANLinkTelemetry):
+            raise TypeError("link must be a WANLinkTelemetry")
+        if not isinstance(hw, CitizenHardwareProfile):
+            raise TypeError("hw must be a CitizenHardwareProfile")
         if activation_bits is not None and (
             isinstance(activation_bits, bool) or activation_bits not in (8, 16)
         ):
@@ -303,6 +338,10 @@ class AdaptiveMultiSplitWANController:
         hw: CitizenHardwareProfile,
     ) -> CutLayerDecision:
         """Select the cut layer `L_c in {1..4}` minimizing total step time under VRAM and preemption ceilings."""
+        if not isinstance(link, WANLinkTelemetry):
+            raise TypeError("link must be a WANLinkTelemetry")
+        if not isinstance(hw, CitizenHardwareProfile):
+            raise TypeError("hw must be a CitizenHardwareProfile")
         if hw.foreground_game_active:
             # Immediate gamer-safe shallowest cut layer L_c = 1 with INT8 boundary
             return self.estimate_cut_layer_cost(1, link, hw, activation_bits=8)
@@ -314,6 +353,8 @@ class AdaptiveMultiSplitWANController:
 
     def quantize_cut_activations_int8(self, activations: Sequence[float]) -> dict[str, Any]:
         """Symmetric per-tensor INT8 quantization at the Prelude -> Edge Core cut boundary."""
+        if isinstance(activations, (str, bytes)) or not isinstance(activations, Sequence):
+            raise TypeError("activations must be a Sequence of finite numbers")
         vals: list[float] = []
         for x in activations:
             if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)):
@@ -343,6 +384,14 @@ def run_e20_adaptive_multi_split_experiment(
     hardware_profiles: Sequence[CitizenHardwareProfile] | None = None,
 ) -> dict[str, Any]:
     """Run Pre-Registered Experiment E20 across supplied or default WAN and hardware profiles."""
+    if link is not None and not isinstance(link, WANLinkTelemetry):
+        raise TypeError("link must be a WANLinkTelemetry or None")
+    if hardware_profiles is not None and (
+        isinstance(hardware_profiles, (str, bytes))
+        or not isinstance(hardware_profiles, Sequence)
+        or not all(isinstance(h, CitizenHardwareProfile) for h in hardware_profiles)
+    ):
+        raise TypeError("hardware_profiles must be a Sequence of CitizenHardwareProfile or None")
     controller = AdaptiveMultiSplitWANController()
     target_link = link if link is not None else WANLinkTelemetry(
         uplink_mbps=20.0, downlink_mbps=50.0, rtt_ms=60.0, jitter_ms=6.0

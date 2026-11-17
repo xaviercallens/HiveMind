@@ -29,7 +29,7 @@ import json
 import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 COBBLESTONES_PER_GFLOPS_DAY: float = 200.0  # BOINC definition: one cobblestone is 1/200 day of one GFLOPS
@@ -63,6 +63,41 @@ class SwarmLiveBaseline:
     p50_latency_s: float = 0.2573
     p95_latency_s: float = 0.5922
 
+    def __post_init__(self) -> None:
+        for field_name in ("total_accounts", "producers", "online_quorum_producers", "live_models_served"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        for field_name in (
+            "prosumers",
+            "consumers",
+            "admins",
+            "assimilated_workunits",
+            "billed_completions",
+            "human_prosumer_completions",
+            "billed_tokens",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name in (
+            "online_quorum_vram_gb",
+            "peak_tflops_fp16",
+            "mean_tokens_per_request",
+            "daytime_aggregate_tok_per_s",
+            "p50_latency_s",
+            "p95_latency_s",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        for field_name in ("cumulative_tflops_hours", "boinc_cobblestones"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if float(self.p95_latency_s) < float(self.p50_latency_s):
+            raise ValueError("p95_latency_s must be >= p50_latency_s")
+
 
 @dataclass(frozen=True)
 class ErlangCQueueDiagnostic:
@@ -80,6 +115,33 @@ class ErlangCQueueDiagnostic:
     max_safe_concurrent_users: int
     is_stable: bool
 
+    def __post_init__(self) -> None:
+        if isinstance(self.active_producers_c, bool) or not isinstance(self.active_producers_c, int) or self.active_producers_c < 1:
+            raise ValueError("active_producers_c must be an integer >= 1")
+        if isinstance(self.max_safe_concurrent_users, bool) or not isinstance(self.max_safe_concurrent_users, int) or self.max_safe_concurrent_users < 0:
+            raise ValueError("max_safe_concurrent_users must be a non-negative integer")
+        if not isinstance(self.is_stable, bool):
+            raise ValueError("is_stable must be a boolean")
+        for field_name in ("aggregate_tok_per_s", "service_rate_req_per_s", "max_safe_arrival_req_per_s"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        for field_name in ("arrival_rate_req_per_s", "utilization_rho"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if (
+            isinstance(self.erlang_c_queue_prob, bool)
+            or not isinstance(self.erlang_c_queue_prob, (int, float))
+            or not math.isfinite(float(self.erlang_c_queue_prob))
+            or not (0.0 <= float(self.erlang_c_queue_prob) <= 1.0)
+        ):
+            raise ValueError("erlang_c_queue_prob must be a finite number in [0.0, 1.0]")
+        for field_name in ("expected_queue_wait_s", "p95_total_latency_s"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or math.isnan(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a non-negative number (or +inf when unstable)")
+
 
 @dataclass(frozen=True)
 class ProgressiveGrantQuote:
@@ -90,6 +152,24 @@ class ProgressiveGrantQuote:
     daily_consumer_drip_hmt: float
     supply_demand_ratio: float
     effective_unbacked_inflation_reduction_pct: float
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "instant_grant_hmt",
+            "prosumer_gpu_unlock_bonus_hmt",
+            "daily_consumer_drip_hmt",
+            "supply_demand_ratio",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if (
+            isinstance(self.effective_unbacked_inflation_reduction_pct, bool)
+            or not isinstance(self.effective_unbacked_inflation_reduction_pct, (int, float))
+            or not math.isfinite(float(self.effective_unbacked_inflation_reduction_pct))
+            or not (0.0 <= float(self.effective_unbacked_inflation_reduction_pct) <= 100.0)
+        ):
+            raise ValueError("effective_unbacked_inflation_reduction_pct must be a finite number in [0.0, 100.0]")
 
 
 @dataclass(frozen=True)
@@ -111,6 +191,36 @@ class SocialFunnelProjection:
     utilization_rho_without_controls: float
     is_self_sustaining: bool
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.wave_name, str) or not self.wave_name.strip():
+            raise ValueError("wave_name must be a non-empty string")
+        for field_name in ("new_visitors", "new_signups"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        for field_name in ("initial_producers", "converted_prosumers", "pure_consumers"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name in ("critical_conversion_rate_kappa_star", "actual_conversion_rate_kappa"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+                raise ValueError(f"{field_name} must be a finite number in [0.0, 1.0]")
+        for field_name in ("post_wave_daytime_tok_per_s", "post_wave_nocturnal_tflops"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        for field_name in (
+            "effective_supply_ratio",
+            "utilization_rho_with_controls",
+            "utilization_rho_without_controls",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if not isinstance(self.is_self_sustaining, bool):
+            raise ValueError("is_self_sustaining must be a boolean")
+
 
 MAX_FORECAST_NODES = 10_000  # upper bound for any node count reachable from a public request
 MAX_FORECAST_VISITORS = 1_000_000
@@ -127,12 +237,8 @@ def compute_erlang_c_metrics(
     """Compute exact M/M/c Erlang-C waiting probability and latency under consumer demand."""
     if isinstance(active_producers_c, bool) or not isinstance(active_producers_c, int):
         raise ValueError("active_producers_c must be an integer")
-    if active_producers_c < 1 or aggregate_tok_per_s <= 0.0 or mean_tokens_per_req <= 0.0:
-        raise ValueError("active_producers_c >= 1, aggregate_tok_per_s > 0, and mean_tokens_per_req > 0 required")
-    if arrival_rate_req_per_s < 0.0:
-        raise ValueError("arrival_rate_req_per_s must be >= 0")
     if not all(
-        math.isfinite(x)
+        (not isinstance(x, bool)) and isinstance(x, (int, float)) and math.isfinite(x)
         for x in (
             aggregate_tok_per_s,
             arrival_rate_req_per_s,
@@ -144,6 +250,10 @@ def compute_erlang_c_metrics(
         raise ValueError(
             "aggregate_tok_per_s, arrival_rate_req_per_s, mean_tokens_per_req, base_network_overhead_s, and safe_rho_ceiling must be finite"
         )
+    if active_producers_c < 1 or aggregate_tok_per_s <= 0.0 or mean_tokens_per_req <= 0.0:
+        raise ValueError("active_producers_c >= 1, aggregate_tok_per_s > 0, and mean_tokens_per_req > 0 required")
+    if arrival_rate_req_per_s < 0.0:
+        raise ValueError("arrival_rate_req_per_s must be >= 0")
     if base_network_overhead_s < 0.0:
         raise ValueError("base_network_overhead_s must be >= 0")
     if not (0.0 < safe_rho_ceiling < 1.0):
@@ -309,23 +419,25 @@ def project_international_launch_wave(
     """Simulate the social, queueing, and economic equilibrium of an English launch wave."""
     if not isinstance(wave_name, str) or not wave_name.strip():
         raise ValueError("wave_name must be a non-empty string")
+    if not isinstance(baseline, SwarmLiveBaseline):
+        raise TypeError("baseline must be a SwarmLiveBaseline")
     if isinstance(new_visitors, bool) or not isinstance(new_visitors, int) or new_visitors < 1 or new_visitors > MAX_FORECAST_VISITORS:
         raise ValueError(f"new_visitors must be an integer in 1..{MAX_FORECAST_VISITORS}")
-    if not math.isfinite(signup_rate) or not (0.0 < signup_rate <= 1.0):
+    if isinstance(signup_rate, bool) or not isinstance(signup_rate, (int, float)) or not math.isfinite(signup_rate) or not (0.0 < signup_rate <= 1.0):
         raise ValueError("signup_rate must be finite in (0, 1]")
-    if not math.isfinite(direct_producer_fraction_alpha_p) or not (0.0 <= direct_producer_fraction_alpha_p < 1.0):
+    if isinstance(direct_producer_fraction_alpha_p, bool) or not isinstance(direct_producer_fraction_alpha_p, (int, float)) or not math.isfinite(direct_producer_fraction_alpha_p) or not (0.0 <= direct_producer_fraction_alpha_p < 1.0):
         raise ValueError("direct_producer_fraction_alpha_p must be finite in [0, 1)")
-    if not math.isfinite(consumer_to_prosumer_conversion_kappa) or not (0.0 <= consumer_to_prosumer_conversion_kappa <= 1.0):
+    if isinstance(consumer_to_prosumer_conversion_kappa, bool) or not isinstance(consumer_to_prosumer_conversion_kappa, (int, float)) or not math.isfinite(consumer_to_prosumer_conversion_kappa) or not (0.0 <= consumer_to_prosumer_conversion_kappa <= 1.0):
         raise ValueError("consumer_to_prosumer_conversion_kappa must be finite in [0, 1]")
-    if not math.isfinite(mean_prosumer_tok_per_s) or mean_prosumer_tok_per_s <= 0.0:
+    if isinstance(mean_prosumer_tok_per_s, bool) or not isinstance(mean_prosumer_tok_per_s, (int, float)) or not math.isfinite(mean_prosumer_tok_per_s) or mean_prosumer_tok_per_s <= 0.0:
         raise ValueError("mean_prosumer_tok_per_s must be finite and > 0")
-    if not math.isfinite(prosumer_daytime_duty_cycle) or not (0.0 < prosumer_daytime_duty_cycle <= 1.0):
+    if isinstance(prosumer_daytime_duty_cycle, bool) or not isinstance(prosumer_daytime_duty_cycle, (int, float)) or not math.isfinite(prosumer_daytime_duty_cycle) or not (0.0 < prosumer_daytime_duty_cycle <= 1.0):
         raise ValueError("prosumer_daytime_duty_cycle must be finite in (0, 1]")
-    if not math.isfinite(mean_consumer_active_req_per_s) or mean_consumer_active_req_per_s <= 0.0:
+    if isinstance(mean_consumer_active_req_per_s, bool) or not isinstance(mean_consumer_active_req_per_s, (int, float)) or not math.isfinite(mean_consumer_active_req_per_s) or mean_consumer_active_req_per_s <= 0.0:
         raise ValueError("mean_consumer_active_req_per_s must be finite and > 0")
-    if uncontrolled_scraping_factor <= 0.0 or not math.isfinite(uncontrolled_scraping_factor):
+    if isinstance(uncontrolled_scraping_factor, bool) or not isinstance(uncontrolled_scraping_factor, (int, float)) or uncontrolled_scraping_factor <= 0.0 or not math.isfinite(uncontrolled_scraping_factor):
         raise ValueError("uncontrolled_scraping_factor must be finite and positive")
-    if not (0.0 <= uncontrolled_conversion_kappa <= 1.0) or not math.isfinite(uncontrolled_conversion_kappa):
+    if isinstance(uncontrolled_conversion_kappa, bool) or not isinstance(uncontrolled_conversion_kappa, (int, float)) or not (0.0 <= uncontrolled_conversion_kappa <= 1.0) or not math.isfinite(uncontrolled_conversion_kappa):
         raise ValueError("uncontrolled_conversion_kappa must be finite in [0, 1]")
 
     new_signups = max(1, int(round(new_visitors * signup_rate)))
@@ -403,6 +515,8 @@ def evaluate_international_launch_readiness(
     baseline: SwarmLiveBaseline = SwarmLiveBaseline(),
 ) -> dict[str, Any]:
     """Return the complete readiness diagnosis, 4-stage rollout schedule, and wave simulations."""
+    if not isinstance(baseline, SwarmLiveBaseline):
+        raise TypeError("baseline must be a SwarmLiveBaseline")
     current_queue = compute_erlang_c_metrics(
         active_producers_c=baseline.producers,
         aggregate_tok_per_s=baseline.daytime_aggregate_tok_per_s,
@@ -521,6 +635,34 @@ class RegionalProducerShard:
     erlang_c_utilization_rho: float
     p95_total_latency_s: float
 
+    def __post_init__(self) -> None:
+        for field_name in ("region_id", "display_name"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.active_producers, bool) or not isinstance(self.active_producers, int) or self.active_producers < 1:
+            raise ValueError("active_producers must be an integer >= 1")
+        if isinstance(self.standby_prosumers, bool) or not isinstance(self.standby_prosumers, int) or self.standby_prosumers < 0:
+            raise ValueError("standby_prosumers must be a non-negative integer")
+        for field_name in ("daytime_aggregate_tok_per_s", "median_intra_region_rtt_ms"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        if (
+            isinstance(self.erlang_c_utilization_rho, bool)
+            or not isinstance(self.erlang_c_utilization_rho, (int, float))
+            or not math.isfinite(float(self.erlang_c_utilization_rho))
+            or float(self.erlang_c_utilization_rho) < 0.0
+        ):
+            raise ValueError("erlang_c_utilization_rho must be a finite non-negative number")
+        if (
+            isinstance(self.p95_total_latency_s, bool)
+            or not isinstance(self.p95_total_latency_s, (int, float))
+            or math.isnan(float(self.p95_total_latency_s))
+            or float(self.p95_total_latency_s) < 0.0
+        ):
+            raise ValueError("p95_total_latency_s must be a non-negative number (or +inf when unstable)")
+
 
 @dataclass(frozen=True)
 class ProducerHardwareTierAllocation:
@@ -534,6 +676,27 @@ class ProducerHardwareTierAllocation:
     avg_tok_per_s_per_node: float
     primary_models: tuple[str, ...]
     supported_runtimes: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        for field_name in ("tier_id", "display_name"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name in ("node_count", "vram_ceiling_mib", "free_vram_guard_mib"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if (
+            isinstance(self.avg_tok_per_s_per_node, bool)
+            or not isinstance(self.avg_tok_per_s_per_node, (int, float))
+            or not math.isfinite(float(self.avg_tok_per_s_per_node))
+            or float(self.avg_tok_per_s_per_node) <= 0.0
+        ):
+            raise ValueError("avg_tok_per_s_per_node must be a finite positive number")
+        for field_name in ("primary_models", "supported_runtimes"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, tuple) or len(seq) == 0 or any(not isinstance(item, str) or not item.strip() for item in seq):
+                raise ValueError(f"{field_name} must be a non-empty tuple of non-empty strings")
 
 
 def build_100_producer_international_fleet_plan(
@@ -554,6 +717,24 @@ def build_100_producer_international_fleet_plan(
     3. Two-Lane Priority QoS reserves `70%` fast-lane capacity for active Prosumers/Producers and
        `30%` fair-queue capacity for pure Consumers, with zero fiat currency (`0.00 EUR / 0.00 USD`).
     """
+    if isinstance(active_producers, bool) or not isinstance(active_producers, int) or active_producers < 1:
+        raise ValueError("active_producers must be a positive integer")
+    if isinstance(standby_prosumers, bool) or not isinstance(standby_prosumers, int) or standby_prosumers < 0:
+        raise ValueError("standby_prosumers must be a non-negative integer")
+    if (
+        isinstance(arrival_rate_req_per_s, bool)
+        or not isinstance(arrival_rate_req_per_s, (int, float))
+        or not math.isfinite(float(arrival_rate_req_per_s))
+        or float(arrival_rate_req_per_s) <= 0.0
+    ):
+        raise ValueError("arrival_rate_req_per_s must be a finite positive number")
+    if (
+        isinstance(mean_tokens_per_request, bool)
+        or not isinstance(mean_tokens_per_request, (int, float))
+        or not math.isfinite(float(mean_tokens_per_request))
+        or float(mean_tokens_per_request) <= 0.0
+    ):
+        raise ValueError("mean_tokens_per_request must be a finite positive number")
     c = max(4, int(active_producers))
     prosumers = max(0, int(standby_prosumers))
 
@@ -897,12 +1078,41 @@ def forecast_200plus_node_international_launch(
     - Total active nodes `>= 200` (default `265` active nodes vs. `47` current baseline nodes).
     """
     # public inputs are clamped: the Erlang-C model is O(nodes) per call (10^7 nodes took 44 s)
-    if isinstance(mean_tokens_per_req, bool) or not (
+    if not isinstance(baseline, SwarmLiveBaseline):
+        raise TypeError("baseline must be a SwarmLiveBaseline")
+    for field_name, int_val in (
+        ("target_total_nodes", target_total_nodes),
+        ("visitor_count", visitor_count),
+        ("utc_hour", utc_hour),
+    ):
+        if isinstance(int_val, bool) or not isinstance(int_val, int):
+            raise ValueError(f"{field_name} must be an integer")
+    for field_name, opt_int in (
+        ("dedicated_producers", dedicated_producers),
+        ("prosumer_nodes", prosumer_nodes),
+        ("consumer_nodes", consumer_nodes),
+    ):
+        if opt_int is not None and (isinstance(opt_int, bool) or not isinstance(opt_int, int)):
+            raise ValueError(f"{field_name} must be an integer or None")
+    if isinstance(mean_tokens_per_req, bool) or not isinstance(mean_tokens_per_req, (int, float)) or not (
         math.isfinite(float(mean_tokens_per_req)) and 1.0 <= float(mean_tokens_per_req) <= 100_000.0
     ):
         raise ValueError("mean_tokens_per_req must be finite and between 1 and 100000")
-    if not (math.isfinite(float(token_length_cv)) and math.isfinite(float(arrival_cv))):
-        raise ValueError("token_length_cv and arrival_cv must be finite")
+    if (
+        isinstance(token_length_cv, bool)
+        or not isinstance(token_length_cv, (int, float))
+        or isinstance(arrival_cv, bool)
+        or not isinstance(arrival_cv, (int, float))
+        or not (math.isfinite(float(token_length_cv)) and math.isfinite(float(arrival_cv)))
+        or float(token_length_cv) < 0.0
+        or float(arrival_cv) < 0.0
+    ):
+        raise ValueError("token_length_cv and arrival_cv must be finite and >= 0")
+    if pioneer_coordinates is not None and (
+        not isinstance(pioneer_coordinates, (list, tuple))
+        or any(not isinstance(item, Mapping) for item in pioneer_coordinates)
+    ):
+        raise ValueError("pioneer_coordinates must be None or a sequence of mappings")
     total_nodes = min(max(200, int(target_total_nodes)), MAX_FORECAST_NODES)
     visitors = min(max(total_nodes * 2, int(visitor_count)), MAX_FORECAST_VISITORS)
     utc_h = int(utc_hour) % 24
@@ -1404,6 +1614,15 @@ def build_foundation_paper_v42_portal_payload(
     """Return the Foundation Paper v4.2.0 metadata, live E20/47-node experiments,
     real vs. forecast traffic comparison, and 5-wave international scalability roadmap.
     """
+    if (
+        not isinstance(base_gcp_url, str)
+        or not base_gcp_url.strip()
+        or any(ord(c) < 32 for c in base_gcp_url)
+        or not base_gcp_url.strip().startswith(("http://", "https://"))
+    ):
+        raise ValueError("base_gcp_url must be a non-empty http(s) URL string")
+    if e20_artifact_path is not None and (not isinstance(e20_artifact_path, (str, Path)) or not str(e20_artifact_path).strip()):
+        raise ValueError("e20_artifact_path must be a non-empty string, Path, or None")
     gcp_root = base_gcp_url.rstrip("/")
     forecast_265 = forecast_200plus_node_international_launch(
         target_total_nodes=265,
@@ -1713,6 +1932,8 @@ def build_foundation_paper_v42_portal_payload(
 
 def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = None) -> str:
     """Delegate 3D Planet HiveMiners & >200-Node Capacity Forecast HTML rendering to views module."""
+    if initial_forecast is not None and not isinstance(initial_forecast, Mapping):
+        raise TypeError("initial_forecast must be a Mapping or None")
     from hivemind.economy.international_launch_views import (
         render_gcp_planet_forecast_html as _render_gcp_planet_forecast_html,
     )
@@ -1724,6 +1945,8 @@ def render_foundation_paper_portal_html(
     payload: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Delegate Foundation Paper v4.2.0 Portal HTML rendering to views module."""
+    if payload is not None and not isinstance(payload, Mapping):
+        raise TypeError("payload must be a Mapping or None")
     from hivemind.economy.international_launch_views import (
         render_foundation_paper_portal_html as _render_foundation_paper_portal_html,
     )

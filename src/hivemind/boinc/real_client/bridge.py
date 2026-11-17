@@ -16,6 +16,7 @@ column and the HiveMind ledger cannot disagree.
 from __future__ import annotations
 
 import base64
+import math
 import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -40,6 +41,27 @@ class Verdict:
     cross_class_max_ulp: float | None
     grant: dict[str, Any]
     detail: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for s_name in ("wu_id", "host", "reason"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        if not isinstance(self.valid, bool):
+            raise ValueError("valid must be a boolean")
+        if self.same_class_exact is not None and not isinstance(self.same_class_exact, bool):
+            raise ValueError("same_class_exact must be None or a boolean")
+        if self.cross_class_max_ulp is not None and (
+            isinstance(self.cross_class_max_ulp, bool)
+            or not isinstance(self.cross_class_max_ulp, (int, float))
+            or not math.isfinite(float(self.cross_class_max_ulp))
+            or float(self.cross_class_max_ulp) < 0.0
+        ):
+            raise ValueError("cross_class_max_ulp must be None or a finite non-negative number")
+        if not isinstance(self.grant, dict):
+            raise ValueError("grant must be a dict")
+        if not isinstance(self.detail, dict):
+            raise ValueError("detail must be a dict")
 
     @property
     def credit(self) -> float:
@@ -72,11 +94,21 @@ def _replay(spec: dict[str, Any], device: str) -> dict[str, Any]:
 
 
 def _peak(fingerprint_class: str) -> float:
+    if not isinstance(fingerprint_class, str) or not fingerprint_class.strip():
+        raise ValueError("fingerprint_class must be a non-empty string")
     return CLASS_PEAK_GFLOPS.get(fingerprint_class, 50.0)
 
 
 def validate_result(spec: dict[str, Any], result: dict[str, Any], host: str, *, replay_devices: tuple[str, ...] = ("cpu", "cuda")) -> Verdict:
     """Spot-check one volunteer result against independent replays and compute the credit grant."""
+    if not isinstance(spec, dict) or not isinstance(spec.get("wu_id"), str) or not spec["wu_id"].strip():
+        raise ValueError("spec must contain a non-empty string wu_id")
+    if not isinstance(result, dict):
+        raise ValueError("result must be a dict")
+    if not isinstance(host, str) or not host.strip():
+        raise ValueError("host must be a non-empty string")
+    if not replay_devices or not all(d in ("cpu", "cuda") for d in replay_devices):
+        raise ValueError("replay_devices must be a non-empty sequence of 'cpu' or 'cuda'")
     wu = spec["wu_id"]
 
     def reject(reason: str, exact: bool | None = None, ulp: float | None = None) -> Verdict:
@@ -92,7 +124,10 @@ def validate_result(spec: dict[str, Any], result: dict[str, Any], host: str, *, 
     except Exception as exc:  # malformed upload is a rejection, never a crash of the validator
         return reject(f"unreadable state: {exc}")
 
-    volunteer_class = result["fingerprint"]["accelerator_class"]
+    fp = result.get("fingerprint")
+    if not isinstance(fp, dict) or not isinstance(fp.get("accelerator_class"), str) or not fp["accelerator_class"].strip():
+        return reject("missing or invalid fingerprint")
+    volunteer_class = fp["accelerator_class"]
     exact: bool | None = None
     worst_ulp = 0.0
     cross_seen = False

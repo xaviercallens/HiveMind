@@ -66,6 +66,27 @@ class NF4QuantState:
     original_shape: tuple[int, ...]
     block_size: int = 64
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.packed_4bit, torch.Tensor) or self.packed_4bit.dtype == torch.bool:
+            raise ValueError("packed_4bit must be a non-boolean torch.Tensor")
+        if not isinstance(self.q_absmax_uint8, torch.Tensor) or self.q_absmax_uint8.dtype == torch.bool:
+            raise ValueError("q_absmax_uint8 must be a non-boolean torch.Tensor")
+        if (
+            isinstance(self.superblock_scale, bool)
+            or not isinstance(self.superblock_scale, (int, float))
+            or not math.isfinite(float(self.superblock_scale))
+            or float(self.superblock_scale) <= 0.0
+        ):
+            raise ValueError("superblock_scale must be a positive finite number")
+        if (
+            not isinstance(self.original_shape, tuple)
+            or len(self.original_shape) < 1
+            or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.original_shape)
+        ):
+            raise ValueError("original_shape must be a non-empty tuple of positive integers")
+        if isinstance(self.block_size, bool) or not isinstance(self.block_size, int) or self.block_size < 1:
+            raise ValueError("block_size must be an integer >= 1")
+
     @property
     def storage_bytes(self) -> int:
         if hasattr(self, "_computed_storage_bytes"):
@@ -88,6 +109,39 @@ class QuantizedModelBundle:
     total_params: int
     lora_size_mb: float
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.model, nn.Module):
+            raise ValueError("model must be an nn.Module")
+        if not isinstance(self.base_model_id, str) or not self.base_model_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in self.base_model_id):
+            raise ValueError("base_model_id must be a non-empty string")
+        if (
+            not isinstance(self.base_model_sha256, str)
+            or len(self.base_model_sha256.strip()) != 64
+            or not all(c in "0123456789abcdefABCDEF" for c in self.base_model_sha256.strip())
+        ):
+            raise ValueError("base_model_sha256 must be a 64-character SHA-256 hex digest")
+        if not isinstance(self.device, torch.device):
+            raise ValueError("device must be a torch.device")
+        if not isinstance(self.compute_dtype, torch.dtype):
+            raise ValueError("compute_dtype must be a torch.dtype")
+        if not isinstance(self.is_4bit_nf4, bool):
+            raise ValueError("is_4bit_nf4 must be a boolean")
+        for mb_name, mb_val in (
+            ("nf4_compressed_base_mb", self.nf4_compressed_base_mb),
+            ("lora_size_mb", self.lora_size_mb),
+        ):
+            if (
+                isinstance(mb_val, bool)
+                or not isinstance(mb_val, (int, float))
+                or not math.isfinite(float(mb_val))
+                or float(mb_val) < 0.0
+            ):
+                raise ValueError(f"{mb_name} must be a non-negative finite number")
+        if isinstance(self.trainable_params, bool) or not isinstance(self.trainable_params, int) or self.trainable_params < 0:
+            raise ValueError("trainable_params must be a non-negative integer")
+        if isinstance(self.total_params, bool) or not isinstance(self.total_params, int) or self.total_params < self.trainable_params:
+            raise ValueError("total_params must be an integer >= trainable_params")
+
 
 def quantize_tensor_nf4_double_quant(
     weight: torch.Tensor,
@@ -100,8 +154,8 @@ def quantize_tensor_nf4_double_quant(
     """
     if isinstance(block_size, bool) or not isinstance(block_size, int) or block_size < 1:
         raise ValueError(f"block_size must be an integer >= 1, got {block_size!r}")
-    if weight.numel() == 0:
-        raise ValueError("weight must be non-empty")
+    if not isinstance(weight, torch.Tensor) or weight.dtype == torch.bool or weight.numel() == 0:
+        raise ValueError("weight must be a non-empty non-boolean tensor")
     if not bool(torch.isfinite(weight).all().item()):
         raise ValueError("weight must contain only finite values")
     orig_shape = tuple(weight.shape)
@@ -155,6 +209,10 @@ def quantize_tensor_nf4_double_quant(
 
 def resolve_compute_dtype(dtype_name: str, device: torch.device) -> torch.dtype:
     """Resolve optimal compute dtype for the target GPU (FP16 on RTX 2070 Turing, BF16 on Ampere+)."""
+    if not isinstance(dtype_name, str) or not dtype_name.strip():
+        raise ValueError("dtype_name must be a non-empty string")
+    if not hasattr(device, "type") or not isinstance(getattr(device, "type", None), str):
+        raise ValueError("device must be a torch.device")
     if device.type != "cuda":
         return torch.float32
     if dtype_name.lower() in ("bfloat16", "bf16"):
@@ -167,8 +225,19 @@ def resolve_compute_dtype(dtype_name: str, device: torch.device) -> torch.dtype:
 
 def compute_state_dict_sha256(state_dict: dict[str, torch.Tensor]) -> str:
     """Compute a deterministic SHA-256 digest over a model or adapter state dict."""
+    if not isinstance(state_dict, dict) or not state_dict:
+        raise ValueError("state_dict must be a non-empty dict")
     hasher = hashlib.sha256()
     for key in sorted(state_dict.keys()):
+        if (
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(state_dict[key], torch.Tensor)
+            or state_dict[key].dtype == torch.bool
+            or state_dict[key].numel() == 0
+            or not bool(torch.isfinite(state_dict[key]).all().item())
+        ):
+            raise ValueError("state_dict must map non-empty string keys to finite non-empty torch.Tensor values")
         t = state_dict[key].detach()
         tensor = t.to(device="cpu", dtype=torch.float32).contiguous()
         hasher.update(key.encode("utf-8"))
@@ -190,6 +259,12 @@ def create_lora_config(
         raise ValueError(f"lora_alpha must be finite and > 0, got {lora_alpha!r}")
     if isinstance(lora_dropout, bool) or not isinstance(lora_dropout, (int, float)) or not math.isfinite(float(lora_dropout)) or not (0.0 <= float(lora_dropout) < 1.0):
         raise ValueError(f"lora_dropout must be finite in [0, 1), got {lora_dropout!r}")
+    if target_modules is not None and (
+        not isinstance(target_modules, (list, tuple))
+        or not target_modules
+        or any(not isinstance(m, str) or not m.strip() or any(ord(c) < 32 or ord(c) == 127 for c in m) for m in target_modules)
+    ):
+        raise ValueError("target_modules must be a non-empty sequence of non-empty printable strings")
     from peft import LoraConfig, TaskType
 
     return LoraConfig(
@@ -207,6 +282,10 @@ def apply_nf4_double_quant_to_backbone(
     double_quant: bool = True,
 ) -> tuple[bool, float]:
     """Apply 4-bit NormalFloat (NF4) + Double Quantization across all decoder Linear layers."""
+    if not isinstance(double_quant, bool):
+        raise ValueError("double_quant must be a boolean")
+    if base_model is None or not hasattr(base_model, "model") or not hasattr(base_model.model, "layers"):
+        raise ValueError("base_model must expose model.layers")
     total_nf4_bytes = 0
     block_size = 64 if double_quant else 128
 
@@ -242,6 +321,30 @@ def build_local_qwen2_backbone(
     use_4bit_nf4_if_cuda: bool = True,
 ) -> tuple[Qwen2ForCausalLM, str, bool]:
     """Instantiate a deterministic Qwen2 causal LM backbone with 4-bit NF4 + Double Quantization."""
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+    if isinstance(vocab_size, bool) or not isinstance(vocab_size, int) or vocab_size < 2:
+        raise ValueError("vocab_size must be an integer >= 2")
+    if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 4:
+        raise ValueError("hidden_size must be an integer >= 4")
+    if isinstance(intermediate_size, bool) or not isinstance(intermediate_size, int) or intermediate_size < 4:
+        raise ValueError("intermediate_size must be an integer >= 4")
+    if isinstance(num_hidden_layers, bool) or not isinstance(num_hidden_layers, int) or num_hidden_layers < 1:
+        raise ValueError("num_hidden_layers must be an integer >= 1")
+    if isinstance(num_attention_heads, bool) or not isinstance(num_attention_heads, int) or num_attention_heads < 1:
+        raise ValueError("num_attention_heads must be an integer >= 1")
+    if isinstance(num_key_value_heads, bool) or not isinstance(num_key_value_heads, int) or num_key_value_heads < 1:
+        raise ValueError("num_key_value_heads must be an integer >= 1")
+    if hidden_size % num_attention_heads != 0:
+        raise ValueError("hidden_size must be divisible by num_attention_heads")
+    if num_attention_heads % num_key_value_heads != 0:
+        raise ValueError("num_attention_heads must be divisible by num_key_value_heads")
+    if isinstance(max_position_embeddings, bool) or not isinstance(max_position_embeddings, int) or max_position_embeddings < 2:
+        raise ValueError("max_position_embeddings must be an integer >= 2")
+    if device is not None and (not hasattr(device, "type") or not isinstance(getattr(device, "type", None), str)):
+        raise ValueError("device must be a torch.device when provided")
+    if not isinstance(use_4bit_nf4_if_cuda, bool):
+        raise ValueError("use_4bit_nf4_if_cuda must be a boolean")
     configure_deterministic_runtime(seed)
     if device is None:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -282,6 +385,22 @@ def attach_qlora_adapters(
     seed: int = 42,
 ) -> QuantizedModelBundle:
     """Freeze base weights W_0 and attach Rank-r LoRA adapters (A_e, B_e) across all linear layers."""
+    if not isinstance(base_model, nn.Module):
+        raise ValueError("base_model must be an nn.Module")
+    if isinstance(rank_r, bool) or not isinstance(rank_r, int) or rank_r < 1:
+        raise ValueError(f"rank_r must be an integer >= 1, got {rank_r!r}")
+    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or lora_alpha <= 0:
+        raise ValueError(f"lora_alpha must be finite and > 0, got {lora_alpha!r}")
+    if target_modules is not None and (
+        not isinstance(target_modules, list)
+        or not target_modules
+        or not all(isinstance(m, str) and m.strip() for m in target_modules)
+    ):
+        raise ValueError("target_modules must be None or a non-empty list of non-empty strings")
+    if not isinstance(gradient_checkpointing, bool):
+        raise ValueError("gradient_checkpointing must be a boolean")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     configure_deterministic_runtime(seed)
     device = next(base_model.parameters()).device
     compute_dtype = resolve_compute_dtype("float16", device)
@@ -320,7 +439,7 @@ def attach_qlora_adapters(
     )
     return QuantizedModelBundle(
         model=peft_model,
-        base_model_id=getattr(base_model.config, "_name_or_path", "qwen2-local-hivemind"),
+        base_model_id=getattr(base_model.config, "_name_or_path", None) or "qwen2-local-hivemind",
         base_model_sha256=base_sha,
         device=device,
         compute_dtype=compute_dtype,
@@ -350,6 +469,14 @@ def stream_load_hf_causal_lm(
     large embedding tables) via standard file I/O without memory-mapping the entire 1 GB file,
     preventing Windows WDDM pagefile/commit-limit exhaustion (`os error 1455`).
     """
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    if not isinstance(device, torch.device):
+        raise ValueError("device must be a torch.device")
+    if not isinstance(compute_dtype, torch.dtype):
+        raise ValueError("compute_dtype must be a torch.dtype")
+    if not isinstance(apply_nf4, bool) or not isinstance(double_quant, bool) or not isinstance(require_pinned_revision, bool):
+        raise ValueError("apply_nf4, double_quant, and require_pinned_revision must be booleans")
     import json
     import struct
     from huggingface_hub import hf_hub_download
@@ -478,6 +605,12 @@ def load_hf_qlora_model(
     seed: int = 42,
 ) -> QuantizedModelBundle:
     """Load an open-weight HuggingFace model (e.g., Qwen2.5-0.5B) using HF_TOKEN and apply 4-bit NF4 + QLoRA."""
+    if not isinstance(profile, HardwareProfile):
+        raise ValueError("profile must be a HardwareProfile instance")
+    if device is not None and not isinstance(device, torch.device):
+        raise ValueError("device must be None or a torch.device")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     from hivemind.config import get_hf_token
 
     configure_deterministic_runtime(seed)
@@ -507,6 +640,8 @@ def load_hf_qlora_model(
 
 def extract_lora_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
     """Return a clean, detached CPU copy of only the trainable LoRA parameters theta = {A_e, B_e}."""
+    if not callable(getattr(model, "named_parameters", None)):
+        raise ValueError("model must provide a callable named_parameters method")
     lora_state: dict[str, torch.Tensor] = {}
     for name, param in model.named_parameters():
         if "lora_" in name or param.requires_grad:
@@ -519,9 +654,20 @@ def extract_lora_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
 
 def load_lora_state_dict(model: nn.Module, lora_state: dict[str, torch.Tensor]) -> None:
     """In-place load of LoRA parameter dictionary into the active model."""
+    if not isinstance(model, nn.Module):
+        raise ValueError("model must be an nn.Module")
+    if not isinstance(lora_state, dict) or not lora_state:
+        raise ValueError("lora_state must be a non-empty dict")
     for name, tensor in lora_state.items():
-        if not isinstance(tensor, torch.Tensor) or not bool(torch.isfinite(tensor).all().item()):
-            raise ValueError(f"lora_state[{name!r}] must be a finite torch.Tensor")
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or not isinstance(tensor, torch.Tensor)
+            or tensor.dtype == torch.bool
+            or tensor.numel() == 0
+            or not bool(torch.isfinite(tensor).all().item())
+        ):
+            raise ValueError(f"lora_state[{name!r}] must be a finite non-empty non-boolean torch.Tensor")
     with torch.no_grad():
         for name, param in model.named_parameters():
             if name in lora_state:
@@ -536,6 +682,8 @@ def measure_vram_footprint(device: torch.device | None = None) -> dict[str, floa
     """Measure live CUDA VRAM allocation and reservation in MiB and GiB."""
     if device is None:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    elif not hasattr(device, "type") or not isinstance(getattr(device, "type", None), str):
+        raise ValueError("device must be None or a torch.device")
     if device.type != "cuda" or not torch.cuda.is_available():
         return {
             "allocated_mb": 0.0,

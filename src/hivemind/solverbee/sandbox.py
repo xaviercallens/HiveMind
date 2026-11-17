@@ -25,6 +25,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import os
 import shutil
 import signal
@@ -56,6 +57,18 @@ class Limits:
     allow_unsandboxed: bool = False
     force_none: bool = False  # run WITHOUT namespaces even when they are available (the MCP server's --allow-unsandboxed mode); every outcome says 'none'
 
+    def __post_init__(self) -> None:
+        if isinstance(self.timeout_s, bool) or not isinstance(self.timeout_s, (int, float)) or not math.isfinite(float(self.timeout_s)) or float(self.timeout_s) <= 0.0:
+            raise ValueError("timeout_s must be a strictly positive finite float")
+        for attr in ("mem_mb", "nproc", "fsize_bytes", "nofile", "stdout_limit", "stderr_tail", "tmpfs_mb"):
+            val = getattr(self, attr)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{attr} must be an integer >= 1")
+        if isinstance(self.stdin_limit, bool) or not isinstance(self.stdin_limit, int) or self.stdin_limit < 0:
+            raise ValueError("stdin_limit must be an integer >= 0")
+        if not isinstance(self.allow_unsandboxed, bool) or not isinstance(self.force_none, bool):
+            raise ValueError("allow_unsandboxed and force_none must be booleans")
+
 
 @dataclass
 class SandboxOutcome:
@@ -68,6 +81,26 @@ class SandboxOutcome:
     limit: Optional[str] = None  # timeout | stdout | cpu | memory | None
     sandbox: str = SANDBOX_NONE  # namespace | none (what was ACTIVE for this run)
     refused: bool = False  # refused before running anything (sandbox unavailable / bad input)
+
+    def __post_init__(self) -> None:
+        for field_name in ("ok", "refused"):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
+        for field_name in ("error", "stderr_tail"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str):
+                raise ValueError(f"{field_name} must be a string")
+        if self.rc is not None and (isinstance(self.rc, bool) or not isinstance(self.rc, int)):
+            raise ValueError("rc must be an integer or None")
+        if not isinstance(self.stdout, bytes):
+            raise ValueError("stdout must be bytes")
+        if isinstance(self.wall_s, bool) or not isinstance(self.wall_s, (int, float)) or not math.isfinite(float(self.wall_s)) or float(self.wall_s) < 0.0:
+            raise ValueError("wall_s must be a finite non-negative number")
+        if self.limit is not None and (not isinstance(self.limit, str) or not self.limit.strip()):
+            raise ValueError("limit must be a non-empty string or None")
+        if self.sandbox not in (SANDBOX_NAMESPACE, SANDBOX_NONE):
+            raise ValueError(f"sandbox must be {SANDBOX_NAMESPACE!r} or {SANDBOX_NONE!r}")
 
 
 LAUNCHER_SRC = r'''
@@ -263,6 +296,8 @@ def _unshare_cmd(unshare: str) -> List[str]:
 
 def namespace_available(refresh: bool = False) -> bool:
     """True if a user+mount+net+pid namespace can be created here (probed once)."""
+    if not isinstance(refresh, bool):
+        raise ValueError("refresh must be a boolean")
     global _NS_CACHE, _NS_WHY
     with _NS_LOCK:
         if _NS_CACHE is not None and not refresh:
@@ -285,6 +320,8 @@ def availability_reason() -> str:
 
 
 def file_sha256(path: str) -> str:
+    if not isinstance(path, str) or not path.strip() or any(ord(c) < 32 or ord(c) == 127 for c in path):
+        raise ValueError("path must be a non-empty string")
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -299,16 +336,33 @@ def _refuse(msg: str) -> SandboxOutcome:
 def run_binary(argv_binary: Sequence[str], stdin_bytes: bytes, *, limits: Limits = Limits(), expected_sha256: Optional[str] = None) -> SandboxOutcome:
     """Run ``argv_binary[0]`` with arguments ``argv_binary[1:]`` and ``stdin_bytes`` under the limits. Never raises for runtime problems; see SandboxOutcome."""
     t0 = time.monotonic()
-    if not argv_binary or not isinstance(argv_binary[0], str):
+    if not isinstance(limits, Limits):
+        raise ValueError("limits must be a Limits instance")
+    if (
+        isinstance(argv_binary, (str, bytes))
+        or not isinstance(argv_binary, Sequence)
+        or not argv_binary
+        or not all(isinstance(a, str) and "\x00" not in a for a in argv_binary)
+        or not argv_binary[0].strip()
+    ):
         return _refuse("empty command")
+    if not isinstance(stdin_bytes, (bytes, bytearray)):
+        return _refuse("stdin_bytes must be bytes")
     if len(stdin_bytes) > limits.stdin_limit:
         return _refuse(f"stdin of {len(stdin_bytes)} bytes exceeds the {limits.stdin_limit}-byte limit")
+    if expected_sha256 is not None:
+        if (
+            not isinstance(expected_sha256, str)
+            or len(expected_sha256.strip()) != 64
+            or not all(c in "0123456789abcdefABCDEF" for c in expected_sha256.strip())
+        ):
+            return _refuse("expected_sha256 must be a 64-character hex string")
     binary = os.path.realpath(argv_binary[0])
     try:
         sha = file_sha256(binary)
     except OSError as exc:
         return _refuse(f"cannot read binary: {exc.strerror}")
-    if expected_sha256 and sha != expected_sha256:
+    if expected_sha256 is not None and sha != expected_sha256.strip().lower():
         return _refuse("binary sha256 does not match the expected value")
     if not os.access(binary, os.X_OK):
         return _refuse("binary is not executable")

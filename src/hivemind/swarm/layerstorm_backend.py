@@ -113,6 +113,8 @@ class TwoZoneVRAMCache:
     """Two-Zone GPU VRAM Expert Cache (Zone A: Waggle-Warm Pinned; Zone B: Dynamic LRU)."""
 
     def __init__(self, budget: TwoZoneVRAMBudget) -> None:
+        if not isinstance(budget, TwoZoneVRAMBudget):
+            raise TypeError("budget must be a TwoZoneVRAMBudget")
         budget.validate()
         self.budget = budget
         self._zone_a: set[int] = set()
@@ -189,6 +191,23 @@ class PCIeStepTelemetry:
     overlapped_stall_ms: float
     total_step_ms: float
 
+    def __post_init__(self) -> None:
+        for tup_field in ("requested_experts", "streamed_experts"):
+            val = getattr(self, tup_field)
+            if not isinstance(val, tuple) or any(
+                isinstance(e, bool) or not isinstance(e, int) or e < 0 for e in val
+            ):
+                raise ValueError(f"{tup_field} must be a tuple of non-negative integers")
+        for flt_field in ("pcie_h2d_mib", "raw_transfer_ms", "overlapped_stall_ms", "total_step_ms"):
+            fval = getattr(self, flt_field)
+            if (
+                isinstance(fval, bool)
+                or not isinstance(fval, (int, float))
+                or not math.isfinite(float(fval))
+                or float(fval) < 0.0
+            ):
+                raise ValueError(f"{flt_field} must be a finite non-negative number")
+
 
 class PCIeWaterlineStreamScheduler:
     """Models LayerStoRm deduplicated PCIe DMA streaming with FoMoE speculative overlap."""
@@ -200,6 +219,8 @@ class PCIeWaterlineStreamScheduler:
         layer_attention_ms: float = 1.8,
         fomoe_speculative_overlap_ratio: float = 0.858,
     ) -> None:
+        if not isinstance(vram_cache, TwoZoneVRAMCache):
+            raise TypeError("vram_cache must be a TwoZoneVRAMCache")
         for name, val in (
             ("pcie_bandwidth_gbps", pcie_bandwidth_gbps),
             ("layer_attention_ms", layer_attention_ms),
@@ -270,6 +291,21 @@ class LayerStoRmSwarmBridge:
     is_preempted: bool = False
     last_preemption_latency_ms: float = 0.0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.scheduler, PCIeWaterlineStreamScheduler):
+            raise TypeError("scheduler must be a PCIeWaterlineStreamScheduler")
+        if not isinstance(self.nectar_cache, SwarmNectarCache):
+            raise TypeError("nectar_cache must be a SwarmNectarCache")
+        if not isinstance(self.is_preempted, bool):
+            raise ValueError("is_preempted must be a boolean")
+        if (
+            isinstance(self.last_preemption_latency_ms, bool)
+            or not isinstance(self.last_preemption_latency_ms, (int, float))
+            or not math.isfinite(float(self.last_preemption_latency_ms))
+            or float(self.last_preemption_latency_ms) < 0.0
+        ):
+            raise ValueError("last_preemption_latency_ms must be a finite non-negative number")
+
     def serve_request(
         self,
         domain: str,
@@ -286,6 +322,8 @@ class LayerStoRmSwarmBridge:
             raise ValueError("query must be a non-empty string")
         if not isinstance(discoverer_bee_id, str) or not discoverer_bee_id.strip():
             raise ValueError("discoverer_bee_id must be a non-empty string")
+        if isinstance(token_expert_traces, (str, bytes)) or not isinstance(token_expert_traces, Sequence):
+            raise ValueError("token_expert_traces must be a sequence of expert traces")
         if not isinstance(prewarm_on_waggle, bool) or not isinstance(use_waterline_overlap, bool):
             raise ValueError("prewarm_on_waggle and use_waterline_overlap must be booleans")
         if self.is_preempted:
@@ -460,6 +498,13 @@ class RealCUDAPCIeExpertStreamer:
         overlap_dma_with_attention: bool = True,
     ) -> dict[str, Any]:
         """Execute one dense-attention + streamed-MoE step and return measured telemetry."""
+        if (
+            not isinstance(hidden_state, torch.Tensor)
+            or hidden_state.ndim != 2
+            or hidden_state.shape[0] < 1
+            or hidden_state.shape[1] != self.expert_rows
+        ):
+            raise ValueError(f"hidden_state must be a 2D tensor with shape (>=1, {self.expert_rows})")
         if not isinstance(overlap_dma_with_attention, bool):
             raise ValueError("overlap_dma_with_attention must be a boolean")
         for e in activated_experts:
@@ -874,6 +919,10 @@ class HybridHiSparseE8KVCache:
         """Select hot VRAM token indices using HiSparse (sink + window + heavy hitters) or random control."""
         import torch
 
+        if not isinstance(random_control, bool):
+            raise ValueError("random_control must be a boolean")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         seq_len = int(attn_weights.shape[-1])
         budget = min(seq_len, self.max_hot_vram_tokens)
         if seq_len <= budget:
@@ -916,6 +965,8 @@ class HybridHiSparseE8KVCache:
         import math
         import torch
 
+        if not isinstance(random_control, bool):
+            raise ValueError("random_control must be a boolean")
         q = query.detach().to(dtype=torch.float32)
         k = key.detach().to(dtype=torch.float32)
         v = value.detach().to(dtype=torch.float32)

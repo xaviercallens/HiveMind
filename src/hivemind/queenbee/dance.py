@@ -50,17 +50,34 @@ class DanceRecord:
 
     def __post_init__(self) -> None:
         if (
-            not str(self.expert_id).strip()
-            or not str(self.served_by).strip()
-            or not str(self.cluster_id).strip()
-            or not str(self.signer_id).strip()
+            not isinstance(self.expert_id, str)
+            or not self.expert_id.strip()
+            or any(c in self.expert_id for c in ("\r", "\n", "\x00"))
+            or not isinstance(self.served_by, str)
+            or not self.served_by.strip()
+            or any(c in self.served_by for c in ("\r", "\n", "\x00"))
+            or not isinstance(self.cluster_id, str)
+            or not self.cluster_id.strip()
+            or any(c in self.cluster_id for c in ("\r", "\n", "\x00"))
+            or not isinstance(self.signer_id, str)
+            or not self.signer_id.strip()
+            or any(c in self.signer_id for c in ("\r", "\n", "\x00"))
         ):
-            raise ValueError("expert_id, served_by, cluster_id and signer_id must be non-empty")
-        if isinstance(self.n, bool) or isinstance(self.successes, bool) or isinstance(self.epoch, bool):
+            raise ValueError("expert_id, served_by, cluster_id and signer_id must be non-empty strings without control characters")
+        if not isinstance(self.signature_hex, str) or any(c in self.signature_hex for c in ("\r", "\n", "\x00")):
+            raise ValueError("signature_hex must be a string without control characters")
+        if (
+            isinstance(self.n, bool)
+            or not isinstance(self.n, int)
+            or isinstance(self.successes, bool)
+            or not isinstance(self.successes, int)
+            or isinstance(self.epoch, bool)
+            or not isinstance(self.epoch, int)
+        ):
             raise ValueError("n, successes and epoch must be integers, not bool")
         if self.n < 0 or self.successes < 0 or self.successes > self.n:
             raise ValueError(f"need 0 <= successes <= n, got successes={self.successes} n={self.n}")
-        if not math.isfinite(self.cost_per_1k) or self.cost_per_1k < 0.0:
+        if isinstance(self.cost_per_1k, bool) or not isinstance(self.cost_per_1k, (int, float)) or not math.isfinite(self.cost_per_1k) or self.cost_per_1k < 0.0:
             raise ValueError("cost_per_1k must be finite and >= 0")
         if self.epoch < 0:
             raise ValueError("epoch must be >= 0")
@@ -75,19 +92,27 @@ class DanceRecord:
         return json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
     def signed(self, secret: bytes, *, prederived: bool = False) -> "DanceRecord":
-        key = secret if prederived else derive_signer_secret(secret, self.signer_id)
+        if not isinstance(prederived, bool):
+            raise ValueError("prederived must be a boolean")
+        if not isinstance(secret, (bytes, bytearray)) or len(secret) == 0:
+            raise ValueError("secret must be non-empty bytes")
+        key = bytes(secret) if prederived else derive_signer_secret(bytes(secret), self.signer_id)
         return replace(self, signature_hex=hmac.new(key, self.payload(), hashlib.sha256).hexdigest())
 
     def verify(self, secret: bytes | Mapping[str, bytes]) -> bool:
+        if not isinstance(secret, (bytes, bytearray, Mapping)) or (
+            isinstance(secret, (bytes, bytearray)) and len(secret) == 0
+        ):
+            raise ValueError("secret must be non-empty bytes or a Mapping[str, bytes]")
         if not self.signature_hex:
             return False
         if isinstance(secret, Mapping):
             key = secret.get(self.signer_id)
-            if not key:
+            if not isinstance(key, (bytes, bytearray)) or len(key) == 0:
                 return False
-            expected = hmac.new(key, self.payload(), hashlib.sha256).hexdigest()
+            expected = hmac.new(bytes(key), self.payload(), hashlib.sha256).hexdigest()
             return hmac.compare_digest(expected, self.signature_hex)
-        derived_key = derive_signer_secret(secret, self.signer_id)
+        derived_key = derive_signer_secret(bytes(secret), self.signer_id)
         expected_derived = hmac.new(derived_key, self.payload(), hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected_derived, self.signature_hex)
 
@@ -96,16 +121,36 @@ class DanceRecord:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DanceRecord":
-        fields = {k: data[k] for k in ("expert_id", "served_by", "cluster_id", "n", "successes", "cost_per_1k", "epoch",
-                                        "verifier_kind", "signer_id")}
-        return cls(signature_hex=str(data.get("signature_hex", "")), **fields)
+        if not isinstance(data, Mapping):
+            raise ValueError("data must be a mapping")
+        if "schema" in data and data["schema"] != RECORD_SCHEMA:
+            raise ValueError("invalid DanceRecord schema")
+        sig = data.get("signature_hex", "")
+        if not isinstance(sig, str):
+            raise ValueError("signature_hex must be a string")
+        req_keys = (
+            "expert_id",
+            "served_by",
+            "cluster_id",
+            "n",
+            "successes",
+            "cost_per_1k",
+            "epoch",
+            "verifier_kind",
+            "signer_id",
+        )
+        missing = [k for k in req_keys if k not in data]
+        if missing:
+            raise ValueError(f"missing required DanceRecord fields: {missing}")
+        fields = {k: data[k] for k in req_keys}
+        return cls(signature_hex=sig, **fields)
 
 
 def wilson_interval(successes: int, n: int, z: float = Z95) -> tuple[float, float]:
     """Wilson's score interval; (0.0, 1.0) when there are no trials."""
-    if isinstance(n, bool) or isinstance(successes, bool) or n < 0 or successes < 0 or successes > n:
+    if isinstance(n, bool) or not isinstance(n, int) or isinstance(successes, bool) or not isinstance(successes, int) or n < 0 or successes < 0 or successes > n:
         raise ValueError("need 0 <= successes <= n")
-    if not math.isfinite(float(z)) or float(z) <= 0.0:
+    if isinstance(z, bool) or not isinstance(z, (int, float)) or not math.isfinite(float(z)) or float(z) <= 0.0:
         raise ValueError("z must be a strictly positive finite float")
     if n == 0:
         return 0.0, 1.0
@@ -132,13 +177,49 @@ class RecruitmentReport:
     trial_successes: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     signer_trials_used: Mapping[str, float] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if isinstance(self.accepted, bool) or not isinstance(self.accepted, int) or self.accepted < 0:
+            raise ValueError("accepted must be a non-negative integer")
+        for field_name in ("weights", "trial_weights", "trial_successes"):
+            outer = getattr(self, field_name)
+            if not isinstance(outer, Mapping):
+                raise ValueError(f"{field_name} must be a mapping")
+            for cluster_id, inner in outer.items():
+                if not isinstance(cluster_id, str) or not cluster_id.strip():
+                    raise ValueError(f"{field_name} cluster keys must be non-empty strings")
+                if not isinstance(inner, Mapping):
+                    raise ValueError(f"{field_name} inner values must be mappings")
+                for expert_id, val in inner.items():
+                    if not isinstance(expert_id, str) or not expert_id.strip():
+                        raise ValueError(f"{field_name} expert keys must be non-empty strings")
+                    if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                        raise ValueError(f"{field_name} values must be finite non-negative numbers")
+        if not isinstance(self.rejected, Mapping):
+            raise ValueError("rejected must be a mapping")
+        for reason, cnt in self.rejected.items():
+            if not isinstance(reason, str) or not reason.strip():
+                raise ValueError("rejected keys must be non-empty strings")
+            if isinstance(cnt, bool) or not isinstance(cnt, int) or cnt < 0:
+                raise ValueError("rejected counts must be non-negative integers")
+        if not isinstance(self.signer_trials_used, Mapping):
+            raise ValueError("signer_trials_used must be a mapping")
+        for signer_id, used in self.signer_trials_used.items():
+            if not isinstance(signer_id, str) or not signer_id.strip():
+                raise ValueError("signer_trials_used keys must be non-empty strings")
+            if isinstance(used, bool) or not isinstance(used, (int, float)) or not math.isfinite(float(used)) or float(used) < 0.0:
+                raise ValueError("signer_trials_used values must be finite non-negative numbers")
+
     def probabilities(self, cluster_id: str, candidates: Iterable[str], floor: float = 0.0) -> dict[str, float]:
         """Recruitment probabilities over `candidates`: weight plus `floor` (exploration mass), normalised. A cluster or
         candidate with no record gets only the floor; with every weight zero the distribution is uniform."""
-        if floor < 0.0 or not math.isfinite(floor):
+        if not isinstance(cluster_id, str) or not cluster_id.strip():
+            raise ValueError("cluster_id must be a non-empty string")
+        if isinstance(floor, bool) or not isinstance(floor, (int, float)) or floor < 0.0 or not math.isfinite(floor):
             raise ValueError("floor must be finite and >= 0")
+        if isinstance(candidates, (str, bytes)):
+            raise ValueError("candidates must be an iterable of expert ID strings, not str/bytes")
         names = list(dict.fromkeys(candidates))
-        if not names:
+        if not names or any(not isinstance(c, str) or not c.strip() for c in names):
             raise ValueError("candidates must be non-empty")
         per = self.weights.get(cluster_id, {})
         raw = {c: per.get(c, 0.0) + floor for c in names}
@@ -163,11 +244,11 @@ _DEFAULT_SCOUT_ROTATION_DOMAIN = "hivemind-scout-rotation-v1"
 
 def derive_signer_secret(master_secret: bytes, signer_id: str) -> bytes:
     """Derive a per-signer HMAC key from `master_secret` so distinct signers cannot forge for third parties (IP-82)."""
-    if not master_secret:
+    if not isinstance(master_secret, (bytes, bytearray)) or len(master_secret) == 0:
         raise ValueError("master_secret must be non-empty")
-    if not str(signer_id).strip():
-        raise ValueError("signer_id must be non-empty")
-    return hmac.new(master_secret, f"hivemind-dance-signer-v1:{signer_id}".encode("utf-8"), hashlib.sha256).digest()
+    if not isinstance(signer_id, str) or not signer_id.strip() or any(c in signer_id for c in ("\r", "\n", "\x00")):
+        raise ValueError("signer_id must be non-empty and without control characters")
+    return hmac.new(bytes(master_secret), f"hivemind-dance-signer-v1:{signer_id}".encode("utf-8"), hashlib.sha256).digest()
 
 
 def rotate_scouts(
@@ -177,8 +258,14 @@ def rotate_scouts(
     secret: bytes | None = None,
 ) -> tuple[str, ...]:
     """Deterministically select `k` distinct scouts from `pool` for `epoch` (HM-S15-02 / #172)."""
-    eff_secret = secret if secret is not None else _DEFAULT_SCOUT_ROTATION_DOMAIN.encode("utf-8")
-    unique_pool = list(dict.fromkeys(s for s in pool if s))
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or isinstance(k, bool) or not isinstance(k, int):
+        raise ValueError("epoch and k must be integers, not bool")
+    if isinstance(pool, (str, bytes)):
+        raise ValueError("pool must be a sequence of scout ID strings, not str/bytes")
+    if secret is not None and (not isinstance(secret, (bytes, bytearray)) or len(secret) == 0):
+        raise ValueError("secret must be non-empty bytes when provided")
+    eff_secret = bytes(secret) if secret is not None else _DEFAULT_SCOUT_ROTATION_DOMAIN.encode("utf-8")
+    unique_pool = list(dict.fromkeys(s for s in pool if isinstance(s, str) and s.strip()))
     if k < 1 or k > len(unique_pool):
         raise ValueError(f"need 1 <= k <= len(unique_pool), got k={k} len={len(unique_pool)}")
     if epoch < 0:
@@ -205,11 +292,26 @@ def dual_scout_bounds(
     independent scouts so a single corrupted scout inflating its claim to `1.0` cannot raise the bound above
     the honest scout's upper interval.
     """
-    if min_independent_scouts < 1:
+    if isinstance(min_independent_scouts, bool) or not isinstance(min_independent_scouts, int) or min_independent_scouts < 1:
         raise ValueError("min_independent_scouts must be >= 1")
+    if isinstance(records, (str, bytes)):
+        raise ValueError("records must be an iterable of DanceRecord instances, not str/bytes")
+    if isinstance(scout_ids, (str, bytes)):
+        raise ValueError("scout_ids must be an iterable of scout ID strings, not str/bytes")
+    if isinstance(z, bool) or not isinstance(z, (int, float)) or not math.isfinite(float(z)) or float(z) <= 0.0:
+        raise ValueError("z must be finite and > 0")
+    if secret is not None and (
+        not isinstance(secret, (bytes, bytearray, Mapping))
+        or (isinstance(secret, (bytes, bytearray)) and len(secret) == 0)
+    ):
+        raise ValueError("secret must be non-empty bytes, a Mapping, or None")
     allowed = set(scout_ids)
+    if any(not isinstance(s, str) or not s.strip() for s in allowed):
+        raise ValueError("scout_ids must contain non-empty strings")
     per_cell: dict[tuple[str, str], dict[str, float]] = {}
     for r in records:
+        if not isinstance(r, DanceRecord):
+            raise ValueError("records must contain DanceRecord instances")
         if r.signer_id not in allowed:
             continue
         if r.served_by != r.expert_id:
@@ -252,12 +354,50 @@ def recruitment_weights(
     `max_trials_per_signer` (HM-S15-01 / #171) bounds the total evidence volume (pseudo-trials) any single `signer_id`
     can contribute across all records they sign, without clipping the honest Wilson lower bound of high-performing experts.
     """
-    if horizon_epochs < 0 or now_epoch < 0:
+    if (
+        isinstance(horizon_epochs, bool)
+        or not isinstance(horizon_epochs, int)
+        or isinstance(now_epoch, bool)
+        or not isinstance(now_epoch, int)
+        or horizon_epochs < 0
+        or now_epoch < 0
+    ):
         raise ValueError("now_epoch and horizon_epochs must be >= 0")
-    if not math.isfinite(cap_per_record) or cap_per_record <= 0.0:
+    if isinstance(cap_per_record, bool) or not isinstance(cap_per_record, (int, float)) or not math.isfinite(cap_per_record) or cap_per_record <= 0.0:
         raise ValueError("cap_per_record must be finite and > 0")
-    if max_trials_per_signer is not None and (not math.isfinite(max_trials_per_signer) or max_trials_per_signer <= 0.0):
+    if isinstance(z, bool) or not isinstance(z, (int, float)) or not math.isfinite(float(z)) or float(z) <= 0.0:
+        raise ValueError("z must be finite and > 0")
+    if max_trials_per_signer is not None and (
+        isinstance(max_trials_per_signer, bool)
+        or not isinstance(max_trials_per_signer, (int, float))
+        or not math.isfinite(max_trials_per_signer)
+        or max_trials_per_signer <= 0.0
+    ):
         raise ValueError("max_trials_per_signer must be finite and > 0")
+    if not isinstance(secret, (bytes, bytearray, Mapping)) or (
+        isinstance(secret, (bytes, bytearray)) and len(secret) == 0
+    ):
+        raise ValueError("secret must be non-empty bytes or a Mapping[str, bytes]")
+    if scout_bounds is not None and (
+        not isinstance(scout_bounds, Mapping)
+        or any(
+            not isinstance(k, tuple)
+            or len(k) != 2
+            or not isinstance(k[0], str)
+            or not k[0].strip()
+            or not isinstance(k[1], str)
+            or not k[1].strip()
+            or isinstance(v, bool)
+            or not isinstance(v, (int, float))
+            or not math.isfinite(float(v))
+            or float(v) < 0.0
+            or float(v) > 1.0
+            for k, v in scout_bounds.items()
+        )
+    ):
+        raise ValueError("scout_bounds must map (cluster_id, expert_id) to finite non-negative numbers in [0, 1]")
+    if isinstance(records, (str, bytes)):
+        raise ValueError("records must be an iterable of DanceRecord instances, not str/bytes")
     weights: dict[str, dict[str, float]] = {}
     trial_weights: dict[str, dict[str, float]] = {}
     trial_successes: dict[str, dict[str, float]] = {}
@@ -266,6 +406,8 @@ def recruitment_weights(
     rejected = {"bad_signature": 0, "not_served_by_reporter": 0, "expired": 0, "future_epoch": 0, "exceeds_scout_bound": 0}
     accepted = 0
     for r in records:
+        if not isinstance(r, DanceRecord):
+            raise ValueError("records must contain DanceRecord instances")
         if not r.verify(secret):
             rejected["bad_signature"] += 1
             continue
@@ -309,9 +451,13 @@ class DanceBoard:
     """Append-only JSONL store of records. Reading never trusts a line: malformed lines are counted and skipped."""
 
     def __init__(self, path: Path | str) -> None:
+        if not isinstance(path, (Path, str)) or not str(path).strip():
+            raise ValueError("path must be a non-empty Path or string")
         self.path = Path(path)
 
     def append(self, record: DanceRecord) -> None:
+        if not isinstance(record, DanceRecord):
+            raise ValueError("record must be a DanceRecord")
         if not record.signature_hex:
             raise ValueError("refusing to store an unsigned record")
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -339,7 +485,7 @@ class DanceBoard:
                 continue
             try:
                 data = json.loads(line)
-                if data.get("schema") != RECORD_SCHEMA:
+                if not isinstance(data, dict) or data.get("schema") != RECORD_SCHEMA:
                     raise ValueError("schema")
                 out.append(DanceRecord.from_dict(data))
             except (ValueError, KeyError, TypeError):

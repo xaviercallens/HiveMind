@@ -16,6 +16,8 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
     """Render the interactive 3D Planet HiveMiners & >200-Node Capacity Forecast GCP Web Page."""
     import json
 
+    if initial_forecast is not None and not isinstance(initial_forecast, dict):
+        raise ValueError("initial_forecast must be a dict or None")
     default_forecast = forecast_200plus_node_international_launch()
     if initial_forecast is None:
         data = default_forecast
@@ -1119,6 +1121,8 @@ def render_foundation_paper_portal_html(
     """Render the interactive HiveMind Foundation Paper v4.2.0, Live Experimentation (E20 & 47-Node WAN),
     Real vs. Forecast Traffic, Network Balancing, and Embedded PDF + 3D Globe Portal Page.
     """
+    if payload is not None and not isinstance(payload, dict):
+        raise ValueError("payload must be a dict or None")
     data = payload or build_foundation_paper_v42_portal_payload()
     live_exp = dict(data.get("live_experimentation_v42") or {})
     wan = dict(live_exp.get("live_47_node_wan_baseline") or {})

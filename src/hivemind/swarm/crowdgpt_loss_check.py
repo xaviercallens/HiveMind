@@ -20,8 +20,10 @@ your own hardware before choosing `tol` (`scripts/crowdgpt_loss_check.py calibra
 
 Standalone on purpose (torch, numpy, standard library; safetensors only for loading files) so the same file can sit in
 the CrowdGPT repository next to `hivemind_bridge.py`. The model below is the inference path of `SotaGPT` in CrowdGPT's
-`client.py` (LayerNorm, grouped-query attention with RoPE, SwiGLU, tied head); the engram table is not read by the
-forward pass there (`ENGRAM_ACTIVE = False`), so it is not part of the check.
+`client.py` (LayerNorm, grouped-query attention with RoPE, SwiGLU, tied head) plus, when `engramBuckets > 0`, the bigram
+engram table that `client.py` adds to the token embedding (on by default since Crowd-v1 step ~348). Measured
+2026-11-13 on revision 5ac3916: leaving the engram out raises held-out loss by ~0.35 nat, so use
+`CROWD_V1_ENGRAM_CONFIG` for current checkpoints; `CROWD_V1_CONFIG` keeps the trunk-only behaviour.
 """
 
 from __future__ import annotations
@@ -44,7 +46,13 @@ CROWD_V1_CONFIG: dict[str, int | bool] = {
     "vocabSize": 151669, "dim": 1536, "nLayers": 24, "nHeads": 16, "nKvHeads": 4,
     "headDim": 96, "maxSeqLen": 2048, "mlpHidden": 2560, "weightTying": True,
 }
+CROWD_V1_ENGRAM_BUCKETS = 227_865
+CROWD_V1_ENGRAM_CONFIG: dict[str, int | bool] = {
+    **CROWD_V1_CONFIG,
+    "engramBuckets": CROWD_V1_ENGRAM_BUCKETS,
+}
 CROWD_V1_MODEL_SIZE = 657_787_392
+CROWD_V1_ENGRAM_SIZE = CROWD_V1_ENGRAM_BUCKETS * 1536
 TOKEN_DTYPE = np.uint32  # the shards on Vxtzq/CrowdGPT hold uint32 tokens (client.py StreamingShardDataset), whatever DATA.md says
 
 
@@ -52,6 +60,10 @@ TOKEN_DTYPE = np.uint32  # the shards on Vxtzq/CrowdGPT hold uint32 tokens (clie
 
 
 def _rope(head_dim: int, seq_len: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    if isinstance(head_dim, bool) or not isinstance(head_dim, int) or head_dim < 2 or head_dim % 2 != 0:
+        raise ValueError("head_dim must be an even integer >= 2")
+    if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 1:
+        raise ValueError("seq_len must be a positive integer")
     inv = 1.0 / (10000.0 ** (torch.arange(0, head_dim, 2, dtype=torch.float32) / head_dim))
     f = torch.einsum("i,j->ij", torch.arange(seq_len, dtype=torch.float32), inv)
     e = torch.cat((f, f), -1)
@@ -59,6 +71,8 @@ def _rope(head_dim: int, seq_len: int, device: torch.device) -> tuple[torch.Tens
 
 
 def _rotate_half(x: torch.Tensor) -> torch.Tensor:
+    if not isinstance(x, torch.Tensor) or x.ndim < 1 or x.shape[-1] < 2 or x.shape[-1] % 2 != 0:
+        raise ValueError("x must be a Tensor with an even last dimension >= 2")
     return torch.cat((-x[..., x.shape[-1] // 2:], x[..., : x.shape[-1] // 2]), -1)
 
 
@@ -113,38 +127,102 @@ class _Block(nn.Module):
         return x + self.mlp(self.ln_2(x))
 
 
+class _Engram(nn.Module):
+    """Bigram hash lookup `(prev * 1_000_003 + idx) % buckets` matching `modeling_crowd.CrowdEngram` (`Step 348+`)."""
+
+    def __init__(self, buckets: int, dim: int) -> None:
+        super().__init__()
+        self.table = nn.Embedding(buckets, dim)
+
+    def forward(self, idx: torch.Tensor) -> torch.Tensor:
+        prev = torch.cat((torch.zeros_like(idx[:, :1]), idx[:, :-1]), dim=1)
+        h = (prev.to(torch.int64) * 1_000_003 + idx.to(torch.int64)) % self.table.num_embeddings
+        u, inv = torch.unique(h.flatten(), return_inverse=True)
+        looked = self.table(u.to(self.table.weight.device)).to(idx.device)
+        return looked[inv].view(*idx.shape, -1)
+
+
 class CrowdV1(nn.Module):
-    """Inference-only SotaGPT. Parameter order matches `SotaGPT.named_parameters()` minus the engram table, so the flat
-    `weights` tensor of `model_bf16.safetensors` loads with the same offsets as `SotaGPT.load_base_weights`."""
+    """Inference-only SotaGPT / `CrowdForCausalLM` with optional `CrowdEngram` (`engramBuckets=227865` on HF Step 348+).
+    Trunk parameter order matches `SotaGPT.named_parameters()` minus the engram table, so the flat `weights` tensor of
+    `model_bf16.safetensors` loads with the exact same offsets as `SotaGPT.load_base_weights`."""
 
     def __init__(self, config: Mapping[str, int | bool] = CROWD_V1_CONFIG) -> None:
+        if not isinstance(config, Mapping):
+            raise TypeError("config must be a Mapping")
         super().__init__()
         self.config = dict(config)
         dim, vocab = int(config["dim"]), int(config["vocabSize"])
+        raw_buckets = config.get("engramBuckets", config.get("engram_buckets", 0))
+        if isinstance(raw_buckets, bool) or not isinstance(raw_buckets, int) or raw_buckets < 0:
+            raise ValueError("engramBuckets must be a non-negative integer")
+        self.engram_buckets = int(raw_buckets)
         self.wte = nn.Embedding(vocab, dim)
         self.blocks = nn.ModuleList([_Block(config) for _ in range(int(config["nLayers"]))])
         self.ln_f = nn.LayerNorm(dim)
         self.lm_head = nn.Linear(dim, vocab, bias=False)
         if config.get("weightTying", True):
             self.wte.weight = self.lm_head.weight
+        self.engram: _Engram | None = _Engram(self.engram_buckets, dim) if self.engram_buckets > 0 else None
+
+    def _base_parameters(self) -> list[nn.Parameter]:
+        out: list[nn.Parameter] = [self.wte.weight]
+        for blk in self.blocks:
+            out.extend(list(blk.parameters()))
+        out.extend([self.ln_f.weight, self.ln_f.bias])
+        if not self.config.get("weightTying", True):
+            out.append(self.lm_head.weight)
+        return out
+
+    def n_base_flat(self) -> int:
+        return sum(p.numel() for p in self._base_parameters())
 
     def n_flat(self) -> int:
         return sum(p.numel() for p in self.parameters())
 
-    def load_flat(self, flat: torch.Tensor) -> None:
+    def load_flat(self, flat: torch.Tensor, engram: torch.Tensor | None = None) -> None:
+        if not isinstance(flat, torch.Tensor):
+            raise TypeError("flat must be a torch.Tensor")
+        if engram is not None and not isinstance(engram, torch.Tensor):
+            raise TypeError("engram must be None or a torch.Tensor")
         flat = flat.reshape(-1)
-        if flat.numel() != self.n_flat():
-            raise ValueError(f"flat weights have {flat.numel()} values, the model needs {self.n_flat()}")
+        base_params = self._base_parameters()
+        n_base = sum(p.numel() for p in base_params)
+        n_total = self.n_flat()
+        if engram is not None:
+            if flat.numel() != n_base:
+                raise ValueError(f"flat trunk weights have {flat.numel()} values, the model trunk needs {n_base}")
+            if self.engram is None:
+                raise ValueError("engram tensor supplied, but engramBuckets is 0")
+            eng_flat = engram.reshape(-1)
+            if eng_flat.numel() != self.engram.table.weight.numel():
+                raise ValueError(
+                    f"engram weights have {eng_flat.numel()} values, need {self.engram.table.weight.numel()}"
+                )
+            targets = [*base_params, self.engram.table.weight]
+            source = torch.cat((flat, eng_flat.to(flat.device, dtype=flat.dtype)))
+        elif self.engram is not None and flat.numel() == n_base:
+            targets = base_params
+            source = flat
+        else:
+            if flat.numel() != n_total:
+                raise ValueError(f"flat weights have {flat.numel()} values, the model needs {n_total}")
+            targets = list(self.parameters())
+            source = flat
         o = 0
         with torch.no_grad():
-            for p in self.parameters():  # deduplicated: the tied head appears once, as wte.weight
+            for p in targets:  # deduplicated: the tied head appears once, as wte.weight
                 s = p.numel()
-                p.copy_(flat[o: o + s].view(p.shape).to(p.dtype))
+                p.copy_(source[o: o + s].view(p.shape).to(p.dtype))
                 o += s
 
     def forward(self, idx: torch.Tensor) -> torch.Tensor:
+        if not isinstance(idx, torch.Tensor) or idx.ndim != 2:
+            raise ValueError("idx must be a 2D torch.Tensor")
         cos, sin = _rope(int(self.config["headDim"]), idx.shape[1], idx.device)
         x = self.wte(idx)
+        if self.engram is not None:
+            x = x + self.engram(idx).to(device=x.device, dtype=x.dtype)
         for blk in self.blocks:
             x = blk(x, cos, sin)
         return F.linear(self.ln_f(x), self.lm_head.weight)
@@ -152,6 +230,8 @@ class CrowdV1(nn.Module):
 
 def load_flat_safetensors(path: Path | str) -> torch.Tensor:
     """The single flat tensor of a CrowdGPT `model_*.safetensors` file (key `weights`)."""
+    if not isinstance(path, (Path, str)) or not str(path).strip():
+        raise ValueError("path must be a non-empty Path or string")
     from safetensors.torch import load_file
 
     tensors = load_file(str(path))
@@ -163,13 +243,63 @@ def load_flat_safetensors(path: Path | str) -> torch.Tensor:
     return tensors[key].reshape(-1)
 
 
+
+def load_crowd_v1_with_engram(model_path: Path | str, engram_path: Path | str) -> torch.Tensor:
+    """`model_bf16.safetensors` ‖ `engram_bf16.safetensors` as one flat tensor, for `CrowdV1(CROWD_V1_ENGRAM_CONFIG)`.
+
+    Passing this single tensor as `base` / `candidate` to `make_receipt` and `cpu_recompute_fn` makes the receipt's
+    `*_sha256` cover the engram table too (it changes every round), with no change to the receipt schema."""
+    trunk, eng = load_flat_safetensors(model_path), load_flat_safetensors(engram_path)
+    if eng.numel() != CROWD_V1_ENGRAM_SIZE:
+        raise ValueError(f"engram file has {eng.numel()} values, expected {CROWD_V1_ENGRAM_SIZE}")
+    return torch.cat((trunk, eng.to(trunk.dtype)))
+
+def load_named_crowd_v1_safetensors(
+    path: Path | str,
+    *,
+    n_layers: int = 24,
+    weight_tying: bool = True,
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    """Extract `(flat_trunk, flat_engram)` from Hugging Face `Vxtzq/Crowd-v1/model.safetensors` (`Step 348+`)."""
+    from safetensors.torch import load_file
+
+    sd = load_file(str(path), device="cpu")
+    parts: list[torch.Tensor] = [sd["wte.weight"].reshape(-1)]
+    for i in range(int(n_layers)):
+        pfx = f"blocks.{i}"
+        parts.extend(
+            [
+                sd[f"{pfx}.ln1.weight"].reshape(-1),
+                sd[f"{pfx}.ln1.bias"].reshape(-1),
+                sd[f"{pfx}.attn.q.weight"].reshape(-1),
+                sd[f"{pfx}.attn.k.weight"].reshape(-1),
+                sd[f"{pfx}.attn.v.weight"].reshape(-1),
+                sd[f"{pfx}.attn.o.weight"].reshape(-1),
+                sd[f"{pfx}.ln2.weight"].reshape(-1),
+                sd[f"{pfx}.ln2.bias"].reshape(-1),
+                sd[f"{pfx}.mlp.w1.weight"].reshape(-1),
+                sd[f"{pfx}.mlp.w2.weight"].reshape(-1),
+                sd[f"{pfx}.mlp.w3.weight"].reshape(-1),
+            ]
+        )
+    parts.extend([sd["ln.weight"].reshape(-1), sd["ln.bias"].reshape(-1)])
+    if not weight_tying and "head.weight" in sd:
+        parts.append(sd["head.weight"].reshape(-1))
+    engram = sd["engram.table.weight"].reshape(-1) if "engram.table.weight" in sd else None
+    return torch.cat(parts), engram
+
+
 def weights_sha256(flat: torch.Tensor) -> str:
     """SHA-256 of the weights as bf16 bytes: the identity both sides agree on, whatever dtype each computes in."""
+    if not isinstance(flat, torch.Tensor) or flat.numel() == 0:
+        raise ValueError("flat must be a non-empty torch.Tensor")
     b = flat.detach().to("cpu", dtype=torch.bfloat16).contiguous().view(torch.int16).numpy().tobytes()
     return hashlib.sha256(b).hexdigest()
 
 
 def tokens_sha256(tokens: np.ndarray) -> str:
+    if not isinstance(tokens, np.ndarray) or tokens.size == 0:
+        raise ValueError("tokens must be a non-empty numpy ndarray")
     return hashlib.sha256(np.ascontiguousarray(tokens, dtype=TOKEN_DTYPE).tobytes()).hexdigest()
 
 
@@ -203,6 +333,16 @@ def window_losses(model: nn.Module, tokens: np.ndarray, starts: Sequence[int], w
     """Mean next-token cross-entropy (nats) of each window: input tokens[s : s+window-1], targets tokens[s+1 : s+window],
     the same split as `StreamingShardDataset.get_batch`. `stop()` is asked before each batch; True raises `Interrupted`
     (so a shared GPU can be handed back to inference between windows)."""
+    if not isinstance(model, nn.Module):
+        raise TypeError("model must be an nn.Module")
+    if isinstance(starts, (str, bytes)) or not isinstance(starts, Sequence) or any(isinstance(s, bool) or not isinstance(s, int) or s < 0 for s in starts):
+        raise ValueError("starts must be a sequence of non-negative integers")
+    if isinstance(window, bool) or not isinstance(window, int) or window < 2:
+        raise ValueError("window must be an integer >= 2")
+    if isinstance(batch, bool) or not isinstance(batch, int) or batch < 1:
+        raise ValueError("batch must be an integer >= 1")
+    if stop is not None and not callable(stop):
+        raise TypeError("stop must be None or callable")
     vocab = int(getattr(model, "config", {}).get("vocabSize", 0)) or None
     arr = np.asarray(tokens)
     if vocab is not None and len(arr) and int(arr.max()) >= vocab:
@@ -275,10 +415,14 @@ class LossCheckReceipt:
         return hashlib.sha256(self.payload()).hexdigest()
 
     def signed(self, key: bytes) -> "LossCheckReceipt":
-        return _replace(self, signature_hex=hmac.new(key, self.payload(), hashlib.sha256).hexdigest())
+        if not isinstance(key, (bytes, bytearray)) or not key:
+            raise ValueError("key must be non-empty bytes")
+        return _replace(self, signature_hex=hmac.new(bytes(key), self.payload(), hashlib.sha256).hexdigest())
 
     def verify_signature(self, key: bytes) -> bool:
-        return bool(self.signature_hex) and hmac.compare_digest(hmac.new(key, self.payload(), hashlib.sha256).hexdigest(), self.signature_hex)
+        if not isinstance(key, (bytes, bytearray)) or not key:
+            raise ValueError("key must be non-empty bytes")
+        return bool(self.signature_hex) and hmac.compare_digest(hmac.new(bytes(key), self.payload(), hashlib.sha256).hexdigest(), self.signature_hex)
 
     @property
     def mean_before(self) -> float:
@@ -293,7 +437,11 @@ class LossCheckReceipt:
 
     @classmethod
     def from_json(cls, text: str) -> "LossCheckReceipt":
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("text must be a non-empty JSON string")
         d = json.loads(text)
+        if not isinstance(d, dict):
+            raise ValueError("receipt JSON must decode to an object")
         if d.get("schema") != RECEIPT_SCHEMA:
             raise ValueError(f"unknown receipt schema {d.get('schema')!r}")
         for k in ("starts", "losses_before", "losses_after"):
@@ -302,6 +450,8 @@ class LossCheckReceipt:
 
 
 def _replace(r: LossCheckReceipt, **kw: object) -> LossCheckReceipt:
+    if not isinstance(r, LossCheckReceipt):
+        raise TypeError("r must be a LossCheckReceipt")
     d = asdict(r) | kw
     return LossCheckReceipt(**d)
 
@@ -310,6 +460,10 @@ def make_receipt(*, evaluator_id: str, key: bytes, base: torch.Tensor, candidate
                  seed: int, model_factory: Callable[[], nn.Module], device: torch.device | str, dtype: torch.dtype = torch.float32,
                  round_id: str = "", batch: int = 1, stop: Callable[[], bool] | None = None) -> LossCheckReceipt:
     """Evaluator side: losses of the base and the candidate on the same n windows, signed."""
+    if not callable(model_factory):
+        raise TypeError("model_factory must be callable")
+    if isinstance(batch, bool) or not isinstance(batch, int) or batch < 1:
+        raise ValueError("batch must be an integer >= 1")
     starts = heldout_windows(len(heldout), window, n, seed)
     losses = []
     for flat in (base, candidate):
@@ -376,6 +530,20 @@ class LossCheckVerdict:
     checked: tuple[dict, ...] = ()
     detail: dict = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.accepted, bool):
+            raise TypeError("accepted must be a bool")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+        for f_name in ("loss_before", "loss_after", "delta_loss"):
+            fval = getattr(self, f_name)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)):
+                raise TypeError(f"{f_name} must be a number")
+        if not isinstance(self.checked, tuple) or any(not isinstance(c, dict) for c in self.checked):
+            raise TypeError("checked must be a tuple of dicts")
+        if not isinstance(self.detail, dict):
+            raise TypeError("detail must be a dict")
+
 
 def verify_receipt(receipt: LossCheckReceipt, *, evaluator_keys: Mapping[str, bytes], server_secret: bytes, expected_base_sha256: str,
                    expected_candidate_sha256: str, heldout: np.ndarray, recompute: Callable[[str, list[int]], list[float]], k: int = 2,
@@ -387,6 +555,22 @@ def verify_receipt(receipt: LossCheckReceipt, *, evaluator_keys: Mapping[str, by
     and the backend's own held-out data; the windows are the ones the seed selects; every claimed loss is finite and in
     [0, ln(vocab) + 5]; every spot-checked number agrees within `tol`; and mean(after) - mean(before) <= the tolerance
     (the same rule as `LossRatchetGate`)."""
+    if not isinstance(receipt, LossCheckReceipt):
+        raise TypeError("receipt must be a LossCheckReceipt")
+    if not isinstance(evaluator_keys, Mapping):
+        raise TypeError("evaluator_keys must be a Mapping")
+    if not callable(recompute):
+        raise TypeError("recompute must be callable")
+    if isinstance(min_windows, bool) or not isinstance(min_windows, int) or min_windows < 1:
+        raise ValueError("min_windows must be an integer >= 1")
+    if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) < 0.0:
+        raise ValueError("tol must be a finite non-negative number")
+    if (
+        isinstance(max_regression_tolerance, bool)
+        or not isinstance(max_regression_tolerance, (int, float))
+        or not math.isfinite(float(max_regression_tolerance))
+    ):
+        raise ValueError("max_regression_tolerance must be a finite number")
     key = evaluator_keys.get(receipt.evaluator_id)
     if key is None:
         return LossCheckVerdict(False, "REJECTED_UNKNOWN_EVALUATOR")
@@ -435,6 +619,8 @@ def verify_receipt(receipt: LossCheckReceipt, *, evaluator_keys: Mapping[str, by
 
 def receipts_agree(a: LossCheckReceipt, b: LossCheckReceipt, tol: float = 2e-3) -> tuple[bool, str]:
     """Two independent evaluators on the same weights, data and windows: every number within `tol`."""
+    if not isinstance(a, LossCheckReceipt) or not isinstance(b, LossCheckReceipt):
+        raise TypeError("a and b must be LossCheckReceipt instances")
     if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) < 0.0:
         raise ValueError("tol must be a finite non-negative number")
     if a.evaluator_id == b.evaluator_id:
@@ -449,8 +635,16 @@ def receipts_agree(a: LossCheckReceipt, b: LossCheckReceipt, tol: float = 2e-3) 
 def cpu_recompute_fn(model_factory: Callable[[], nn.Module], base: torch.Tensor, candidate: torch.Tensor, heldout: np.ndarray, window: int,
                      dtype: torch.dtype = torch.float32) -> Callable[[str, list[int]], list[float]]:
     """A `recompute` for `verify_receipt` that loads the base or candidate weights on CPU only when a pick needs them."""
+    if not callable(model_factory):
+        raise TypeError("model_factory must be callable")
+    if not isinstance(base, torch.Tensor) or not isinstance(candidate, torch.Tensor):
+        raise TypeError("base and candidate must be torch.Tensor instances")
+    if isinstance(window, bool) or not isinstance(window, int) or window < 2:
+        raise ValueError("window must be an integer >= 2")
 
     def run(which: str, starts: list[int]) -> list[float]:
+        if which not in ("before", "after"):
+            raise ValueError("which must be 'before' or 'after'")
         m = model_factory()
         m.load_flat(base if which == "before" else candidate)
         return window_losses(m, heldout, starts, window, device="cpu", dtype=dtype)

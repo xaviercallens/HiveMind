@@ -45,6 +45,18 @@ def _cert(
     *,
     unverified: bool = False,
 ) -> Dict[str, Any]:
+    if not isinstance(spec_id, str) or not spec_id.strip():
+        raise ValueError("spec_id must be a non-empty string")
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string")
+    if not isinstance(checks, list):
+        raise ValueError("checks must be a list")
+    if not isinstance(reasons, list):
+        raise ValueError("reasons must be a list")
+    if not isinstance(payload_for_hash, dict):
+        raise ValueError("payload_for_hash must be a dict")
+    if not isinstance(unverified, bool):
+        raise ValueError("unverified must be a boolean")
     raw_bytes = json.dumps(payload_for_hash, sort_keys=True, default=str).encode("utf-8")
     input_sha256 = hashlib.sha256(raw_bytes).hexdigest()
     if unverified:
@@ -83,6 +95,8 @@ def verify_quantum_fluid_relaxation(
       3. Force convergence `0 <= max_free_force <= force_rel_tol * |V'(a)|`.
       4. Topological defect charge neutrality `sum(q_i) == 0` under periodic/neutral boundary conditions.
     """
+    if not isinstance(spec_id, str) or not spec_id.strip():
+        raise ValueError("spec_id must be a non-empty string")
     payload = {
         "energy_init": energy_init,
         "energy_final": energy_final,
@@ -165,6 +179,8 @@ def verify_astrophysics_transit_and_orbit(
       2. Hamiltonian energy conservation `max |H(t) - H(0)| / |H(0)| <= conservation_rel_tol`.
       3. Angular momentum conservation `max |L(t) - L(0)| / |L(0)| <= conservation_rel_tol`.
     """
+    if not isinstance(spec_id, str) or not spec_id.strip():
+        raise ValueError("spec_id must be a non-empty string")
     payload = {
         "r_planet_earth": r_planet_earth,
         "r_star_sun": r_star_sun,
@@ -256,6 +272,8 @@ def verify_genetic_elenchus_thermodynamics(
       2. Jarzynski-Crooks second-law dissipative bound: `<W> >= delta_F - prob_tol`.
       3. Conway-Sloane E8 lattice quantization of the 8D dicodon feature vector (`nearest_e8` & `is_lattice_point`).
     """
+    if not isinstance(spec_id, str) or not spec_id.strip():
+        raise ValueError("spec_id must be a non-empty string")
     payload = {
         "prob_vector": list(prob_vector) if isinstance(prob_vector, (list, tuple)) else None,
         "mean_work_kbt": mean_work_kbt,
@@ -358,6 +376,8 @@ def verify_topology_tda_and_lattice(
          matching `TriangularRiesz.latticeEnergy_riesz_lt_top`).
       3. Exact nearest-lattice-point optimality on `A2`, `D4`/`Dn`, `E8`, or `Z`.
     """
+    if not isinstance(spec_id, str) or not spec_id.strip():
+        raise ValueError("spec_id must be a non-empty string")
     payload = {
         "betti_numbers": list(betti_numbers) if isinstance(betti_numbers, (list, tuple)) else None,
         "reported_euler_char": reported_euler_char,
@@ -475,7 +495,9 @@ def verify_numeric_solver_trajectory(
     spec_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Fail-closed verifier for `bee_numeric_solver_sundials` (Spec grammar + 100x tightening agreement + invariants)."""
-    sid = str(spec_id or (spec.get("id") if isinstance(spec, dict) else "wave3-numeric"))
+    if spec_id is not None and (not isinstance(spec_id, str) or not spec_id.strip()):
+        raise ValueError("spec_id must be None or a non-empty string")
+    sid = str(spec_id or (spec.get("id") if isinstance(spec, dict) and str(spec.get("id") or "").strip() else "wave3-numeric"))
     payload = {
         "spec": spec,
         "y_coarse": y_coarse,
@@ -483,6 +505,8 @@ def verify_numeric_solver_trajectory(
         "invariant_drift": invariant_drift,
     }
     try:
+        if not isinstance(spec, dict):
+            raise SpecInvalid("spec must be a dict")
         validated = validate_spec(dict(spec))
     except (SpecInvalid, TypeError, ValueError) as exc:
         return _cert(sid, "science_numeric_solver", [{"name": "spec_grammar", "status": "fail"}], [str(exc)], payload)

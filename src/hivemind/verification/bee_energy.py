@@ -42,6 +42,54 @@ class BeeEnergyEvaluation:
     total_energy: float
     receipt_sha256: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate_id, str) or not self.candidate_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in self.candidate_id):
+            raise ValueError("candidate_id must be a non-empty string")
+        if not isinstance(self.response_text, str):
+            raise ValueError("response_text must be a string")
+        if isinstance(self.tests_passed, bool) or not isinstance(self.tests_passed, int) or self.tests_passed < 0:
+            raise ValueError("tests_passed must be a non-negative integer")
+        if isinstance(self.tests_total, bool) or not isinstance(self.tests_total, int) or self.tests_total < 0:
+            raise ValueError("tests_total must be a non-negative integer")
+        if self.tests_passed > self.tests_total:
+            raise ValueError("tests_passed cannot exceed tests_total")
+        if (
+            isinstance(self.latency_ms, bool)
+            or not isinstance(self.latency_ms, (int, float))
+            or not math.isfinite(float(self.latency_ms))
+            or float(self.latency_ms) < 0.0
+        ):
+            raise ValueError("latency_ms must be a finite number >= 0.0")
+        if (
+            isinstance(self.memory_mb, bool)
+            or not isinstance(self.memory_mb, (int, float))
+            or not math.isfinite(float(self.memory_mb))
+            or float(self.memory_mb) < 0.0
+        ):
+            raise ValueError("memory_mb must be a finite number >= 0.0")
+        if isinstance(self.invariant_residual, bool) or not isinstance(self.invariant_residual, (int, float)):
+            raise ValueError("invariant_residual must be a numeric float or int")
+        if not isinstance(self.is_stub_or_invalid, bool):
+            raise ValueError("is_stub_or_invalid must be a boolean")
+        if self.failure_reason is not None and (
+            not isinstance(self.failure_reason, str) or not self.failure_reason.strip()
+        ):
+            raise ValueError("failure_reason must be None or a non-empty string")
+        if (
+            isinstance(self.total_energy, bool)
+            or not isinstance(self.total_energy, (int, float))
+            or float(self.total_energy) < 0.0
+            or math.isinf(float(self.total_energy))
+        ):
+            raise ValueError("total_energy must be a finite number >= 0.0")
+        if (
+            not isinstance(self.receipt_sha256, str)
+            or self.receipt_sha256 != self.receipt_sha256.strip()
+            or len(self.receipt_sha256) != 64
+            or not all(c in "0123456789abcdefABCDEF" for c in self.receipt_sha256)
+        ):
+            raise ValueError("receipt_sha256 must be a 64-character SHA-256 hex digest")
+
     @property
     def passed_all_tests(self) -> bool:
         return (
@@ -57,6 +105,8 @@ def _strip_lean4_comments(source: str) -> str:
     """Strip Lean 4 block comments (`/- ... -/`) and line comments (`-- ...`)."""
     import re
 
+    if not isinstance(source, str):
+        raise ValueError("source must be a string")
     no_block = re.sub(r"/-[\s\S]*?-/", " ", source)
     return "\n".join(line.split("--", 1)[0] for line in no_block.splitlines())
 
@@ -64,6 +114,10 @@ def _strip_lean4_comments(source: str) -> str:
 def _has_ast_stub_or_syntax_error(code: str, *, domain: str = "code") -> tuple[bool, str | None]:
     import re
 
+    if not isinstance(code, str):
+        raise ValueError("code must be a string")
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string")
     stripped = code.strip()
     if not stripped:
         return True, "EMPTY_RESPONSE"
@@ -267,15 +321,33 @@ def evaluate_bee_candidate_energy(
     w_mem: float = 0.5,
 ) -> BeeEnergyEvaluation:
     """Compute the deterministic ANSE physical energy `E_Bee(x, y)` for a Bee candidate."""
-    if not (
-        math.isfinite(float(w_fail))
-        and float(w_fail) > 0.0
-        and math.isfinite(float(w_inv))
-        and float(w_inv) >= 0.0
-        and math.isfinite(float(w_lat))
-        and float(w_lat) >= 0.0
-        and math.isfinite(float(w_mem))
-        and float(w_mem) >= 0.0
+    if not isinstance(candidate_id, str) or not candidate_id.strip():
+        raise ValueError("candidate_id must be a non-empty string.")
+    if not isinstance(response_text, str):
+        raise ValueError("response_text must be a string.")
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string.")
+    if not isinstance(timed_out_or_crashed, bool):
+        raise ValueError("timed_out_or_crashed must be a boolean.")
+    if isinstance(tests_passed, bool) or isinstance(tests_total, bool):
+        raise ValueError("tests_passed and tests_total must be integers, not booleans.")
+    if isinstance(latency_ms, bool) or isinstance(memory_mb, bool) or isinstance(invariant_residual, bool):
+        raise ValueError("latency_ms, memory_mb, and invariant_residual must be numeric, not booleans.")
+    if (
+        isinstance(w_fail, bool)
+        or isinstance(w_inv, bool)
+        or isinstance(w_lat, bool)
+        or isinstance(w_mem, bool)
+        or not (
+            math.isfinite(float(w_fail))
+            and float(w_fail) > 0.0
+            and math.isfinite(float(w_inv))
+            and float(w_inv) >= 0.0
+            and math.isfinite(float(w_lat))
+            and float(w_lat) >= 0.0
+            and math.isfinite(float(w_mem))
+            and float(w_mem) >= 0.0
+        )
     ):
         raise ValueError("energy weights w_fail (> 0) and w_inv, w_lat, w_mem (>= 0) must be finite.")
     is_stub, stub_reason = _has_ast_stub_or_syntax_error(response_text, domain=domain)
@@ -329,11 +401,13 @@ def evaluate_bee_candidate_energy(
         and float(memory_mb) >= 0.0
     )
     if is_stub or tests_total <= 0 or not metrics_valid:
+        clamped_invalid_total = max(0, int(tests_total))
+        clamped_invalid_passed = max(0, min(clamped_invalid_total, int(tests_passed)))
         return BeeEnergyEvaluation(
             candidate_id=candidate_id,
             response_text=response_text,
-            tests_passed=max(0, int(tests_passed)),
-            tests_total=max(0, int(tests_total)),
+            tests_passed=clamped_invalid_passed,
+            tests_total=clamped_invalid_total,
             latency_ms=max(0.0, float(latency_ms)) if math.isfinite(float(latency_ms)) else 0.0,
             memory_mb=max(0.0, float(memory_mb)) if math.isfinite(float(memory_mb)) else 0.0,
             invariant_residual=float(invariant_residual),
@@ -383,6 +457,10 @@ def compress_error_trace_d1(
     max_chars: int = 200,
 ) -> str:
     """Directive D1: Compress failing code + stderr to `< max_chars` to prevent small-Bee attention dilution."""
+    if not isinstance(failing_code, str) or not isinstance(stderr_or_reason, str):
+        raise ValueError("failing_code and stderr_or_reason must be strings.")
+    if isinstance(max_chars, bool) or not isinstance(max_chars, int) or max_chars < 1:
+        raise ValueError("max_chars must be a positive integer.")
     budget = max(32, int(max_chars))
     err_clean = " ".join((stderr_or_reason or "test_failed").strip().split())
     code_clean = " ".join((failing_code or "").strip().split())
@@ -402,11 +480,13 @@ def select_best_so_far_d3(
     Never returns a degraded final retry when an earlier attempt had lower energy,
     and triggers early stop when `E_1 > early_stop_energy_ceiling` or `E_t > E_{t-1}`.
     """
-    if not attempts:
+    if not isinstance(attempts, Sequence) or isinstance(attempts, (str, bytes)) or not attempts:
         raise ValueError("attempts must be non-empty.")
-    if not math.isfinite(float(early_stop_energy_ceiling)) or float(early_stop_energy_ceiling) <= 0.0:
+    if any(not isinstance(a, BeeEnergyEvaluation) for a in attempts):
+        raise ValueError("all attempts must be BeeEnergyEvaluation instances.")
+    if isinstance(early_stop_energy_ceiling, bool) or not isinstance(early_stop_energy_ceiling, (int, float)) or not math.isfinite(float(early_stop_energy_ceiling)) or float(early_stop_energy_ceiling) <= 0.0:
         raise ValueError("early_stop_energy_ceiling must be a strictly positive finite float.")
-    if any(not math.isfinite(float(a.total_energy)) for a in attempts):
+    if any(isinstance(a.total_energy, bool) or not math.isfinite(float(a.total_energy)) for a in attempts):
         raise ValueError("all attempt energies must be finite.")
     best = min(attempts, key=lambda a: a.total_energy)
     if best.passed_all_tests:
@@ -425,9 +505,15 @@ def harvest_energy_gap_dpo_pair_d6(
     min_delta_energy: float = 10.0,
 ) -> dict[str, Any] | None:
     """Directive D6: Export a verified `(chosen_low_E, rejected_high_E)` pair when `Delta E >= min_delta_energy`."""
-    if not math.isfinite(float(min_delta_energy)) or float(min_delta_energy) <= 0.0:
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string.")
+    if isinstance(min_delta_energy, bool) or not isinstance(min_delta_energy, (int, float)) or not math.isfinite(float(min_delta_energy)) or float(min_delta_energy) <= 0.0:
         raise ValueError("min_delta_energy must be a strictly positive finite float.")
-    if any(not math.isfinite(float(a.total_energy)) for a in attempts):
+    if not isinstance(attempts, Sequence) or isinstance(attempts, (str, bytes)):
+        raise ValueError("attempts must be a sequence of BeeEnergyEvaluation instances.")
+    if any(not isinstance(a, BeeEnergyEvaluation) for a in attempts):
+        raise ValueError("all attempts must be BeeEnergyEvaluation instances.")
+    if any(isinstance(a.total_energy, bool) or not math.isfinite(float(a.total_energy)) for a in attempts):
         raise ValueError("all attempt energies must be finite.")
     if len(attempts) < 2:
         return None
@@ -460,11 +546,19 @@ def detect_boinc_loss_plateau(
     max_tail_std: float = 0.006,
 ) -> dict[str, Any]:
     """Detect the 30-round BOINC QLoRA loss plateau (`HM-S18-AE-02`) to trigger curriculum rotation."""
-    if int(block_size) < 1:
+    if isinstance(block_size, bool) or not isinstance(block_size, int) or int(block_size) < 1:
         raise ValueError("block_size must be >= 1.")
-    if not math.isfinite(float(min_block_gain)) or not math.isfinite(float(max_tail_std)) or float(max_tail_std) < 0.0:
+    if (
+        isinstance(min_block_gain, bool)
+        or isinstance(max_tail_std, bool)
+        or not isinstance(min_block_gain, (int, float))
+        or not isinstance(max_tail_std, (int, float))
+        or not math.isfinite(float(min_block_gain))
+        or not math.isfinite(float(max_tail_std))
+        or float(max_tail_std) < 0.0
+    ):
         raise ValueError("min_block_gain and max_tail_std (>= 0) must be finite floats.")
-    if any(not math.isfinite(float(x)) for x in round_losses):
+    if any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)) for x in round_losses):
         raise ValueError("round_losses must contain only finite floats.")
     n = len(round_losses)
     if n < 2 * block_size:
@@ -492,6 +586,8 @@ def detect_boinc_loss_plateau(
 
 def exact_mcnemar_p(only_child_right: int, only_parent_right: int) -> float:
     """Two-sided exact McNemar p-value on the discordant pairs (binomial, p = 0.5)."""
+    if isinstance(only_child_right, bool) or isinstance(only_parent_right, bool) or not isinstance(only_child_right, int) or not isinstance(only_parent_right, int):
+        raise ValueError("discordant counts must be non-negative integers.")
     b, c = int(only_child_right), int(only_parent_right)
     if b < 0 or c < 0:
         raise ValueError("discordant counts must be non-negative.")
@@ -509,7 +605,7 @@ def calibrate_noise_margin(aa_median_deltas: Sequence[float]) -> float:
     """
     if len(aa_median_deltas) < 3:
         raise ValueError("at least 3 A/A runs are needed to calibrate the noise margin.")
-    if any(not math.isfinite(float(d)) for d in aa_median_deltas):
+    if any(isinstance(d, bool) or not isinstance(d, (int, float)) or not math.isfinite(float(d)) for d in aa_median_deltas):
         raise ValueError("aa_median_deltas must contain only finite floats.")
     return float(max(abs(float(d)) for d in aa_median_deltas))
 
@@ -524,6 +620,33 @@ class AutopoieticPromotionVerdict:
     shuffled_control_gained: bool
     reason: str
     mcnemar_p: float | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.promoted, bool):
+            raise ValueError("promoted must be a boolean")
+        if (
+            isinstance(self.median_delta_energy, bool)
+            or not isinstance(self.median_delta_energy, (int, float))
+            or not math.isfinite(float(self.median_delta_energy))
+        ):
+            raise ValueError("median_delta_energy must be a finite number")
+        if (
+            isinstance(self.parent_regressions_failed, bool)
+            or not isinstance(self.parent_regressions_failed, int)
+            or self.parent_regressions_failed < 0
+        ):
+            raise ValueError("parent_regressions_failed must be a non-negative integer")
+        if not isinstance(self.shuffled_control_gained, bool):
+            raise ValueError("shuffled_control_gained must be a boolean")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+        if self.mcnemar_p is not None and (
+            isinstance(self.mcnemar_p, bool)
+            or not isinstance(self.mcnemar_p, (int, float))
+            or not math.isfinite(float(self.mcnemar_p))
+            or not (0.0 <= float(self.mcnemar_p) <= 1.0)
+        ):
+            raise ValueError("mcnemar_p must be None or a finite float in [0.0, 1.0]")
 
 
 def evaluate_child_bee_promotion(
@@ -546,13 +669,23 @@ def evaluate_child_bee_promotion(
     """
     if len(parent_energies) == 0 or len(parent_energies) != len(child_energies):
         raise ValueError("parent_energies and child_energies must be non-empty and equal length.")
-    if int(parent_regressions_failed) < 0:
+    if isinstance(parent_regressions_failed, bool) or not isinstance(parent_regressions_failed, int) or int(parent_regressions_failed) < 0:
         raise ValueError("parent_regressions_failed must be >= 0.")
-    if not math.isfinite(float(alpha)) or not (0.0 < float(alpha) < 1.0):
+    if not isinstance(shuffled_control_gained, bool):
+        raise ValueError("shuffled_control_gained must be a boolean.")
+    if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(float(alpha)) or not (0.0 < float(alpha) < 1.0):
         raise ValueError("alpha must be a finite float in (0.0, 1.0).")
-    if not math.isfinite(float(noise_margin)) or float(noise_margin) <= 0.0:
+    if isinstance(noise_margin, bool) or not isinstance(noise_margin, (int, float)) or not math.isfinite(float(noise_margin)) or float(noise_margin) <= 0.0:
         raise ValueError("noise_margin must be a strictly positive finite float from calibrate_noise_margin.")
-    if not all(math.isfinite(float(p)) and math.isfinite(float(c)) for p, c in zip(parent_energies, child_energies)):
+    if not all(
+        not isinstance(p, bool)
+        and not isinstance(c, bool)
+        and isinstance(p, (int, float))
+        and isinstance(c, (int, float))
+        and math.isfinite(float(p))
+        and math.isfinite(float(c))
+        for p, c in zip(parent_energies, child_energies)
+    ):
         raise ValueError("parent_energies and child_energies must contain only finite floats.")
     deltas = [float(c - p) for p, c in zip(parent_energies, child_energies)]
     med_delta = float(statistics.median(deltas))

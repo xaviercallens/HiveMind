@@ -41,6 +41,16 @@ class CrowdGPTDeltaPayload:
     engram_values_uint16: np.ndarray
     payload_sha256: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.metadata, dict):
+            raise TypeError("metadata must be a dict")
+        if not isinstance(self.base_delta_bf16, torch.Tensor) or self.base_delta_bf16.dtype != torch.bfloat16:
+            raise TypeError("base_delta_bf16 must be a bfloat16 torch.Tensor")
+        if not isinstance(self.engram_indices, np.ndarray) or not isinstance(self.engram_values_uint16, np.ndarray):
+            raise TypeError("engram_indices and engram_values_uint16 must be numpy.ndarray instances")
+        if not isinstance(self.payload_sha256, str) or len(self.payload_sha256.strip()) != 64:
+            raise ValueError("payload_sha256 must be a 64-character hex string")
+
 
 def pack_crowdgpt_delta_stream(
     metadata: Mapping[str, Any],
@@ -51,6 +61,12 @@ def pack_crowdgpt_delta_stream(
     compresslevel: int = 6,
 ) -> bytes:
     """Pack a CrowdGPT delta in the exact wire format produced by `client.py`."""
+    if not isinstance(metadata, Mapping):
+        raise TypeError("metadata must be a Mapping.")
+    if not isinstance(base_delta_bf16, torch.Tensor):
+        raise TypeError("base_delta_bf16 must be a torch.Tensor.")
+    if isinstance(compresslevel, bool) or not isinstance(compresslevel, int) or not (0 <= compresslevel <= 9):
+        raise ValueError("compresslevel must be an integer in [0, 9].")
     if base_delta_bf16.dtype != torch.bfloat16:
         base_delta_bf16 = base_delta_bf16.to(torch.bfloat16)
     flat_uint16 = (
@@ -97,6 +113,8 @@ def unpack_crowdgpt_delta_stream(
     engram_row_dim: int = 1536,
 ) -> CrowdGPTDeltaPayload:
     """Unpack a gzipped CrowdGPT client delta stream and verify its structure."""
+    if not isinstance(compressed_data, (bytes, bytearray)) or not compressed_data:
+        raise ValueError("compressed_data must be non-empty bytes.")
     if isinstance(engram_row_dim, bool) or not isinstance(engram_row_dim, int) or engram_row_dim < 1:
         raise ValueError("engram_row_dim must be an integer >= 1.")
     payload_sha256 = hashlib.sha256(compressed_data).hexdigest()
@@ -206,6 +224,37 @@ class MultiKrumAggregationResult:
     aggregated_delta_bf16: torch.Tensor
     effective_tokens: int
     byzantine_filter_active: bool = True
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.selected_indices, list)
+            or not self.selected_indices
+            or any(isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in self.selected_indices)
+        ):
+            raise ValueError("selected_indices must be a non-empty list of non-negative integers")
+        if (
+            not isinstance(self.rejected_indices, list)
+            or any(isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in self.rejected_indices)
+        ):
+            raise ValueError("rejected_indices must be a list of non-negative integers")
+        if (
+            not isinstance(self.krum_scores, list)
+            or not self.krum_scores
+            or any(
+                isinstance(s, bool)
+                or not isinstance(s, (int, float))
+                or not math.isfinite(float(s))
+                or float(s) < 0.0
+                for s in self.krum_scores
+            )
+        ):
+            raise ValueError("krum_scores must be a non-empty list of finite non-negative numbers")
+        if not isinstance(self.aggregated_delta_bf16, torch.Tensor) or self.aggregated_delta_bf16.dtype != torch.bfloat16:
+            raise TypeError("aggregated_delta_bf16 must be a bfloat16 torch.Tensor")
+        if isinstance(self.effective_tokens, bool) or not isinstance(self.effective_tokens, int) or self.effective_tokens < 1:
+            raise ValueError("effective_tokens must be a positive integer")
+        if not isinstance(self.byzantine_filter_active, bool):
+            raise ValueError("byzantine_filter_active must be a boolean")
 
 
 def _validate_and_clamp_token_weights(
@@ -336,6 +385,20 @@ class LossRatchetDecision:
     checkpoint_sha256: str
     reason: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.accepted, bool):
+            raise ValueError("accepted must be a boolean")
+        for f_name in ("loss_before", "loss_after", "delta_loss"):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise ValueError(f"{f_name} must be a number")
+            if self.accepted and not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be finite when accepted is True")
+        for s_name in ("checkpoint_sha256", "reason"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+
 
 class LossRatchetGate:
     """Monotonic held-out validation gate for outer DiLoCo / CrowdGPT merges."""
@@ -406,6 +469,23 @@ class WeightRmsGuardDecision:
     rms_ratio: float
     halving_residual_rms: float
     reason: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.accepted, bool):
+            raise ValueError("accepted must be a boolean")
+        for f_name in ("rms_old", "rms_new", "rms_ratio", "halving_residual_rms"):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise ValueError(f"{f_name} must be a number")
+            if self.accepted:
+                if not math.isfinite(float(val)):
+                    raise ValueError(f"{f_name} must be finite when accepted is True")
+                if f_name == "halving_residual_rms" and float(val) < 0.0:
+                    raise ValueError("halving_residual_rms must be non-negative")
+                if f_name != "halving_residual_rms" and float(val) <= 0.0:
+                    raise ValueError(f"{f_name} must be positive when accepted is True")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
 
 
 def check_weight_rms_collapse_guard(
@@ -510,6 +590,24 @@ class GpuPrecisionCohort:
     pre_ampere_fp32_enforced: bool
     cohort_key: str
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("vendor", self.vendor),
+            ("effective_dtype", self.effective_dtype),
+            ("optimizer_family", self.optimizer_family),
+            ("cohort_key", self.cohort_key),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            not isinstance(self.compute_capability, tuple)
+            or len(self.compute_capability) != 2
+            or any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in self.compute_capability)
+        ):
+            raise ValueError("compute_capability must be a 2-tuple of non-negative integers")
+        if not isinstance(self.pre_ampere_fp32_enforced, bool):
+            raise ValueError("pre_ampere_fp32_enforced must be a boolean")
+
 
 def classify_gpu_precision_cohort(
     vendor: str,
@@ -519,6 +617,14 @@ def classify_gpu_precision_cohort(
     optimizer_family: str = "adamw_8bit",
 ) -> GpuPrecisionCohort:
     """Assign a volunteer GPU to a homogeneous numerical cohort and enforce `fp32` on pre-Ampere CUDA (`sm < 80`)."""
+    if not isinstance(vendor, str) or not vendor.strip():
+        raise ValueError("vendor must be a non-empty string.")
+    if (
+        not isinstance(compute_capability, tuple)
+        or len(compute_capability) != 2
+        or any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in compute_capability)
+    ):
+        raise ValueError("compute_capability must be a 2-tuple of non-negative integers.")
     norm_vendor = vendor.strip().lower()
     major, minor = int(compute_capability[0]), int(compute_capability[1])
     req = requested_dtype.strip().lower()
@@ -569,6 +675,18 @@ class PoolDispatchDecision:
     requires_multi_krum: bool
     requires_loss_ratchet: bool
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.mode, str) or not self.mode.strip():
+            raise ValueError("mode must be a non-empty string")
+        if not isinstance(self.cohort_key, str) or not self.cohort_key.strip():
+            raise ValueError("cohort_key must be a non-empty string")
+        if isinstance(self.active_members, bool) or not isinstance(self.active_members, int) or self.active_members < 0:
+            raise ValueError("active_members must be a non-negative integer")
+        if isinstance(self.target_pool_size, bool) or not isinstance(self.target_pool_size, int) or self.target_pool_size < 1:
+            raise ValueError("target_pool_size must be a positive integer")
+        if not isinstance(self.requires_multi_krum, bool) or not isinstance(self.requires_loss_ratchet, bool):
+            raise ValueError("requires_multi_krum and requires_loss_ratchet must be booleans")
+
 
 def resolve_forming_pool_starvation(
     *,
@@ -579,6 +697,24 @@ def resolve_forming_pool_starvation(
     cohort_key: str = "nvidia:sm75_pre_ampere:fp32:adamw",
 ) -> PoolDispatchDecision:
     """Prevent `1/3` or `2/3` forming pools from starving minority `fp32` / ROCm cohorts after timeout."""
+    if isinstance(current_members, bool) or not isinstance(current_members, int):
+        raise ValueError("current_members must be an integer.")
+    if isinstance(target_pool_size, bool) or not isinstance(target_pool_size, int) or target_pool_size < 1:
+        raise ValueError("target_pool_size must be a positive integer.")
+    if (
+        isinstance(waited_seconds, bool)
+        or not isinstance(waited_seconds, (int, float))
+        or not math.isfinite(float(waited_seconds))
+        or float(waited_seconds) < 0.0
+    ):
+        raise ValueError("waited_seconds must be a finite non-negative number.")
+    if (
+        isinstance(forming_timeout_s, bool)
+        or not isinstance(forming_timeout_s, (int, float))
+        or not math.isfinite(float(forming_timeout_s))
+        or float(forming_timeout_s) <= 0.0
+    ):
+        raise ValueError("forming_timeout_s must be a positive finite number.")
     if current_members <= 0:
         return PoolDispatchDecision(
             mode="IDLE_EMPTY_POOL",
@@ -671,4 +807,192 @@ def evaluate_client_resilience_policy(
         "next_batch_size": batch_size,
         "redownload_checkpoint": False,
         "backoff_s": 0.0,
+    }
+
+
+
+@dataclass(frozen=True)
+class CrowdGPTCrossCheckSpec:
+    """Parsed `/fl/task` cross-client verification (`crossCheck`) specification from `server.crowdgpt.net`."""
+
+    task_id: str
+    global_step: int
+    seq_len: int
+    cohort_mode: bool
+    target_seed: int | None
+    target_local_steps: int | None
+    target_batch_size: int | None
+    target_accum_steps: int | None
+    target_autocast: str | None
+    target_optimizer: str
+    effective_slot: int
+
+
+def build_crowdgpt_client_hardware_headers(
+    *,
+    hiveminder_handle: str,
+    device_suffix: str = "gpu0",
+    backend: str = "CUDA",
+    batch_size: int = 1,
+    vram_gb: float = 8.0,
+    gpu_name: str = "NVIDIA GeForce RTX 2070",
+    autocast_dtype: str = "fp32",
+    native_optim: str = "adamw8bit",
+    can_fp32: bool = True,
+    can_8bit: bool = True,
+    engram_active: bool = True,
+    compute_capability: tuple[int, int] = (7, 5),
+    client_version: str = "3.1.0",
+) -> dict[str, str]:
+    """Build the exact 12 `X-Client-*` headers required by `server.crowdgpt.net` (`client.py:_hardware_headers`).
+
+    Because CrowdGPT keys active per-client tasks on `user:<uuid>:dev:<device>` (`client.py:337`),
+    setting a deterministic `X-Client-Device: hm-<handle>-<device_suffix>` allows multiple HiveMinder
+    GPUs to share one fleet account (`hivemind-swarm`) OR use their own personal CrowdGPT account
+    without colliding on the coordinator.
+    """
+    handle_clean = "".join(c if c.isalnum() or c in "-_" else "-" for c in str(hiveminder_handle or "").strip())
+    if not handle_clean:
+        raise ValueError("hiveminder_handle must be a non-empty string.")
+    dev_clean = "".join(c if c.isalnum() or c in "-_" else "-" for c in str(device_suffix or "gpu0").strip()) or "gpu0"
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
+        raise ValueError("batch_size must be an integer >= 1.")
+    if isinstance(vram_gb, bool) or not isinstance(vram_gb, (int, float)) or not math.isfinite(float(vram_gb)) or float(vram_gb) <= 0.0:
+        raise ValueError("vram_gb must be a finite positive number.")
+    if (
+        not isinstance(compute_capability, tuple)
+        or len(compute_capability) != 2
+        or any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in compute_capability)
+    ):
+        raise ValueError("compute_capability must be a 2-tuple of non-negative integers.")
+    device_id = f"hm-{handle_clean[:32]}-{dev_clean[:16]}"
+    cc_str = f"{compute_capability[0]}.{compute_capability[1]}"
+    return {
+        "X-Client-Backend": str(backend or "CUDA").strip().upper(),
+        "X-Client-Batch-Size": str(int(batch_size)),
+        "X-Client-Vram-Gb": f"{float(vram_gb):.2f}",
+        "X-Client-Gpu-Name": str(gpu_name or "UNKNOWN").strip(),
+        "X-Client-Autocast": str(autocast_dtype or "fp32").strip().lower(),
+        "X-Client-Optim": str(native_optim or "adamw8bit").strip(),
+        "X-Client-Optim-Can-Fp32": "1" if can_fp32 else "0",
+        "X-Client-Optim-Can-8bit": "1" if can_8bit else "0",
+        "X-Client-Engram": "1" if engram_active else "0",
+        "X-Client-Device": device_id,
+        "X-Client-Compute-Cap": cc_str,
+        "X-Client-Version": str(client_version or "3.1.0").strip(),
+    }
+
+
+def parse_crowdgpt_task_crosscheck(
+    task_metadata: Mapping[str, Any],
+    *,
+    default_seq_len: int = 2048,
+) -> CrowdGPTCrossCheckSpec:
+    """Parse `/fl/task` metadata and enforce `crossCheck` cohort rules (`client.py:_parse_task_meta`)."""
+    if not isinstance(task_metadata, Mapping):
+        raise TypeError("task_metadata must be a Mapping.")
+    tid = str(task_metadata.get("taskId") or "").strip()
+    if not tid:
+        raise ValueError("task_metadata must include a non-empty taskId.")
+    gs = int(task_metadata.get("globalStep") or 0)
+    cc_cfg = task_metadata.get("crossCheck")
+    if not isinstance(cc_cfg, Mapping):
+        cc_cfg = {}
+
+    cohort_mode = bool(cc_cfg.get("enabled", False))
+    cc_seed = cc_cfg.get("targetSeed") if cohort_mode else None
+    cc_steps = cc_cfg.get("targetLocalSteps") if cohort_mode else None
+    cc_bs = cc_cfg.get("targetBatchSize") if cohort_mode else None
+    cc_accum = cc_cfg.get("targetAccumSteps") if cohort_mode else None
+    cc_autocast = cc_cfg.get("targetAutocast") if cohort_mode else None
+    cc_optim = str((cc_cfg.get("targetOptimizer") if cohort_mode else None) or "any")
+
+    if cohort_mode and (
+        cc_seed is None
+        or cc_steps is None
+        or cc_bs is None
+        or cc_accum is None
+        or cc_autocast is None
+    ):
+        cohort_mode = False
+        cc_seed = cc_steps = cc_bs = cc_accum = cc_autocast = None
+        cc_optim = "any"
+
+    shard_cfg = task_metadata.get("shardConfig")
+    raw_slot = int(shard_cfg.get("slot", 0)) if isinstance(shard_cfg, Mapping) else 0
+    effective_slot = 0 if cohort_mode else raw_slot
+
+    return CrowdGPTCrossCheckSpec(
+        task_id=tid,
+        global_step=gs,
+        seq_len=int(default_seq_len),
+        cohort_mode=cohort_mode,
+        target_seed=int(cc_seed) if cc_seed is not None else None,
+        target_local_steps=int(cc_steps) if cc_steps is not None else None,
+        target_batch_size=int(cc_bs) if cc_bs is not None else None,
+        target_accum_steps=int(cc_accum) if cc_accum is not None else None,
+        target_autocast=str(cc_autocast) if cc_autocast is not None else None,
+        target_optimizer=cc_optim,
+        effective_slot=effective_slot,
+    )
+
+
+def build_crowdgpt_submit_metadata(
+    *,
+    spec: CrowdGPTCrossCheckSpec,
+    mean_loss: float,
+    last_step_loss: float,
+    loss_std: float,
+    loss_samples: int,
+    actual_steps: int,
+    actual_batch_size: int,
+    tokens_processed: int,
+    has_engram: bool = False,
+    engram_sparse_count: int = 0,
+) -> dict[str, Any]:
+    """Build and verify the exact `/fl/submit` JSON header required by CrowdGPT cross-client verification (`client.py:2905-2914`)."""
+    if not isinstance(spec, CrowdGPTCrossCheckSpec):
+        raise TypeError("spec must be a CrowdGPTCrossCheckSpec.")
+    for name, val in (("mean_loss", mean_loss), ("last_step_loss", last_step_loss), ("loss_std", loss_std)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError(f"{name} must be a finite number.")
+    if float(loss_std) < 0.0:
+        raise ValueError("loss_std must be non-negative.")
+    for int_name, int_val, min_v in (
+        ("loss_samples", loss_samples, 1),
+        ("actual_steps", actual_steps, 1),
+        ("actual_batch_size", actual_batch_size, 1),
+        ("tokens_processed", tokens_processed, 1),
+        ("engram_sparse_count", engram_sparse_count, 0),
+    ):
+        if isinstance(int_val, bool) or not isinstance(int_val, int) or int_val < min_v:
+            raise ValueError(f"{int_name} must be an integer >= {min_v}.")
+
+    if spec.cohort_mode:
+        if spec.target_local_steps is not None and int(actual_steps) != int(spec.target_local_steps):
+            raise ValueError(
+                f"Cross-check cohort requires exact targetLocalSteps={spec.target_local_steps}, got actual_steps={actual_steps}."
+            )
+        if spec.target_batch_size is not None and int(actual_batch_size) != int(spec.target_batch_size):
+            raise ValueError(
+                f"Cross-check cohort requires exact targetBatchSize={spec.target_batch_size}, got actual_batch_size={actual_batch_size}."
+            )
+
+    return {
+        "taskId": spec.task_id,
+        "loss": float(mean_loss),
+        "localSteps": int(actual_steps),
+        "tokensProcessed": int(tokens_processed),
+        "loraRank": 0,
+        "isDelta": True,
+        "weightFormat": "bf16",
+        "hasEngram": bool(has_engram and engram_sparse_count > 0),
+        "engramSparseCount": int(engram_sparse_count) if has_engram else 0,
+        "crossCheckUsed": bool(spec.cohort_mode),
+        "actualSeed": int(spec.target_seed) if (spec.cohort_mode and spec.target_seed is not None) else None,
+        "actualSteps": int(actual_steps),
+        "actualBatchSize": int(actual_batch_size),
+        "lastLoss": float(last_step_loss),
+        "lossStd": float(loss_std),
+        "lossSamples": int(loss_samples),
     }

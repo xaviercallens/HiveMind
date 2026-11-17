@@ -37,6 +37,24 @@ class CompressedTensorPayload:
     fp8_values: torch.Tensor    # float8_e4m3fn (or uint8-packed) quantized values
     scale: float                # absmax / FP8_E4M3_MAX dequantization factor
 
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.original_shape, tuple)
+            or not self.original_shape
+            or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.original_shape)
+        ):
+            raise ValueError("original_shape must be a non-empty tuple of positive integers")
+        if isinstance(self.original_numel, bool) or not isinstance(self.original_numel, int) or self.original_numel < 1:
+            raise ValueError("original_numel must be an integer >= 1")
+        if math.prod(self.original_shape) != self.original_numel:
+            raise ValueError("math.prod(original_shape) must equal original_numel")
+        if not isinstance(self.indices, torch.Tensor) or not isinstance(self.fp8_values, torch.Tensor):
+            raise ValueError("indices and fp8_values must be torch.Tensors")
+        if self.indices.numel() != self.fp8_values.numel():
+            raise ValueError("indices and fp8_values must have equal numel")
+        if isinstance(self.scale, bool) or not isinstance(self.scale, (int, float)):
+            raise ValueError("scale must be a number")
+
     @property
     def compressed_bytes(self) -> int:
         # 1 byte per FP8 value + 2 bytes per delta-coded/uint16 index in block-sparse wire format
@@ -64,6 +82,48 @@ class DCTSparse2BitTensorPayload:
     chunk_size: int
     index_width: int            # 1, 2 or 4 bytes per transmitted index
     dct_energy_retained_fraction: float
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.original_shape, tuple)
+            or not self.original_shape
+            or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.original_shape)
+        ):
+            raise ValueError("original_shape must be a non-empty tuple of positive integers")
+        if isinstance(self.original_numel, bool) or not isinstance(self.original_numel, int) or self.original_numel < 1:
+            raise ValueError("original_numel must be an integer >= 1")
+        if math.prod(self.original_shape) != self.original_numel:
+            raise ValueError("math.prod(original_shape) must equal original_numel")
+        if (
+            not isinstance(self.padded_shape, tuple)
+            or len(self.padded_shape) != 2
+            or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.padded_shape)
+            or self.padded_shape[0] * self.padded_shape[1] < self.original_numel
+        ):
+            raise ValueError("padded_shape must be a 2-tuple of positive integers with product >= original_numel")
+        if (
+            not isinstance(self.indices, torch.Tensor)
+            or not isinstance(self.packed_2bit, torch.Tensor)
+            or not isinstance(self.lookup, torch.Tensor)
+        ):
+            raise ValueError("indices, packed_2bit, and lookup must be torch.Tensors")
+        if isinstance(self.shift, bool) or not isinstance(self.shift, (int, float)):
+            raise ValueError("shift and scale must be numbers")
+        if isinstance(self.scale, bool) or not isinstance(self.scale, (int, float)):
+            raise ValueError("shift and scale must be numbers")
+        if isinstance(self.n_coefficients, bool) or not isinstance(self.n_coefficients, int) or self.n_coefficients < 0:
+            raise ValueError("n_coefficients must be a non-negative integer")
+        if isinstance(self.chunk_size, bool) or not isinstance(self.chunk_size, int) or self.chunk_size < 2:
+            raise ValueError("chunk_size must be an integer >= 2")
+        if isinstance(self.index_width, bool) or self.index_width not in (1, 2, 4):
+            raise ValueError("index_width must be one of (1, 2, 4)")
+        if (
+            isinstance(self.dct_energy_retained_fraction, bool)
+            or not isinstance(self.dct_energy_retained_fraction, (int, float))
+            or not math.isfinite(float(self.dct_energy_retained_fraction))
+            or not (0.0 <= float(self.dct_energy_retained_fraction) <= 1.0)
+        ):
+            raise ValueError("dct_energy_retained_fraction must be a finite number in [0.0, 1.0]")
 
     @property
     def compressed_bytes(self) -> int:
@@ -94,6 +154,37 @@ class CompressedDeltaPackage:
     compressed_bytes: int
     compression_mode: str = "topk_fp8"
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("worker_id", self.worker_id),
+            ("branch_name", self.branch_name),
+            ("compression_mode", self.compression_mode),
+        ):
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 or ord(c) == 127 for c in val):
+                raise ValueError(f"{field_name} must be a non-empty printable string")
+        for field_name, val in (
+            ("outer_step", self.outer_step),
+            ("inner_steps_completed", self.inner_steps_completed),
+            ("uncompressed_bytes", self.uncompressed_bytes),
+            ("compressed_bytes", self.compressed_bytes),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        if (
+            isinstance(self.topk_ratio, bool)
+            or not isinstance(self.topk_ratio, (int, float))
+            or not math.isfinite(float(self.topk_ratio))
+            or not (0.0 < float(self.topk_ratio) <= 1.0)
+        ):
+            raise ValueError("topk_ratio must be a finite number in (0.0, 1.0]")
+        if not isinstance(self.tensors, dict):
+            raise ValueError("tensors must be a dict")
+        for k, v in self.tensors.items():
+            if not isinstance(k, str) or not k.strip() or any(ord(c) < 32 or ord(c) == 127 for c in k):
+                raise ValueError("tensors keys must be non-empty printable strings")
+            if not isinstance(v, (CompressedTensorPayload, DCTSparse2BitTensorPayload)):
+                raise ValueError("tensors values must be CompressedTensorPayload or DCTSparse2BitTensorPayload")
+
     @property
     def compression_ratio(self) -> float:
         if self.compressed_bytes == 0:
@@ -106,11 +197,26 @@ def compute_pseudo_gradient_delta(
     theta_final: dict[str, torch.Tensor],
 ) -> dict[str, torch.Tensor]:
     """Compute the DiLoCo pseudo-gradient: Delta_k^(t) = theta^(t-1) - theta_k^(t, H)."""
+    if not isinstance(theta_init, dict) or not theta_init:
+        raise ValueError("theta_init must be a non-empty dict")
+    if not isinstance(theta_final, dict):
+        raise ValueError("theta_final must be a dict")
     delta: dict[str, torch.Tensor] = {}
     for name, init_t in theta_init.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("theta_init keys must be non-empty strings")
         if name not in theta_final:
             raise KeyError(f"Missing LoRA parameter '{name}' in final worker state.")
         fin_t = theta_final[name]
+        if (
+            not isinstance(init_t, torch.Tensor)
+            or not isinstance(fin_t, torch.Tensor)
+            or init_t.dtype == torch.bool
+            or fin_t.dtype == torch.bool
+            or init_t.numel() == 0
+            or fin_t.numel() == 0
+        ):
+            raise ValueError(f"Parameter '{name}' must be a non-empty numeric torch.Tensor")
         if init_t.shape != fin_t.shape:
             raise ValueError(
                 f"Shape mismatch for parameter '{name}': {tuple(init_t.shape)} vs {tuple(fin_t.shape)}"
@@ -125,7 +231,7 @@ def compute_pseudo_gradient_delta(
 
 def _require_finite_delta(name: str, delta: torch.Tensor) -> None:
     """Refuse a NaN/inf delta: it made the absmax scale NaN/inf, so the whole payload decoded to NaN (one inf was not even preserved)."""
-    if not bool(torch.isfinite(delta).all()):
+    if not isinstance(delta, torch.Tensor) or delta.dtype == torch.bool or not bool(torch.isfinite(delta).all()):
         raise ValueError(f"{name}: delta contains NaN or inf")
 
 
@@ -136,7 +242,7 @@ def compress_tensor_topk_fp8(
     """Compress a 1D/2D LoRA delta tensor using Top-k sparsification and FP8 E4M3 quantization."""
     if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not math.isfinite(float(topk_ratio)) or not (0.0 < float(topk_ratio) <= 1.0):
         raise ValueError(f"topk_ratio must be in (0, 1], got {topk_ratio!r}")
-    if tensor.numel() == 0:
+    if not isinstance(tensor, torch.Tensor) or tensor.dtype == torch.bool or tensor.numel() == 0:
         raise ValueError("cannot compress an empty tensor")
 
     flat = tensor.detach().to(torch.float32).cpu().reshape(-1)
@@ -183,6 +289,8 @@ def decompress_tensor_topk_fp8(
     device: torch.device | str = "cpu",
 ) -> torch.Tensor:
     """Decompress a Top-k + FP8 payload back into a dense tensor of original_shape."""
+    if not isinstance(payload, CompressedTensorPayload):
+        raise ValueError("payload must be a CompressedTensorPayload")
     if payload.original_numel < 1:
         raise ValueError(f"original_numel must be >= 1, got {payload.original_numel!r}")
     if not math.isfinite(payload.scale) or payload.scale <= 0.0:
@@ -222,8 +330,10 @@ def _prepare_chunked_dct_matrix(
     chunk_size: int,
 ) -> tuple[torch.Tensor, tuple[int, int]]:
     """Reshape an N-D delta to 2D and zero-pad it to whole DCT chunks."""
-    if tensor.numel() == 0:
+    if not isinstance(tensor, torch.Tensor) or tensor.dtype == torch.bool or tensor.numel() == 0:
         raise ValueError("cannot DCT-compress an empty tensor")
+    if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size < 2:
+        raise ValueError("chunk_size must be >= 2")
     matrix = tensor if tensor.ndim == 2 else tensor.reshape(1, -1)
     rows, cols = int(matrix.shape[0]), int(matrix.shape[1])
     pad_rows = (-rows) % chunk_size
@@ -257,6 +367,8 @@ def _chunked_dct_inverse(
 
 def _index_width(numel: int) -> int:
     """Smallest unsigned wire width that can address every coefficient of `numel`."""
+    if isinstance(numel, bool) or not isinstance(numel, int) or numel < 0:
+        raise ValueError("numel must be a non-negative integer")
     if numel <= 0x100:
         return 1
     if numel <= 0x10000:
@@ -266,6 +378,15 @@ def _index_width(numel: int) -> int:
 
 def _pack_2bit_codes(codes: torch.Tensor) -> torch.Tensor:
     """Pack four 2-bit codes into each `uint8` byte (least-significant code first)."""
+    if not isinstance(codes, torch.Tensor) or codes.dtype == torch.bool:
+        raise ValueError("codes must be a numeric torch.Tensor")
+    if codes.numel() > 0:
+        if not bool(torch.isfinite(codes).all().item()):
+            raise ValueError("codes must be finite")
+        min_code = int(codes.min().item())
+        max_code = int(codes.max().item())
+        if min_code < 0 or max_code > 3:
+            raise ValueError(f"2-bit codes must be in [0, 3], got [{min_code}, {max_code}]")
     packed_input = codes.detach().to(torch.uint8).reshape(-1)
     padding = (-packed_input.numel()) % 4
     if padding:
@@ -279,6 +400,12 @@ def _pack_2bit_codes(codes: torch.Tensor) -> torch.Tensor:
 
 def _unpack_2bit_codes(packed: torch.Tensor, count: int) -> torch.Tensor:
     """Unpack `count` 2-bit codes from four-codes-per-byte `uint8` payloads."""
+    if not isinstance(packed, torch.Tensor):
+        raise ValueError("packed must be a torch.Tensor")
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        raise ValueError("count must be a non-negative integer")
+    if count > packed.numel() * 4:
+        raise ValueError("count exceeds capacity of packed 2-bit tensor")
     shifts = torch.tensor([0, 2, 4, 6], dtype=torch.int16)
     codes = (packed.detach().to(torch.int16).reshape(-1, 1) >> shifts) & 0x03
     return codes.reshape(-1)[:count].to(torch.long)
@@ -290,6 +417,13 @@ def _quantize_2bit_centroids(
     range_in_sigmas: float,
 ) -> tuple[torch.Tensor, torch.Tensor, float, float]:
     """Quantize values with a `4`-bin empirical statistical-centroid LUT (2 bits/value)."""
+    if (
+        not isinstance(values, torch.Tensor)
+        or values.dtype == torch.bool
+        or values.numel() == 0
+        or not bool(torch.isfinite(values).all().item())
+    ):
+        raise ValueError("values must be a non-empty finite numeric torch.Tensor")
     if isinstance(n_bins, bool) or n_bins != 4:
         raise ValueError(f"2-bit compression requires exactly 4 bins, got {n_bins!r}")
     if isinstance(range_in_sigmas, bool) or not isinstance(range_in_sigmas, (int, float)) or not math.isfinite(float(range_in_sigmas)) or range_in_sigmas <= 0.0:
@@ -331,6 +465,8 @@ def compress_tensor_dct_sparse_2bit(
     range_in_sigmas: float = 4.0,
 ) -> DCTSparse2BitTensorPayload:
     """Compress one LoRA delta tensor via chunked orthonormal DCT + 2-bit centroid sparsity."""
+    if not isinstance(tensor, torch.Tensor) or tensor.dtype == torch.bool:
+        raise ValueError("tensor must be a numeric torch.Tensor")
     if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not math.isfinite(float(topk_ratio)) or not (0.0 < float(topk_ratio) <= 1.0):
         raise ValueError(f"topk_ratio must be in (0, 1], got {topk_ratio!r}")
     if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size < 2:
@@ -437,9 +573,11 @@ def compress_lora_delta(
     is required to clear the `16x` BF16 wire-reduction target once sparse indices and
     the per-tensor LUT are counted honestly.
     """
-    if not isinstance(worker_id, str) or not worker_id.strip():
+    if not isinstance(delta_dict, dict) or not delta_dict:
+        raise ValueError("delta_dict must be a non-empty dict")
+    if not isinstance(worker_id, str) or not worker_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in worker_id):
         raise ValueError("worker_id must be a non-empty string")
-    if not isinstance(branch_name, str) or not branch_name.strip():
+    if not isinstance(branch_name, str) or not branch_name.strip() or any(ord(c) < 32 or ord(c) == 127 for c in branch_name):
         raise ValueError("branch_name must be a non-empty string")
     if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
         raise ValueError(f"outer_step must be an integer >= 0, got {outer_step!r}")
@@ -501,9 +639,11 @@ def compress_lora_delta_dct_sparse_2bit(
     n_bins: int = 4,
 ) -> CompressedDeltaPackage:
     """Compress LoRA pseudo-gradients via chunked orthonormal DCT + 2-bit centroid sparsity."""
-    if not isinstance(worker_id, str) or not worker_id.strip():
+    if not isinstance(delta_dict, dict) or not delta_dict:
+        raise ValueError("delta_dict must be a non-empty dict")
+    if not isinstance(worker_id, str) or not worker_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in worker_id):
         raise ValueError("worker_id must be a non-empty string")
-    if not isinstance(branch_name, str) or not branch_name.strip():
+    if not isinstance(branch_name, str) or not branch_name.strip() or any(ord(c) < 32 or ord(c) == 127 for c in branch_name):
         raise ValueError("branch_name must be a non-empty string")
     if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
         raise ValueError(f"outer_step must be an integer >= 0, got {outer_step!r}")
@@ -547,6 +687,8 @@ def decompress_lora_delta(
     device: torch.device | str = "cpu",
 ) -> dict[str, torch.Tensor]:
     """Reconstruct dense LoRA pseudo-gradient dictionary from a CompressedDeltaPackage."""
+    if not isinstance(package, CompressedDeltaPackage):
+        raise ValueError("package must be a CompressedDeltaPackage")
     if package.compression_mode == "topk_fp8":
         return {
             name: decompress_tensor_topk_fp8(payload, dtype=dtype, device=device)
@@ -566,6 +708,8 @@ def decompress_lora_delta_dct_sparse_2bit(
     device: torch.device | str = "cpu",
 ) -> dict[str, torch.Tensor]:
     """Reconstruct a chunked-DCT + 2-bit compressed LoRA pseudo-gradient package."""
+    if not isinstance(package, CompressedDeltaPackage):
+        raise ValueError("package must be a CompressedDeltaPackage")
     if package.compression_mode != "dct_sparse_2bit":
         raise ValueError(
             "decompress_lora_delta_dct_sparse_2bit requires "

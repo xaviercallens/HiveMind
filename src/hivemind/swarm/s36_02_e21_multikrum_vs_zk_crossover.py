@@ -9,6 +9,7 @@ across swarm sizes ``N in {100, 250, 500, 1000, 2500, 5000, 10000}``.
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import asdict, dataclass
 from typing import Sequence
@@ -31,6 +32,29 @@ class E21CrossoverRow:
     energy_reduction_pct: float
     zk_dominates: bool
 
+    def __post_init__(self) -> None:
+        if isinstance(self.swarm_nodes_n, bool) or not isinstance(self.swarm_nodes_n, int) or self.swarm_nodes_n < 2:
+            raise ValueError("swarm_nodes_n must be an integer >= 2")
+        for f_field in (
+            "multikrum_pairwise_ms",
+            "gpu_replay_10pct_ms",
+            "legacy_total_ms",
+            "zk_opoi_v5_total_ms",
+            "speedup_ratio",
+        ):
+            val = getattr(self, f_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{f_field} must be a finite non-negative number")
+        if (
+            isinstance(self.energy_reduction_pct, bool)
+            or not isinstance(self.energy_reduction_pct, (int, float))
+            or not math.isfinite(float(self.energy_reduction_pct))
+            or not (0.0 <= float(self.energy_reduction_pct) <= 100.0)
+        ):
+            raise ValueError("energy_reduction_pct must be a finite number in [0.0, 100.0]")
+        if not isinstance(self.zk_dominates, bool):
+            raise ValueError("zk_dominates must be a boolean")
+
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
@@ -49,6 +73,31 @@ class E21CrossoverBenchmarkReport:
     rows: tuple[E21CrossoverRow, ...]
     gate_passed: bool
 
+    def __post_init__(self) -> None:
+        for s_field in ("experiment_id", "estimation_mode"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        for p_field in ("measured_flop_ms_coeff", "measured_single_zk_verify_ms"):
+            val = getattr(self, p_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{p_field} must be a positive finite number")
+        if isinstance(self.measured_proof_bytes, bool) or not isinstance(self.measured_proof_bytes, int) or self.measured_proof_bytes < 1:
+            raise ValueError("measured_proof_bytes must be an integer >= 1")
+        if isinstance(self.crossover_node_count_n, bool) or not isinstance(self.crossover_node_count_n, int) or self.crossover_node_count_n < 2:
+            raise ValueError("crossover_node_count_n must be an integer >= 2")
+        if (
+            isinstance(self.energy_reduction_at_10k_pct, bool)
+            or not isinstance(self.energy_reduction_at_10k_pct, (int, float))
+            or not math.isfinite(float(self.energy_reduction_at_10k_pct))
+            or not (0.0 <= float(self.energy_reduction_at_10k_pct) <= 100.0)
+        ):
+            raise ValueError("energy_reduction_at_10k_pct must be a finite number in [0.0, 100.0]")
+        if not isinstance(self.rows, tuple) or len(self.rows) == 0 or not all(isinstance(r, E21CrossoverRow) for r in self.rows):
+            raise ValueError("rows must be a non-empty tuple of E21CrossoverRow instances")
+        if not isinstance(self.gate_passed, bool):
+            raise ValueError("gate_passed must be a boolean")
+
     def to_dict(self) -> dict[str, object]:
         return {
             "experiment_id": self.experiment_id,
@@ -65,6 +114,10 @@ class E21CrossoverBenchmarkReport:
 
 def _measure_pairwise_l2_flop_ms_coeff(k_calib: int = 8, d_calib: int = 256) -> float:
     """Measure pairwise squared-L2 distance cost per coordinate on the current CPU (IP-116 / IP-137)."""
+    if isinstance(k_calib, bool) or not isinstance(k_calib, int) or k_calib < 2:
+        raise ValueError("k_calib must be an integer >= 2")
+    if isinstance(d_calib, bool) or not isinstance(d_calib, int) or d_calib < 1:
+        raise ValueError("d_calib must be a positive integer")
     vecs = [[0.01 * ((i + j) % 11 - 5) for j in range(d_calib)] for i in range(k_calib)]
     t0 = time.perf_counter()
     acc = 0.0
@@ -93,6 +146,46 @@ def run_e21_multikrum_vs_zk_crossover(
     forged_proof_control: bool = False,
 ) -> E21CrossoverBenchmarkReport:
     """Execute the E21 validation cost crossover benchmark (model-based estimate calibrated by measured CPU timings)."""
+    if (
+        isinstance(swarm_sizes, (str, bytes))
+        or not isinstance(swarm_sizes, Sequence)
+        or not swarm_sizes
+        or any(isinstance(n, bool) or not isinstance(n, int) or n < 2 for n in swarm_sizes)
+    ):
+        raise ValueError("swarm_sizes must be a non-empty sequence of integers >= 2")
+    if isinstance(lora_dim_d, bool) or not isinstance(lora_dim_d, int) or lora_dim_d < 1:
+        raise ValueError("lora_dim_d must be a positive integer")
+    if (
+        isinstance(gpu_step_replay_ms_per_wu, bool)
+        or not isinstance(gpu_step_replay_ms_per_wu, (int, float))
+        or not math.isfinite(float(gpu_step_replay_ms_per_wu))
+        or float(gpu_step_replay_ms_per_wu) <= 0.0
+    ):
+        raise ValueError("gpu_step_replay_ms_per_wu must be a finite positive number")
+    if (
+        isinstance(spot_check_ratio, bool)
+        or not isinstance(spot_check_ratio, (int, float))
+        or not (0.0 < float(spot_check_ratio) <= 1.0)
+    ):
+        raise ValueError("spot_check_ratio must be a finite number in (0, 1]")
+    if single_zk_verify_ms_override is not None:
+        if (
+            isinstance(single_zk_verify_ms_override, bool)
+            or not isinstance(single_zk_verify_ms_override, (int, float))
+            or not math.isfinite(float(single_zk_verify_ms_override))
+            or float(single_zk_verify_ms_override) <= 0.0
+        ):
+            raise ValueError("single_zk_verify_ms_override must be a finite positive number")
+    if flop_ms_coeff_override is not None:
+        if (
+            isinstance(flop_ms_coeff_override, bool)
+            or not isinstance(flop_ms_coeff_override, (int, float))
+            or not math.isfinite(float(flop_ms_coeff_override))
+            or float(flop_ms_coeff_override) <= 0.0
+        ):
+            raise ValueError("flop_ms_coeff_override must be a finite positive number")
+    if not isinstance(forged_proof_control, bool):
+        raise ValueError("forged_proof_control must be a boolean")
     verifier = ZKOPoIV5Int8TransitionVerifier()
     theta0 = [0.02 * ((i % 13) - 6) for i in range(256)]
     delta = [0.005 * ((i % 7) - 3) for i in range(256)]

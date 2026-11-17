@@ -255,6 +255,24 @@ class ProducerNodeCapability:
     is_european_night: bool
     active_inference_requests: int = 0
 
+    def __post_init__(self) -> None:
+        for field_name, val in (("node_id", self.node_id), ("gpu_model", self.gpu_model)):
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 for c in val):
+                raise ValueError(f"{field_name} must be a non-empty printable string")
+        if isinstance(self.vram_mib, bool) or not isinstance(self.vram_mib, int) or self.vram_mib < 0:
+            raise ValueError("vram_mib must be a non-negative integer")
+        for field_name, val in (("fp16_tflops", self.fp16_tflops), ("idle_seconds", self.idle_seconds)):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative finite number")
+        if not isinstance(self.is_european_night, bool):
+            raise ValueError("is_european_night must be a boolean")
+        if (
+            isinstance(self.active_inference_requests, bool)
+            or not isinstance(self.active_inference_requests, int)
+            or self.active_inference_requests < 0
+        ):
+            raise ValueError("active_inference_requests must be a non-negative integer")
+
     @property
     def hardware_tier(self) -> str:
         if self.vram_mib >= QWEN35_HARDWARE_TIERS["xl_16gb_plus"]["min_vram_mib"]:
@@ -297,6 +315,37 @@ class ScheduledMoEWorkunit:
     verification_oracle: str
     prorated_reward_hmt: float
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("workunit_id", self.workunit_id),
+            ("node_id", self.node_id),
+            ("hardware_tier", self.hardware_tier),
+            ("training_mode", self.training_mode),
+            ("backbone_model", self.backbone_model),
+            ("bee_id", self.bee_id),
+            ("cluster", self.cluster),
+            ("hf_dataset", self.hf_dataset),
+            ("verification_oracle", self.verification_oracle),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (
+            ("lora_rank", self.lora_rank),
+            ("lora_alpha", self.lora_alpha),
+            ("seq_len", self.seq_len),
+            ("inner_steps", self.inner_steps),
+            ("estimated_vram_mib", self.estimated_vram_mib),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if (
+            isinstance(self.prorated_reward_hmt, bool)
+            or not isinstance(self.prorated_reward_hmt, (int, float))
+            or not math.isfinite(float(self.prorated_reward_hmt))
+            or float(self.prorated_reward_hmt) <= 0.0
+        ):
+            raise ValueError("prorated_reward_hmt must be a positive finite number")
+
 
 class UsageDrivenQwen35MoEOrchestrator:
     """Computes usage-proportional MoE training allocations and schedules idle/nocturnal producers."""
@@ -306,12 +355,30 @@ class UsageDrivenQwen35MoEOrchestrator:
         observed_completions_by_cluster: Mapping[str, int] | None = None,
         energy_failure_rate_by_bee: Mapping[str, float] | None = None,
     ) -> None:
+        if observed_completions_by_cluster is not None and not isinstance(observed_completions_by_cluster, Mapping):
+            raise ValueError("observed_completions_by_cluster must be a mapping when provided")
+        if energy_failure_rate_by_bee is not None and not isinstance(energy_failure_rate_by_bee, Mapping):
+            raise ValueError("energy_failure_rate_by_bee must be a mapping when provided")
         # Default to live v3.9.0 OpenRouter telemetry (873 coding, 551 science, 3 multilingual/general)
-        self.observed_completions = dict(
+        raw_obs = dict(
             observed_completions_by_cluster
-            or {"coding": 873, "science": 551, "multilingual_byob": 3}
+            if observed_completions_by_cluster is not None
+            else {"coding": 873, "science": 551, "multilingual_byob": 3}
         )
-        self.energy_failure_rate_by_bee = dict(energy_failure_rate_by_bee or {})
+        for k, v in raw_obs.items():
+            if not isinstance(k, str) or not k.strip():
+                raise ValueError("observed_completions_by_cluster keys must be non-empty strings")
+            if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+                raise ValueError(f"observed_completions_by_cluster[{k!r}] must be a non-negative integer")
+        self.observed_completions = raw_obs
+
+        raw_fail = dict(energy_failure_rate_by_bee or {})
+        for k, v in raw_fail.items():
+            if not isinstance(k, str) or not k.strip():
+                raise ValueError("energy_failure_rate_by_bee keys must be non-empty strings")
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or v < 0.0 or v > 1.0:
+                raise ValueError(f"energy_failure_rate_by_bee[{k!r}] must be a finite number in [0.0, 1.0]")
+        self.energy_failure_rate_by_bee = raw_fail
 
     def compute_cluster_target_shares(self) -> dict[str, float]:
         """Blend live OpenRouter usage (70% weight) with a 10% strategic multilingual/BYOB floor."""
@@ -357,6 +424,13 @@ class UsageDrivenQwen35MoEOrchestrator:
         round_index: int = 1,
     ) -> list[ScheduledMoEWorkunit]:
         """Assign usage-prioritized Qwen 3.5 QLoRA workunits to eligible idle and nocturnal producers."""
+        if isinstance(round_index, bool) or not isinstance(round_index, int) or round_index < 1:
+            raise ValueError("round_index must be an integer >= 1")
+        if not isinstance(producers, Sequence) or isinstance(producers, (str, bytes)):
+            raise ValueError("producers must be a sequence of ProducerNodeCapability")
+        for node in producers:
+            if not isinstance(node, ProducerNodeCapability):
+                raise ValueError("producers must contain ProducerNodeCapability instances")
         scores = self.compute_bee_priority_scores()
         tier_rank = {"std_8gb": 1, "big_12gb": 2, "xl_16gb_plus": 3}
         ordered_bees = sorted(
@@ -429,12 +503,24 @@ def project_lora_rank_svd(
     Computes the best rank-`target_rank` Frobenius approximation of `delta_W = lora_b @ lora_a`
     via truncated SVD and returns `(student_a, student_b, retained_energy_ratio)`.
     """
-    if lora_a.ndim != 2 or lora_b.ndim != 2:
+    if not isinstance(lora_a, torch.Tensor) or not isinstance(lora_b, torch.Tensor):
         raise ValueError("lora_a and lora_b must be 2D matrices")
+    if (
+        lora_a.dtype == torch.bool
+        or lora_b.dtype == torch.bool
+        or lora_a.ndim != 2
+        or lora_b.ndim != 2
+        or lora_a.numel() == 0
+        or lora_b.numel() == 0
+    ):
+        raise ValueError("lora_a and lora_b must be non-empty non-boolean 2D matrices")
     if lora_b.shape[1] != lora_a.shape[0]:
         raise ValueError(f"Inner rank mismatch: lora_b {lora_b.shape} vs lora_a {lora_a.shape}")
-    if target_rank <= 0 or target_rank > lora_a.shape[0]:
-        raise ValueError(f"target_rank {target_rank} must be in [1, {lora_a.shape[0]}]")
+    max_rank = min(lora_a.shape[0], lora_b.shape[0], lora_a.shape[1])
+    if isinstance(target_rank, bool) or not isinstance(target_rank, int) or target_rank <= 0 or target_rank > max_rank:
+        raise ValueError(f"target_rank {target_rank} must be in [1, {max_rank}]")
+    if not torch.isfinite(lora_a).all() or not torch.isfinite(lora_b).all():
+        raise ValueError("lora_a and lora_b must contain finite values")
 
     delta_w = (lora_b.to(torch.float32)) @ (lora_a.to(torch.float32))
     u, s, vh = torch.linalg.svd(delta_w, full_matrices=False)

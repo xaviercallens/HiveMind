@@ -11,6 +11,7 @@ Implements lossless speculative decoding (Leviathan et al. / Chen et al.) for th
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
 
@@ -25,6 +26,33 @@ class DraftTokenCandidate:
     target_prob: float
     uniform_draw: float = 0.5
 
+    def __post_init__(self) -> None:
+        if isinstance(self.token_id, bool) or not isinstance(self.token_id, int) or self.token_id < 0:
+            raise ValueError("token_id must be a non-negative integer")
+        if not isinstance(self.token_text, str):
+            raise ValueError("token_text must be a string")
+        if (
+            isinstance(self.draft_prob, bool)
+            or not isinstance(self.draft_prob, (int, float))
+            or not math.isfinite(self.draft_prob)
+            or not (0.0 < float(self.draft_prob) <= 1.0)
+        ):
+            raise ValueError("draft_prob must be a finite number in (0.0, 1.0]")
+        if (
+            isinstance(self.target_prob, bool)
+            or not isinstance(self.target_prob, (int, float))
+            or not math.isfinite(self.target_prob)
+            or not (0.0 <= float(self.target_prob) <= 1.0)
+        ):
+            raise ValueError("target_prob must be a finite number in [0.0, 1.0]")
+        if (
+            isinstance(self.uniform_draw, bool)
+            or not isinstance(self.uniform_draw, (int, float))
+            or not math.isfinite(self.uniform_draw)
+            or not (0.0 <= float(self.uniform_draw) <= 1.0)
+        ):
+            raise ValueError("uniform_draw must be a finite number in [0.0, 1.0]")
+
 
 @dataclass(frozen=True)
 class SpeculativeDecodingStepResult:
@@ -38,6 +66,41 @@ class SpeculativeDecodingStepResult:
     effective_speedup_factor: float
     speedup_measurement_kind: str = "model"
 
+    def __post_init__(self) -> None:
+        if isinstance(self.draft_k, bool) or not isinstance(self.draft_k, int) or self.draft_k < 1:
+            raise ValueError("draft_k must be a positive integer")
+        if (
+            isinstance(self.accepted_count, bool)
+            or not isinstance(self.accepted_count, int)
+            or self.accepted_count < 0
+            or self.accepted_count > self.draft_k
+        ):
+            raise ValueError("accepted_count must be an integer in [0, draft_k]")
+        if isinstance(self.bonus_token_id, bool) or not isinstance(self.bonus_token_id, int) or self.bonus_token_id < 0:
+            raise ValueError("bonus_token_id must be a non-negative integer")
+        if (
+            not isinstance(self.emitted_tokens, tuple)
+            or len(self.emitted_tokens) == 0
+            or any(isinstance(t, bool) or not isinstance(t, int) or t < 0 for t in self.emitted_tokens)
+        ):
+            raise ValueError("emitted_tokens must be a non-empty tuple of non-negative integers")
+        if (
+            isinstance(self.acceptance_rate, bool)
+            or not isinstance(self.acceptance_rate, (int, float))
+            or not math.isfinite(float(self.acceptance_rate))
+            or not (0.0 <= float(self.acceptance_rate) <= 1.0)
+        ):
+            raise ValueError("acceptance_rate must be a finite number in [0.0, 1.0]")
+        if (
+            isinstance(self.effective_speedup_factor, bool)
+            or not isinstance(self.effective_speedup_factor, (int, float))
+            or not math.isfinite(float(self.effective_speedup_factor))
+            or float(self.effective_speedup_factor) <= 0.0
+        ):
+            raise ValueError("effective_speedup_factor must be a finite positive number")
+        if not isinstance(self.speedup_measurement_kind, str) or not self.speedup_measurement_kind.strip():
+            raise ValueError("speedup_measurement_kind must be a non-empty string")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -48,8 +111,23 @@ def sample_residual_token_distribution(
     uniform_draw: float = 0.5,
 ) -> int:
     """Sample a token from the normalized residual distribution max(0, p(x) - q(x)) on rejection (IP-21)."""
-    if not target_probs:
-        raise ValueError("target_probs must be non-empty")
+    if not isinstance(target_probs, dict) or not target_probs:
+        raise ValueError("target_probs must be a non-empty dictionary")
+    if not isinstance(draft_probs, dict):
+        raise ValueError("draft_probs must be a dictionary")
+    for d_name, d_map in (("target_probs", target_probs), ("draft_probs", draft_probs)):
+        for k, v in d_map.items():
+            if isinstance(k, bool) or not isinstance(k, int) or k < 0:
+                raise ValueError(f"{d_name} keys must be non-negative integers")
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or float(v) < 0.0:
+                raise ValueError(f"{d_name} values must be finite non-negative numbers")
+    if (
+        isinstance(uniform_draw, bool)
+        or not isinstance(uniform_draw, (int, float))
+        or not math.isfinite(uniform_draw)
+        or not (0.0 <= float(uniform_draw) <= 1.0)
+    ):
+        raise ValueError("uniform_draw must be a finite number in [0.0, 1.0]")
     residuals: list[tuple[int, float]] = []
     total_mass = 0.0
     for tok_id in sorted(target_probs):
@@ -84,15 +162,29 @@ class SpeculativeSwarmDecoder:
         target_parallel_verify_ms: float = 14.0,
         target_single_token_ms: float = 12.5,
     ) -> None:
-        if draft_step_ms <= 0.0 or target_parallel_verify_ms <= 0.0 or target_single_token_ms <= 0.0:
-            raise ValueError("all latency parameters must be positive")
+        for name, val in (
+            ("draft_step_ms", draft_step_ms),
+            ("target_parallel_verify_ms", target_parallel_verify_ms),
+            ("target_single_token_ms", target_single_token_ms),
+        ):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(val) or val <= 0.0:
+                raise ValueError(f"all latency parameters must be positive finite numbers (invalid {name})")
         self.draft_step_ms = float(draft_step_ms)
         self.target_parallel_verify_ms = float(target_parallel_verify_ms)
         self.target_single_token_ms = float(target_single_token_ms)
 
     @staticmethod
     def acceptance_probability(draft_prob: float, target_prob: float) -> float:
-        if draft_prob <= 0.0 or target_prob < 0.0:
+        if (
+            isinstance(draft_prob, bool)
+            or not isinstance(draft_prob, (int, float))
+            or not math.isfinite(draft_prob)
+            or draft_prob <= 0.0
+            or isinstance(target_prob, bool)
+            or not isinstance(target_prob, (int, float))
+            or not math.isfinite(target_prob)
+            or target_prob < 0.0
+        ):
             raise ValueError("draft_prob must be > 0 and target_prob >= 0")
         return min(1.0, float(target_prob) / float(draft_prob))
 
@@ -106,8 +198,16 @@ class SpeculativeSwarmDecoder:
         residual_uniform_draw: float | None = None,
     ) -> SpeculativeDecodingStepResult:
         """Verify K draft tokens in parallel and emit accepted prefix plus 1 residual-sampled/bonus token."""
-        if not candidates:
+        if not isinstance(candidates, (list, tuple)) or not candidates:
             raise ValueError("candidates must be non-empty")
+        if any(not isinstance(c, DraftTokenCandidate) for c in candidates):
+            raise ValueError("all candidates must be DraftTokenCandidate instances")
+        if fallback_or_bonus_token_id is not None and (
+            isinstance(fallback_or_bonus_token_id, bool)
+            or not isinstance(fallback_or_bonus_token_id, int)
+            or fallback_or_bonus_token_id < 0
+        ):
+            raise ValueError("fallback_or_bonus_token_id must be None or a non-negative integer")
 
         accepted: list[int] = []
         rejected_cand: DraftTokenCandidate | None = None

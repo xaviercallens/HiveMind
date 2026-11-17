@@ -69,7 +69,11 @@ def _count_lean4_spec_theorems() -> int:
 
 def _hash_password(password: str, salt: Optional[bytes] = None) -> Tuple[str, str]:
     """Derive a 256-bit PBKDF2-HMAC-SHA256 password hash with 200,000 iterations."""
-    salt_bytes = salt if salt is not None else secrets.token_bytes(16)
+    if not isinstance(password, str) or not password:
+        raise ValueError("password must be a non-empty string")
+    if salt is not None and (not isinstance(salt, (bytes, bytearray)) or len(salt) < 8):
+        raise ValueError("salt must be bytes of length >= 8 or None")
+    salt_bytes = bytes(salt) if salt is not None else secrets.token_bytes(16)
     derived = hashlib.pbkdf2_hmac(
         "sha256",
         password.encode("utf-8"),
@@ -210,6 +214,10 @@ def scan_and_sanitize_waf_payload(raw_text: str) -> Dict[str, Any]:
 
 def _flag(report: Dict[str, Any], *keys: str) -> Optional[bool]:
     """Pass flag from a campaign report: None (NOT_MEASURED) unless every named key is present."""
+    if not isinstance(report, dict):
+        raise ValueError("report must be a dict")
+    if not keys or any(not isinstance(k, str) or not k.strip() for k in keys):
+        raise ValueError("keys must be non-empty strings")
     if any(k not in report for k in keys):
         return None
     return all(bool(report[k]) for k in keys)
@@ -244,6 +252,8 @@ def sanitize_handle(handle: str) -> str:
 
 def sanitize_prompt_text(text: str, max_chars: int = 4096) -> str:
     """Sanitize prompt text, truncate excessive length, and neutralize active script injection vectors."""
+    if isinstance(max_chars, bool) or not isinstance(max_chars, int) or max_chars <= 0:
+        raise ValueError("max_chars must be a positive integer")
     if not isinstance(text, str):
         return ""
     clean = text.replace("\x00", "").strip()
@@ -256,6 +266,8 @@ def sanitize_prompt_text(text: str, max_chars: int = 4096) -> str:
 
 def portal_csp(allow_sameorigin_frame: bool = False) -> str:
     """Content-Security-Policy of the portal pages (they need inline scripts and the Tailwind CDN)."""
+    if not isinstance(allow_sameorigin_frame, bool):
+        raise ValueError("allow_sameorigin_frame must be a bool")
     return (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' blob: https://cdn.tailwindcss.com; "
@@ -318,6 +330,28 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "ACTIVE-INTENSE-MVP-RELEASE" if getattr(globals().get("_maintenance_mgr"), "active", True) else "OPERATIONAL"
         )
         return response
+
+
+def _shards_from_cas(vault_path: Path) -> List[Dict[str, Any]]:
+    """Describe mined shards from ``mined_shards_cas/dataset_shards/<domain>_shard_<n>_<hash>.json`` files."""
+    cas_dir = Path(vault_path) / "mined_shards_cas" / "dataset_shards"
+    if not cas_dir.is_dir():
+        return []
+    shards: List[Dict[str, Any]] = []
+    for path in sorted(cas_dir.glob("*_shard_*.json")):
+        domain = path.name.split("_shard_", 1)[0]
+        if domain:
+            shards.append({"domain_name": domain, "source_file": path.name})
+    return shards
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read a positive integer setting from the environment, falling back to ``default`` on bad input."""
+    try:
+        value = int(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+    return value if value > 0 else default
 
 
 class RateLimiterMiddleware(BaseHTTPMiddleware):
@@ -659,6 +693,11 @@ class AuthLoginRequest(BaseModel):
     handle_or_email: str
     password: Optional[str] = None
     strict_existing: bool = False
+
+
+class AuthChangePasswordRequest(BaseModel):
+    new_password: Optional[str] = None
+    password: Optional[str] = None
 
 
 class AuthSSORequest(BaseModel):
@@ -4083,6 +4122,17 @@ def build_hivemind_at_home_state(
     gcp_accelerator_type: str = "v5litepod-1",
 ) -> Dict[str, Any]:
     """Assemble the unified HiveMind@home + GCP Cloud + La Ruche telemetry state."""
+    if not isinstance(gpu_campaigns_report_path, (Path, str)) or not str(gpu_campaigns_report_path).strip():
+        raise ValueError("gpu_campaigns_report_path must be a non-empty path")
+    if not isinstance(mining_ruche_report_path, (Path, str)) or not str(mining_ruche_report_path).strip():
+        raise ValueError("mining_ruche_report_path must be a non-empty path")
+    for fname, fval in (
+        ("gcp_tpu_node_id", gcp_tpu_node_id),
+        ("gcp_zone", gcp_zone),
+        ("gcp_accelerator_type", gcp_accelerator_type),
+    ):
+        if not isinstance(fval, str) or not fval.strip():
+            raise ValueError(f"{fname} must be a non-empty string")
     gpu_report_p = Path(gpu_campaigns_report_path)
     mining_report_p = Path(mining_ruche_report_path)
 
@@ -4547,15 +4597,23 @@ def build_hivemind_at_home_state(
 
 
 def _rms_norm_np(x: np.ndarray, weight: np.ndarray, eps: float = 1e-6) -> np.ndarray:
+    if not isinstance(x, np.ndarray) or not isinstance(weight, np.ndarray) or x.size == 0 or weight.size == 0:
+        raise ValueError("x and weight must be non-empty numpy arrays")
+    if isinstance(eps, bool) or not isinstance(eps, (int, float)) or not math.isfinite(float(eps)) or float(eps) <= 0.0:
+        raise ValueError("eps must be a finite positive number")
     rms = np.sqrt(np.mean(np.square(x), axis=-1, keepdims=True) + eps)
     return (x / rms) * weight
 
 
 def _silu_np(x: np.ndarray) -> np.ndarray:
+    if isinstance(x, (bool, str, bytes)) or not isinstance(x, (np.ndarray, np.number, int, float)):
+        raise ValueError("x must be a numeric array or scalar")
     return x / (1.0 + np.exp(-np.clip(x, -20.0, 20.0)))
 
 
 def _sigmoid_np(x: np.ndarray) -> np.ndarray:
+    if isinstance(x, (bool, str, bytes)) or not isinstance(x, (np.ndarray, np.number, int, float)):
+        raise ValueError("x must be a numeric array or scalar")
     return 1.0 / (1.0 + np.exp(-np.clip(x, -20.0, 20.0)))
 
 
@@ -4566,6 +4624,14 @@ def run_la_ruche_moe_inference(
     max_new_tokens: int = 32,
 ) -> Dict[str, Any]:
     """Execute forward Sparse MoE inference using the real `.safetensors` weights in `La Ruche`."""
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string")
+    if not isinstance(vault_dir, (Path, str)) or not str(vault_dir).strip():
+        raise ValueError("vault_dir must be a non-empty path")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError("top_k must be a positive integer")
+    if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int) or max_new_tokens < 1:
+        raise ValueError("max_new_tokens must be a positive integer")
     t0 = time.perf_counter()
     vault_p = Path(vault_dir)
     manifest_p = vault_p / "community_moe_release" / "ruche_manifest.json"
@@ -4764,7 +4830,7 @@ def run_la_ruche_moe_inference(
 _DEFAULT_LEDGER_BALANCES: Dict[str, int] = {
     "xavier_callens": 68500,
     "xaviercallens": 68500,
-    "vxtzq": 30000,
+    "vxtzq": 100000,
     "clark719664": 24000,
     "radialmonster": 21000,
     "pedromineo": 18000,
@@ -4784,6 +4850,14 @@ def redeem_compute_points_for_task(
     auth_users: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Redeem non-monetary HiveMind Reflexion Points to run a specialized MoE Bee task."""
+    if not isinstance(req, ComputePointsRedeemRequest):
+        raise TypeError("req must be a ComputePointsRedeemRequest")
+    if not isinstance(vault_dir, (str, Path)) or not str(vault_dir).strip():
+        raise ValueError("vault_dir must be a non-empty path")
+    if ledger is not None and not isinstance(ledger, dict):
+        raise TypeError("ledger must be None or a dict")
+    if auth_users is not None and not isinstance(auth_users, dict):
+        raise TypeError("auth_users must be None or a dict")
     cost_map = {
         "python_coding_gwaya": 50,
         "astrophysics_exoplanet": 50,
@@ -4936,6 +5010,10 @@ def render_hivemind_at_home_html(
     api_base_url: str = "",
 ) -> str:
     """Render the 5-Screen Cyber-Bee & Hive interactive HTML5 portal for HiveMind@home & La Ruche."""
+    if not isinstance(state, dict):
+        raise ValueError("state must be a dict")
+    if not isinstance(api_base_url, str):
+        raise ValueError("api_base_url must be a string")
     state_json = json.dumps(state)
     api_prefix = api_base_url.rstrip("/")
     if api_prefix.startswith("http://") and not any(
@@ -7619,6 +7697,16 @@ def export_hivemind_at_home_artifacts(
     api_base_url: str = "",
 ) -> Dict[str, Any]:
     """Generate and write both the JSON state and self-contained HTML5 dashboard artifact."""
+    for field_name, path_val in (
+        ("output_html_path", output_html_path),
+        ("output_state_json_path", output_state_json_path),
+        ("gpu_campaigns_report_path", gpu_campaigns_report_path),
+        ("mining_ruche_report_path", mining_ruche_report_path),
+    ):
+        if not isinstance(path_val, (str, Path)) or not str(path_val).strip():
+            raise ValueError(f"{field_name} must be a non-empty path")
+    if not isinstance(api_base_url, str):
+        raise TypeError("api_base_url must be a string")
     state = build_hivemind_at_home_state(
         gpu_campaigns_report_path=gpu_campaigns_report_path,
         mining_ruche_report_path=mining_ruche_report_path,
@@ -7655,6 +7743,14 @@ def create_hivemind_at_home_app(
     night_moe_results_path: Path | str = DEFAULT_RESULTS_PATH,
 ) -> FastAPI:
     """Create the FastAPI web server for HiveMind@home, GCP Cloud Telemetry, La Ruche & Federated AI."""
+    for field_name, path_val in (
+        ("gpu_campaigns_report_path", gpu_campaigns_report_path),
+        ("mining_ruche_report_path", mining_ruche_report_path),
+        ("vault_dir", vault_dir),
+        ("night_moe_results_path", night_moe_results_path),
+    ):
+        if not isinstance(path_val, (str, Path)) or not str(path_val).strip():
+            raise ValueError(f"{field_name} must be a non-empty path")
     app = FastAPI(
         title="HiveMind@home & La Ruche Community MoE + Federated AI Gateway (proof of concept)",
         version="2.7.0",
@@ -7667,8 +7763,8 @@ def create_hivemind_at_home_app(
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
         RateLimiterMiddleware,
-        get_limit_per_min=600,
-        post_limit_per_min=300,
+        get_limit_per_min=_env_int("HIVEMIND_RATE_GET_PER_MIN", 3000),
+        post_limit_per_min=_env_int("HIVEMIND_RATE_POST_PER_MIN", 900),
         window_seconds=60.0,
     )
     app.add_middleware(
@@ -7804,6 +7900,12 @@ def create_hivemind_at_home_app(
         "vxtzq": {
             "handle": "@Vxtzq",
             "email": "vxtzq@github.com",
+            "secondary_emails": [
+                "116555319+vxtzq@users.noreply.github.com",
+                "vxtzq@crowdgpt.net",
+                "contact@crowdgpt.net",
+                "vxtzq@hivemind.network",
+            ],
             "github_url": "https://github.com/Vxtzq",
             "role": "MasterMinder (Lead WebUI Reviewer & Pre-Deploy Gatekeeper)",
             "badge": "🔍 PRE-DEPLOY REVIEWER",
@@ -7815,7 +7917,7 @@ def create_hivemind_at_home_app(
             "v2_access_granted": True,
             "target_profile": "developer",
             "hardware_profile": "rtx_4090",
-            "compute_points": 30000,
+            "compute_points": 100000,
             "token": "hm_live_vxtzq_771a904c55b",
             "node_id": "0x771A904C",
             "registered_at": time.time() - 86400 * 28,
@@ -7831,6 +7933,42 @@ def create_hivemind_at_home_app(
                 "deploy:approve_gcp",
                 "campaign:create",
                 "moe:train",
+            ],
+        },
+        "jblam62122": {
+            "handle": "@jblam-O",
+            "email": "43570951+jblam-o@users.noreply.github.com",
+            "secondary_emails": [
+                "jblam-o@github.com",
+                "jblam62122@hivemind.network",
+            ],
+            "github_url": "https://github.com/jblam-O",
+            "role": "MasterMinder (Lead WebUI Engineer & Merge Gatekeeper)",
+            "badge": "⚡ WEBUI CO-MAINTAINER",
+            "admin_group": "MasterMinders",
+            "groups": ["MasterMinders"],
+            "is_admin": True,
+            "is_masterminder": True,
+            "is_mastercommander": False,
+            "v2_access_granted": True,
+            "target_profile": "developer",
+            "hardware_profile": "rtx_4090",
+            "compute_points": 30000,
+            "token": "hm_live_jblam_62122a435709",
+            "node_id": "0x62122A43",
+            "registered_at": time.time() - 86400 * 21,
+            "provider": "GITHUB_SSO",
+            "linked_providers": ["GITHUB_SSO"],
+            "login_count": 8,
+            "is_new_user": False,
+            "is_guest": False,
+            "user_state": "EXISTING_USER",
+            "permissions": [
+                "admin:all",
+                "webui:review_gate",
+                "webui:merge",
+                "deploy:approve_gcp",
+                "campaign:create",
             ],
         },
         "clark719664": {
@@ -8201,21 +8339,23 @@ def create_hivemind_at_home_app(
                     if hmac.compare_digest(cand_r_hash, router_pwd_hash):
                         auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
                         return
-            for _ident_cand in dict.fromkeys(
-                s
-                for s in (
-                    str(user.get("email") or ""),
-                    str(user.get("handle") or ""),
-                    *[str(e) for e in user.get("secondary_emails", [])],
-                )
-                if s
-            ):
+            # The gateway may vouch for the password only of THIS account: ask by its own handle, and accept only when the
+            # account the gateway answers for has that same handle. Asking by e-mail would let anyone who registered a
+            # gateway account under one of this user's (unverified) addresses set this account's password.
+            if norm_u_handle:
+                allowed_handles = {norm_u_handle}
+                for _sk, _sv in seeded_users.items():
+                    if _sv is user or str(_sv.get("handle") or "").lstrip("@").lower().replace("-", "_") == norm_u_handle:
+                        allowed_handles.add(_sk.lstrip("@").lower().replace("-", "_"))
                 upstream_ok = _sync_or_verify_openrouter_credentials(
                     "login",
-                    handle_or_email=_ident_cand,
+                    handle_or_email=norm_u_handle,
                     password=supplied_password,
                 )
-                if upstream_ok is not None:
+                upstream_handle = str((upstream_ok or {}).get("handle") or "").lstrip("@").lower().replace("-", "_")
+                if upstream_ok is not None and upstream_handle and any(
+                    hmac.compare_digest(upstream_handle, _ah) for _ah in allowed_handles
+                ):
                     s_hex, h_hex = _hash_password(supplied_password)
                     user["password_salt"] = s_hex
                     user["password_hash"] = h_hex
@@ -8232,25 +8372,6 @@ def create_hivemind_at_home_app(
                     _save_persisted_users()
                     auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
                     return
-            if (
-                not user.get("password_bound")
-                and norm_u_handle in {k.lower().replace("-", "_") for k in seeded_users}
-                and len(clean_pwd) >= 8
-            ):
-                s_hex, h_hex = _hash_password(clean_pwd)
-                user["password_salt"] = s_hex
-                user["password_hash"] = h_hex
-                user["has_password"] = True
-                user["password_bound"] = True
-                _save_persisted_users()
-                _sync_or_verify_openrouter_credentials(
-                    "register",
-                    handle_or_email=str(user.get("handle") or norm_u_handle),
-                    password=clean_pwd,
-                    email=str(user.get("email") or ""),
-                )
-                auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
-                return
             _record_failed_password_attempt(account_key, client)
             _check_password_rate_limit(account_key, client)
         raise HTTPException(
@@ -8696,7 +8817,7 @@ def create_hivemind_at_home_app(
             for k_u, u in auth_state["users"].items():
                 u_h = str(u.get("handle", "")).lstrip("@").lower().replace("-", "_")
                 emails = [u.get("email", "").lower()] + [e.lower() for e in u.get("secondary_emails", [])]
-                if clean_email.lower() in emails or norm_h in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_h in ("xaviercallens", "callensxavier", "xavier")):
+                if clean_email.lower() in emails or norm_h in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_h in ("xaviercallens", "callensxavier", "xavier")) or (k_u == "vxtzq" and norm_h in ("vxtzq", "vxtzq1")):
                     matched_existing = u
                     break
         if not matched_existing:
@@ -8803,7 +8924,7 @@ def create_hivemind_at_home_app(
             for k_u, u in auth_state["users"].items():
                 u_h = str(u.get("handle", "")).lstrip("@").lower().replace("-", "_")
                 emails = [u.get("email", "").lower()] + [e.lower() for e in u.get("secondary_emails", [])]
-                if key.lower() in emails or norm_k in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_k in ("xaviercallens", "callensxavier", "xavier")):
+                if key.lower() in emails or norm_k in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_k in ("xaviercallens", "callensxavier", "xavier")) or (k_u == "vxtzq" and norm_k in ("vxtzq", "vxtzq1")):
                     matched = u
                     break
         if not matched:
@@ -8952,6 +9073,35 @@ def create_hivemind_at_home_app(
             "handle": "ephemeral",
             "old_token_revoked": False,
             "token": new_token,
+        })
+
+    @app.post("/api/v1/auth/change-password", response_class=JSONResponse)
+    def api_auth_change_password(req: AuthChangePasswordRequest, request: Request) -> JSONResponse:
+        auth_header = request.headers.get("Authorization", "")
+        old_token = auth_header.replace("Bearer ", "").strip()
+        user = _lookup_user_by_token(old_token)
+        if not user or user.get("is_guest"):
+            raise HTTPException(status_code=401, detail="A valid authenticated token is required to change password")
+        new_pwd = (req.new_password or req.password or "").strip()
+        if len(new_pwd) < 8 or len(new_pwd) > 256:
+            raise HTTPException(status_code=422, detail="Password must be between 8 and 256 characters")
+        salt_hex, hash_hex = _hash_password(new_pwd)
+        user["password_salt"] = salt_hex
+        user["password_hash"] = hash_hex
+        user["password_kdf"] = f"PBKDF2-HMAC-SHA256-{PBKDF2_ITERATIONS}"
+        user["has_password"] = True
+        user["password_bound"] = True
+        auth_state["api_keys"].pop(old_token, None)
+        new_token = "hm_live_" + secrets.token_hex(16)
+        user["token"] = new_token
+        auth_state["api_keys"][new_token] = user
+        _save_persisted_users()
+        return JSONResponse(content={
+            "status": "PASSWORD_SET",
+            "handle": user["handle"],
+            "token": new_token,
+            "api_key": new_token,
+            "old_key_revoked": True,
         })
 
     @app.post("/api/v1/auth/magic-link", response_class=JSONResponse)
@@ -9716,7 +9866,10 @@ def create_hivemind_at_home_app(
         shards = state["dataset_mining_campaign"]["mined_shards"]
         cells = state["la_ruche_vault"]["cells"]
         if not shards:
-            raise HTTPException(status_code=503, detail="No mined dataset shards available")
+            # The mining report can be missing its shard list in a deployed image; fall back to the CAS shard files.
+            shards = _shards_from_cas(vault_path)
+        if not shards:
+            raise HTTPException(status_code=503, detail="No mined dataset shards available", headers={"Retry-After": "600"})
 
         federated_state["lease_counter"] += 1
         lease_idx = int(federated_state["lease_counter"])

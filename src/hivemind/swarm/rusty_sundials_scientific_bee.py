@@ -99,6 +99,35 @@ class PhysicalMathematicalDiagnosis:
     recommended_solver_scheme: str
     lean4_reference_theorem: str
 
+    def __post_init__(self) -> None:
+        for str_name in (
+            "domain",
+            "problem_subtype",
+            "equation_class",
+            "underlying_mathematics",
+            "underlying_physics",
+            "naive_failure_mechanism",
+            "recommended_rusty_sundials_crate",
+            "recommended_solver_scheme",
+            "lean4_reference_theorem",
+        ):
+            sval = getattr(self, str_name)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{str_name} must be a non-empty string")
+        if (
+            isinstance(self.stiffness_ratio_estimate, bool)
+            or not isinstance(self.stiffness_ratio_estimate, (int, float))
+            or not math.isfinite(float(self.stiffness_ratio_estimate))
+            or float(self.stiffness_ratio_estimate) < 0.0
+        ):
+            raise ValueError("stiffness_ratio_estimate must be a non-negative finite number")
+        if not isinstance(self.is_stiff, bool):
+            raise TypeError("is_stiff must be a bool")
+        if not isinstance(self.conserved_invariants, list) or any(
+            not isinstance(inv, str) or not inv.strip() for inv in self.conserved_invariants
+        ):
+            raise ValueError("conserved_invariants must be a list of non-empty strings")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -124,6 +153,34 @@ class NumericRescueResult:
     rust_reference_snippet: str
     energy_score_e: float
 
+    def __post_init__(self) -> None:
+        for str_name in (
+            "domain",
+            "naive_scheme_name",
+            "naive_failure_reason",
+            "rescued_scheme_name",
+            "rust_reference_snippet",
+        ):
+            sval = getattr(self, str_name)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{str_name} must be a non-empty string")
+        if not isinstance(self.diagnosis, PhysicalMathematicalDiagnosis):
+            raise TypeError("diagnosis must be a PhysicalMathematicalDiagnosis")
+        if isinstance(self.steps_executed, bool) or not isinstance(self.steps_executed, int) or self.steps_executed < 1:
+            raise ValueError("steps_executed must be an integer >= 1")
+        if isinstance(self.dt, bool) or not isinstance(self.dt, (int, float)) or not math.isfinite(float(self.dt)) or float(self.dt) <= 0.0:
+            raise ValueError("dt must be a positive finite number")
+        if not isinstance(self.naive_failed, bool) or not isinstance(self.rescued_succeeded, bool):
+            raise TypeError("naive_failed and rescued_succeeded must be bools")
+        for f_name in ("naive_invariant_drift", "rescued_invariant_drift", "improvement_factor", "energy_score_e"):
+            fval = getattr(self, f_name)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or float(fval) < 0.0 or math.isnan(float(fval)):
+                raise ValueError(f"{f_name} must be a non-negative number")
+        if not isinstance(self.invariants_verified, dict):
+            raise TypeError("invariants_verified must be a dict")
+        if not isinstance(self.sample_trajectory, list):
+            raise TypeError("sample_trajectory must be a list")
+
     def to_dict(self) -> dict[str, Any]:
         out = asdict(self)
         out["diagnosis"] = self.diagnosis.to_dict()
@@ -139,6 +196,10 @@ def analyze_physical_mathematical_problem(
     domain_hint: str | None = None,
 ) -> PhysicalMathematicalDiagnosis:
     """Analyze the underlying physical conservation laws and mathematical stiffness/singularities."""
+    if not isinstance(prompt_or_equation, str) or not prompt_or_equation.strip():
+        raise ValueError("prompt_or_equation must be a non-empty string")
+    if domain_hint is not None and not isinstance(domain_hint, str):
+        raise ValueError("domain_hint must be a string or None")
     text = prompt_or_equation.lower()
     domain = (domain_hint or "").strip().lower()
 
@@ -309,6 +370,20 @@ def _extract_prompt_param(
     high: float,
 ) -> float:
     """Parse an optional numeric initial-condition override (`name=val` or `name: val`) from `prompt`."""
+    if not isinstance(prompt, str):
+        raise ValueError("prompt must be a string")
+    if (
+        not isinstance(names, Sequence)
+        or isinstance(names, (str, bytes))
+        or len(names) == 0
+        or any(not isinstance(n, str) or not n.strip() for n in names)
+    ):
+        raise ValueError("names must be a non-empty sequence of non-empty strings")
+    for pname, pval in (("default", default), ("low", low), ("high", high)):
+        if isinstance(pval, bool) or not isinstance(pval, (int, float)) or not math.isfinite(float(pval)):
+            raise ValueError(f"{pname} must be a finite number")
+    if float(low) > float(high):
+        raise ValueError("low must be <= high")
     for name in names:
         m = re.search(rf"\b{re.escape(name)}\s*[:=]\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)", prompt, re.IGNORECASE)
         if m:
@@ -323,6 +398,12 @@ def _extract_prompt_param(
 
 def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025, ecc: float = 0.6) -> NumericRescueResult:
     """Rescue an eccentric Kepler / Post-Newtonian orbit from explicit Euler energy blowup using RK4 + Dual-RRK."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(ecc, bool) or not isinstance(ecc, (int, float)) or not math.isfinite(float(ecc)):
+        raise ValueError("ecc must be a finite number")
     diag = analyze_physical_mathematical_problem("kepler post-newtonian hamiltonian orbit", domain_hint="astronomy")
     mu = 1.0
     ecc = max(0.01, min(0.95, float(ecc)))
@@ -427,6 +508,12 @@ def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025, ecc: float = 0
 
 def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01, nu: float = 0.05) -> NumericRescueResult:
     """Rescue the stiff dyadic Navier-Stokes shell model from explicit float blowup using IMEX ARS(2,2,2)."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(nu, bool) or not isinstance(nu, (int, float)) or not math.isfinite(float(nu)) or float(nu) <= 0.0:
+        raise ValueError("nu must be a positive finite number")
     diag = analyze_physical_mathematical_problem("stiff dyadic navier-stokes enstrophy hypothesis u", domain_hint="fluid_mechanics")
     num_shells = 8
     nu = max(1e-4, min(1.0, float(nu)))
@@ -549,6 +636,12 @@ def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01, nu: flo
 
 def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02, amp: float = 0.8) -> NumericRescueResult:
     """Rescue 1D/2D Projected Gross-Pitaevskii superfluid evolution using Fourier IF-RK4 + k_cut=k_max/2."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(amp, bool) or not isinstance(amp, (int, float)) or not math.isfinite(float(amp)) or float(amp) <= 0.0:
+        raise ValueError("amp must be a positive finite number")
     diag = analyze_physical_mathematical_problem("projected gross-pitaevskii superfluid vortex", domain_hint="quantum_fluid")
     n_grid = 16
     length = 2.0 * math.pi
@@ -678,6 +771,12 @@ def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02, amp: float = 
 
 def _rescue_genetics_stiff_hopfield_and_dna_lk(steps: int = 80, dt: float = 0.01, lk0: float = 104.0) -> NumericRescueResult:
     """Rescue stiff Hopfield-Ninio kinetic proofreading & DNA Lk=Tw+Wr conservation via implicit BDF."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(lk0, bool) or not isinstance(lk0, (int, float)) or not math.isfinite(float(lk0)) or float(lk0) <= 0.0:
+        raise ValueError("lk0 must be a positive finite number")
     diag = analyze_physical_mathematical_problem(
         "hopfield-ninio kinetic proofreading and dna supercoiling linking number",
         domain_hint="genetics",
@@ -813,6 +912,10 @@ def rescue_numeric_calculation(
     dt: float = 0.02,
 ) -> NumericRescueResult:
     """Analyze a physical/mathematical problem and execute the matching rusty-SUNDIALS rescue solver."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be an integer >= 1")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
     diag = analyze_physical_mathematical_problem(prompt_or_equation, domain_hint=domain)
     if diag.domain == "astronomy":
         r0 = _extract_prompt_param(prompt_or_equation, ("r0", "periastron"), -1.0, 0.05, 0.99)
@@ -820,15 +923,15 @@ def rescue_numeric_calculation(
             ecc = 1.0 - r0
         else:
             ecc = _extract_prompt_param(prompt_or_equation, ("eccentricity", "ecc", "e"), 0.6, 0.01, 0.95)
-        return _rescue_astronomy_kepler(steps=steps, dt=dt, ecc=ecc)
+        return _rescue_astronomy_kepler(steps=steps, dt=float(dt), ecc=ecc)
     if diag.domain == "fluid_mechanics":
         nu = _extract_prompt_param(prompt_or_equation, ("viscosity", "nu"), 0.05, 1e-4, 1.0)
-        return _rescue_fluid_mechanics_dyadic_ns(steps=min(steps, 100), dt=min(dt, 0.01), nu=nu)
+        return _rescue_fluid_mechanics_dyadic_ns(steps=min(steps, 100), dt=min(float(dt), 0.01), nu=nu)
     if diag.domain == "quantum_fluid":
         amp = _extract_prompt_param(prompt_or_equation, ("amplitude", "amp"), 0.8, 0.05, 5.0)
-        return _rescue_quantum_fluid_pgpe(steps=steps, dt=dt, amp=amp)
+        return _rescue_quantum_fluid_pgpe(steps=steps, dt=float(dt), amp=amp)
     lk0 = _extract_prompt_param(prompt_or_equation, ("lk0", "lk", "linking_number"), 104.0, 10.0, 1000.0)
-    return _rescue_genetics_stiff_hopfield_and_dna_lk(steps=steps, dt=min(dt, 0.01), lk0=lk0)
+    return _rescue_genetics_stiff_hopfield_and_dna_lk(steps=steps, dt=min(float(dt), 0.01), lk0=lk0)
 
 
 # ---------------------------------------------------------------------------
@@ -841,6 +944,10 @@ def build_rusty_sundials_rescue_dataset(
     """Generate a curated, physics-verified SFT + DPO dataset across Astronomy, Fluid Mechanics,
     Quantum Fluids, and Genetics so producer machines can train and retain `hivemind/bee-rusty-sundials`.
     """
+    if output_jsonl_path is not None:
+        if not isinstance(output_jsonl_path, (Path, str)) or not str(output_jsonl_path).strip():
+            raise ValueError("output_jsonl_path must be a non-empty Path or string when provided")
+        output_jsonl_path = Path(output_jsonl_path)
     scenarios: list[tuple[str, str]] = [
         ("astronomy", "Rescue an eccentric Kepler binary inspiral (e=0.6) from explicit Euler Hamiltonian energy drift using rusty-SUNDIALS ARKode Dual-RRK relaxation."),
         ("astronomy", "Desingularize the stellar hydrostatic Lane-Emden equation theta'' + (2/xi)theta' + theta^n = 0 at xi -> 0+ and integrate to the stellar surface root xi_1."),
@@ -937,6 +1044,20 @@ class BeeRetentionStore:
         """Retain a trained Bee checkpoint on disk only if all 4 physical domain rescue gates pass
         and held-out energy improves (`heldout_energy_e < parent_energy_e` and `< 25.0`).
         """
+        if not isinstance(node_id, str) or not node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(backbone_model, str) or not backbone_model.strip():
+            raise ValueError("backbone_model must be a non-empty string")
+        if isinstance(lora_rank, bool) or not isinstance(lora_rank, int) or lora_rank < 1:
+            raise ValueError("lora_rank must be an integer >= 1")
+        if not isinstance(adapter_weights_bytes, bytes) or not adapter_weights_bytes:
+            raise ValueError("adapter_weights_bytes must be non-empty bytes")
+        if isinstance(heldout_energy_e, bool) or not isinstance(heldout_energy_e, (int, float)) or not math.isfinite(float(heldout_energy_e)):
+            raise ValueError("heldout_energy_e must be a finite number")
+        if isinstance(parent_energy_e, bool) or not isinstance(parent_energy_e, (int, float)) or not math.isfinite(float(parent_energy_e)):
+            raise ValueError("parent_energy_e must be a finite number")
+        heldout_energy_e = float(heldout_energy_e)
+        parent_energy_e = float(parent_energy_e)
         domain_rescues = {
             dom: rescue_numeric_calculation(f"verify {dom}", domain=dom, steps=40, dt=0.01)
             for dom in ("astronomy", "fluid_mechanics", "quantum_fluid", "genetics")
@@ -1086,10 +1207,19 @@ def rusty_sundials_bee_descriptor() -> dict[str, Any]:
 
 def _wilson_lower_bound_95(passes: int, trials: int, z: float = 1.959963984540054) -> float:
     """95% Wilson score interval lower bound for surrogate expert routing trust."""
-    if trials <= 0 or passes <= 0:
+    if isinstance(passes, bool) or not isinstance(passes, int) or passes < 0:
+        raise ValueError("passes must be a non-negative integer")
+    if isinstance(trials, bool) or not isinstance(trials, int) or trials < 0:
+        raise ValueError("trials must be a non-negative integer")
+    if passes > trials:
+        raise ValueError("passes cannot exceed trials")
+    if isinstance(z, bool) or not isinstance(z, (int, float)) or not math.isfinite(float(z)) or float(z) <= 0:
+        raise ValueError("z must be a positive finite number")
+    if trials == 0 or passes == 0:
         return 0.0
     p = min(1.0, max(0.0, float(passes) / float(trials)))
     n = float(trials)
+    z = float(z)
     z2 = z * z
     denom = 1.0 + z2 / n
     centre = p + z2 / (2.0 * n)
@@ -1113,6 +1243,8 @@ class SolverTaughtSurrogateExpert:
     """
 
     def __init__(self, expert_id: str = "hivemind/moe-surrogate-sundials") -> None:
+        if not isinstance(expert_id, str) or not expert_id.strip():
+            raise ValueError("expert_id must be a non-empty string")
         self.expert_id = expert_id
         self._domain_models: dict[str, dict[str, Any]] = {}
         self.trials: int = 0
@@ -1121,6 +1253,10 @@ class SolverTaughtSurrogateExpert:
 
     def fit_from_verified_rescue(self, domain: str, rescue: NumericRescueResult) -> dict[str, Any]:
         """Distill a verified `NumericRescueResult` trajectory into spectral-polynomial surrogate weights."""
+        if not isinstance(domain, str) or not domain.strip():
+            raise ValueError("domain must be a non-empty string")
+        if not isinstance(rescue, NumericRescueResult):
+            raise TypeError("rescue must be a NumericRescueResult instance")
         if not rescue.rescued_succeeded:
             raise ValueError(f"Cannot train surrogate on unverified rescue for domain {domain!r}")
         traj = rescue.sample_trajectory
@@ -1148,6 +1284,10 @@ class SolverTaughtSurrogateExpert:
 
     def fit_all_four_domains(self, steps: int = 60, dt: float = 0.01) -> dict[str, Any]:
         """Train the surrogate expert across all 4 flagship physical domains using verified teacher trajectories."""
+        if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+            raise ValueError("steps must be an integer >= 1")
+        if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0:
+            raise ValueError("dt must be a positive finite number")
         summaries: dict[str, Any] = {}
         for dom in ("astronomy", "fluid_mechanics", "quantum_fluid", "genetics"):
             teacher = rescue_numeric_calculation(f"Train surrogate teacher for {dom}", domain=dom, steps=steps, dt=dt)
@@ -1173,6 +1313,23 @@ class SolverTaughtSurrogateExpert:
         force_surrogate_perturbation: float = 0.0,
     ) -> dict[str, Any]:
         """Run fast surrogate trajectory prediction followed by mandatory `rusty-SUNDIALS` verifier gate."""
+        if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+            raise ValueError("steps must be an integer >= 1")
+        if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0:
+            raise ValueError("dt must be a positive finite number")
+        if (
+            isinstance(max_surrogate_drift_tol, bool)
+            or not isinstance(max_surrogate_drift_tol, (int, float))
+            or not math.isfinite(float(max_surrogate_drift_tol))
+            or float(max_surrogate_drift_tol) < 0
+        ):
+            raise ValueError("max_surrogate_drift_tol must be a non-negative finite number")
+        if (
+            isinstance(force_surrogate_perturbation, bool)
+            or not isinstance(force_surrogate_perturbation, (int, float))
+            or not math.isfinite(float(force_surrogate_perturbation))
+        ):
+            raise ValueError("force_surrogate_perturbation must be a finite number")
         diag = analyze_physical_mathematical_problem(prompt_or_equation, domain_hint=domain)
         dom = diag.domain
         if dom not in self._domain_models:
@@ -1257,13 +1414,30 @@ def solve_wave2_method_of_lines_pde(
     - ``pgpe_vortex_lattice``: 2D Projected Gross-Pitaevskii superfluid condensate with sharp spectral cutoff $k_{\\text{cut}} = k_{\\max}/2$.
     - ``fisher_kpp_genetic_wave``: 1D Fisher-KPP reaction-diffusion allele wave $p_t = D p_{xx} + s p(1-p)$ on the simplex $[0, 1]$.
     """
+    if not isinstance(pde_family, str) or not pde_family.strip():
+        raise ValueError("pde_family must be a non-empty string")
+    if isinstance(grid_points, bool) or not isinstance(grid_points, int) or grid_points < 4:
+        raise ValueError("grid_points must be an integer >= 4")
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be an integer >= 1")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0:
+        raise ValueError("dt must be a positive finite number")
+    if param is not None and pde_family != "lane_emden_stellar":
+        if isinstance(param, bool) or not isinstance(param, (int, float)) or not math.isfinite(float(param)):
+            raise ValueError("param must be a finite number when provided")
     n_pts = max(8, min(int(grid_points), 128))
     n_steps = max(5, min(int(steps), 200))
     step_dt = max(1e-5, min(float(dt), 0.05))
 
     if pde_family == "lane_emden_stellar":
         if param is not None:
-            if isinstance(param, bool) or not math.isfinite(float(param)) or float(param) < 0.0 or float(param) > 4.5:
+            if (
+                isinstance(param, bool)
+                or not isinstance(param, (int, float))
+                or not math.isfinite(float(param))
+                or float(param) < 0.0
+                or float(param) > 4.5
+            ):
                 raise ValueError(f"polytropic index n must be finite in [0.0, 4.5], got {param!r} (IP-48)")
         poly_n = 1.0 if param is None else float(param)
         xi_max = math.pi
@@ -1427,6 +1601,11 @@ def solve_wave2_method_of_lines_pde(
 
 def _rk4_van_der_pol_step(x: float, v: float, mu: float, h: float) -> tuple[float, float]:
     """Advance Van der Pol oscillator ``x'' = mu*(1 - x^2)*x' - x`` by one classic RK4 step ``h``."""
+    for val in (x, v, mu, h):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError("x, v, mu, and h must be finite numbers")
+    if float(h) <= 0.0 or float(mu) < 0.0:
+        raise ValueError("h must be > 0 and mu must be >= 0")
     k1x = v
     k1v = mu * (1.0 - x * x) * v - x
 
@@ -1457,6 +1636,8 @@ def verify_wave2_quorum_replicas(
     replica_b: Mapping[str, Any],
 ) -> bool:
     """Verify two Wave 2 parameter-sweep replicas against ``spec`` and against each other within S-1 tolerances."""
+    if not isinstance(spec, Mapping) or not isinstance(replica_a, Mapping) or not isinstance(replica_b, Mapping):
+        raise TypeError("spec, replica_a, and replica_b must be Mappings")
     expected_sha = str(spec.get("spec_sha256") or "")
     if not expected_sha:
         return False
@@ -1470,10 +1651,18 @@ def verify_wave2_quorum_replicas(
     rtol = float(spec.get("s1_rtol", 1e-6))
     atol = float(spec.get("s1_atol", 1e-9))
     max_drift = float(spec.get("max_invariant_drift", 1e-6))
+    if not (math.isfinite(rtol) and math.isfinite(atol) and math.isfinite(max_drift)):
+        return False
     for idx, (ra, rb) in enumerate(zip(sweep_a, sweep_b)):
+        if not isinstance(ra, Mapping) or not isinstance(rb, Mapping):
+            return False
         if ra.get("status") != "ok" or rb.get("status") != "ok":
             return False
-        if abs(float(ra.get("invariant_drift", 1.0))) > max_drift or abs(float(rb.get("invariant_drift", 1.0))) > max_drift:
+        drift_a = float(ra.get("invariant_drift", 1.0))
+        drift_b = float(rb.get("invariant_drift", 1.0))
+        if not (math.isfinite(drift_a) and math.isfinite(drift_b)):
+            return False
+        if abs(drift_a) > max_drift or abs(drift_b) > max_drift:
             return False
         ya = ra.get("y")
         yb = rb.get("y")
@@ -1485,11 +1674,15 @@ def verify_wave2_quorum_replicas(
                 return False
             for c_idx, (va, vb) in enumerate(zip(row_a, row_b)):
                 fva, fvb = float(va), float(vb)
+                if not (math.isfinite(fva) and math.isfinite(fvb)):
+                    return False
                 tol = atol + rtol * max(abs(fva), abs(fvb))
                 if abs(fva - fvb) > tol:
                     return False
                 if isinstance(ref_y, list) and r_idx < len(ref_y) and c_idx < len(ref_y[r_idx]):
                     fref = float(ref_y[r_idx][c_idx])
+                    if not math.isfinite(fref):
+                        return False
                     ref_tol = atol + rtol * max(abs(fref), abs(fva), abs(fvb))
                     if abs(fva - fref) > ref_tol or abs(fvb - fref) > ref_tol:
                         return False
@@ -1510,7 +1703,23 @@ def run_wave2_parameter_sweep_quorum(
     Produces a canonical ``hivemind_solver_sweep`` workunit spec and two independent CPU replica
     results (``replica_a``, ``replica_b``) verified under S-1 cross-CPU tolerances.
     """
-    grid = [float(p) for p in parameter_grid]
+    if not isinstance(family, str) or not family.strip():
+        raise ValueError("family must be a non-empty string")
+    if not isinstance(parameter_name, str) or not parameter_name.strip():
+        raise ValueError("parameter_name must be a non-empty string")
+    if not isinstance(wu_id, str) or not wu_id.strip():
+        raise ValueError("wu_id must be a non-empty string")
+    if isinstance(parameter_grid, (str, bytes)) or not isinstance(parameter_grid, Sequence) or not parameter_grid:
+        raise ValueError("parameter_grid must be a non-empty sequence of finite numbers")
+    grid: list[float] = []
+    for p in parameter_grid:
+        if isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(float(p)):
+            raise ValueError("parameter_grid must contain only finite numbers")
+        grid.append(float(p))
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be an integer >= 1")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0:
+        raise ValueError("dt must be a positive finite number")
     n_steps = max(4, min(int(steps), 120))
     step_dt = max(1e-4, min(float(dt), 0.1))
     t_out = [round((k + 1) * step_dt, 8) for k in range(n_steps)]
@@ -1737,8 +1946,22 @@ class OwnerFleetCoServingOrchestrator:
     ) -> dict[str, Any]:
         """Truncated-SVD energy retention for an ASSUMED singular spectrum sigma_i = (i+1)^-1.35. This is a model of what a
         projection would keep; it is not computed from any adapter and is not served by the public endpoints."""
-        if teacher_rank <= 0 or student_rank <= 0 or student_rank > teacher_rank:
-            raise ValueError("Require 0 < student_rank <= teacher_rank")
+        if (
+            isinstance(teacher_rank, bool)
+            or not isinstance(teacher_rank, int)
+            or isinstance(student_rank, bool)
+            or not isinstance(student_rank, int)
+            or teacher_rank <= 0
+            or student_rank <= 0
+            or student_rank > teacher_rank
+        ):
+            raise ValueError("Require integer 0 < student_rank <= teacher_rank")
+        if (
+            isinstance(verified_trajectories_count, bool)
+            or not isinstance(verified_trajectories_count, int)
+            or verified_trajectories_count < 1
+        ):
+            raise ValueError("verified_trajectories_count must be an integer >= 1")
         # Rapidly decaying singular spectrum typical of physics-verified LoRA updates: sigma_i = 1 / (i + 1)^1.35
         sigmas = [1.0 / ((i + 1) ** 1.35) for i in range(teacher_rank)]
         total_energy = sum(s * s for s in sigmas)
@@ -1770,6 +1993,14 @@ class OwnerFleetCoServingOrchestrator:
         atol: float = 1e-9,
     ) -> dict[str, Any]:
         """Agreement of two replicas computed in this one process. It does not compare two hosts."""
+        if not isinstance(family, str) or not family.strip():
+            raise ValueError("family must be a non-empty string")
+        if isinstance(rtol, bool) or not isinstance(rtol, (int, float)) or not math.isfinite(float(rtol)) or float(rtol) <= 0:
+            raise ValueError("rtol must be a positive finite number")
+        if isinstance(atol, bool) or not isinstance(atol, (int, float)) or not math.isfinite(float(atol)) or float(atol) <= 0:
+            raise ValueError("atol must be a positive finite number")
+        rtol = float(rtol)
+        atol = float(atol)
         quorum = run_wave2_parameter_sweep_quorum(family=family, steps=20, dt=0.05, wu_id=f"s1b_{family}")
         rep_a = quorum["replica_a"]["sweep_results"]
         rep_b = quorum["replica_b"]["sweep_results"]
@@ -2007,6 +2238,8 @@ class NextGenMoEScienceBee:
         language: str | None = None,
     ) -> dict[str, Any]:
         """Formulate (via named slots or spec), echo the interpreted problem, solve, verify, and score."""
+        if not isinstance(question, str) or not question.strip():
+            raise ValueError("question must be a non-empty string")
         from hivemind.solverbee import scoring
 
         ans = self.science_bee.ask(question, follow_up=follow_up, language=language)

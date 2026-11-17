@@ -157,11 +157,16 @@ def scrub_or_reject_sensitive_prompt(
 
 def wilson_lower_bound(successes: int, trials: int, z: float = 1.96) -> float:
     """Compute the Wilson score confidence interval lower bound for producer canary spot-checks."""
-    if isinstance(successes, bool) or isinstance(trials, bool):
+    if (
+        isinstance(successes, bool)
+        or not isinstance(successes, int)
+        or isinstance(trials, bool)
+        or not isinstance(trials, int)
+    ):
         raise ValueError("successes and trials must be integers")
     if trials < 0 or successes < 0 or successes > trials:
         raise ValueError("0 <= successes <= trials is required")
-    if isinstance(z, bool) or not math.isfinite(float(z)) or float(z) <= 0.0:
+    if isinstance(z, bool) or not isinstance(z, (int, float)) or not math.isfinite(float(z)) or float(z) <= 0.0:
         raise ValueError("z must be a finite positive float")
     if trials == 0:
         return 0.0
@@ -204,7 +209,7 @@ def evaluate_producer_anti_farming_gate(
         ("min_wilson_lower_bound", min_wilson_lower_bound),
         ("max_allowed_logprob_drift", max_allowed_logprob_drift),
     ):
-        if isinstance(val, bool) or not math.isfinite(float(val)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
             raise ValueError(f"{name} must be a finite float")
     if float(max_logprob_drift) < 0.0 or float(max_allowed_logprob_drift) <= 0.0:
         raise ValueError("logprob drift values must be non-negative (and max_allowed_logprob_drift > 0)")
@@ -289,6 +294,10 @@ def audit_selfhosted_reddit_1xjc76k_promises(
     public_fleet_payload: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Audit all 6 promises from the ``r/SelfHostedAI`` (``1xjc76k``) discussion and return a signed receipt."""
+    if signup_html_trainer is not None and not isinstance(signup_html_trainer, str):
+        raise ValueError("signup_html_trainer must be a string or None")
+    if public_fleet_payload is not None and not isinstance(public_fleet_payload, Mapping):
+        raise ValueError("public_fleet_payload must be a mapping or None")
     from hivemind.router.signup_page import render_signup_page
 
     rendered_trainer_signup = (

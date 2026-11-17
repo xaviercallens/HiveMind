@@ -196,6 +196,12 @@ _NUMERIC_GPU_FIELDS = ("used_mib", "total_mib", "free_mib", "temp_c", "util_pct"
 
 def _require_finite_numbers(section: str, values: dict[str, Any], fields: tuple[str, ...]) -> None:
     """Refuse a telemetry update whose numeric fields are not finite numbers (a poisoned or malformed push)."""
+    if not isinstance(section, str) or not section.strip():
+        raise ValueError("section must be a non-empty string")
+    if not isinstance(values, dict):
+        raise ValueError("values must be a dict")
+    if not isinstance(fields, tuple) or not all(isinstance(f, str) and f.strip() for f in fields):
+        raise ValueError("fields must be a tuple of non-empty strings")
     for key in fields:
         if key in values:
             v = values[key]
@@ -219,6 +225,10 @@ def _validated_section(section: str, current: dict[str, Any], update: dict[str, 
     booleans, lists stay bounded lists of finite numbers or bounded strings, dicts stay dicts of the same. A push that
     fails any rule changes nothing.
     """
+    if not isinstance(section, str) or not section.strip():
+        raise ValueError("section must be a non-empty string")
+    if not isinstance(current, dict) or not isinstance(update, dict):
+        raise ValueError("current and update must be dicts")
     out: dict[str, Any] = {}
     for key, value in update.items():
         if key not in current:
@@ -229,6 +239,8 @@ def _validated_section(section: str, current: dict[str, Any], update: dict[str, 
 
 
 def _check_like(path: str, template: Any, value: Any) -> None:
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("path must be a non-empty string")
     if isinstance(template, bool):
         if not isinstance(value, bool):
             raise ValueError(f"{path} must be a boolean, got {value!r}")
@@ -263,6 +275,12 @@ def _check_like(path: str, template: Any, value: Any) -> None:
 
 def format_workunit_counter_label(record: dict[str, Any], *, tolerance: float = 1e-6, baseline_nll: float = 2.12) -> str:
     """Format a workunit counter label; units with eval_loss_after > eval_loss_before + tolerance are 'assimilated, no held-out gain'."""
+    if not isinstance(record, dict):
+        raise ValueError("record must be a dictionary")
+    if not _is_finite_number(tolerance) or float(tolerance) < 0.0:
+        raise ValueError("tolerance must be a non-negative finite number")
+    if not _is_finite_number(baseline_nll) or float(baseline_nll) <= 0.0:
+        raise ValueError("baseline_nll must be a positive finite number")
     before = record.get("eval_loss_before", record.get("held_out_eval_loss_before"))
     after = record.get("eval_loss_after", record.get("held_out_eval_loss_after"))
     if _is_finite_number(before) and _is_finite_number(after):
@@ -275,15 +293,19 @@ def format_workunit_counter_label(record: dict[str, Any], *, tolerance: float = 
 
 def update_t4_telemetry_snapshot(update: dict[str, Any]) -> dict[str, Any]:
     """Update the in-memory T4 telemetry snapshot from the monitor or T4 node; a malformed push changes nothing."""
+    if not isinstance(update, dict):
+        raise ValueError("update must be a dictionary")
+    if "sole_active_gpu" in update and not isinstance(update["sole_active_gpu"], bool):
+        raise ValueError("sole_active_gpu must be a boolean")
     with _SNAPSHOT_LOCK:
         staged: dict[str, dict[str, Any]] = {}
-        if "gpu" in update and isinstance(update["gpu"], dict):
-            _require_finite_numbers("gpu", update["gpu"], _NUMERIC_GPU_FIELDS)
-            staged["gpu"] = _validated_section("gpu", _LATEST_T4_SNAPSHOT["gpu"], update["gpu"])
-        if "governor" in update and isinstance(update["governor"], dict):
-            staged["governor"] = _validated_section("governor", _LATEST_T4_SNAPSHOT["governor"], update["governor"])
-        if "qlora_progress" in update and isinstance(update["qlora_progress"], dict):
-            staged["qlora_progress"] = _validated_section("qlora_progress", _LATEST_T4_SNAPSHOT["qlora_progress"], update["qlora_progress"])
+        for section in ("gpu", "governor", "qlora_progress"):
+            if section in update:
+                if not isinstance(update[section], dict):
+                    raise ValueError(f"{section} must be an object")
+                if section == "gpu":
+                    _require_finite_numbers("gpu", update["gpu"], _NUMERIC_GPU_FIELDS)
+                staged[section] = _validated_section(section, _LATEST_T4_SNAPSHOT[section], update[section])
         for section, values in staged.items():
             _LATEST_T4_SNAPSHOT[section].update(values)
         if "gpu" in staged:
@@ -306,6 +328,20 @@ def build_t4_visibility_payload(
     secondary_gpu: str | None = None,
 ) -> dict[str, Any]:
     """Build the complete JSON visibility payload for the Web UI and /v1/hivemind/t4/status."""
+    if now_utc is not None and (not _is_finite_number(now_utc) or float(now_utc) < 0.0):
+        raise ValueError("now_utc must be None or a non-negative finite number")
+    if isinstance(active_producers_count, bool) or not isinstance(active_producers_count, int) or active_producers_count < 0:
+        raise ValueError("active_producers_count must be a non-negative integer")
+    if distinct_physical_gpus is not None and (
+        isinstance(distinct_physical_gpus, bool) or not isinstance(distinct_physical_gpus, int) or distinct_physical_gpus < 0
+    ):
+        raise ValueError("distinct_physical_gpus must be None or a non-negative integer")
+    if live_models is not None and (
+        not isinstance(live_models, list) or any(not isinstance(m, str) or not m.strip() for m in live_models)
+    ):
+        raise ValueError("live_models must be None or a list of non-empty strings")
+    if secondary_gpu is not None and not isinstance(secondary_gpu, str):
+        raise ValueError("secondary_gpu must be None or a string")
     ts = now_utc if now_utc is not None else time.time()
     dt_utc = datetime.fromtimestamp(ts, tz=timezone.utc)
     dt_paris = dt_utc.astimezone(EUROPE_TZ)

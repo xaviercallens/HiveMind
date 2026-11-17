@@ -98,6 +98,10 @@ ASTRO_BEE_EXPERTS: List[Dict[str, Any]] = [
 
 def _find_cached_parquet(repo_id: str, suffix: str) -> Optional[Path]:
     """Locate a cached Hugging Face Parquet file without network calls."""
+    if not isinstance(repo_id, str) or not repo_id.strip():
+        raise ValueError("repo_id must be a non-empty string")
+    if not isinstance(suffix, str) or not suffix.strip():
+        raise ValueError("suffix must be a non-empty string")
     repo_folder = "datasets--" + repo_id.replace("/", "--")
     roots = [
         CACHE_ROOT / "huggingface" / "hub" / repo_folder / "snapshots",
@@ -118,6 +122,13 @@ def compute_earth_similarity_index(
     insolation_earth: float,
 ) -> float:
     """Compute the astrophysical Earth Similarity Index (ESI in [0.0, 1.0])."""
+    for field_name, val in (
+        ("radius_rearth", radius_rearth),
+        ("teq_k", teq_k),
+        ("insolation_earth", insolation_earth),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
     r = max(0.1, float(radius_rearth))
     t = max(30.0, float(teq_k))
     s = max(0.001, float(insolation_earth))
@@ -132,6 +143,9 @@ def compute_earth_similarity_index(
 
 def compute_habitable_zone_au(st_teff_k: float, st_rad_rsun: float) -> Dict[str, float]:
     """Compute circumstellar Habitable Zone bounds (Kopparapu et al. 2014) in AU."""
+    for field_name, val in (("st_teff_k", st_teff_k), ("st_rad_rsun", st_rad_rsun)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
     teff = max(2500.0, min(10000.0, float(st_teff_k)))
     r_sun = max(0.08, float(st_rad_rsun))
     l_star = (r_sun ** 2) * ((teff / 5778.0) ** 4)
@@ -162,6 +176,13 @@ def classify_planet_taxonomy(
     transit_depth_ppm: float,
 ) -> Dict[str, str]:
     """Return bilingual French/English planetary taxonomy and habitability status."""
+    for field_name, val in (("radius_rearth", radius_rearth), ("teq_k", teq_k)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
+    if isinstance(transit_depth_ppm, bool) or not isinstance(transit_depth_ppm, (int, float)) or not math.isfinite(float(transit_depth_ppm)) or float(transit_depth_ppm) < 0.0:
+        raise ValueError("transit_depth_ppm must be a non-negative finite number")
+    if isinstance(disposition, bool) or not isinstance(disposition, str) or not disposition.strip():
+        raise ValueError("disposition must be a non-empty string")
     disp = disposition.upper()
     if disp == "FALSE POSITIVE" or radius_rearth > 28.0 or transit_depth_ppm > 50000.0:
         return {
@@ -249,6 +270,25 @@ def synthesize_transit_light_curve_and_bls(
     seed: int = 42,
 ) -> Dict[str, Any]:
     """Synthesize realistic Kepler/TESS photometric time-series, phase-folded curve & BLS periodogram."""
+    for field_name, val in (
+        ("period_days", period_days),
+        ("transit_depth_ppm", transit_depth_ppm),
+        ("duration_hours", duration_hours),
+        ("model_snr", model_snr),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
+    if trial_period_days is not None and (
+        isinstance(trial_period_days, bool)
+        or not isinstance(trial_period_days, (int, float))
+        or not math.isfinite(float(trial_period_days))
+        or float(trial_period_days) <= 0.0
+    ):
+        raise ValueError("trial_period_days must be a positive finite number or None")
+    if isinstance(disposition, bool) or not isinstance(disposition, str) or not disposition.strip():
+        raise ValueError("disposition must be a non-empty string")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     rng = random.Random(seed)
     p_true = max(0.4, float(period_days))
     p_trial = float(trial_period_days) if trial_period_days is not None else p_true
@@ -358,6 +398,15 @@ def synthesize_jwst_transmission_spectrum(
     disposition: str,
 ) -> Dict[str, Any]:
     """Synthesize a JWST NIRSpec Prism (0.6 - 5.3 um) transmission spectrum & molecular biosignatures."""
+    for field_name, val in (
+        ("radius_rearth", radius_rearth),
+        ("teq_k", teq_k),
+        ("transit_depth_ppm", transit_depth_ppm),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
+    if isinstance(disposition, bool) or not isinstance(disposition, str) or not disposition.strip():
+        raise ValueError("disposition must be a non-empty string")
     if disposition.upper() == "FALSE POSITIVE" or radius_rearth > 28.0:
         return {
             "instrument": "JWST NIRSpec Prism (0.6 - 5.3 um)",
@@ -449,6 +498,8 @@ def synthesize_jwst_transmission_spectrum(
 
 def compute_four_astrophysical_laws(target: Dict[str, Any]) -> Dict[str, Any]:
     """Compute the 4 Core Astrophysical Rules (Transit Depth, Doppler RV K & Bulk Density, HZ Teq, False-Positive Vetting)."""
+    if not isinstance(target, dict):
+        raise ValueError("target must be a dict")
     r_p_rearth = max(0.1, float(target.get("planet_radius_rearth", 1.0)))
     m_p_mearth = max(0.01, float(target.get("planet_mass_mearth", 1.0)))
     p_days = max(0.2, float(target.get("period_days", 10.0)))
@@ -611,6 +662,8 @@ def compute_four_astrophysical_laws(target: Dict[str, Any]) -> Dict[str, Any]:
 
 def synthesize_jwst_coronagraph_4bands(target: Dict[str, Any]) -> Dict[str, Any]:
     """Synthesize 4-Band JWST Direct Imaging Coronagraphy (HIP 65426 b style: NIRCam F300M/F444W + MIRI F1140C/F1550C)."""
+    if not isinstance(target, dict):
+        raise ValueError("target must be a dict")
     a_au = max(0.01, float(target.get("semi_major_axis_au", 0.1)))
     d_pc = max(1.0, float(target.get("distance_pc", 25.0)))
     teq_k = max(60.0, float(target.get("equilibrium_temp_k", 260.0)))
@@ -678,6 +731,8 @@ def synthesize_jwst_coronagraph_4bands(target: Dict[str, Any]) -> Dict[str, Any]
 
 def compute_oolite_planetfall_parameters(target: Dict[str, Any]) -> Dict[str, Any]:
     """Compute Oolite (oolite.space) + Planetfall OXP (wiki.alioth.net/index.php/Planetfall_OXP) landing physics."""
+    if not isinstance(target, dict):
+        raise ValueError("target must be a dict")
     rp_re = max(0.4, float(target.get("planet_radius_rearth", 1.0)))
     mp_me = max(0.1, float(target.get("planet_mass_mearth", max(0.2, rp_re ** 2.06))))
     teq_k = max(50.0, float(target.get("equilibrium_temp_k", 255.0)))
@@ -771,6 +826,10 @@ def _load_gemini_api_key_from_env() -> Optional[str]:
 def _wrap_pcm16_to_wav(pcm_bytes: bytes, sample_rate: int = 24000) -> bytes:
     """Wrap raw 16-bit mono signed PCM from Gemini 2.5 Flash TTS into a standard 44-byte RIFF WAV container."""
     import struct
+    if not isinstance(pcm_bytes, (bytes, bytearray)):
+        raise ValueError("pcm_bytes must be bytes or bytearray")
+    if isinstance(sample_rate, bool) or not isinstance(sample_rate, int) or sample_rate <= 0:
+        raise ValueError("sample_rate must be a positive integer")
     data_len = len(pcm_bytes)
     header = struct.pack(
         "<4sI4s4sIHHIIHH4sI",
@@ -794,6 +853,10 @@ def _wrap_pcm16_to_wav(pcm_bytes: bytes, sample_rate: int = 24000) -> bytes:
 def _split_text_for_gcp_tts(text: str, max_chars: int = 180) -> List[str]:
     """Split a paragraph into natural sentence/clause chunks <= max_chars for Google Cloud TTS."""
     import re
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
+    if isinstance(max_chars, bool) or not isinstance(max_chars, int) or max_chars <= 0:
+        raise ValueError("max_chars must be a positive integer")
     clean = re.sub(r"\s+", " ", text).strip()
     if not clean:
         return []
@@ -891,6 +954,8 @@ def synthesize_gemini_or_gcp_free_tts(
       2. Tier 2: Google Cloud Free-Tier Neural Speech (`translate.googleapis.com/translate_tts`) across all 5 languages
          (`en`, `fr`, `es`, `de`, `zh-CN`) with zero API key required and local disk caching.
     """
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     import base64
     import urllib.error
     import urllib.parse
@@ -1029,6 +1094,8 @@ def synthesize_gemini_or_gcp_free_tts(
 
 def query_nasa_exoplanet_archive_tap(live_network: bool = False) -> Dict[str, Any]:
     """Query the NASA Exoplanet Archive TAP REST API (pscomppars ADQL) with local cache fallback."""
+    if not isinstance(live_network, bool):
+        raise ValueError("live_network must be a boolean")
     adql_query = (
         "SELECT pl_name, hostname, sy_dist, pl_orbper, pl_rade, pl_bmasse, "
         "pl_orbeccen, pl_insol, pl_eqt, rv_flag, tran_flag "
@@ -1097,6 +1164,8 @@ def query_nasa_exoplanet_archive_tap(live_network: bool = False) -> Dict[str, An
 
 def load_real_hf_exoplanet_catalog(max_extra_per_category: int = 12) -> List[Dict[str, Any]]:
     """Build the playable exoplanet discovery catalog from real cached Hugging Face Parquet datasets & NASA TAP."""
+    if isinstance(max_extra_per_category, bool) or not isinstance(max_extra_per_category, int) or max_extra_per_category < 0:
+        raise ValueError("max_extra_per_category must be a non-negative integer")
     featured_targets: List[Dict[str, Any]] = [
         {
             "target_id": "SECTOR-01-TRAPPIST-1E",
@@ -1661,6 +1730,17 @@ class AstroBeeMoEGPUService:
         gamer_tag: str = "CyberExplorer_FR",
     ) -> Dict[str, Any]:
         """Run a live CUDA forward pass across the 4 Astro-Bees on `cuda:0` and return the discovery analysis."""
+        if not isinstance(target, dict) or not target:
+            raise ValueError("target must be a non-empty dict")
+        if trial_period_days is not None and (
+            isinstance(trial_period_days, bool)
+            or not isinstance(trial_period_days, (int, float))
+            or not math.isfinite(float(trial_period_days))
+            or float(trial_period_days) <= 0.0
+        ):
+            raise ValueError("trial_period_days must be a finite positive number or None")
+        if not isinstance(gamer_tag, str) or not gamer_tag.strip():
+            raise ValueError("gamer_tag must be a non-empty string")
         self.ensure_gpu_moe_ready()
         t0 = time.perf_counter()
 
@@ -1791,6 +1871,8 @@ class AstroBeeMoEGPUService:
 
     def resolve_target(self, target_id: str) -> Dict[str, Any]:
         """Resolve a catalog target by target_id, Stitch v4.6 planet key, or planet name."""
+        if not isinstance(target_id, str):
+            raise ValueError("target_id must be a string")
         key = str(target_id or "").strip()
         stitch_key_map = {
             "trappist1e": "SECTOR-01-TRAPPIST-1E",
@@ -1824,6 +1906,16 @@ class AstroBeeMoEGPUService:
         account_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Log a player's discovery once per (account, target); replays earn 0 and are not recorded."""
+        if not isinstance(target_id, str) or not target_id.strip():
+            raise ValueError("target_id must be a non-empty string")
+        if not isinstance(gamer_tag, str):
+            raise ValueError("gamer_tag must be a string")
+        if not isinstance(player_classification, str) or not player_classification.strip():
+            raise ValueError("player_classification must be a non-empty string")
+        if not isinstance(notes, str):
+            raise ValueError("notes must be a string")
+        if account_id is not None and not isinstance(account_id, str):
+            raise ValueError("account_id must be a string or None")
         target = self.resolve_target(target_id)
         clean_tag = str(gamer_tag or "").strip()[:64] or "Anonyme"
         clean_notes = str(notes or "")[:512]
@@ -1934,6 +2026,12 @@ class AstroBeeMoEGPUService:
         preferred_producer: str = "auto",
     ) -> Dict[str, Any]:
         """Serve general HiveMind Bee-MoE inference on Local RTX 2070 (`cuda:0`) or failover from T4/other producers."""
+        if not isinstance(prompt, str):
+            raise ValueError("prompt must be a string")
+        if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int) or max_new_tokens < 1:
+            raise ValueError("max_new_tokens must be a positive integer")
+        if not isinstance(preferred_producer, str) or not preferred_producer.strip():
+            raise ValueError("preferred_producer must be a non-empty string")
         self.ensure_gpu_moe_ready()
         t0 = time.perf_counter()
         clamped_max_new_tokens = max(1, min(512, int(max_new_tokens)))
@@ -2008,6 +2106,8 @@ class HiveMindMultiProducerInferencePool:
     MONITOR_WRITE_MIN_INTERVAL_S = 2.0
 
     def __init__(self, gpu_service: AstroBeeMoEGPUService) -> None:
+        if not isinstance(gpu_service, AstroBeeMoEGPUService):
+            raise ValueError("gpu_service must be an AstroBeeMoEGPUService")
         self.gpu_service = gpu_service
         self.registry_path = ARTIFACTS_ROOT / "hivemind_inference_producers.json"
         self.monitor_path = ARTIFACTS_ROOT / "hivemind_traffic_tflops_monitor.json"
@@ -2150,6 +2250,14 @@ class HiveMindMultiProducerInferencePool:
         target_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Route and execute inference across the producer pool with automatic failover to Local RTX 2070."""
+        if not isinstance(prompt, str):
+            raise ValueError("prompt must be a string")
+        if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int) or max_new_tokens < 1:
+            raise ValueError("max_new_tokens must be a positive integer")
+        if not isinstance(preferred_producer, str):
+            raise ValueError("preferred_producer must be a string")
+        if target_id is not None and not isinstance(target_id, str):
+            raise ValueError("target_id must be a string or None")
         self.total_requests_served += 1
         pref_norm = (preferred_producer or "auto").strip().lower()
 
@@ -2211,6 +2319,8 @@ class HiveMindMultiProducerInferencePool:
 
     def benchmark_live_tflops(self, matrix_dim: int = 3072) -> Dict[str, Any]:
         """Measure live sustained FP32, FP16 Tensor Core, and Effective 4-Bit NF4 Sparse MoE TFLOPS on `cuda:0`."""
+        if isinstance(matrix_dim, bool) or not isinstance(matrix_dim, int) or matrix_dim < 1:
+            raise ValueError("matrix_dim must be a positive integer")
         now_iso = datetime.datetime.now().isoformat()[:19]
         if torch.cuda.is_available():
             dev = self.gpu_service.device
@@ -2294,6 +2404,19 @@ class HiveMindMultiProducerInferencePool:
         served_by: Optional[str] = None,
     ) -> None:
         """Record an incoming HTTP or inference request and track new/active end-users."""
+        if not isinstance(method, str) or not method.strip() or not isinstance(path, str) or not path.strip():
+            raise ValueError("method and path must be non-empty strings")
+        if not isinstance(client_ip, str) or not isinstance(user_agent, str) or not isinstance(gamer_tag, str):
+            raise ValueError("client_ip, user_agent, and gamer_tag must be strings")
+        if (
+            isinstance(latency_ms, bool)
+            or not isinstance(latency_ms, (int, float))
+            or not math.isfinite(float(latency_ms))
+            or float(latency_ms) < 0.0
+        ):
+            raise ValueError("latency_ms must be a finite non-negative number")
+        if served_by is not None and not isinstance(served_by, str):
+            raise ValueError("served_by must be a string or None")
         if path.startswith("/api/v1/monitor/telemetry"):
             return
         self.total_http_requests += 1

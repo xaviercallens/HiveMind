@@ -22,6 +22,7 @@ import dataclasses
 import hashlib
 import json
 import logging
+import math
 import threading
 from typing import Any, BinaryIO, Callable, Dict, List, Optional
 
@@ -123,20 +124,36 @@ class McpError(Exception):
     """A JSON-RPC error to return to the client."""
 
     def __init__(self, code: int, message: str) -> None:
+        if isinstance(code, bool) or not isinstance(code, int):
+            raise ValueError("code must be an integer")
+        if not isinstance(message, str) or not message.strip():
+            raise ValueError("message must be a non-empty string")
         super().__init__(message)
         self.code, self.message = code, message
 
 
 def spec_bytes_of(spec: Any) -> bytes:
     """The bytes a spec object is hashed and solved as: compact JSON, keys in the order given, UTF-8, no ASCII escaping."""
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
     return json.dumps(spec, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
 def _rpc_error(rid: Any, code: int, message: str) -> Dict[str, Any]:
+    if isinstance(code, bool) or not isinstance(code, int):
+        raise ValueError("code must be an integer")
+    if not isinstance(message, str) or not message.strip():
+        raise ValueError("message must be a non-empty string")
     return {"jsonrpc": "2.0", "id": rid, "error": {"code": code, "message": message}}
 
 
 def _tool_result(text: str, payload: Dict[str, Any], *, is_error: bool = False) -> Dict[str, Any]:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
+    if not isinstance(payload, dict):
+        raise ValueError("payload must be a dict")
+    if not isinstance(is_error, bool):
+        raise ValueError("is_error must be a boolean")
     return {
         "content": [{"type": "text", "text": text}, {"type": "text", "text": json.dumps(payload, ensure_ascii=False, indent=1, allow_nan=False)}],
         "structuredContent": payload,
@@ -146,6 +163,8 @@ def _tool_result(text: str, payload: Dict[str, Any], *, is_error: bool = False) 
 
 def _check_args(schema: Dict[str, Any], args: Dict[str, Any]) -> None:
     """Shape check against the tool's inputSchema: required keys present, no unknown keys, object-typed values are objects."""
+    if not isinstance(schema, dict) or not isinstance(args, dict):
+        raise McpError(E_INVALID_PARAMS, "schema and args must be JSON objects")
     props = schema.get("properties", {})
     for key in schema.get("required", []):
         if key not in args:
@@ -165,8 +184,12 @@ class SolverBeeMcp:
     """One MCP session. ``handle_line`` takes one raw message and returns the response object, or None for notifications."""
 
     def __init__(self, service: svc_mod.SolverBeeService, *, sandbox_mode: str, problems_dir: Optional[str]) -> None:
+        if not isinstance(service, svc_mod.SolverBeeService):
+            raise ValueError("service must be a SolverBeeService")
         if sandbox_mode not in ("namespace", "none", "unavailable"):
             raise ValueError("sandbox_mode must be 'namespace', 'none', or 'unavailable'")
+        if problems_dir is not None and not isinstance(problems_dir, str):
+            raise ValueError("problems_dir must be a string or None")
         self.svc = service
         self.sandbox_mode = sandbox_mode  # "namespace" | "none" | "unavailable"; reported in every tool result
         self.problems_dir = problems_dir
@@ -277,6 +300,8 @@ class SolverBeeMcp:
             return self._tool_error("internal error; treat the answer as UNVERIFIED")
 
     def _tool_error(self, message: str) -> Dict[str, Any]:
+        if not isinstance(message, str) or not message.strip():
+            raise ValueError("message must be a non-empty string")
         msg = _clean(message, 300)
         return _tool_result("Error: " + msg, {"error": msg, "sandbox": self.sandbox_mode}, is_error=True)
 
@@ -378,6 +403,14 @@ class SolverBeeMcp:
 def build_server(binary: str, *, problems_dir: Optional[str] = None, timeout_s: float = DEFAULT_TIMEOUT_S, allow_unsandboxed: bool = False,
                  verifier: Any = None) -> SolverBeeMcp:
     """The server for one binary. With ``allow_unsandboxed`` every solver run is forced without namespaces and every result says sandbox 'none'."""
+    if not isinstance(binary, str) or not binary.strip():
+        raise ValueError("binary must be a non-empty string")
+    if problems_dir is not None and (not isinstance(problems_dir, str) or not problems_dir.strip()):
+        raise ValueError("problems_dir must be None or a non-empty string")
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+        raise ValueError("timeout_s must be a positive finite number")
+    if not isinstance(allow_unsandboxed, bool):
+        raise ValueError("allow_unsandboxed must be a boolean")
     svc = svc_mod.SolverBeeService(binary, problems_dir=problems_dir, verifier=verifier, max_concurrent=1, timeout_s=timeout_s,
                                    allow_unsandboxed=allow_unsandboxed)
     if allow_unsandboxed:
@@ -405,6 +438,8 @@ def read_frame(stream: BinaryIO, limit: int = MAX_LINE_BYTES) -> Optional[bytes]
 
 def encode(resp: Dict[str, Any]) -> bytes:
     """One protocol line: ASCII only (no U+2028 or other line separators), compact, no raw newlines."""
+    if not isinstance(resp, dict):
+        raise ValueError("resp must be a dict")
     try:
         text = json.dumps(resp, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
     except (TypeError, ValueError):

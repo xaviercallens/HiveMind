@@ -35,10 +35,14 @@ BLOCK: Dict[str, int] = {"Z": 8, "A2": 2, "E8": 8}
 
 
 def nearest_zn_t(x: torch.Tensor) -> torch.Tensor:
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or x.dtype == torch.bool or not bool(torch.isfinite(x).all()):
+        raise ValueError("x must be a non-empty finite torch.Tensor")
     return torch.round(x)
 
 
 def nearest_dn_t(x: torch.Tensor) -> torch.Tensor:
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or x.dtype == torch.bool or not bool(torch.isfinite(x).all()):
+        raise ValueError("x must be a non-empty finite torch.Tensor")
     f = torch.round(x)
     odd = torch.remainder(f.sum(dim=-1), 2.0) != 0
     d = x - f
@@ -49,12 +53,19 @@ def nearest_dn_t(x: torch.Tensor) -> torch.Tensor:
 
 
 def _closer_t(a: torch.Tensor, b: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    for name, t in (("a", a), ("b", b), ("x", x)):
+        if not isinstance(t, torch.Tensor) or t.numel() == 0 or t.dtype == torch.bool or not bool(torch.isfinite(t).all()):
+            raise ValueError(f"{name} must be a non-empty finite numeric torch.Tensor")
+    if a.shape != x.shape or b.shape != x.shape:
+        raise ValueError("a, b, and x must have identical shapes")
     da = ((x - a) ** 2).sum(dim=-1)
     db = ((x - b) ** 2).sum(dim=-1)
     return torch.where((db < da).unsqueeze(-1), b, a)
 
 
 def nearest_e8_t(x: torch.Tensor) -> torch.Tensor:
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or x.dtype == torch.bool or not bool(torch.isfinite(x).all()):
+        raise ValueError("x must be a non-empty finite torch.Tensor")
     if x.shape[-1] != 8:
         raise ValueError("E8 lives in dimension 8")
     return _closer_t(nearest_dn_t(x), nearest_dn_t(x - 0.5) + 0.5, x)
@@ -62,6 +73,8 @@ def nearest_e8_t(x: torch.Tensor) -> torch.Tensor:
 
 def nearest_a2_t(x: torch.Tensor) -> torch.Tensor:
     """Nearest point of A₂ = R ∪ (R + (½, √3/2)), R = ℤ × √3ℤ; rows of ``x`` have 2 columns."""
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or x.dtype == torch.bool or not bool(torch.isfinite(x).all()):
+        raise ValueError("x must be a non-empty finite torch.Tensor")
     if x.shape[-1] != 2:
         raise ValueError("A2 lives in dimension 2")
     scale = torch.tensor([1.0, SQRT3], dtype=x.dtype, device=x.device)
@@ -76,12 +89,24 @@ DECODERS_T = {"Z": nearest_zn_t, "E8": nearest_e8_t, "A2": nearest_a2_t}
 
 def is_a2_point(c: torch.Tensor, tol: float = 1e-9) -> torch.Tensor:
     """Membership in A₂ (rows): integer coordinates in the basis (1, 0), (½, √3/2)."""
+    if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) <= 0.0:
+        raise ValueError("tol must be a strictly positive finite float")
+    if (
+        not isinstance(c, torch.Tensor)
+        or c.numel() == 0
+        or c.dtype == torch.bool
+        or c.shape[-1] != 2
+        or not bool(torch.isfinite(c).all())
+    ):
+        raise ValueError("A2 points must have last dimension 2 and be non-empty")
     b = c[..., 1] / (0.5 * SQRT3)
     a = c[..., 0] - 0.5 * b
-    return ((a - torch.round(a)).abs() < tol) & ((b - torch.round(b)).abs() < tol)
+    return ((a - torch.round(a)).abs() < float(tol)) & ((b - torch.round(b)).abs() < float(tol))
 
 
 def _entropy_bits(key: torch.Tensor) -> float:
+    if not isinstance(key, torch.Tensor) or key.numel() == 0 or key.dtype == torch.bool or not bool(torch.isfinite(key).all()):
+        raise ValueError("key must be a non-empty finite numeric torch.Tensor")
     _, counts = torch.unique(key.reshape(-1), return_counts=True)
     p = counts.to(torch.float64) / counts.sum()
     return float(-(p * torch.log2(p)).sum())
@@ -89,8 +114,13 @@ def _entropy_bits(key: torch.Tensor) -> float:
 
 def _joint_key(*cols: torch.Tensor) -> torch.Tensor:
     """Injective int64 key of several integer columns (mixed radix on their observed ranges)."""
-    if not cols or any(c.numel() == 0 for c in cols):
-        raise ValueError("cols must be non-empty tensors")
+    if not cols or any(
+        not isinstance(c, torch.Tensor) or c.numel() == 0 or c.dtype == torch.bool or not bool(torch.isfinite(c).all())
+        for c in cols
+    ):
+        raise ValueError("cols must be non-empty finite numeric tensors")
+    if any(c.shape != cols[0].shape for c in cols):
+        raise ValueError("all cols must have identical shapes")
     key = torch.zeros_like(cols[0], dtype=torch.int64)
     for c in cols:
         c = c.to(torch.int64)
@@ -101,6 +131,8 @@ def _joint_key(*cols: torch.Tensor) -> torch.Tensor:
 
 
 def _cond_entropy_bits(x: torch.Tensor, *cond: torch.Tensor) -> float:
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or x.dtype == torch.bool or not bool(torch.isfinite(x).all()):
+        raise ValueError("x must be a non-empty finite numeric torch.Tensor")
     if not cond:
         return _entropy_bits(x)
     return _entropy_bits(_joint_key(x, *cond)) - _entropy_bits(_joint_key(*cond))
@@ -108,12 +140,18 @@ def _cond_entropy_bits(x: torch.Tensor, *cond: torch.Tensor) -> float:
 
 def integer_coordinates(kind: str, c: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     """(coset index per row, integer coordinates per row) of unscaled codewords."""
+    if not isinstance(c, torch.Tensor) or c.numel() == 0 or c.dtype == torch.bool or not bool(torch.isfinite(c).all()):
+        raise ValueError("c must be a non-empty finite torch.Tensor")
     if kind == "Z":
         return torch.zeros(c.shape[:-1], dtype=torch.int64, device=c.device), torch.round(c).to(torch.int64)
     if kind == "E8":
+        if c.shape[-1] != 8:
+            raise ValueError("E8 lives in dimension 8")
         coset = ((c[..., 0] - torch.round(c[..., 0])).abs() > 1e-9).to(torch.int64)
         return coset, torch.round(c - 0.5 * coset.unsqueeze(-1).to(c.dtype)).to(torch.int64)
     if kind == "A2":
+        if c.shape[-1] != 2:
+            raise ValueError("A2 lives in dimension 2")
         y = c[..., 1] / SQRT3
         coset = ((y - torch.round(y)).abs() > 1e-9).to(torch.int64)
         half = 0.5 * coset.to(c.dtype)
@@ -123,9 +161,21 @@ def integer_coordinates(kind: str, c: torch.Tensor) -> Tuple[torch.Tensor, torch
 
 def factorised_rate_t(kind: str, codewords: torch.Tensor, context: torch.Tensor) -> float:
     """Bits per dimension of unscaled codewords (rows, shape (N, n)) given an integer context per row (N,)."""
-    if codewords.ndim != 2 or codewords.shape[0] == 0 or codewords.shape[1] == 0:
+    if (
+        not isinstance(codewords, torch.Tensor)
+        or codewords.ndim != 2
+        or codewords.shape[0] == 0
+        or codewords.shape[1] == 0
+        or codewords.dtype == torch.bool
+    ):
         raise ValueError("codewords must be a non-empty 2D tensor")
-    if context.ndim != 1 or context.shape[0] != codewords.shape[0]:
+    if (
+        not isinstance(context, torch.Tensor)
+        or context.ndim != 1
+        or context.shape[0] != codewords.shape[0]
+        or context.dtype == torch.bool
+        or not bool(torch.isfinite(context).all())
+    ):
         raise ValueError("context must be a 1D tensor matching codewords.shape[0]")
     n = codewords.shape[-1]
     coset, z = integer_coordinates(kind, codewords)
@@ -146,7 +196,7 @@ def to_rows(kind: str, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     ℤ and E₈: consecutive blocks of 8 channels. A₂: RoPE planes (i, i + d/2), i < d/2."""
     if kind not in DECODERS_T:
         raise KeyError(kind)
-    if x.numel() == 0:
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or x.dtype == torch.bool or not bool(torch.isfinite(x).all()):
         raise ValueError("x must be non-empty")
     d = x.shape[-1]
     if kind == "A2":
@@ -167,9 +217,21 @@ def to_rows(kind: str, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
 def from_rows(kind: str, rows: torch.Tensor, shape: torch.Size) -> torch.Tensor:
     if kind not in DECODERS_T:
         raise KeyError(kind)
+    if not isinstance(rows, torch.Tensor) or rows.numel() == 0 or rows.dtype == torch.bool or not bool(torch.isfinite(rows).all()):
+        raise ValueError("rows must be a non-empty torch.Tensor")
+    if (
+        not isinstance(shape, (tuple, torch.Size))
+        or len(shape) < 1
+        or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in shape)
+    ):
+        raise ValueError("shape must be a non-empty tuple/Size of positive integers")
     if kind == "A2":
+        if shape[-1] % 2:
+            raise ValueError("A2 needs an even head_dim")
         r = rows.reshape(*shape[:-1], shape[-1] // 2, 2)
         return torch.cat([r[..., 0], r[..., 1]], dim=-1)
+    if shape[-1] % 8:
+        raise ValueError("Z/E8 blocks need head_dim % 8 == 0")
     return rows.reshape(shape)
 
 
@@ -177,8 +239,12 @@ def lattice_quantize(kind: str, x: torch.Tensor, scale: float, measure_rate: boo
     """Quantise ``x`` (last axis = head_dim, already normalised) on ``scale · L``; return (x̂ float64, rate or nan)."""
     if kind not in DECODERS_T:
         raise KeyError(kind)
-    if not math.isfinite(float(scale)) or float(scale) <= 0.0:
+    if isinstance(scale, bool) or not isinstance(scale, (int, float)) or not math.isfinite(float(scale)) or float(scale) <= 0.0:
         raise ValueError("scale must be positive and finite")
+    if not isinstance(measure_rate, bool):
+        raise ValueError("measure_rate must be a boolean")
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or x.dtype == torch.bool:
+        raise ValueError("x must be a non-empty torch.Tensor")
     if not bool(torch.isfinite(x).all()):
         raise ValueError("x contains NaN or inf; refusing to quantise it")
     rows, ctx = to_rows(kind, x.to(torch.float64))

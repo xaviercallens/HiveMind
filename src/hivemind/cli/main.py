@@ -94,6 +94,8 @@ def cmd_hardware_check() -> int:
 
 def cmd_benchmark_vram(profile_name: str) -> int:
     """Run a live 4-bit NF4 + Rank-64 QLoRA + 8-bit Paged AdamW VRAM benchmark on the RTX 2070."""
+    if isinstance(profile_name, bool) or not isinstance(profile_name, str) or not profile_name.strip():
+        raise ValueError("profile_name must be a non-empty string")
     cfg = HiveMindConfig.from_yaml()
     prof = cfg.profiles.get(profile_name) or cfg.profiles["rtx2070_7b_worker"]
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -174,11 +176,17 @@ def cmd_serve_coordinator(host: str, port: int, public_url: str | None = None, i
     from hivemind.boinc.coordinator_api import BOINCCoordinatorService, create_coordinator_fastapi_app
     from hivemind.client.steam_identity import SteamIdentityGate
 
-    host_clean = str(host).strip()
+    if isinstance(host, bool) or not isinstance(host, str):
+        raise ValueError("host must be a non-empty string.")
+    host_clean = host.strip()
     if not host_clean:
         raise ValueError("host must be a non-empty string.")
-    if int(port) < 1 or int(port) > 65535:
+    if isinstance(port, bool) or not isinstance(port, int) or port < 1 or port > 65535:
         raise ValueError("port must be in 1..65535.")
+    if not isinstance(insecure_dev_identities, bool):
+        raise ValueError("insecure_dev_identities must be a boolean.")
+    if public_url is not None and (isinstance(public_url, bool) or not isinstance(public_url, str)):
+        raise ValueError("public_url must be a string or None.")
     is_loopback = host_clean in ("127.0.0.1", "localhost", "::1")
     pub_clean = public_url.strip() if public_url is not None else ""
     identity = None

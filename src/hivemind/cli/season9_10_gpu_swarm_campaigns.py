@@ -182,6 +182,14 @@ def _build_and_train_domain_branches(
     seed: int = 42,
 ) -> tuple[Any, dict[str, torch.Tensor], dict[str, dict[str, torch.Tensor]], list[str]]:
     """Build a compact Qwen2 + QLoRA model on `dev` and train `num_domains` domain branches."""
+    if not isinstance(dev, torch.device):
+        raise ValueError("dev must be a torch.device")
+    if isinstance(num_domains, bool) or not isinstance(num_domains, int) or num_domains < 2 or num_domains > 8:
+        raise ValueError("num_domains must be in [2, 8]")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be >= 1")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     torch.manual_seed(seed)
     domain_names = [
         "Rust_Systems_Kernel",
@@ -256,12 +264,14 @@ def run_season9_10_gpu_swarm_campaigns(
     """Execute all 4 Season 9 & Season 10 GPU + HiveMind Swarm contributor campaigns."""
     if not isinstance(contributor_handle, str) or not contributor_handle.strip():
         raise ValueError("contributor_handle must be non-empty")
-    if isinstance(num_domains, bool) or int(num_domains) < 2 or int(num_domains) > 8:
+    if isinstance(num_domains, bool) or not isinstance(num_domains, int) or num_domains < 2 or num_domains > 8:
         raise ValueError("num_domains must be in [2, 8]")
-    if isinstance(inner_steps, bool) or int(inner_steps) < 1:
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
         raise ValueError("inner_steps must be >= 1")
-    if isinstance(seed, bool):
-        raise ValueError("seed must be an integer")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
+        raise ValueError("output_path must be a Path or None")
 
     t_start = time.perf_counter()
     hw = detect_community_accelerator(preferred_device=preferred_device)
@@ -771,6 +781,8 @@ def verify_season9_10_campaign_report(report: Mapping[str, Any]) -> bool:
 
 def format_season9_10_gpu_campaigns_markdown(report: dict[str, Any]) -> str:
     """Format a Markdown receipt table for pasting into GitHub Discussions or Issues."""
+    if not isinstance(report, dict) or not report:
+        raise ValueError("report must be a non-empty dict")
     hw = report["hardware_envelope"]
     c1 = report["campaign_1_s9_quorum_and_rda"]
     c2 = report["campaign_2_s9_sigma_and_looped_moe"]
@@ -824,6 +836,8 @@ def format_season9_10_gpu_campaigns_markdown(report: dict[str, Any]) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entrypoint for Season 9 & Season 10 GPU + HiveMind Swarm Campaigns."""
+    if argv is not None and (isinstance(argv, (str, bytes)) or not isinstance(argv, Sequence)):
+        raise ValueError("argv must be a sequence of strings or None")
     parser = argparse.ArgumentParser(
         description="Run Project HiveMind Season 9 & Season 10 GPU & Swarm Contributor Campaigns."
     )

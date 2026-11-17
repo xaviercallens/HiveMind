@@ -93,6 +93,23 @@ class CloudEventEnvelope:
     specversion: str = "1.0"
     datacontenttype: str = "application/json"
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("id", self.id),
+            ("source", self.source),
+            ("type", self.type),
+            ("correlation_id", self.correlation_id),
+            ("subject", self.subject),
+            ("specversion", self.specversion),
+            ("datacontenttype", self.datacontenttype),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.time, bool) or not isinstance(self.time, (int, float)) or not math.isfinite(float(self.time)) or float(self.time) <= 0.0:
+            raise ValueError("time must be a positive finite timestamp")
+        if not isinstance(self.data, dict):
+            raise TypeError("data must be a dict")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -110,6 +127,26 @@ class AMCPMobilityCommand:
     expected_warm_latency_s: float
     reason: str
     event_id: str
+
+    def __post_init__(self) -> None:
+        if self.verb not in ("dispatch", "clone", "replicate", "migrate", "retract", "federateWith"):
+            raise ValueError(f"Unsupported AMCPMobilityVerb: {self.verb!r}")
+        for field_name, val in (
+            ("bee_id", self.bee_id),
+            ("model_id", self.model_id),
+            ("source_node_id", self.source_node_id),
+            ("target_node_id", self.target_node_id),
+            ("reason", self.reason),
+            ("event_id", self.event_id),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, num in (
+            ("adapter_size_mib", self.adapter_size_mib),
+            ("expected_warm_latency_s", self.expected_warm_latency_s),
+        ):
+            if isinstance(num, bool) or not isinstance(num, (int, float)) or not math.isfinite(float(num)) or float(num) <= 0.0:
+                raise ValueError(f"{field_name} must be a positive finite number")
 
 
 @dataclass(frozen=True)
@@ -131,6 +168,39 @@ class ElasticEDAScalingResult:
     mobility_commands_emitted: list[dict[str, Any]]
     sustained_without_drops: bool
     basis: str = "closed_form_model"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.wave_name, str) or not self.wave_name.strip():
+            raise ValueError("wave_name must be a non-empty string")
+        if not isinstance(self.basis, str) or not self.basis.strip():
+            raise ValueError("basis must be a non-empty string")
+        for field_name, iv in (
+            ("base_resident_producers_c0", self.base_resident_producers_c0),
+            ("effective_active_producers_c", self.effective_active_producers_c),
+        ):
+            if isinstance(iv, bool) or not isinstance(iv, int) or iv < 1:
+                raise ValueError(f"{field_name} must be a positive integer")
+        for field_name, iv in (
+            ("standby_prosumer_pool", self.standby_prosumer_pool),
+            ("activated_amcp_replicas", self.activated_amcp_replicas),
+            ("eda_buffered_burst_requests", self.eda_buffered_burst_requests),
+            ("cold_start_504_prevented_by_pr249", self.cold_start_504_prevented_by_pr249),
+        ):
+            if isinstance(iv, bool) or not isinstance(iv, int) or iv < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name, num in (
+            ("peak_arrival_req_per_s", self.peak_arrival_req_per_s),
+            ("static_service_rate_req_per_s", self.static_service_rate_req_per_s),
+            ("elastic_service_rate_req_per_s", self.elastic_service_rate_req_per_s),
+            ("static_utilization_rho", self.static_utilization_rho),
+            ("elastic_eda_utilization_rho", self.elastic_eda_utilization_rho),
+        ):
+            if isinstance(num, bool) or not isinstance(num, (int, float)) or not math.isfinite(float(num)) or float(num) <= 0.0:
+                raise ValueError(f"{field_name} must be a positive finite number")
+        if not isinstance(self.mobility_commands_emitted, list) or any(not isinstance(c, dict) for c in self.mobility_commands_emitted):
+            raise TypeError("mobility_commands_emitted must be a list of dicts")
+        if not isinstance(self.sustained_without_drops, bool):
+            raise ValueError("sustained_without_drops must be a boolean")
 
 
 class AMCPEventDrivenTrafficSustainer:

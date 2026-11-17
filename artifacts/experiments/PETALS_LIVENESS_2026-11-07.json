@@ -1,4 +1,8 @@
 {
+  "evidence": "placeholder",
+  "not_a_measurement": true,
+  "evidence_note": "weekly entries are literals; no liveness check was run on those dates",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md",
   "schema": "hivemind.petals_liveness_receipt.v1",
   "deliverable_id": "PS-07-D3",
   "generated_at_utc": "2026-11-07T22:46:40Z",

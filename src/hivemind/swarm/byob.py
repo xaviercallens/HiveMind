@@ -86,6 +86,12 @@ class ServedBase:
     hf_repo_id: str
     tier_id: str  # must exist in ``hivemind.router.catalog.TIERS`` (checked by a test)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.hf_repo_id, str) or not self.hf_repo_id.strip():
+            raise ValueError("hf_repo_id must be a non-empty string")
+        if not isinstance(self.tier_id, str) or not self.tier_id.strip():
+            raise ValueError("tier_id must be a non-empty string")
+
 
 # Base checkpoints of the dense catalog tiers whose Ollama tag is the instruct model of that Hugging Face repo. Repackaged
 # copies (``unsloth/...``, ``*-bnb-4bit``) are deliberately absent: identical weights would be a claim we do not verify.
@@ -190,6 +196,12 @@ class Reason:
     code: ReasonCode
     detail: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.code, ReasonCode):
+            raise TypeError("code must be a ReasonCode")
+        if not isinstance(self.detail, str) or not self.detail.strip():
+            raise ValueError("detail must be a non-empty string")
+
     def to_dict(self) -> dict[str, str]:
         return {"code": self.code.value, "detail": self.detail}
 
@@ -276,12 +288,18 @@ class BeeManifest:
 
 
 def hmac_hex(key: bytes, payload: bytes) -> str:
-    if len(key) < MIN_KEY_BYTES:
+    if not isinstance(key, (bytes, bytearray)) or len(key) < MIN_KEY_BYTES:
         raise ValueError(f"HMAC key must be at least {MIN_KEY_BYTES} bytes")
-    return hmac.new(key, payload, hashlib.sha256).hexdigest()
+    if not isinstance(payload, (bytes, bytearray)):
+        raise TypeError("payload must be bytes")
+    return hmac.new(bytes(key), bytes(payload), hashlib.sha256).hexdigest()
 
 
 def verify_signature(manifest: BeeManifest, keyring: Mapping[str, bytes]) -> list[Reason]:
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if not isinstance(keyring, Mapping):
+        raise TypeError("keyring must be a Mapping")
     if not manifest.signature:
         return [Reason(ReasonCode.SIGNATURE_MISSING, "manifest carries no signature")]
     key = keyring.get(manifest.contributor_id)
@@ -299,11 +317,15 @@ def verify_signature(manifest: BeeManifest, keyring: Mapping[str, bytes]) -> lis
 
 
 def _bad(field_name: str, value: Any, rule: str) -> Reason:
+    if not isinstance(field_name, str) or not field_name.strip() or not isinstance(rule, str) or not rule.strip():
+        raise ValueError("field_name and rule must be non-empty strings")
     return Reason(ReasonCode.MANIFEST_FIELD_INVALID, f"{field_name}={value!r}: {rule}")
 
 
 def check_endpoint_url(url: str) -> list[Reason]:
     """https only, no credentials, no localhost and no literal private, loopback, link-local or reserved address."""
+    if not isinstance(url, str):
+        raise TypeError("url must be a string")
     parsed = urllib.parse.urlsplit(url)
     host = (parsed.hostname or "").rstrip(".")  # "localhost." and "svc.internal." resolve like their dotless forms
     if parsed.scheme != "https" or not host:
@@ -327,6 +349,8 @@ def check_endpoint_url(url: str) -> list[Reason]:
 
 def check_manifest_fields(manifest: BeeManifest) -> list[Reason]:
     """Grammar and allowlist checks that need no network. Returns every failure, not just the first."""
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
     m = manifest
     reasons: list[Reason] = []
     if m.schema != MANIFEST_SCHEMA:
@@ -372,6 +396,8 @@ def check_manifest_fields(manifest: BeeManifest) -> list[Reason]:
 
 def normalised_name_key(name: str) -> str:
     """Collision key: lower-case alphanumerics with a leading ``hivemind`` and ``bee`` stripped (``bee-coder`` == ``coder``)."""
+    if not isinstance(name, str):
+        raise TypeError("name must be a string")
     key = re.sub(r"[^a-z0-9]", "", normalize_model_alias(name).lower())
     key = key.removeprefix("hivemind")
     return key.removeprefix("bee")
@@ -383,6 +409,8 @@ def existing_bee_names(extra: Iterable[str] = ()) -> frozenset[str]:
     ``extra`` is where the expert registry passes the bees it already holds. ``btm_moe`` (which imports torch) is imported
     here rather than at module load so that ``scripts/byob_submit.py`` starts quickly.
     """
+    if isinstance(extra, (str, bytes)) or not isinstance(extra, Iterable):
+        raise TypeError("extra must be an iterable of strings")
     from hivemind.core.btm_moe import SEASON_3_DOMAIN_EXPERT_SPECS
     from hivemind.core.serving_experts import SERVING_EXPERT_SPECS
     from hivemind.swarm.rusty_sundials_scientific_bee import BEE_RUSTY_SUNDIALS_ID
@@ -397,6 +425,10 @@ def existing_bee_names(extra: Iterable[str] = ()) -> frozenset[str]:
 
 
 def check_name_collision(bee_name: str, taken: Iterable[str]) -> list[Reason]:
+    if not isinstance(bee_name, str) or not bee_name.strip():
+        raise ValueError("bee_name must be a non-empty string")
+    if isinstance(taken, (str, bytes)) or not isinstance(taken, Iterable):
+        raise TypeError("taken must be an iterable of strings")
     key = normalised_name_key(bee_name)
     clashes = sorted(name for name in taken if normalised_name_key(name) == key)
     if clashes:
@@ -405,6 +437,8 @@ def check_name_collision(bee_name: str, taken: Iterable[str]) -> list[Reason]:
 
 
 def served_base(base_model: str) -> ServedBase | None:
+    if not isinstance(base_model, str):
+        raise TypeError("base_model must be a string")
     return next((b for b in HIVE_SERVED_BASES if b.hf_repo_id.lower() == base_model.lower()), None)
 
 
@@ -419,11 +453,21 @@ class RepoFile:
     size: int
     sha256: str  # LFS sha256 when the Hub reports one, else "" (small git blobs only carry a git oid)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.path, str):
+            raise TypeError("path must be a string")
+        if isinstance(self.size, bool) or not isinstance(self.size, int) or self.size < 0:
+            raise ValueError("size must be a non-negative integer")
+        if not isinstance(self.sha256, str):
+            raise TypeError("sha256 must be a string")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 def _extension(path: str) -> str:
+    if not isinstance(path, str):
+        raise TypeError("path must be a string")
     name = path.rsplit("/", 1)[-1]
     if name.startswith(".") and name.count(".") == 1:
         return name  # ".gitattributes"
@@ -431,6 +475,12 @@ def _extension(path: str) -> str:
 
 
 def parse_tree(entries: Sequence[Mapping[str, Any]]) -> list[RepoFile]:
+    if (
+        not isinstance(entries, Sequence)
+        or isinstance(entries, (str, bytes))
+        or any(not isinstance(e, Mapping) for e in entries)
+    ):
+        raise TypeError("entries must be a sequence of mappings")
     files: list[RepoFile] = []
     for entry in entries:
         if entry.get("type") != "file":
@@ -442,6 +492,8 @@ def parse_tree(entries: Sequence[Mapping[str, Any]]) -> list[RepoFile]:
 
 def check_repo_files(files: Sequence[RepoFile]) -> list[Reason]:
     """Whole-repository file policy: safetensors/gguf weights only, no pickle, no code, no unsafe path."""
+    if isinstance(files, (str, bytes)) or not isinstance(files, Sequence) or any(not isinstance(f, RepoFile) for f in files):
+        raise TypeError("files must be a sequence of RepoFile instances")
     reasons: list[Reason] = []
     for f in files:
         parts = f.path.split("/")
@@ -472,6 +524,10 @@ def _join(subfolder: str, name: str) -> str:
 
 def served_weight_files(manifest: BeeManifest, files: Sequence[RepoFile]) -> list[RepoFile]:
     """The weight files the hive would load for this kind (the size check and the registry entry use these)."""
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if isinstance(files, (str, bytes)) or not isinstance(files, Sequence) or any(not isinstance(f, RepoFile) for f in files):
+        raise TypeError("files must be a sequence of RepoFile instances")
     if manifest.kind == "gguf":
         return [f for f in files if f.path == manifest.primary_file]
     if manifest.kind == "lora_adapter":
@@ -481,6 +537,10 @@ def served_weight_files(manifest: BeeManifest, files: Sequence[RepoFile]) -> lis
 
 
 def check_required_files(manifest: BeeManifest, files: Sequence[RepoFile]) -> list[Reason]:
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if isinstance(files, (str, bytes)) or not isinstance(files, Sequence) or any(not isinstance(f, RepoFile) for f in files):
+        raise TypeError("files must be a sequence of RepoFile instances")
     paths = {f.path for f in files}
     need: list[str] = []
     if manifest.kind == "lora_adapter":
@@ -521,6 +581,8 @@ def has_remote_code(config: Mapping[str, Any] | None) -> bool:
     A transformers ``auto_map`` always points at modules shipped in the repo, so any non-empty one is remote code. A peft
     ``auto_mapping`` is remote code unless :func:`peft_auto_mapping_is_library_only` holds.
     """
+    if config is not None and not isinstance(config, Mapping):
+        raise TypeError("config must be None or a Mapping")
     if not config:
         return False
     if config.get("auto_map"):
@@ -531,6 +593,8 @@ def has_remote_code(config: Mapping[str, Any] | None) -> bool:
 
 def estimate_resident_gb(manifest: BeeManifest, weight_bytes: int) -> float | None:
     """Planning estimate of GPU residency in GB, or ``None`` when it cannot be computed (adapter on an unserved base)."""
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
     if isinstance(weight_bytes, bool) or not isinstance(weight_bytes, int) or weight_bytes < 0:
         raise ValueError("weight_bytes must be a non-negative integer")
     weights_gb = weight_bytes / 1e9
@@ -664,6 +728,10 @@ class SubmissionLedger:
                     self._events.append((str(row["contributor_id"]), float(row["ts"])))
 
     def count(self, contributor_id: str, now: float) -> int:
+        if not isinstance(contributor_id, str) or not contributor_id.strip():
+            raise ValueError("contributor_id must be a non-empty string")
+        if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)):
+            raise ValueError("now must be a finite number")
         return sum(1 for cid, ts in self._events if cid == contributor_id and now - self.window_s < ts <= now)
 
     def check(self, contributor_id: str, now: float) -> list[Reason]:
@@ -673,6 +741,10 @@ class SubmissionLedger:
         return []
 
     def record(self, contributor_id: str, now: float) -> None:
+        if not isinstance(contributor_id, str) or not contributor_id.strip():
+            raise ValueError("contributor_id must be a non-empty string")
+        if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)):
+            raise ValueError("now must be a finite number")
         self._events.append((contributor_id, now))
         if self.path is not None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -695,6 +767,27 @@ class StaticReport:
     resident_gb: float | None = None
     hub_license: str = ""
     checked_utc: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.verdict, Verdict):
+            raise TypeError("verdict must be a Verdict")
+        if not isinstance(self.reasons, list) or any(not isinstance(r, Reason) for r in self.reasons):
+            raise TypeError("reasons must be a list of Reason instances")
+        if not isinstance(self.files, list) or any(not isinstance(f, RepoFile) for f in self.files):
+            raise TypeError("files must be a list of RepoFile instances")
+        if not isinstance(self.weight_files, list) or any(not isinstance(f, RepoFile) for f in self.weight_files):
+            raise TypeError("weight_files must be a list of RepoFile instances")
+        if isinstance(self.weight_bytes, bool) or not isinstance(self.weight_bytes, int) or self.weight_bytes < 0:
+            raise ValueError("weight_bytes must be a non-negative integer")
+        if self.resident_gb is not None and (
+            isinstance(self.resident_gb, bool)
+            or not isinstance(self.resident_gb, (int, float))
+            or not math.isfinite(float(self.resident_gb))
+            or float(self.resident_gb) < 0.0
+        ):
+            raise ValueError("resident_gb must be None or a non-negative finite number")
+        if not isinstance(self.hub_license, str) or not isinstance(self.checked_utc, str):
+            raise TypeError("hub_license and checked_utc must be strings")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -801,7 +894,19 @@ def static_validate(manifest: BeeManifest, *, keyring: Mapping[str, bytes], hub:
     Order matters only for the signature: an unsigned or forged manifest stops there (nothing else is worth reporting to
     an unauthenticated sender) and is not recorded against the claimed contributor's rate limit.
     """
-    ts = time.time() if now is None else now
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if not isinstance(keyring, Mapping):
+        raise TypeError("keyring must be a Mapping")
+    if not isinstance(hub, HfHttpHubClient):
+        raise TypeError("hub must be an HfHttpHubClient")
+    if not isinstance(ledger, SubmissionLedger):
+        raise TypeError("ledger must be a SubmissionLedger")
+    if isinstance(taken_names, (str, bytes)) or not isinstance(taken_names, Iterable):
+        raise TypeError("taken_names must be an iterable of strings")
+    if now is not None and (isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now))):
+        raise ValueError("now must be None or a finite number")
+    ts = time.time() if now is None else float(now)
     report = StaticReport(verdict=Verdict.REJECT, checked_utc=_utc(ts))
     report.reasons.extend(verify_signature(manifest, keyring))
     if report.reasons:
@@ -836,6 +941,12 @@ class HeldOutItem:
     expected_regex: str
     reference_answer: str  # used only by the positive control; never sent to the bee
 
+    def __post_init__(self) -> None:
+        for field_name in ("item_id", "prompt", "expected_regex", "reference_answer"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+
 
 @dataclass(frozen=True)
 class HeldOutPack:
@@ -843,6 +954,12 @@ class HeldOutPack:
 
     pack_id: str
     items: tuple[HeldOutItem, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.pack_id, str) or not self.pack_id.strip():
+            raise ValueError("pack_id must be a non-empty string")
+        if not isinstance(self.items, tuple) or any(not isinstance(i, HeldOutItem) for i in self.items):
+            raise ValueError("items must be a tuple of HeldOutItem instances")
 
     @classmethod
     def from_json_file(cls, path: Path) -> "HeldOutPack":
@@ -886,6 +1003,14 @@ class IsolatedExecutor:
     isolated: bool
     answer_pack: AnswerFn
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("name must be a non-empty string")
+        if not isinstance(self.isolated, bool):
+            raise TypeError("isolated must be a bool")
+        if not callable(self.answer_pack):
+            raise TypeError("answer_pack must be callable")
+
 
 EndpointProber = Callable[[str, str, str, float], str]
 
@@ -904,6 +1029,14 @@ _PROBE_OPENER: Final[urllib.request.OpenerDirector] = urllib.request.build_opene
 
 def https_chat_prober(url: str, model: str, prompt: str, timeout_s: float) -> str:
     """POST one OpenAI-format chat request to ``{url}/v1/chat/completions`` and return the first message content."""
+    if not isinstance(url, str) or not url.strip().startswith("https://"):
+        raise ValueError("url must be a non-empty https:// URL")
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError("model must be a non-empty string")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string")
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+        raise ValueError("timeout_s must be a positive finite number")
     body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0}).encode()
     request = urllib.request.Request(url.rstrip("/") + "/v1/chat/completions", data=body, method="POST",
                                      headers={"Content-Type": "application/json", "User-Agent": "hivemind-byob/1"})
@@ -921,6 +1054,23 @@ class EvaluationReport:
     pass_rate: float | None = None
     executor: str = ""
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.verdict, Verdict):
+            raise TypeError("verdict must be a Verdict")
+        if not isinstance(self.reasons, list) or any(not isinstance(r, Reason) for r in self.reasons):
+            raise TypeError("reasons must be a list of Reason instances")
+        if not isinstance(self.pack_id, str) or not isinstance(self.executor, str):
+            raise TypeError("pack_id and executor must be strings")
+        if isinstance(self.n_items, bool) or not isinstance(self.n_items, int) or self.n_items < 0:
+            raise ValueError("n_items must be a non-negative integer")
+        if self.pass_rate is not None and (
+            isinstance(self.pass_rate, bool)
+            or not isinstance(self.pass_rate, (int, float))
+            or not math.isfinite(float(self.pass_rate))
+            or not (0.0 <= float(self.pass_rate) <= 1.0)
+        ):
+            raise ValueError("pass_rate must be None or a finite number in [0.0, 1.0]")
+
     def to_dict(self) -> dict[str, Any]:
         return {"verdict": self.verdict.value, "reasons": [r.to_dict() for r in self.reasons], "pack_id": self.pack_id,
                 "n_items": self.n_items, "pass_rate": self.pass_rate, "executor": self.executor}
@@ -935,6 +1085,16 @@ def evaluate(manifest: BeeManifest, static: StaticReport, *, pack: HeldOutPack |
     ``prober`` with ``timeout_s`` per item; nothing of the contributor's runs on hive hardware. The pack's own positive and
     negative controls run before any answer is scored.
     """
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if not isinstance(static, StaticReport):
+        raise TypeError("static must be a StaticReport")
+    if pack is not None and not isinstance(pack, HeldOutPack):
+        raise TypeError("pack must be None or a HeldOutPack")
+    if executor is not None and not isinstance(executor, IsolatedExecutor):
+        raise TypeError("executor must be None or an IsolatedExecutor")
+    if prober is not None and not callable(prober):
+        raise TypeError("prober must be None or callable")
     if (
         isinstance(min_pass_rate, bool)
         or not isinstance(min_pass_rate, (int, float))
@@ -1035,6 +1195,14 @@ def _stage(static: StaticReport, evaluation: EvaluationReport | None) -> Stage:
 def build_registry_entry(manifest: BeeManifest, static: StaticReport, evaluation: EvaluationReport | None,
                          now: float | None = None) -> dict[str, Any]:
     """Registry-entry-shaped dict; the best stage it can carry is ``shadow``."""
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if not isinstance(static, StaticReport):
+        raise TypeError("static must be a StaticReport")
+    if evaluation is not None and not isinstance(evaluation, EvaluationReport):
+        raise TypeError("evaluation must be None or an EvaluationReport")
+    if now is not None and (isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now))):
+        raise ValueError("now must be None or a finite number")
     base = served_base(manifest.base_model)
     reasons = [r.to_dict() for r in static.reasons] + ([r.to_dict() for r in evaluation.reasons] if evaluation else [])
     entry = {
@@ -1072,11 +1240,19 @@ def build_registry_entry(manifest: BeeManifest, static: StaticReport, evaluation
 
 
 def owner_approval_payload(entry: Mapping[str, Any], approver: str, approved_utc: str) -> bytes:
+    if not isinstance(entry, Mapping):
+        raise TypeError("entry must be a Mapping")
+    if not isinstance(approver, str) or not approver.strip():
+        raise ValueError("approver must be a non-empty string")
+    if not isinstance(approved_utc, str) or not approved_utc.strip():
+        raise ValueError("approved_utc must be a non-empty string")
     return canonical_json({"action": "byob_promote_live", "expert_id": entry["expert_id"],
                            "manifest_sha256": entry["manifest_sha256"], "approver": approver, "approved_utc": approved_utc})
 
 
 def sign_owner_approval(entry: Mapping[str, Any], approver: str, approved_utc: str, owner_key: bytes) -> dict[str, str]:
+    if not isinstance(owner_key, (bytes, bytearray)) or len(owner_key) < MIN_KEY_BYTES:
+        raise ValueError(f"owner_key must be at least {MIN_KEY_BYTES} bytes")
     return {"approver": approver, "approved_utc": approved_utc,
             "manifest_sha256": str(entry["manifest_sha256"]),
             "signature": hmac_hex(owner_key, owner_approval_payload(entry, approver, approved_utc))}
@@ -1084,6 +1260,12 @@ def sign_owner_approval(entry: Mapping[str, Any], approver: str, approved_utc: s
 
 def approve_live(entry: Mapping[str, Any], approval: Mapping[str, str], owner_key: bytes) -> tuple[dict[str, Any], list[Reason]]:
     """shadow -> live, only with an owner approval signed over this exact manifest digest. Returns (entry, reasons)."""
+    if not isinstance(entry, Mapping):
+        raise TypeError("entry must be a Mapping")
+    if not isinstance(approval, Mapping):
+        raise TypeError("approval must be a Mapping")
+    if not isinstance(owner_key, (bytes, bytearray)) or len(owner_key) < MIN_KEY_BYTES:
+        raise ValueError(f"owner_key must be at least {MIN_KEY_BYTES} bytes")
     out = dict(entry)
     if entry.get("stage") != Stage.SHADOW.value:
         return out, [Reason(ReasonCode.STAGE_NOT_SHADOW, f"stage is {entry.get('stage')!r}; only shadow can go live")]

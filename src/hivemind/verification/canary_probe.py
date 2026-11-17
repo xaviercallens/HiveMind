@@ -70,10 +70,30 @@ class CanaryPrompt:
     expected_pattern: str
     category: str
 
+    def __post_init__(self) -> None:
+        for field_name in ("canary_id", "prompt", "expected_pattern", "category"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name in ("canary_id", "category"):
+            val = getattr(self, field_name)
+            if any(ord(c) < 32 or ord(c) == 127 for c in val):
+                raise ValueError(f"{field_name} must not contain control characters")
+        try:
+            re.compile(self.expected_pattern)
+        except re.error as exc:
+            raise ValueError(f"expected_pattern must be a valid regular expression: {exc}") from exc
+
     def to_chat_request(self, model: str = "hivemind/coder") -> dict[str, Any]:
         """Format as an ordinary OpenAI-compatible chat request (blinded: no canary header)."""
+        if (
+            not isinstance(model, str)
+            or not model.strip()
+            or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in model.strip())
+        ):
+            raise ValueError("model must be a non-empty string")
         return {
-            "model": model,
+            "model": model.strip(),
             "messages": [{"role": "user", "content": self.prompt}],
             "temperature": 0.0,
             "max_tokens": 32,
@@ -149,9 +169,9 @@ class NodeCanaryState:
     wilson_lb_threshold: float = DEFAULT_WILSON_LB_THRESHOLD
 
     def __post_init__(self) -> None:
-        if not isinstance(self.node_id, str) or not self.node_id.strip():
+        if not isinstance(self.node_id, str) or not self.node_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in self.node_id):
             raise ValueError("node_id must be a non-empty string")
-        if not isinstance(self.planted_role, str) or not self.planted_role.strip():
+        if not isinstance(self.planted_role, str) or not self.planted_role.strip() or any(ord(c) < 32 or ord(c) == 127 for c in self.planted_role):
             raise ValueError("planted_role must be a non-empty string")
         if (
             isinstance(self.successes, bool)
@@ -168,6 +188,7 @@ class NodeCanaryState:
         if (
             isinstance(self.wilson_lb_threshold, bool)
             or not isinstance(self.wilson_lb_threshold, (int, float))
+            or not math.isfinite(float(self.wilson_lb_threshold))
             or not (0.0 < float(self.wilson_lb_threshold) < 1.0)
         ):
             raise ValueError("wilson_lb_threshold must be in (0.0, 1.0)")
@@ -185,6 +206,8 @@ class NodeCanaryState:
         return self.total >= self.min_trials and self.wilson_lb < self.wilson_lb_threshold
 
     def record(self, passed: bool) -> None:
+        if not isinstance(passed, bool):
+            raise ValueError("passed must be a boolean")
         self.total += 1
         if passed:
             self.successes += 1

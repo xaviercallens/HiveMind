@@ -199,11 +199,13 @@ def validate_spec_bytes(raw: bytes) -> Dict[str, Any]:
 
 # ---------------------------------------------------------------- helpers
 def canonical_sha256(obj: Any) -> str:
-    return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
+    return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
 
 
 def _clean(text: Any, limit: int = 200) -> str:
     """Printable, single-line, bounded: for reasons derived from stderr or exceptions."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("limit must be a positive integer")
     s = "".join(ch if ch.isprintable() else " " for ch in str(text))
     return " ".join(s.split())[:limit]
 
@@ -218,6 +220,8 @@ def _content_text(content: Any) -> str:
 
 def extract_spec_block(text: str) -> bytes:
     """The bytes of the single ```ode-spec fenced block (content verbatim, minus the newline before the closing fence)."""
+    if not isinstance(text, str):
+        raise SpecError("text must be a string")
     blocks = SPEC_BLOCK_RE.findall(text)
     opens = len(SPEC_OPEN_RE.findall(text))
     if not blocks:
@@ -233,6 +237,8 @@ def extract_spec_block(text: str) -> bytes:
 
 
 def _is_loopback_host(h: str) -> bool:
+    if not isinstance(h, str):
+        raise ValueError("h must be a string")
     h = h.strip("[]").lower()
     if h == "localhost":
         return True
@@ -243,6 +249,8 @@ def _is_loopback_host(h: str) -> bool:
 
 
 def _hostname_of(host_header: str) -> str:
+    if not isinstance(host_header, str):
+        raise ValueError("host_header must be a string")
     h = host_header.strip()
     if h.startswith("["):
         return h[1:].split("]")[0]
@@ -255,6 +263,10 @@ class ServiceError(Exception):
 
 def check_bind(host: str, allow_nonlocal: bool, api_key_file: Optional[str]) -> Optional[str]:
     """Returns the API key to enforce (or None). Refuses a non-loopback bind unless BOTH allow_nonlocal and an api key file are given (as gwaya_lite does)."""
+    if not isinstance(host, str) or not host.strip():
+        raise ServiceError("host must be a non-empty string")
+    if not isinstance(allow_nonlocal, bool):
+        raise ServiceError("allow_nonlocal must be a boolean")
     key = None
     if api_key_file:
         try:
@@ -272,7 +284,11 @@ def check_bind(host: str, allow_nonlocal: bool, api_key_file: Optional[str]) -> 
 def load_problem_library(directory: Optional[str]) -> Dict[str, Dict[str, Any]]:
     lib: Dict[str, Dict[str, Any]] = {}
     if not directory:
+        if directory is not None and not isinstance(directory, (str, os.PathLike)):
+            raise ValueError("directory must be a path or None")
         return lib
+    if not isinstance(directory, (str, os.PathLike)):
+        raise ValueError("directory must be a path or None")
     for p in sorted(Path(directory).glob("*.json")):
         try:
             d = json.loads(p.read_text(encoding="utf-8"))
@@ -290,12 +306,18 @@ class SolverBeeService:
                  log: Callable[[str], None] = lambda m: None) -> None:
         if not isinstance(binary, str) or not binary.strip():
             raise ValueError("binary must be a non-empty string")
+        if not isinstance(allow_unsandboxed, bool) or not isinstance(loopback_only, bool):
+            raise ValueError("allow_unsandboxed and loopback_only must be booleans")
         if isinstance(max_concurrent, bool) or not isinstance(max_concurrent, int) or max_concurrent < 1:
             raise ValueError("max_concurrent must be an integer >= 1")
         if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(timeout_s) or timeout_s <= 0:
             raise ValueError("timeout_s must be a finite positive number")
         if isinstance(mem_mb, bool) or not isinstance(mem_mb, int) or mem_mb < 1:
             raise ValueError("mem_mb must be an integer >= 1")
+        if api_key is not None and (not isinstance(api_key, str) or not api_key.strip()):
+            raise ValueError("api_key must be a non-empty string or None")
+        if not callable(log):
+            raise ValueError("log must be callable")
         self.binary = binary
         self.library = load_problem_library(problems_dir)
         self._verifier = verifier
@@ -320,6 +342,8 @@ class SolverBeeService:
         return mod, ""
 
     def authorised(self, header: str) -> bool:
+        if header is not None and not isinstance(header, str):
+            raise ValueError("header must be a string or None")
         if not self.api_key:
             return True
         m = re.match(r"Bearer\s+(.+)$", header or "")
@@ -358,6 +382,12 @@ class SolverBeeService:
         return res
 
     def _unverified(self, spec_id: str, input_sha: str, reasons: List[str], result: Optional[Dict[str, Any]], bin_sha: Optional[str]) -> Dict[str, Any]:
+        if not isinstance(spec_id, str) or not spec_id.strip():
+            raise ValueError("spec_id must be a non-empty string")
+        if not isinstance(input_sha, str) or not input_sha.strip():
+            raise ValueError("input_sha must be a non-empty string")
+        if not isinstance(reasons, list):
+            raise ValueError("reasons must be a list")
         return {"schema": CERT_SCHEMA, "id": spec_id, "verdict": "UNVERIFIED", "checks": [], "reasons": [_clean(r) for r in reasons], "input_sha256": input_sha,
                 "result_sha256": canonical_sha256(result) if result is not None else None, "binary_sha256": bin_sha,
                 "solver_rev": ((result or {}).get("solver") or {}).get("rev") if isinstance(result, dict) else None, "verifier_version": None, "caveat": CAVEAT}
@@ -414,6 +444,8 @@ class SolverBeeService:
 
     def _library_problem(self, spec: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """The library entry for this spec id, but only when the submitted problem/y0/t0/t_out equal the library spec's (otherwise the reference does not apply)."""
+        if not isinstance(spec, dict) or not isinstance(spec.get("id"), str):
+            raise ValueError("spec must be a dict with a string id")
         p = self.library.get(spec["id"])
         if p is None:
             return None
@@ -433,6 +465,14 @@ class SolverBeeService:
 
     @staticmethod
     def _summary(spec_id: str, cert: Dict[str, Any], sandbox: str, wall_ms: int) -> str:
+        if not isinstance(spec_id, str) or not spec_id.strip():
+            raise ValueError("spec_id must be a non-empty string")
+        if not isinstance(cert, dict) or "verdict" not in cert:
+            raise ValueError("cert must be a dict with verdict")
+        if not isinstance(sandbox, str) or not sandbox.strip():
+            raise ValueError("sandbox must be a non-empty string")
+        if isinstance(wall_ms, bool) or not isinstance(wall_ms, int) or wall_ms < 0:
+            raise ValueError("wall_ms must be a non-negative integer")
         checks = ", ".join("%s %s" % (_clean(c.get("name"), 30), _clean(c.get("status"), 10)) for c in (cert.get("checks") or [])[:8] if isinstance(c, dict))
         reasons = "; ".join(_clean(r, 160) for r in (cert.get("reasons") or [])[:4])
         out = f"Solver Bee verdict for spec {spec_id}: {cert['verdict']} (sandbox: {sandbox}, {wall_ms} ms)."
@@ -482,6 +522,8 @@ class SolverBeeService:
 
 # ---------------------------------------------------------------- HTTP
 def make_handler(svc: SolverBeeService) -> type:
+    if not isinstance(svc, SolverBeeService):
+        raise ValueError("svc must be a SolverBeeService")
     class Handler(BaseHTTPRequestHandler):
         server_version = "SolverBee/1"
         timeout = 30  # slow clients cannot hold a thread forever
@@ -554,6 +596,12 @@ def make_handler(svc: SolverBeeService) -> type:
 
 
 def build_server(svc: SolverBeeService, host: str, port: int) -> ThreadingHTTPServer:
+    if not isinstance(svc, SolverBeeService):
+        raise ValueError("svc must be a SolverBeeService")
+    if not isinstance(host, str) or not host.strip():
+        raise ValueError("host must be a non-empty string")
+    if isinstance(port, bool) or not isinstance(port, int) or not (0 <= port <= 65535):
+        raise ValueError("port must be an integer in 0..65535")
     class Server(ThreadingHTTPServer):
         daemon_threads = True
         address_family = socket.AF_INET6 if ":" in host else socket.AF_INET

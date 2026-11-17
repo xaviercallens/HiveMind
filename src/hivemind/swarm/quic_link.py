@@ -124,6 +124,14 @@ class LinkIdentity:
     certificate: x509.Certificate
     private_key: ec.EllipticCurvePrivateKey
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.ca_certificate, x509.Certificate):
+            raise TypeError("ca_certificate must be an x509.Certificate")
+        if not isinstance(self.certificate, x509.Certificate):
+            raise TypeError("certificate must be an x509.Certificate")
+        if not isinstance(self.private_key, ec.EllipticCurvePrivateKey):
+            raise TypeError("private_key must be an EllipticCurvePrivateKey")
+
     @property
     def ca_pem(self) -> str:
         return self.ca_certificate.public_bytes(serialization.Encoding.PEM).decode("ascii")
@@ -335,6 +343,7 @@ class _ServerProtocol(QuicConnectionProtocol):
 
 async def await_quic_closed(protocol: QuicConnectionProtocol, timeout: float = 1.0) -> None:
     """Wait for a QUIC protocol to send or receive CONNECTION_CLOSE and finish its drain timer immediately."""
+    _validate_timeout(timeout)
     deadline = time.monotonic() + timeout
     while not protocol._closed.is_set():
         if getattr(protocol._quic, "_close_event", None) is not None:
@@ -362,6 +371,12 @@ class QuicHiddenStateServer:
         port: int = 0,
         on_frame: Optional[FrameHandler] = None,
     ) -> None:
+        if not isinstance(identity, LinkIdentity):
+            raise TypeError("identity must be a LinkIdentity")
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("host must be a non-empty string")
+        if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
+            raise ValueError("port must be an integer in [0, 65535]")
         self.identity = identity
         self.host = host
         self.port = port
@@ -471,6 +486,21 @@ class QuicSendReport:
     handshake_latency_s: Optional[float] = None
     """Time from the first byte on the wire to the completed TLS handshake."""
 
+    def __post_init__(self) -> None:
+        if isinstance(self.delivered, bool) or not isinstance(self.delivered, int) or self.delivered < 0:
+            raise ValueError("delivered must be a non-negative integer")
+        if isinstance(self.elapsed_s, bool) or not isinstance(self.elapsed_s, (int, float)) or not math.isfinite(float(self.elapsed_s)) or float(self.elapsed_s) < 0.0:
+            raise ValueError("elapsed_s must be a finite non-negative number")
+        if not isinstance(self.session_resumed, bool) or not isinstance(self.early_data_accepted, bool):
+            raise ValueError("session_resumed and early_data_accepted must be booleans")
+        if self.handshake_latency_s is not None and (
+            isinstance(self.handshake_latency_s, bool)
+            or not isinstance(self.handshake_latency_s, (int, float))
+            or not math.isfinite(float(self.handshake_latency_s))
+            or float(self.handshake_latency_s) < 0.0
+        ):
+            raise ValueError("handshake_latency_s must be None or a finite non-negative number")
+
 
 async def quic_send_frames(
     host: str,
@@ -575,6 +605,23 @@ class Quic0RttProbe:
     elapsed_s: float = 0.0
     ticket: Optional[SessionTicket] = None
     error: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        for int_name in ("frames_sent", "frames_delivered", "server_early_frames"):
+            ival = getattr(self, int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 0:
+                raise ValueError(f"{int_name} must be a non-negative integer")
+        if not isinstance(self.session_resumed, bool) or not isinstance(self.early_data_accepted, bool):
+            raise TypeError("session_resumed and early_data_accepted must be bools")
+        if not isinstance(self.frame_latencies_ms, list):
+            raise TypeError("frame_latencies_ms must be a list")
+        if (
+            isinstance(self.elapsed_s, bool)
+            or not isinstance(self.elapsed_s, (int, float))
+            or not math.isfinite(float(self.elapsed_s))
+            or float(self.elapsed_s) < 0.0
+        ):
+            raise ValueError("elapsed_s must be a non-negative finite number")
 
     @property
     def ok(self) -> bool:
@@ -736,6 +783,10 @@ class WebSocketHiddenStateServer:
         *, ssl_context: Optional[ssl.SSLContext] = None, timeout: float = STREAM_TIMEOUT_S,
     ) -> None:
         _validate_timeout(timeout)
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("host must be a non-empty string")
+        if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
+            raise ValueError("port must be an integer in [0, 65535]")
         if ssl_context is None and not _is_loopback_ip(host):
             raise ValueError("non-loopback WebSocket listeners require TLS")
         self.host = host
@@ -858,6 +909,18 @@ class LinkRun:
     fallback_reason: Optional[str] = None
     handshakes: List[Dict[str, bool]] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        if self.protocol not in ("quic_0rtt", "quic", "libp2p_websocket"):
+            raise ValueError("protocol must be 'quic_0rtt', 'quic', or 'libp2p_websocket'")
+        for i_field in ("frames_sent", "frames_delivered", "server_early_frames"):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if isinstance(self.elapsed_s, bool) or not isinstance(self.elapsed_s, (int, float)) or not math.isfinite(float(self.elapsed_s)) or float(self.elapsed_s) < 0.0:
+            raise ValueError("elapsed_s must be a finite non-negative number")
+        if not isinstance(self.session_resumed, bool) or not isinstance(self.early_data_accepted, bool):
+            raise ValueError("session_resumed and early_data_accepted must be booleans")
+
     @property
     def frames_per_sec(self) -> float:
         return self.frames_delivered / max(self.elapsed_s, 1e-9)
@@ -909,6 +972,8 @@ class RemoteHiddenStateLink:
     """
 
     def __init__(self, endpoint: LinkEndpoint, timeout: float = 3.0) -> None:
+        if not isinstance(endpoint, LinkEndpoint):
+            raise TypeError("endpoint must be a LinkEndpoint")
         _validate_timeout(timeout)
         self.endpoint = endpoint
         self.timeout = timeout

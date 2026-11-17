@@ -955,13 +955,36 @@ def summarize_moe_self_training_progress(
         recent_rounds,
         key=lambda r: (float(r.get("submitted_utc") or 0.0), int(r.get("round_index") or 0)),
     )
-    eval_losses = [
-        float(r["eval_loss"])
-        for r in ordered
-        if r.get("eval_loss") is not None and math.isfinite(float(r["eval_loss"]))
-    ]
     total_tokens = sum(max(0, int(r.get("tokens_trained") or 0)) for r in ordered)
     campaigns = sorted({str(r.get("run_id") or "") for r in ordered if str(r.get("run_id") or "").strip()})
+
+    def _losses(rows: Sequence[Mapping[str, Any]]) -> list[float]:
+        return [float(r["eval_loss"]) for r in rows
+                if r.get("eval_loss") is not None and math.isfinite(float(r["eval_loss"]))]
+
+    # One trajectory per campaign (IP-295): rounds of different runs measure different models and data, so an
+    # "initial" loss from one run and a "latest" loss from another (11.929 from an uninitialised T4 run) is not a
+    # trajectory. The top-level numbers are those of the campaign with the most recent round.
+    per_campaign: list[dict[str, Any]] = []
+    for cid in campaigns:
+        rows = [r for r in ordered if str(r.get("run_id") or "") == cid]
+        ls = _losses(rows)
+        per_campaign.append({
+            "run_id": cid,
+            "rounds": len(rows),
+            "first_round_index": int(rows[0].get("round_index") or 0),
+            "latest_round_index": int(rows[-1].get("round_index") or 0),
+            "initial_eval_loss": round(ls[0], 6) if ls else None,
+            "latest_eval_loss": round(ls[-1], 6) if ls else None,
+            "best_eval_loss": round(min(ls), 6) if ls else None,
+            "improved": bool(ls) and ls[-1] <= ls[0],
+            "latest_submitted_utc": float(rows[-1].get("submitted_utc") or 0.0),
+        })
+    current = max(per_campaign, key=lambda c: c["latest_submitted_utc"], default=None)
+    if current is not None:
+        eval_losses = _losses([r for r in ordered if str(r.get("run_id") or "") == current["run_id"]])
+    else:
+        eval_losses = _losses(ordered)
     handles = sorted({str(r.get("handle") or "") for r in ordered if str(r.get("handle") or "").strip()})
     latest_round = int(ordered[-1].get("round_index") or 0) if ordered else 0
 
@@ -995,6 +1018,9 @@ def summarize_moe_self_training_progress(
         "monotone_ratchet_improved": ratchet_improved,
         "total_tokens_trained": total_tokens,
         "active_campaigns": campaigns,
+        "trajectory_campaign": current["run_id"] if current is not None else None,
+        "campaign_trajectories": [{k: v for k, v in c.items() if k != "latest_submitted_utc"} for c in per_campaign],
+        "evidence": "client_reported_unverified: losses are reported by the trainers; the gateway does not recompute them",
         "participating_handles": handles,
         "active_trainer_nodes_count": len(live_nodes),
         "total_registered_trainer_nodes": len(opentrainer_nodes),

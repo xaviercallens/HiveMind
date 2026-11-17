@@ -132,6 +132,33 @@ class SteamUserTelemetry:
         }
     )
 
+    def __post_init__(self) -> None:
+        for s_name in ("steam_id64", "persona_name"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for f_name in ("verified_tflops", "api_credits_balance"):
+            val = getattr(self, f_name)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a finite non-negative number")
+        for i_name in ("workunits_completed", "hack_miner_total_pts", "swarm_contribution_pts"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        for s_opt in ("leaderboard_receipt_hmac", "rich_presence_status"):
+            if not isinstance(getattr(self, s_opt), str):
+                raise ValueError(f"{s_opt} must be a string")
+        for l_name in ("unlocked_achievements", "credit_receipts"):
+            if not isinstance(getattr(self, l_name), list):
+                raise ValueError(f"{l_name} must be a list")
+        if not isinstance(self.stats, dict):
+            raise ValueError("stats must be a dict")
+
 
 class SteamworksSDKBridge:
     """Interface to Steamworks Native DLL, User Auth, Rich Presence, Leaderboards, Achievements & Credits."""
@@ -243,13 +270,15 @@ class SteamworksSDKBridge:
         else:
             active_mission = mission_name
 
+        if not isinstance(steam_id64, str) or not steam_id64.strip():
+            raise ValueError("steam_id64 must be a non-empty string")
         if gpu_model is not None:
             gpu_name = gpu_model
         if hive_earned is not None:
             hive_balance = hive_earned
-        if not math.isfinite(float(hive_balance)) or float(hive_balance) < 0.0:
+        if isinstance(hive_balance, bool) or not isinstance(hive_balance, (int, float)) or not math.isfinite(float(hive_balance)) or float(hive_balance) < 0.0:
             raise ValueError("hive_balance must be finite and >= 0")
-        if int(total_points) < 0:
+        if isinstance(total_points, bool) or not isinstance(total_points, int) or int(total_points) < 0:
             raise ValueError("total_points must be >= 0")
 
         status_str = (
@@ -327,10 +356,24 @@ class SteamworksSDKBridge:
         hive_mined: float = 0.0,
     ) -> dict[str, float | int]:
         """Update `ISteamUserStats::SetStat` progression counters for a Steam gamer."""
-        if not (math.isfinite(float(best_loss_drop_pct)) and math.isfinite(float(hive_mined))):
+        if not isinstance(steam_id64, str) or not steam_id64.strip():
+            raise ValueError("steam_id64 must be a non-empty string")
+        if (
+            isinstance(best_loss_drop_pct, bool)
+            or isinstance(hive_mined, bool)
+            or not isinstance(best_loss_drop_pct, (int, float))
+            or not isinstance(hive_mined, (int, float))
+            or not (math.isfinite(float(best_loss_drop_pct)) and math.isfinite(float(hive_mined)))
+        ):
             raise ValueError("best_loss_drop_pct and hive_mined must be finite")
         if (
-            int(shards_mined) < 0
+            isinstance(shards_mined, bool)
+            or isinstance(bounties_cracked, bool)
+            or isinstance(boss_raids_cleared, bool)
+            or not isinstance(shards_mined, int)
+            or not isinstance(bounties_cracked, int)
+            or not isinstance(boss_raids_cleared, int)
+            or int(shards_mined) < 0
             or int(bounties_cracked) < 0
             or int(boss_raids_cleared) < 0
             or float(best_loss_drop_pct) < 0.0
@@ -359,10 +402,12 @@ class SteamworksSDKBridge:
         is_vac_banned: bool = False,
     ) -> SteamAuthSessionTicket:
         """Generate an ISteamUser::GetAuthSessionTicket for BOINC Coordinator Sybil verification."""
-        if not steam_id64 or not str(steam_id64).strip():
+        if not isinstance(steam_id64, str) or not str(steam_id64).strip():
             raise ValueError("steam_id64 must be non-empty")
-        if not math.isfinite(float(account_spend_usd)) or float(account_spend_usd) < 0.0:
+        if isinstance(account_spend_usd, bool) or not isinstance(account_spend_usd, (int, float)) or not math.isfinite(float(account_spend_usd)) or float(account_spend_usd) < 0.0:
             raise ValueError("account_spend_usd must be finite and >= 0")
+        if not isinstance(is_vac_banned, bool):
+            raise ValueError("is_vac_banned must be a boolean")
         payload = f"{steam_id64}:{STEAMWORKS_APP_ID}:{account_spend_usd:.2f}:{int(is_vac_banned)}"
         sig = hmac.new(self.signing_secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
         return SteamAuthSessionTicket(
@@ -416,10 +461,14 @@ class SteamworksSDKBridge:
         credits_minted: float = 10.0,
     ) -> SteamUserTelemetry:
         """Update ISteamLeaderboards FLOPs, unlock Steam Achievements, and mint API credits."""
-        if not steam_id64 or not str(steam_id64).strip() or not wu_id or not str(wu_id).strip():
+        if not isinstance(steam_id64, str) or not str(steam_id64).strip() or not isinstance(wu_id, str) or not str(wu_id).strip():
             raise ValueError("steam_id64 and wu_id must be non-empty")
         if (
-            not (math.isfinite(float(tflops_contributed)) and math.isfinite(float(credits_minted)))
+            isinstance(tflops_contributed, bool)
+            or isinstance(credits_minted, bool)
+            or not isinstance(tflops_contributed, (int, float))
+            or not isinstance(credits_minted, (int, float))
+            or not (math.isfinite(float(tflops_contributed)) and math.isfinite(float(credits_minted)))
             or float(tflops_contributed) < 0.0
             or float(credits_minted) < 0.0
         ):
@@ -459,8 +508,16 @@ class SteamworksSDKBridge:
         achievements: list[str],
     ) -> str:
         """Sign and upload a gamer's Hack-Miner score to ISteamLeaderboards (KeepBest)."""
+        if not isinstance(steam_id64, str) or not str(steam_id64).strip():
+            raise ValueError("steam_id64 must be non-empty")
         if (
-            not math.isfinite(float(hive_balance))
+            isinstance(hive_balance, bool)
+            or isinstance(total_points, bool)
+            or isinstance(swarm_contribution_points, bool)
+            or not isinstance(hive_balance, (int, float))
+            or not isinstance(total_points, int)
+            or not isinstance(swarm_contribution_points, int)
+            or not math.isfinite(float(hive_balance))
             or float(hive_balance) < 0.0
             or int(total_points) < 0
             or int(swarm_contribution_points) < 0
@@ -470,9 +527,9 @@ class SteamworksSDKBridge:
             steam_id64,
             SteamUserTelemetry(steam_id64=steam_id64, persona_name=persona_name),
         )
-        entry.hack_miner_total_pts = max(entry.hack_miner_total_pts, total_points)
-        entry.swarm_contribution_pts = max(entry.swarm_contribution_pts, swarm_contribution_points)
-        entry.api_credits_balance = round(hive_balance, 4)
+        entry.hack_miner_total_pts = max(entry.hack_miner_total_pts, int(total_points))
+        entry.swarm_contribution_pts = max(entry.swarm_contribution_pts, int(swarm_contribution_points))
+        entry.api_credits_balance = round(max(float(entry.api_credits_balance), float(hive_balance)), 4)
         for ach in achievements:
             if ach not in entry.unlocked_achievements:
                 entry.unlocked_achievements.append(ach)

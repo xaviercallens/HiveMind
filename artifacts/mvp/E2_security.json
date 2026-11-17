@@ -41,7 +41,7 @@
       }
     ],
     "chain_verdicts": {
-      "valid": 169,
+      "valid": 190,
       "invalid": 0
     }
   },
@@ -49,9 +49,18 @@
     "kind": "measured on gateway.meter_usage",
     "completion_bytes": 4000,
     "honest_billed_tokens": 1000,
-    "max_billable_tokens_for_these_bytes": 4000,
+    "bytes_cap_only": {
+      "max_billable_tokens": 4000,
+      "max_inflation_factor": 4.0
+    },
+    "tokenizer_recount": {
+      "slack": 1.25,
+      "max_billable_tokens": 1250,
+      "max_inflation_factor": 1.25
+    },
+    "tokenizer_recount_deployed": false,
     "max_inflation_factor": 4.0,
-    "note": "capped by the completion BYTES (a token is at least one byte), so a producer can still overstate by up to the bytes-per-token ratio (about 4x for English); there is no tokenizer-based cross-check yet"
+    "note": "with HIVEMIND_TOKENIZER_DIR the gateway recounts completions with the model's tokenizer and bills at most 1.25x its own count; without it (or for a model with no tokenizer file) the bytes cap allows about 4x for English. The factor above is the one the deploy configuration actually gives."
   },
   "wired": {
     "kind": "static check",

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import hashlib
 import math
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from hivemind.swarm.s35_01_optimal_energy_amcp_xswat_codec import (
     benchmark_a2_rope_plane_quantizer,
@@ -46,6 +46,26 @@ class PortfolioProjectNode:
     role_in_unified_stack: str
     locally_present: bool
 
+    def __post_init__(self) -> None:
+        for s_field in ("name", "github_repo", "role_in_unified_stack"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if self.origin_type not in ("original_core_ip", "community_fork_bridge"):
+            raise ValueError("origin_type must be 'original_core_ip' or 'community_fork_bridge'")
+        if self.layer not in (
+            "L1_Orchestration_Latent",
+            "L2_Compute_Lattice",
+            "L3_FailClosed_Gate",
+            "L4_Formal_Physics_Audit",
+            "B2B_Vertical",
+        ):
+            raise ValueError(f"Unsupported layer: {self.layer!r}")
+        if not isinstance(self.local_xdev_dir, str):
+            raise ValueError("local_xdev_dir must be a string")
+        if not isinstance(self.locally_present, bool):
+            raise ValueError("locally_present must be a boolean")
+
 
 @dataclass(frozen=True)
 class UnifiedEcosystemExecutionReceipt:
@@ -65,9 +85,51 @@ class UnifiedEcosystemExecutionReceipt:
     merkle_root_sha256: str
     simulated: bool = True
 
+    def __post_init__(self) -> None:
+        for i_field in ("original_core_count", "fork_bridge_count", "local_xdev_verified_count"):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if (
+            isinstance(self.layer1_kv_compression_ratio, bool)
+            or not isinstance(self.layer1_kv_compression_ratio, (int, float))
+            or not math.isfinite(float(self.layer1_kv_compression_ratio))
+            or float(self.layer1_kv_compression_ratio) <= 0.0
+        ):
+            raise ValueError("layer1_kv_compression_ratio must be a finite positive number")
+        if (
+            isinstance(self.layer1_a2_rope_mse_gain_pct, bool)
+            or not isinstance(self.layer1_a2_rope_mse_gain_pct, (int, float))
+            or not math.isfinite(float(self.layer1_a2_rope_mse_gain_pct))
+        ):
+            raise ValueError("layer1_a2_rope_mse_gain_pct must be a finite number")
+        for nn_field in ("layer2_peak_citizen_vram_mib", "layer3_final_anse_energy"):
+            val = getattr(self, nn_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{nn_field} must be a finite non-negative number")
+        for b_field in (
+            "layer3_gwaya_a3_verified",
+            "layer4_lean_kernel_clean",
+            "layer4_sundials_tier_x_accepted",
+            "all_layers_passed",
+            "simulated",
+        ):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if (
+            not isinstance(self.merkle_root_sha256, str)
+            or len(self.merkle_root_sha256) != 64
+            or any(c not in "0123456789abcdefABCDEF" for c in self.merkle_root_sha256)
+        ):
+            raise ValueError("merkle_root_sha256 must be a 64-character hex string")
+
 
 def classify_repo_origin(repo_name: str) -> str:
     """Classify a repository name: `x`/`X`-prefixed forks vs original core IP."""
+    if not isinstance(repo_name, str) or not repo_name.strip():
+        raise ValueError("repo_name must be a non-empty string")
+    if any(ord(c) < 32 or ord(c) == 127 or c in ("/", "\\") for c in repo_name):
+        raise ValueError("repo_name contains forbidden control or path-separator characters")
     if len(repo_name) >= 2 and repo_name[0] in ("x", "X") and repo_name not in ("xaviercallens.github.io",):
         return "community_fork_bridge"
     return "original_core_ip"
@@ -88,6 +150,8 @@ def build_xdev_portfolio_catalog(xdev_root: Path | None = None) -> tuple[Portfol
     """Build the complete catalog of original core IP projects and `x*` fork bridges."""
     if xdev_root is None:
         xdev_root = _default_xdev_root()
+    elif not isinstance(xdev_root, Path):
+        raise ValueError("xdev_root must be a pathlib.Path or None")
     specs = (
         (
             "AMCP",
@@ -245,7 +309,7 @@ def build_xdev_portfolio_catalog(xdev_root: Path | None = None) -> tuple[Portfol
 def _eval_safe_arith_expr(node: object, env: dict[str, float]) -> float:
     import ast as _ast
 
-    if isinstance(node, _ast.Constant) and isinstance(node.value, (int, float)):
+    if isinstance(node, _ast.Constant) and not isinstance(node.value, bool) and isinstance(node.value, (int, float)):
         return float(node.value)
     if isinstance(node, _ast.Name) and node.id in env:
         return float(env[node.id])
@@ -308,12 +372,25 @@ def run_unified_4layer_ecosystem_pipeline(
     *,
     candidates: Sequence[str] | None = None,
     lean_source: str | None = None,
-    sent_arguments: dict[str, object] | None = None,
-    received_arguments: dict[str, object] | None = None,
+    sent_arguments: Mapping[str, object] | None = None,
+    received_arguments: Mapping[str, object] | None = None,
 ) -> UnifiedEcosystemExecutionReceipt:
     """Execute the end-to-end 4-Layer integration pipeline across all core & fork-bridge modules."""
     if xdev_root is None:
         xdev_root = _default_xdev_root()
+    elif not isinstance(xdev_root, Path):
+        raise ValueError("xdev_root must be a pathlib.Path or None")
+    if candidates is not None:
+        if isinstance(candidates, (str, bytes)) or not isinstance(candidates, Sequence) or not candidates:
+            raise ValueError("candidates must be a non-empty sequence of strings")
+        if any(not isinstance(c, str) for c in candidates):
+            raise ValueError("Every candidate in candidates must be a string")
+    if lean_source is not None and (not isinstance(lean_source, str) or "\x00" in lean_source):
+        raise ValueError("lean_source must be a string without NUL bytes")
+    if sent_arguments is not None and not isinstance(sent_arguments, Mapping):
+        raise ValueError("sent_arguments must be a mapping")
+    if received_arguments is not None and not isinstance(received_arguments, Mapping):
+        raise ValueError("received_arguments must be a mapping")
     catalog = build_xdev_portfolio_catalog(xdev_root=xdev_root)
     orig_cnt = sum(1 for n in catalog if n.origin_type == "original_core_ip")
     fork_cnt = sum(1 for n in catalog if n.origin_type == "community_fork_bridge")

@@ -1,0 +1,96 @@
+{
+  "experiment_id": "E27-TESTBED-1000",
+  "deliverable_id": "PS-09-D1",
+  "registered_utc": "2026-11-07T21:40:00Z",
+  "registered_before_run": true,
+  "status": "REGISTERED, NOT RUN. Committed before the first E27 1,000-node heterogeneous testbed run per PS-09-D1.",
+  "title": "1,000-node heterogeneous testbed (CUDA, ROCm, Metal profiles on residential network traces with 10-30% planted Byzantine nodes): convergence time, bandwidth per epoch, verification overhead, and routing latency gates",
+  "plan_document": "docs/roadmap/PLANETARY_SCALE_PLAN.md",
+  "paper_sections": [
+    "sec:roadmap_phase3",
+    "sec:literature_queueing_model"
+  ],
+  "roadmap_ids": [
+    "HM-S31-02"
+  ],
+  "design": {
+    "node_counts": [
+      100,
+      300,
+      1000
+    ],
+    "runs_per_node_count": 3,
+    "hardware_profiles": [
+      {
+        "backend": "CUDA",
+        "share": 0.65,
+        "representative_cards": [
+          "RTX 2070 8GB",
+          "RTX 3060 12GB",
+          "RTX 4070 12GB",
+          "Tesla T4 16GB"
+        ]
+      },
+      {
+        "backend": "ROCm",
+        "share": 0.20,
+        "representative_cards": [
+          "RX 6700 XT 12GB",
+          "RX 7800 XT 16GB"
+        ]
+      },
+      {
+        "backend": "Metal",
+        "share": 0.15,
+        "representative_cards": [
+          "Apple M2 16GB",
+          "Apple M3 Pro 18GB"
+        ]
+      }
+    ],
+    "byzantine_planted_fractions": [
+      0.10,
+      0.20,
+      0.30
+    ],
+    "byzantine_attack_models": [
+      "label_flip_gradient",
+      "gaussian_noise_poisoning",
+      "alie_little_is_enough",
+      "lazy_stale_adapter_replay"
+    ],
+    "network_trace_source": "PS-06 residential link profiles (asymmetric residential broadband up/down bandwidth and RTT distributions)"
+  },
+  "registered_thresholds": {
+    "time_to_convergence_ceiling_s": {
+      "100": 1800.0,
+      "300": 2700.0,
+      "1000": 3600.0
+    },
+    "bandwidth_per_epoch_ceiling_mb_per_node": 25.0,
+    "prover_or_replay_overhead_ceiling_pct": 15.0,
+    "routing_latency_p95_ceiling_ms": 250.0,
+    "byzantine_rejection_recall_floor": 0.95,
+    "honest_false_positive_ceiling": 0.05
+  },
+  "constraints": {
+    "infrastructure": "Spot VMs or local CPU-only harness only; Spot VMs deleted immediately after the run.",
+    "monthly_cloud_budget_ceiling_usd": 150.0
+  },
+  "acceptance_rules_fixed_now": {
+    "R1_replications": "At least 3 independent seeded runs completed for each node count N in {100, 300, 1000}.",
+    "R2_convergence_and_bandwidth": "Mean time-to-convergence <= time_to_convergence_ceiling_s[N] and mean bandwidth per epoch <= 25.0 MB/node.",
+    "R3_verification_and_routing": "Verification/replay overhead <= 15.0% of epoch wall time and routing p95 latency <= 250.0 ms at N=1000.",
+    "R4_byzantine_resilience": "Multi-Krum + execution-class-matched replay achieves >= 95% poisoner rejection recall with <= 5% honest false positives at 10%, 20%, and 30% planted fractions.",
+    "verdicts": {
+      "PASS": "R1 and R2 and R3 and R4",
+      "FAIL_SCALING": "R1 holds, R2 or R3 fails",
+      "FAIL_BYZANTINE": "R1 holds, R4 fails",
+      "INVALID": "R1 fails (fewer than 3 runs per size)"
+    }
+  },
+  "not_claimed": [
+    "No E27 simulation run has been executed in this pre-registration file.",
+    "Emulated 1,000-node results do not replace real volunteer hardware enrollment receipts (PS-03-D1, PS-04-D2)."
+  ]
+}

@@ -47,6 +47,8 @@ class FP8E4M3PageCodec:
     name = "fp8_e4m3"
 
     def encode(self, page: Tensor) -> Tuple[Tensor, Tensor]:
+        if not isinstance(page, torch.Tensor) or page.dtype == torch.bool:
+            raise ValueError(f"{self.name}: page must be a non-boolean torch.Tensor")
         x = page.detach().to(torch.float32)
         _require_encodable(self.name, x)
         q, scale = FP8PagedKVCache._quantize_page_fp8(page)
@@ -61,10 +63,24 @@ class FP8E4M3PageCodec:
         return q, scale
 
     def decode(self, payload: Tuple[Tensor, Tensor], dtype: torch.dtype = torch.float16) -> Tensor:
+        if not isinstance(dtype, torch.dtype):
+            raise ValueError(f"{self.name}: dtype must be a torch.dtype")
+        if (
+            not isinstance(payload, tuple)
+            or len(payload) != 2
+            or not all(isinstance(t, torch.Tensor) and t.numel() > 0 and t.dtype != torch.bool for t in payload)
+        ):
+            raise ValueError(f"{self.name}: payload must be a 2-tuple of torch.Tensor")
         q, scale = payload
         return FP8PagedKVCache._dequantize_page_fp8(q, scale, target_dtype=dtype)
 
     def payload_bits(self, payload: Tuple[Tensor, Tensor]) -> float:
+        if (
+            not isinstance(payload, tuple)
+            or len(payload) != 2
+            or not all(isinstance(t, torch.Tensor) and t.numel() > 0 and t.dtype != torch.bool for t in payload)
+        ):
+            raise ValueError(f"{self.name}: payload must be a 2-tuple of torch.Tensor")
         q, scale = payload
         return float(q.numel() * q.element_size() * 8 + scale.numel() * scale.element_size() * 8)
 
@@ -74,6 +90,8 @@ def _require_encodable(codec: str, page: Tensor, *side: Tensor) -> None:
 
     NaN or inf in the page, or a finite page whose per-row min/max/RMS overflows fp16 (above 65504), would otherwise be
     encoded silently and `payload_bits` would still report a cost for a payload that is unusable."""
+    if page.dim() < 1 or page.numel() == 0:
+        raise ValueError(f"{codec}: page must be a non-empty tensor with at least 1 dimension")
     if not bool(torch.isfinite(page).all()):
         raise ValueError(f"{codec}: page contains NaN or inf")
     if not all(bool(torch.isfinite(t).all()) for t in side):
@@ -91,12 +109,14 @@ class IntMinMaxPageCodec:
     """Asymmetric per-row min-max integer quantiser: ``2**bits`` levels, fp16 min and max stored per row."""
 
     def __init__(self, bits: int) -> None:
-        if not 1 <= int(bits) <= 16:
-            raise ValueError("bits must be in 1..16")
+        if isinstance(bits, bool) or not isinstance(bits, int) or not 1 <= bits <= 16:
+            raise ValueError("bits must be an integer in 1..16")
         self.bits = int(bits)
         self.name = f"int{self.bits}_minmax"
 
     def encode(self, page: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+        if not isinstance(page, torch.Tensor) or page.dtype == torch.bool:
+            raise ValueError(f"{self.name}: page must be a non-boolean torch.Tensor")
         x = page.detach().to(torch.float32)
         mn = x.amin(dim=-1, keepdim=True).to(torch.float16)
         mx = x.amax(dim=-1, keepdim=True).to(torch.float16)
@@ -107,12 +127,26 @@ class IntMinMaxPageCodec:
         return codes.to(torch.int32), mn, mx
 
     def decode(self, payload: Tuple[Tensor, Tensor, Tensor], dtype: torch.dtype = torch.float16) -> Tensor:
+        if not isinstance(dtype, torch.dtype):
+            raise ValueError(f"{self.name}: dtype must be a torch.dtype")
+        if (
+            not isinstance(payload, tuple)
+            or len(payload) != 3
+            or not all(isinstance(t, torch.Tensor) and t.numel() > 0 and t.dtype != torch.bool for t in payload)
+        ):
+            raise ValueError(f"{self.name}: payload must be a 3-tuple of torch.Tensor")
         codes, mn, mx = payload
         mn32, mx32 = mn.to(torch.float32), mx.to(torch.float32)
         step = ((mx32 - mn32) / float((1 << self.bits) - 1)).clamp_min(1e-12)
         return (mn32 + codes.to(torch.float32) * step).to(dtype)
 
     def payload_bits(self, payload: Tuple[Tensor, Tensor, Tensor]) -> float:
+        if (
+            not isinstance(payload, tuple)
+            or len(payload) != 3
+            or not all(isinstance(t, torch.Tensor) and t.numel() > 0 and t.dtype != torch.bool for t in payload)
+        ):
+            raise ValueError(f"{self.name}: payload must be a 3-tuple of torch.Tensor")
         codes, mn, mx = payload
         return float(codes.numel() * self.bits + (mn.numel() + mx.numel()) * 16)
 
@@ -129,13 +163,15 @@ class LatticePageCodec:
     def __init__(self, kind: str, scale: float) -> None:
         if kind not in DECODERS_T:
             raise ValueError(f"kind must be one of {sorted(DECODERS_T)}")
-        if not scale > 0:
-            raise ValueError("scale must be positive")
+        if isinstance(scale, bool) or not isinstance(scale, (int, float)) or not math.isfinite(float(scale)) or float(scale) <= 0.0:
+            raise ValueError("scale must be a finite positive number")
         self.kind = kind
         self.scale = float(scale)
         self.name = f"lattice_{kind}_s{self.scale:g}"
 
     def encode(self, page: Tensor) -> Dict[str, Any]:
+        if not isinstance(page, torch.Tensor) or page.dim() < 1 or page.numel() == 0 or page.dtype == torch.bool:
+            raise ValueError(f"{self.name}: page must be a non-empty tensor with at least 1 dimension")
         x = page.detach().to(torch.float64)
         true_rms = x.pow(2).mean(dim=-1, keepdim=True).sqrt()
         if bool(((true_rms > 0) & (true_rms < 1e-6)).any()):  # the 1e-6 floor below would hide it: the row quantises to zeros
@@ -148,10 +184,25 @@ class LatticePageCodec:
         return {"codewords": c, "rms": rms, "shape": tuple(page.shape), "rate": rate, "coords": page.numel()}
 
     def decode(self, payload: Dict[str, Any], dtype: torch.dtype = torch.float16) -> Tensor:
+        if not isinstance(dtype, torch.dtype):
+            raise ValueError(f"{self.name}: dtype must be a torch.dtype")
+        if (
+            not isinstance(payload, dict)
+            or not all(k in payload for k in ("codewords", "rms", "shape"))
+            or not isinstance(payload["codewords"], torch.Tensor)
+            or not isinstance(payload["rms"], torch.Tensor)
+        ):
+            raise ValueError(f"{self.name}: payload must be a dict containing 'codewords', 'rms', and 'shape'")
         xn = from_rows(self.kind, payload["codewords"] * self.scale, torch.Size(payload["shape"]))
         return (xn * payload["rms"].to(torch.float64)).to(dtype)
 
     def payload_bits(self, payload: Dict[str, Any]) -> float:
+        if (
+            not isinstance(payload, dict)
+            or not all(k in payload for k in ("rate", "coords", "rms"))
+            or not isinstance(payload["rms"], torch.Tensor)
+        ):
+            raise ValueError(f"{self.name}: payload must be a dict containing 'rate', 'coords', and 'rms'")
         return float(payload["rate"] * payload["coords"] + 16 * payload["rms"].numel())
 
 
@@ -168,18 +219,43 @@ class PluggableKVPageCache:
         device: torch.device | str = "cpu",
         codec: KVPageCodec | None = None,
     ) -> None:
+        for name, val in (
+            ("num_layers", num_layers),
+            ("num_kv_heads", num_kv_heads),
+            ("head_dim", head_dim),
+            ("page_size_tokens", page_size_tokens),
+            ("max_pages", max_pages),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{name} must be an integer >= 1, got {val!r}")
         self.num_layers = int(num_layers)
         self.num_kv_heads = int(num_kv_heads)
         self.head_dim = int(head_dim)
         self.page_size_tokens = int(page_size_tokens)
         self.max_pages = int(max_pages)
         self.device = torch.device(device)
+        if codec is not None and not isinstance(codec, KVPageCodec):
+            raise ValueError("codec must implement KVPageCodec")
         self.codec: KVPageCodec = codec if codec is not None else FP8E4M3PageCodec()
         self._pages_k: Dict[Tuple[int, int], Any] = {}
         self._pages_v: Dict[Tuple[int, int], Any] = {}
 
     def write_kv_page(self, layer_idx: int, page_idx: int, k_tensor: Tensor, v_tensor: Tensor) -> Dict[str, Any]:
         """Encode and store a ``(K, V)`` page; evicts the oldest page when full (same rule as FP8PagedKVCache)."""
+        if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0 or layer_idx >= self.num_layers:
+            raise ValueError(f"layer_idx must be an integer in 0..{self.num_layers - 1}, got {layer_idx!r}")
+        if isinstance(page_idx, bool) or not isinstance(page_idx, int) or page_idx < 0:
+            raise ValueError(f"page_idx must be an integer >= 0, got {page_idx!r}")
+        if (
+            not isinstance(k_tensor, torch.Tensor)
+            or not isinstance(v_tensor, torch.Tensor)
+            or k_tensor.numel() == 0
+            or v_tensor.numel() == 0
+            or k_tensor.dtype == torch.bool
+            or v_tensor.dtype == torch.bool
+            or k_tensor.shape != v_tensor.shape
+        ):
+            raise ValueError("k_tensor and v_tensor must be non-empty tensors with matching shapes")
         # Encode both halves first: a codec that refuses the page (NaN, overflow, underflow) must not have evicted a good page already.
         pk = self.codec.encode(k_tensor.to(self.device))
         pv = self.codec.encode(v_tensor.to(self.device))
@@ -203,6 +279,12 @@ class PluggableKVPageCache:
     def read_kv_page(
         self, layer_idx: int, page_idx: int, target_dtype: torch.dtype = torch.float16
     ) -> Tuple[Tensor, Tensor]:
+        if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0 or layer_idx >= self.num_layers:
+            raise ValueError(f"layer_idx must be an integer in 0..{self.num_layers - 1}, got {layer_idx!r}")
+        if isinstance(page_idx, bool) or not isinstance(page_idx, int) or page_idx < 0:
+            raise ValueError(f"page_idx must be an integer >= 0, got {page_idx!r}")
+        if not isinstance(target_dtype, torch.dtype):
+            raise ValueError("target_dtype must be a torch.dtype")
         pk = self._pages_k[(layer_idx, page_idx)]
         pv = self._pages_v[(layer_idx, page_idx)]
         return self.codec.decode(pk, target_dtype), self.codec.decode(pv, target_dtype)

@@ -71,6 +71,12 @@ def _format_astrophysics_hf_dataset_subset(
     hf_token: str | None = None,
 ) -> List[str]:
     """Stream and format real Hugging Face Astrophysics (Planet & Star Classification) datasets."""
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0:
+        raise ValueError("num_samples must be a positive integer")
+    if hf_token is not None and (isinstance(hf_token, bool) or not isinstance(hf_token, str)):
+        raise ValueError("hf_token must be a string or None")
     import csv
     import pyarrow.parquet as pq
     from huggingface_hub import hf_hub_download
@@ -371,6 +377,10 @@ def fetch_hf_domain_subset(
     - `CyberNative/Code_Vulnerability_Security_DPO` (`CyberSecurity_Vulnerability_Recon` — Season 2 `HM-M5-02`)
     - `CohereForAI/aya_collection` (`Multilingual_FR_Synthesis` — Season 2 `HM-M5-02`)
     """
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0:
+        raise ValueError("num_samples must be a positive integer")
     ensure_local_drive_caches()
     safe_ds_name = dataset_id.replace("/", "_").replace("-", "_").lower()
     subset_cache_dir = CACHE_ROOT / "swarm_store" / "hf_subsets"
@@ -587,20 +597,24 @@ def _curated_fallback_texts() -> set[str]:
 
 def describe_data_provenance(rows: Iterable[str]) -> Dict[str, Any]:
     """Count how many rows are the built-in fallback text rather than fetched dataset rows."""
-    rows = list(rows)
+    if isinstance(rows, (str, bytes)) or not isinstance(rows, Iterable):
+        raise ValueError("rows must be an iterable of strings, not a raw string")
+    rows_list = list(rows)
+    if any(isinstance(r, bool) or not isinstance(r, str) for r in rows_list):
+        raise ValueError("every item in rows must be a string")
     fallback = _curated_fallback_texts()
-    fallback_rows = sum(1 for r in rows if r in fallback)
-    if not rows:
+    fallback_rows = sum(1 for r in rows_list if r in fallback)
+    if not rows_list:
         status = "no_rows"
-    elif fallback_rows == len(rows):
+    elif fallback_rows == len(rows_list):
         status = "all_rows_are_curated_fallback"
     elif fallback_rows:
         status = "mixed_fetched_and_curated_fallback"
     else:
         status = "no_curated_fallback_rows_detected"
     return {
-        "rows": len(rows),
-        "distinct_rows": len(set(rows)),
+        "rows": len(rows_list),
+        "distinct_rows": len(set(rows_list)),
         "curated_fallback_rows": fallback_rows,
         "source_status": status,
     }
@@ -608,6 +622,8 @@ def describe_data_provenance(rows: Iterable[str]) -> Dict[str, Any]:
 
 def label_experiment_evidence(exp: Dict[str, Any]) -> Dict[str, Any]:
     """Mark what one experiment report measured and what it did not. Idempotent."""
+    if not isinstance(exp, dict):
+        raise ValueError("exp must be a dict")
     settlement = exp.get("inference_settlement")
     if isinstance(settlement, dict):
         settlement["rtt_speedup"] = None
@@ -630,6 +646,8 @@ def label_experiment_evidence(exp: Dict[str, Any]) -> Dict[str, Any]:
 
 def label_astrophysics_report_evidence(report: Dict[str, Any]) -> Dict[str, Any]:
     """Mark measured vs. simulated vs. unmeasured fields in the astrophysics report. Idempotent."""
+    if not isinstance(report, dict):
+        raise ValueError("report must be a dict")
     for exp in report.get("experiments", []):
         label_experiment_evidence(exp)
     for gen in report.get("regional_swarm_speculative_generations", {}).values():
@@ -661,6 +679,15 @@ def _evaluate_batch_perplexity(
     The demos pad with the EOS id, so a genuine final EOS is masked along with the padding.
     """
     import math
+
+    if not isinstance(model, torch.nn.Module):
+        raise ValueError("model must be a torch.nn.Module")
+    if not isinstance(token_batch, torch.Tensor) or token_batch.numel() == 0:
+        raise ValueError("token_batch must be a non-empty torch.Tensor")
+    if pad_token_id is not None and (
+        isinstance(pad_token_id, bool) or not isinstance(pad_token_id, int) or pad_token_id < 0
+    ):
+        raise ValueError("pad_token_id must be a non-negative integer or None")
 
     device = next(model.parameters()).device
     ids = token_batch.to(device)
@@ -704,6 +731,39 @@ def _execute_single_domain_on_loaded_model(
     num_samples: int = 36,
 ) -> Tuple[Dict[str, Any], Dict[str, torch.Tensor], torch.Tensor]:
     """Run one complete decentralized Hugging Face domain training + PoUW block + fee settlement cycle."""
+    import math
+
+    if isinstance(exp_index, bool) or not isinstance(exp_index, int) or exp_index < 1:
+        raise ValueError("exp_index must be a positive integer")
+    for field_name, val in (
+        ("dataset_id", dataset_id),
+        ("domain_name", domain_name),
+        ("eval_prompt", eval_prompt),
+        ("consumer_node_id", consumer_node_id),
+        ("base_model_sha256", base_model_sha256),
+    ):
+        if isinstance(val, bool) or not isinstance(val, str) or not val.strip():
+            raise ValueError(f"{field_name} must be a non-empty string")
+    if (
+        not isinstance(provider_node_ids, list)
+        or not provider_node_ids
+        or any(isinstance(p, bool) or not isinstance(p, str) or not p.strip() for p in provider_node_ids)
+    ):
+        raise ValueError("provider_node_ids must be a non-empty list of non-empty strings")
+    if not isinstance(model, torch.nn.Module):
+        raise ValueError("model must be a torch.nn.Module")
+    if not isinstance(initial_lora_state, dict) or not initial_lora_state:
+        raise ValueError("initial_lora_state must be a non-empty dict")
+    if isinstance(nf4_mb, bool) or not isinstance(nf4_mb, (int, float)) or not math.isfinite(float(nf4_mb)) or float(nf4_mb) < 0.0:
+        raise ValueError("nf4_mb must be a finite non-negative number")
+    for field_name, val in (
+        ("lora_rank", lora_rank),
+        ("inner_steps", inner_steps),
+        ("seq_len", seq_len),
+        ("num_samples", num_samples),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            raise ValueError(f"{field_name} must be a positive integer")
     device = next(model.parameters()).device
     raw_samples = fetch_hf_domain_subset(dataset_id=dataset_id, num_samples=num_samples)
     agent_ids = ["seti-node-paris-01", "seti-node-lyon-02", "seti-node-nice-03"]
@@ -994,6 +1054,26 @@ def _execute_single_domain_on_loaded_model(
     return exp_report, converged_domain_lora, domain_token_batch
 
 
+def _validate_swarm_demo_params(
+    *,
+    model_id: str,
+    lora_rank: int,
+    inner_steps: int,
+    seq_len: int,
+    dataset_id: str | None = None,
+    domain_name: str | None = None,
+) -> None:
+    if isinstance(model_id, bool) or not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    if dataset_id is not None and (isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip()):
+        raise ValueError("dataset_id must be a non-empty string")
+    if domain_name is not None and (isinstance(domain_name, bool) or not isinstance(domain_name, str) or not domain_name.strip()):
+        raise ValueError("domain_name must be a non-empty string")
+    for field_name, val in (("lora_rank", lora_rank), ("inner_steps", inner_steps), ("seq_len", seq_len)):
+        if isinstance(val, bool) or not isinstance(val, int) or val <= 0:
+            raise ValueError(f"{field_name} must be a positive integer")
+
+
 def run_decentralized_hf_domain_demo(
     model_id: str = "Qwen/Qwen2.5-0.5B",
     dataset_id: str = "sahil2801/CodeAlpaca-20k",
@@ -1003,6 +1083,14 @@ def run_decentralized_hf_domain_demo(
     seq_len: int = 64,
 ) -> Dict[str, Any]:
     """Execute a single-domain HiveMind v2 SETI-Swarm experiment on the local RTX 2070."""
+    _validate_swarm_demo_params(
+        model_id=model_id,
+        dataset_id=dataset_id,
+        domain_name=domain_name,
+        lora_rank=lora_rank,
+        inner_steps=inner_steps,
+        seq_len=seq_len,
+    )
     t_start = time.perf_counter()
     ensure_local_drive_caches()
     configure_deterministic_runtime(seed=42)
@@ -1108,6 +1196,12 @@ def run_three_hf_swarm_experiments(
       hot-plugs Exp 3 from the CAS Vault (`E=2 -> E=3`), trains the Top-2 Router W_g, and runs
       Regional P2P Swarm 5-Token Speculative Decoding (gamma=5) across all 3 domains.
     """
+    _validate_swarm_demo_params(
+        model_id=model_id,
+        lora_rank=lora_rank,
+        inner_steps=inner_steps,
+        seq_len=seq_len,
+    )
     t_start = time.perf_counter()
     ensure_local_drive_caches()
     configure_deterministic_runtime(seed=42)
@@ -1455,6 +1549,12 @@ def run_astrophysics_hf_swarm_experiments(
     It does not measure classification accuracy, held-out quality or network latency;
     `label_astrophysics_report_evidence` marks those fields as unmeasured.
     """
+    _validate_swarm_demo_params(
+        model_id=model_id,
+        lora_rank=lora_rank,
+        inner_steps=inner_steps,
+        seq_len=seq_len,
+    )
     t_start = time.perf_counter()
     ensure_local_drive_caches()
     configure_deterministic_runtime(seed=42)

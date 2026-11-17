@@ -1,0 +1,85 @@
+{
+  "schema": "hivemind.accounts_receipt.v1",
+  "roadmap_deliverable": "PS-03-D1",
+  "generated_at_utc": "2026-11-15T07:20:09Z",
+  "source_status": "measured_sqlite",
+  "personal_data_included": false,
+  "total_accounts": 88,
+  "counts_by_kind": {
+    "user": 88,
+    "test": 0,
+    "probe": 0
+  },
+  "counts_by_role": {
+    "consumer": 30,
+    "producer": 12,
+    "prosumer": 43,
+    "trainer": 0,
+    "admin": 3
+  },
+  "by_kind_and_role": {
+    "user": {
+      "consumer": 30,
+      "producer": 12,
+      "prosumer": 43,
+      "trainer": 0,
+      "admin": 3
+    },
+    "test": {
+      "consumer": 0,
+      "producer": 0,
+      "prosumer": 0,
+      "trainer": 0,
+      "admin": 0
+    },
+    "probe": {
+      "consumer": 0,
+      "producer": 0,
+      "prosumer": 0,
+      "trainer": 0,
+      "admin": 0
+    }
+  },
+  "active_nodes_30d": {
+    "window_days": 30,
+    "producer_endpoints_active_30d": 56,
+    "opentrainer_nodes_active_30d": 8,
+    "total_active_nodes_30d": 64
+  },
+  "active_nodes_30d_caveat": "rows with a heartbeat in 30 days, not distinct machines; see activity_evidence",
+  "activity_evidence": {
+    "windows": [
+      "24h",
+      "7d",
+      "30d"
+    ],
+    "accounts_that_sent_requests": {
+      "24h": 1,
+      "7d": 8,
+      "30d": 31
+    },
+    "accounts_with_password": 15,
+    "accounts_never_signed_in_nor_used": 20,
+    "producer_endpoint_rows": {
+      "24h": 3,
+      "7d": 8,
+      "30d": 56
+    },
+    "producer_accounts_heartbeating": {
+      "24h": 3,
+      "7d": 8,
+      "30d": 50
+    },
+    "producer_hardware_classes_heartbeating": {
+      "24h": 2,
+      "7d": 3,
+      "30d": 8
+    },
+    "opentrainer_nodes_heartbeating": {
+      "24h": 1,
+      "7d": 3,
+      "30d": 8
+    },
+    "note": "Endpoint rows over-count machines (a restart behind a rotating tunnel adds a row); hardware classes and producer accounts are closer to machine counts. Accounts are not marked seeded vs real: use 'sent requests' and 'with password' as evidence of real use. Requests include the operator's own tests."
+  }
+}

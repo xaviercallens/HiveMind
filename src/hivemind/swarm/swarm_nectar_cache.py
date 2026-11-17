@@ -29,6 +29,10 @@ MICRO_ROYALTY_HMT = 0.005  # 0.005 HMT awarded to discoverer per peer hit
 
 def canonical_query_hash(tool_name: str, query: str | Mapping[str, Any]) -> str:
     """Compute a deterministic SHA-256 hash for a given tool and query."""
+    if not isinstance(tool_name, str) or not tool_name.strip():
+        raise ValueError("tool_name must be a non-empty string")
+    if not isinstance(query, (str, Mapping)):
+        raise ValueError("query must be a string or a Mapping")
     normalized_tool = tool_name.strip().lower()
     if isinstance(query, Mapping):
         canonical_content = json.dumps(query, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -54,12 +58,56 @@ class NectarEntry:
     created_utc: float = field(default_factory=time.time)
     ttl_s: float = DEFAULT_NECTAR_TTL_S
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("nectar_id", self.nectar_id),
+            ("tool_name", self.tool_name),
+            ("query_hash", self.query_hash),
+            ("discovered_by_bee", self.discovered_by_bee),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.content, dict):
+            raise ValueError("content must be a dict")
+        if (
+            isinstance(self.nectar_richness, bool)
+            or not isinstance(self.nectar_richness, (int, float))
+            or not math.isfinite(self.nectar_richness)
+            or not (0.0 <= float(self.nectar_richness) <= 1.0)
+        ):
+            raise ValueError("nectar_richness must be a finite number in [0.0, 1.0]")
+        if isinstance(self.access_count, bool) or not isinstance(self.access_count, int) or self.access_count < 0:
+            raise ValueError("access_count must be a non-negative integer")
+        if (
+            isinstance(self.hmt_royalties_earned, bool)
+            or not isinstance(self.hmt_royalties_earned, (int, float))
+            or not math.isfinite(self.hmt_royalties_earned)
+            or self.hmt_royalties_earned < 0.0
+        ):
+            raise ValueError("hmt_royalties_earned must be a finite non-negative number")
+        if (
+            isinstance(self.created_utc, bool)
+            or not isinstance(self.created_utc, (int, float))
+            or not math.isfinite(self.created_utc)
+            or self.created_utc <= 0.0
+        ):
+            raise ValueError("created_utc must be a finite positive timestamp")
+        if (
+            isinstance(self.ttl_s, bool)
+            or not isinstance(self.ttl_s, (int, float))
+            or not math.isfinite(self.ttl_s)
+            or self.ttl_s <= 0.0
+        ):
+            raise ValueError("ttl_s must be finite and positive")
+
     @property
     def is_expired(self) -> bool:
         return (time.time() - self.created_utc) > self.ttl_s
 
     def record_access(self, *, credit_royalty: bool = True) -> float:
         """Increment access count and distribute micro-royalty for peer hits."""
+        if not isinstance(credit_royalty, bool):
+            raise ValueError("credit_royalty must be a boolean")
         self.access_count += 1
         if credit_royalty:
             self.hmt_royalties_earned = round(self.hmt_royalties_earned + MICRO_ROYALTY_HMT, 6)
@@ -73,6 +121,8 @@ class NectarEntry:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> NectarEntry:
         """Deserialize a NectarEntry from a persisted dictionary."""
+        if not isinstance(data, Mapping):
+            raise TypeError("data must be a Mapping")
         return cls(
             nectar_id=str(data["nectar_id"]),
             tool_name=str(data["tool_name"]),
@@ -91,9 +141,13 @@ class FileNectarPersistence:
     """Atomic JSON file persistence backend for cross-process SwarmNectarCache sharing (HM-S23)."""
 
     def __init__(self, path: str | Path) -> None:
+        if not isinstance(path, (str, Path)) or not str(path).strip():
+            raise ValueError("path must be a non-empty string or Path")
         self.path = Path(path)
 
     def save(self, entries: Mapping[str, NectarEntry]) -> None:
+        if not isinstance(entries, Mapping):
+            raise TypeError("entries must be a Mapping")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         active = {k: v.to_dict() for k, v in entries.items() if not v.is_expired}
         tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
@@ -119,6 +173,8 @@ class InMemoryClusterNectarHub:
         self._kv: dict[str, tuple[str, float]] = {}
 
     def get(self, key: str) -> str | None:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
         item = self._kv.get(key)
         if item is None:
             return None
@@ -129,9 +185,20 @@ class InMemoryClusterNectarHub:
         return payload
 
     def setex(self, key: str, ttl_seconds: int | float, value: str) -> None:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
+        if (
+            isinstance(ttl_seconds, bool)
+            or not isinstance(ttl_seconds, (int, float))
+            or not math.isfinite(ttl_seconds)
+            or ttl_seconds <= 0.0
+        ):
+            raise ValueError("ttl_seconds must be a finite positive number")
         self._kv[key] = (str(value), time.time() + float(ttl_seconds))
 
     def delete(self, key: str) -> None:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
         self._kv.pop(key, None)
 
 
@@ -144,13 +211,19 @@ class MultiNodeNectarSyncBackend:
         *,
         namespace: str = "hivemind:nectar:v1",
     ) -> None:
+        if not isinstance(namespace, str) or not namespace.strip().strip(":"):
+            raise ValueError("namespace must be a non-empty string")
         self.kv_client = kv_client if kv_client is not None else InMemoryClusterNectarHub()
-        self.namespace = namespace.strip(":")
+        self.namespace = namespace.strip().strip(":")
 
     def _key(self, query_hash: str) -> str:
+        if not isinstance(query_hash, str) or not query_hash.strip():
+            raise ValueError("query_hash must be a non-empty string")
         return f"{self.namespace}:{query_hash}"
 
     def put_entry(self, entry: NectarEntry) -> None:
+        if not isinstance(entry, NectarEntry):
+            raise TypeError("entry must be a NectarEntry")
         remaining_ttl = max(1.0, entry.ttl_s - (time.time() - entry.created_utc))
         payload = json.dumps(entry.to_dict(), ensure_ascii=False, sort_keys=True)
         key = self._key(entry.query_hash)
@@ -160,6 +233,8 @@ class MultiNodeNectarSyncBackend:
             self.kv_client.set(key, payload)
 
     def get_entry(self, query_hash: str) -> NectarEntry | None:
+        if not isinstance(query_hash, str) or not query_hash.strip():
+            raise ValueError("query_hash must be a non-empty string")
         raw = self.kv_client.get(self._key(query_hash))
         if raw is None:
             return None
@@ -172,6 +247,8 @@ class MultiNodeNectarSyncBackend:
         return entry
 
     def delete_entry(self, query_hash: str) -> None:
+        if not isinstance(query_hash, str) or not query_hash.strip():
+            raise ValueError("query_hash must be a non-empty string")
         if hasattr(self.kv_client, "delete"):
             self.kv_client.delete(self._key(query_hash))
 
@@ -185,7 +262,14 @@ class SwarmNectarCache:
         persistence_path: str | Path | None = None,
         sync_backend: MultiNodeNectarSyncBackend | None = None,
     ) -> None:
-        self.default_ttl_s = default_ttl_s
+        if (
+            isinstance(default_ttl_s, bool)
+            or not isinstance(default_ttl_s, (int, float))
+            or not math.isfinite(default_ttl_s)
+            or default_ttl_s <= 0.0
+        ):
+            raise ValueError("default_ttl_s must be finite and positive")
+        self.default_ttl_s = float(default_ttl_s)
         self._persistence = FileNectarPersistence(persistence_path) if persistence_path is not None else None
         self._sync_backend = sync_backend
         self._cache: dict[str, NectarEntry] = self._persistence.load() if self._persistence is not None else {}
@@ -217,12 +301,26 @@ class SwarmNectarCache:
         ttl_s: float | None = None,
     ) -> NectarEntry:
         """Store tool result in the nectar cache and format Kafka food source event."""
-        richness_val = float(nectar_richness)
-        if not math.isfinite(richness_val):
+        if (
+            isinstance(nectar_richness, bool)
+            or not isinstance(nectar_richness, (int, float))
+            or not math.isfinite(float(nectar_richness))
+        ):
             raise ValueError(f"nectar_richness must be finite, got {nectar_richness!r}")
-        eff_ttl = float(ttl_s if ttl_s is not None else self.default_ttl_s)
-        if not math.isfinite(eff_ttl) or eff_ttl <= 0.0:
+        richness_val = float(nectar_richness)
+        raw_ttl = ttl_s if ttl_s is not None else self.default_ttl_s
+        if (
+            isinstance(raw_ttl, bool)
+            or not isinstance(raw_ttl, (int, float))
+            or not math.isfinite(float(raw_ttl))
+            or float(raw_ttl) <= 0.0
+        ):
             raise ValueError(f"ttl_s must be finite and positive, got {ttl_s!r}")
+        eff_ttl = float(raw_ttl)
+        if not isinstance(discovered_by_bee, str) or not discovered_by_bee.strip():
+            raise ValueError("discovered_by_bee must be a non-empty string")
+        if not isinstance(content, dict):
+            raise ValueError("content must be a dict")
         q_hash = canonical_query_hash(tool_name, query)
         entry_id = f"nectar-{q_hash[:16]}"
         entry = NectarEntry(
@@ -248,6 +346,8 @@ class SwarmNectarCache:
         requesting_bee: str = "anonymous",
     ) -> NectarEntry | None:
         """Retrieve cached nectar entry if present and unexpired."""
+        if not isinstance(requesting_bee, str):
+            raise ValueError("requesting_bee must be a string")
         t0 = time.perf_counter()
         self._total_queries += 1
         q_hash = canonical_query_hash(tool_name, query)
@@ -287,6 +387,8 @@ class SwarmNectarCache:
 
     def build_kafka_food_source_event(self, entry: NectarEntry) -> dict[str, Any]:
         """Construct canonical CloudEvent dict for publishing to hivemind.mesh.food_sources.v1."""
+        if not isinstance(entry, NectarEntry):
+            raise TypeError("entry must be a NectarEntry")
         return {
             "topic": TOPIC_FOOD_SOURCES,
             "event_type": "io.hivemind.mesh.food_source_updated",
@@ -312,6 +414,15 @@ class SwarmNectarCache:
         ttl_s: float | None = None,
     ) -> NectarEntry:
         """Store a content-addressed `SwaT + AM_U` compacted KV state (`HM-S34-02`) in `SwarmNectarCache`."""
+        for field_name, val in (
+            ("sender_model_id", sender_model_id),
+            ("receiver_model_id", receiver_model_id),
+            ("context_key", context_key),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(compacted_kv_manifest, Mapping):
+            raise ValueError("compacted_kv_manifest must be a Mapping")
         query_spec = {
             "sender_model_id": sender_model_id,
             "receiver_model_id": receiver_model_id,
@@ -349,6 +460,13 @@ class SwarmNectarCache:
         requesting_bee: str = "anonymous",
     ) -> NectarEntry | None:
         """Retrieve a cached `SwaT + AM_U` compacted KV state (`HM-S34-02`) and award PoUW HMT royalties."""
+        for field_name, val in (
+            ("sender_model_id", sender_model_id),
+            ("receiver_model_id", receiver_model_id),
+            ("context_key", context_key),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
         query_spec = {
             "sender_model_id": sender_model_id,
             "receiver_model_id": receiver_model_id,
@@ -358,6 +476,8 @@ class SwarmNectarCache:
 
     def build_kafka_telepathy_kv_event(self, entry: NectarEntry) -> dict[str, Any]:
         """Construct canonical CloudEvent dict for publishing compacted KV states on `hivemind.mesh.telepathy_kv.v1`."""
+        if not isinstance(entry, NectarEntry):
+            raise TypeError("entry must be a NectarEntry")
         return {
             "topic": TOPIC_TELEPATHY_KV,
             "event_type": "io.hivemind.mesh.telepathy_kv_published",

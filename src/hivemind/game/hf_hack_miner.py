@@ -176,6 +176,26 @@ class HFBountyChallenge:
     base_bounty_pts: int = 600
     season: int = 1
 
+    def __post_init__(self) -> None:
+        for fname, fval in (
+            ("contract_id", self.contract_id),
+            ("mission_codename", self.mission_codename),
+            ("dataset_id", self.dataset_id),
+            ("domain_expert", self.domain_expert),
+            ("bounty_question_prompt", self.bounty_question_prompt),
+            ("reference_solution", self.reference_solution),
+        ):
+            if not isinstance(fval, str) or not fval.strip():
+                raise ValueError(f"{fname} must be a non-empty string")
+        if isinstance(self.difficulty_skulls, bool) or not isinstance(self.difficulty_skulls, int) or self.difficulty_skulls < 1:
+            raise ValueError("difficulty_skulls must be a positive integer")
+        if isinstance(self.base_bounty_pts, bool) or not isinstance(self.base_bounty_pts, int) or self.base_bounty_pts <= 0:
+            raise ValueError("base_bounty_pts must be a positive integer")
+        if isinstance(self.season, bool) or not isinstance(self.season, int) or self.season < 1:
+            raise ValueError("season must be a positive integer")
+        if not isinstance(self.target_keywords, list) or len(self.target_keywords) == 0:
+            raise ValueError("target_keywords must be a non-empty list of strings")
+
 
 @dataclass
 class MinerScoreBreakdown:
@@ -194,6 +214,32 @@ class MinerScoreBreakdown:
     swarm_contribution_pts: int
     total_mission_pts: int
     hive_earned: float
+
+    def __post_init__(self) -> None:
+        for field_name in ("gamer_tag", "contract_id", "shard_cid"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name in ("shard_signal_score", "initial_loss", "final_loss", "hive_earned"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if (
+            isinstance(self.loss_reduction_pct, bool)
+            or not isinstance(self.loss_reduction_pct, (int, float))
+            or not math.isfinite(float(self.loss_reduction_pct))
+        ):
+            raise ValueError("loss_reduction_pct must be a finite number")
+        for field_name in (
+            "data_discovery_pts",
+            "lora_training_pts",
+            "solution_bounty_pts",
+            "swarm_contribution_pts",
+            "total_mission_pts",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
 
 
 @dataclass
@@ -229,7 +275,50 @@ class GamerMinerProfile:
     domains_forged: List[str] = field(default_factory=list)
     achievements_unlocked: List[str] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        for field_name in ("gamer_tag", "steam_id64", "node_id", "region", "specialty_focus", "rank_title"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name in (
+            "total_points",
+            "data_discovery_points",
+            "lora_training_points",
+            "solution_bounty_points",
+            "swarm_contribution_points",
+            "boss_raid_points",
+            "reputation_score",
+            "shards_mined",
+            "bounties_solved",
+            "boss_raids_cleared",
+            "swarm_tokens_served",
+            "season5_missions_forged",
+            "season6_missions_forged",
+            "agent_arena_wins",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name in ("hive_balance", "best_loss_reduction_pct"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if not isinstance(self.steam_sybil_verified, bool):
+            raise ValueError("steam_sybil_verified must be a boolean")
+        for field_name in ("steam_leaderboard_receipt", "rich_presence_status", "rich_presence_hmac"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str):
+                raise ValueError(f"{field_name} must be a string")
+        for field_name in ("domains_forged", "achievements_unlocked"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, list) or any(not isinstance(item, str) or not item.strip() for item in seq):
+                raise ValueError(f"{field_name} must be a list of non-empty strings")
+
     def update_rank_and_achievements(self, is_top_miner: bool = False, num_moe_experts: int = 3) -> None:
+        if not isinstance(is_top_miner, bool):
+            raise ValueError("is_top_miner must be a boolean")
+        if isinstance(num_moe_experts, bool) or not isinstance(num_moe_experts, int) or num_moe_experts < 1:
+            raise ValueError("num_moe_experts must be a positive integer")
         for threshold, title in RANK_LADDER:
             if self.total_points >= threshold:
                 self.rank_title = title
@@ -295,6 +384,14 @@ class HFDataReconScanner:
         target_keywords: List[str],
     ) -> Tuple[List[str], float]:
         """Scan candidate Hugging Face rows, score their training signal quality, and assign shard."""
+        if not isinstance(raw_samples, list) or len(raw_samples) == 0 or any(not isinstance(s, str) for s in raw_samples):
+            raise ValueError("raw_samples must be a non-empty list of strings")
+        if isinstance(gamer_idx, bool) or not isinstance(gamer_idx, int) or gamer_idx < 0:
+            raise ValueError("gamer_idx must be a non-negative integer")
+        if isinstance(num_gamers, bool) or not isinstance(num_gamers, int) or num_gamers < 1:
+            raise ValueError("num_gamers must be a positive integer")
+        if not isinstance(target_keywords, list) or any(not isinstance(k, str) for k in target_keywords):
+            raise ValueError("target_keywords must be a list of strings")
         shard_size = max(1, len(raw_samples) // max(1, num_gamers))
         candidate_slice = raw_samples[gamer_idx * shard_size : (gamer_idx + 1) * shard_size]
 
@@ -741,6 +838,10 @@ SEASON_4_OFFLINE_CURATED_CORPUS: Dict[str, List[str]] = {
 
 def fetch_season4_curated_corpus(dataset_id: str, num_samples: int = 12) -> List[str]:
     """Return the curated offline Season 4 corpus for a mission dataset (no network required)."""
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0 or num_samples > 10_000:
+        raise ValueError("num_samples must be an int in [1, 10000]")
     bank = SEASON_4_OFFLINE_CURATED_CORPUS.get(dataset_id, [])
     if not bank:
         return []
@@ -956,6 +1057,10 @@ SEASON_5_OFFLINE_CURATED_CORPUS: Dict[str, List[str]] = {
 
 def fetch_season5_curated_corpus(dataset_id: str, num_samples: int = 12) -> List[str]:
     """Return the curated offline Season 5 corpus for a mission dataset (no network required)."""
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0 or num_samples > 10_000:
+        raise ValueError("num_samples must be an int in [1, 10000]")
     bank = SEASON_5_OFFLINE_CURATED_CORPUS.get(dataset_id, [])
     if not bank:
         return []
@@ -964,6 +1069,10 @@ def fetch_season5_curated_corpus(dataset_id: str, num_samples: int = 12) -> List
 
 def fetch_offline_curated_corpus(dataset_id: str, num_samples: int = 12) -> List[str]:
     """Return the curated offline corpus of any shipped season (Season 4, 5 or 6)."""
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0 or num_samples > 10_000:
+        raise ValueError("num_samples must be an int in [1, 10000]")
     rows = fetch_season4_curated_corpus(dataset_id, num_samples=num_samples)
     if rows:
         return rows
@@ -1186,6 +1295,10 @@ SEASON_6_OFFLINE_CURATED_CORPUS: Dict[str, List[str]] = {
 
 def fetch_season6_curated_corpus(dataset_id: str, num_samples: int = 12) -> List[str]:
     """Return the curated offline Season 6 corpus for a mission dataset (no network required)."""
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0 or num_samples > 10_000:
+        raise ValueError("num_samples must be an int in [1, 10000]")
     bank = SEASON_6_OFFLINE_CURATED_CORPUS.get(dataset_id, [])
     if not bank:
         return []
@@ -1245,6 +1358,20 @@ class CodeRepairTask:
     reference_fix: str
     tests: Tuple[str, ...]
     candidate_fixes: Dict[str, str]
+
+    def __post_init__(self) -> None:
+        for field_name in ("task_id", "title", "bug_family", "buggy_code", "failing_test", "reference_fix"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.tests, tuple) or len(self.tests) == 0 or any(not isinstance(t, str) or not t.strip() for t in self.tests):
+            raise ValueError("tests must be a non-empty tuple of non-empty strings")
+        if (
+            not isinstance(self.candidate_fixes, dict)
+            or len(self.candidate_fixes) == 0
+            or any(not isinstance(k, str) or not k.strip() or not isinstance(v, str) or not v.strip() for k, v in self.candidate_fixes.items())
+        ):
+            raise ValueError("candidate_fixes must be a non-empty dict of non-empty strings")
 
 
 SELF_PLAY_CODE_REPAIR_TASKS: Tuple[CodeRepairTask, ...] = (
@@ -1484,6 +1611,8 @@ _REPAIR_FORBIDDEN_CALLS = frozenset(
 
 def _repair_patch_safety_error(patch_code: str) -> str:
     """Statically reject imports and dangerous calls before sandboxed execution."""
+    if not isinstance(patch_code, str):
+        raise ValueError("patch_code must be a string")
     if len(patch_code) > 20_000:
         return "PatchTooLarge"
     try:
@@ -1506,6 +1635,14 @@ def _repair_patch_safety_error(patch_code: str) -> str:
 
 
 def _failed_repair_results(tests: Sequence[str], error: str) -> Tuple[Dict[str, Any], ...]:
+    if (
+        not isinstance(tests, Sequence)
+        or isinstance(tests, (str, bytes))
+        or any(not isinstance(t, str) for t in tests)
+    ):
+        raise ValueError("tests must be a sequence of strings")
+    if not isinstance(error, str) or not error.strip():
+        raise ValueError("error must be a non-empty string")
     return tuple(
         {"test": test, "passed": False, "error": error} for test in tests
     )
@@ -1578,6 +1715,15 @@ def _run_repair_candidate_sandbox(
 
 def _evaluate_repair_candidate(patch_code: str, tests: Sequence[str]) -> Dict[str, Any]:
     """Statically screen, then verify a curated patch against curated test assertions."""
+    if not isinstance(patch_code, str):
+        raise ValueError("patch_code must be a string")
+    if (
+        not isinstance(tests, Sequence)
+        or isinstance(tests, (str, bytes))
+        or len(tests) == 0
+        or any(not isinstance(t, str) or not t.strip() for t in tests)
+    ):
+        raise ValueError("tests must be a non-empty sequence of non-empty strings")
     normalized_tests = tuple(str(test) for test in tests)
     safety_error = _repair_patch_safety_error(patch_code)
     if safety_error:
@@ -1594,6 +1740,17 @@ def _evaluate_repair_candidate(patch_code: str, tests: Sequence[str]) -> Dict[st
 
 
 def _choose_strategy(preferences: Dict[str, float], rng: Any, policies: Sequence[str]) -> str:
+    if not isinstance(preferences, dict):
+        raise ValueError("preferences must be a dict")
+    if (
+        not isinstance(policies, Sequence)
+        or isinstance(policies, (str, bytes))
+        or len(policies) == 0
+        or any(not isinstance(p, str) or not p.strip() for p in policies)
+    ):
+        raise ValueError("policies must be a non-empty sequence of non-empty strings")
+    if rng is None or not hasattr(rng, "random"):
+        raise ValueError("rng must provide a random() method")
     total = sum(max(0.0, float(preferences.get(p, 1.0))) for p in policies)
     if total <= 1e-9:
         return policies[0]
@@ -1614,6 +1771,26 @@ def _update_preferences(
     policies: Sequence[str],
     learning_rate: float,
 ) -> None:
+    if not isinstance(preferences, dict):
+        raise ValueError("preferences must be a dict")
+    if not isinstance(chosen, str) or not chosen.strip():
+        raise ValueError("chosen must be a non-empty string")
+    if (
+        not isinstance(policies, Sequence)
+        or isinstance(policies, (str, bytes))
+        or len(policies) == 0
+        or any(not isinstance(p, str) or not p.strip() for p in policies)
+    ):
+        raise ValueError("policies must be a non-empty sequence of non-empty strings")
+    for fname, fval in (
+        ("reward", reward),
+        ("mean_reward", mean_reward),
+        ("learning_rate", learning_rate),
+    ):
+        if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)):
+            raise ValueError(f"{fname} must be a finite number")
+    if float(learning_rate) <= 0.0:
+        raise ValueError("learning_rate must be positive")
     for policy in policies:
         prior = max(1e-3, float(preferences.get(policy, 1.0)))
         if policy == chosen:
@@ -1634,6 +1811,15 @@ class SelfPlayCodeRepairArena:
     """
 
     def __init__(self, seed: int = 42, learning_rate: float = 1.5) -> None:
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            raise ValueError("seed must be an integer")
+        if (
+            isinstance(learning_rate, bool)
+            or not isinstance(learning_rate, (int, float))
+            or not math.isfinite(float(learning_rate))
+            or float(learning_rate) <= 0.0
+        ):
+            raise ValueError("learning_rate must be a finite positive number")
         self.seed = int(seed)
         self.learning_rate = float(learning_rate)
         self.tasks = SELF_PLAY_CODE_REPAIR_TASKS
@@ -1648,6 +1834,8 @@ class SelfPlayCodeRepairArena:
         }
 
     def run(self, rounds: int = 12) -> Dict[str, Any]:
+        if isinstance(rounds, bool) or not isinstance(rounds, int) or rounds < 1:
+            raise ValueError("rounds must be a positive integer")
         rounds = max(1, min(_SELF_PLAY_MAX_ROUNDS, int(rounds)))
         rng = random.Random(self.seed)
         cumulative_reward = {agent: 0.0 for agent in self.agent_ids}
@@ -1823,10 +2011,24 @@ class Lean4ProofTask:
     reference_proof: str
     candidate_proofs: Dict[str, str]
 
+    def __post_init__(self) -> None:
+        for field_name in ("task_id", "title", "natural_language", "reference_proof"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            not isinstance(self.candidate_proofs, dict)
+            or len(self.candidate_proofs) == 0
+            or any(not isinstance(k, str) or not k.strip() or not isinstance(v, str) or not v.strip() for k, v in self.candidate_proofs.items())
+        ):
+            raise ValueError("candidate_proofs must be a non-empty dict of non-empty strings")
+
 
 def audit_lean4_proof(proof: str) -> Dict[str, Any]:
     """Structurally audit a Lean 4 proof script (not a substitute for `lake build`)."""
-    text = str(proof or "").strip()
+    if isinstance(proof, bool) or not isinstance(proof, str):
+        raise ValueError("proof must be a str")
+    text = proof.strip()
     checks = {
         "declares_theorem": bool(re.search(r"\btheorem\s+[A-Za-z_][A-Za-z0-9_']*", text)),
         "has_by_proof": ":= by" in text,
@@ -1942,6 +2144,15 @@ class Lean4AutoformalizerArena:
     """Multi-agent proof-search arena with a structural Lean 4 audit."""
 
     def __init__(self, seed: int = 7, learning_rate: float = 1.4) -> None:
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            raise ValueError("seed must be an integer")
+        if (
+            isinstance(learning_rate, bool)
+            or not isinstance(learning_rate, (int, float))
+            or not math.isfinite(float(learning_rate))
+            or float(learning_rate) <= 0.0
+        ):
+            raise ValueError("learning_rate must be a finite positive number")
         self.seed = int(seed)
         self.learning_rate = float(learning_rate)
         self.tasks = LEAN4_PROOF_TASKS
@@ -1956,6 +2167,8 @@ class Lean4AutoformalizerArena:
         }
 
     def run(self, rounds: int = 9) -> Dict[str, Any]:
+        if isinstance(rounds, bool) or not isinstance(rounds, int) or rounds < 1:
+            raise ValueError("rounds must be a positive integer")
         rounds = max(1, min(_LEAN4_MAX_ROUNDS, int(rounds)))
         rng = random.Random(self.seed)
         cumulative_reward = {agent: 0.0 for agent in self.agent_ids}
@@ -2084,6 +2297,10 @@ class Lean4AutoformalizerArena:
 
 def build_agent_arena_state(seed: int = 42, rounds: int = 12) -> Dict[str, Any]:
     """Run both Season 6 arenas and return the `/api/agent-arena` payload."""
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative int")
+    if isinstance(rounds, bool) or not isinstance(rounds, int) or rounds <= 0 or rounds > 1000:
+        raise ValueError("rounds must be an int in [1, 1000]")
     code_repair = SelfPlayCodeRepairArena(seed=seed).run(rounds=rounds)
     lean4 = Lean4AutoformalizerArena(seed=seed + 1).run(rounds=max(6, rounds // 2))
     return {
@@ -2138,6 +2355,34 @@ class GuildTournamentSquad:
     member_contributors: List[str]
     synergy_multiplier: float
     domain_weights: Dict[str, float]
+
+    def __post_init__(self) -> None:
+        for field_name in ("guild_id", "guild_name", "full_guild_id", "guild_motto", "region_hub", "home_node"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.lat, bool) or not isinstance(self.lat, (int, float)) or not math.isfinite(float(self.lat)) or not (-90.0 <= float(self.lat) <= 90.0):
+            raise ValueError("lat must be a finite number in [-90.0, 90.0]")
+        if isinstance(self.lon, bool) or not isinstance(self.lon, (int, float)) or not math.isfinite(float(self.lon)) or not (-180.0 <= float(self.lon) <= 180.0):
+            raise ValueError("lon must be a finite number in [-180.0, 180.0]")
+        for field_name in ("member_miners", "member_contributors"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, list) or len(seq) == 0 or any(not isinstance(item, str) or not item.strip() for item in seq):
+                raise ValueError(f"{field_name} must be a non-empty list of non-empty strings")
+        if (
+            isinstance(self.synergy_multiplier, bool)
+            or not isinstance(self.synergy_multiplier, (int, float))
+            or not math.isfinite(float(self.synergy_multiplier))
+            or float(self.synergy_multiplier) <= 0.0
+        ):
+            raise ValueError("synergy_multiplier must be a finite positive number")
+        if not isinstance(self.domain_weights, dict) or len(self.domain_weights) == 0:
+            raise ValueError("domain_weights must be a non-empty dict")
+        for k, v in self.domain_weights.items():
+            if not isinstance(k, str) or not k.strip():
+                raise ValueError("domain_weights keys must be non-empty strings")
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or float(v) < 0.0:
+                raise ValueError("domain_weights values must be finite non-negative numbers")
 
 
 DEFAULT_GUILD_TOURNAMENT_SQUADS: List[GuildTournamentSquad] = [
@@ -2219,6 +2464,22 @@ def estimate_bigram_holdout_perplexity(
     RNG and no network access, so the cross-guild tournament standings are
     reproducible on every HUD server.
     """
+    if not isinstance(corpus, list) or any(not isinstance(r, str) for r in corpus):
+        raise ValueError("corpus must be a list of strings")
+    if (
+        isinstance(holdout_ratio, bool)
+        or not isinstance(holdout_ratio, (int, float))
+        or not math.isfinite(float(holdout_ratio))
+        or not (0.0 < float(holdout_ratio) < 1.0)
+    ):
+        raise ValueError("holdout_ratio must be in (0.0, 1.0)")
+    if (
+        isinstance(smoothing, bool)
+        or not isinstance(smoothing, (int, float))
+        or not math.isfinite(float(smoothing))
+        or float(smoothing) <= 0.0
+    ):
+        raise ValueError("smoothing must be a finite positive number")
     rows = [r for r in corpus if r and str(r).strip()]
     if len(rows) < 2:
         return {
@@ -2292,6 +2553,12 @@ class GuildTournamentEngine:
     """
 
     def __init__(self, squads: List[GuildTournamentSquad] | None = None) -> None:
+        if squads is not None and (
+            not isinstance(squads, list)
+            or len(squads) == 0
+            or any(not isinstance(s, GuildTournamentSquad) for s in squads)
+        ):
+            raise ValueError("squads must be a non-empty list of GuildTournamentSquad instances or None")
         self.squads: Dict[str, GuildTournamentSquad] = {
             s.guild_id: s for s in (squads or DEFAULT_GUILD_TOURNAMENT_SQUADS)
         }
@@ -2614,6 +2881,26 @@ class GuildTournamentEngine:
         Only updates with ``verified_worker=True`` override the measured holdout perplexity
         or speculative throughput used to rank the tournament champion (IP-153).
         """
+        if not isinstance(guild_id, str) or not guild_id.strip():
+            raise ValueError("guild_id must be a non-empty string")
+        if not isinstance(verified_worker, bool):
+            raise ValueError("verified_worker must be a boolean")
+        if multi_domain_holdout_perplexity is not None and (
+            isinstance(multi_domain_holdout_perplexity, bool)
+            or not isinstance(multi_domain_holdout_perplexity, (int, float))
+            or not math.isfinite(float(multi_domain_holdout_perplexity))
+            or float(multi_domain_holdout_perplexity) <= 0.0
+        ):
+            raise ValueError("multi_domain_holdout_perplexity must be a finite positive number")
+        if speculative_tokens_per_sec is not None and (
+            isinstance(speculative_tokens_per_sec, bool)
+            or not isinstance(speculative_tokens_per_sec, (int, float))
+            or not math.isfinite(float(speculative_tokens_per_sec))
+            or float(speculative_tokens_per_sec) < 0.0
+        ):
+            raise ValueError("speculative_tokens_per_sec must be a finite non-negative number")
+        if gamer_tag is not None and not isinstance(gamer_tag, str):
+            raise ValueError("gamer_tag must be a string or None")
         key = str(guild_id or "").strip().upper()
         if key not in self.squads:
             raise KeyError(f"Unknown guild squad: {guild_id}")
@@ -2641,11 +2928,15 @@ def build_guild_tournament_state(
     engine: GuildTournamentEngine | None = None,
 ) -> Dict[str, Any]:
     """Build the `/api/guild-tournament` payload (default: the shipped guild squads)."""
+    if engine is not None and not isinstance(engine, GuildTournamentEngine):
+        raise ValueError("engine must be a GuildTournamentEngine or None")
     return (engine or _DEFAULT_GUILD_TOURNAMENT_ENGINE).build_state()
 
 
 def build_swarm_telemetry_frame(seq: int = 0) -> Dict[str, Any]:
     """Build one live swarm telemetry frame streamed by the `/ws/swarm-telemetry` HUD socket."""
+    if isinstance(seq, bool) or not isinstance(seq, int) or seq < 0:
+        raise ValueError("seq must be a non-negative int")
     topo = build_georing_3d_topology_snapshot()
     contracts = SEASON_4_HF_BOUNTY_CONTRACTS
     active = contracts[seq % len(contracts)]
@@ -2874,6 +3165,18 @@ def run_hf_hack_mining_game(
     build_steam_package: bool = True,
 ) -> Dict[str, Any]:
     """Execute the Hugging Face Hack-Miner Game (Season 1 + Season 2 = 6 Missions + 6-Expert MoE Boss Raid) on the local RTX 2070."""
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    if isinstance(lora_rank, bool) or not isinstance(lora_rank, int) or lora_rank < 1:
+        raise ValueError("lora_rank must be a positive integer")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
+    if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 1:
+        raise ValueError("seq_len must be a positive integer")
+    if not isinstance(season, str) or not season.strip():
+        raise ValueError("season must be a non-empty string")
+    if not isinstance(build_steam_package, bool):
+        raise TypeError("build_steam_package must be a boolean")
     from hivemind.swarm.swarm_fabric import (
         PinnedRAMExpertDMAStreamer,
         TokenTreeSpeculativeVerifier,
@@ -3687,6 +3990,10 @@ def execute_interactive_hf_shard_scan(
     target_keywords: List[str] | None = None,
 ) -> Dict[str, Any]:
     """Scan a Hugging Face dataset or custom rows, pin a 16 KB CAS shard, verify Merkle PoS, and award points."""
+    if not isinstance(gamer_tag, str) or not gamer_tag.strip():
+        raise ValueError("gamer_tag must be a non-empty string")
+    if not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
     if dataset_id not in ALLOWED_HF_SCAN_DATASETS:
         return {
             "status": "BLOCKED",
@@ -3833,6 +4140,12 @@ def execute_interactive_bounty_probe(
     persist_leaderboard: bool = True,
 ) -> Dict[str, Any]:
     """Route a live player prompt across the 6-Expert Sparse MoE domains (Season 1 + Season 2), synthesize a solution, and award bounty points."""
+    if not isinstance(gamer_tag, str) or not gamer_tag.strip():
+        raise ValueError("gamer_tag must be a non-empty string")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string")
+    if not isinstance(persist_leaderboard, bool):
+        raise TypeError("persist_leaderboard must be a boolean")
     p_low = prompt.lower()
     code_hits = sum(
         1 for w in ["def", "python", "function", "code", "array", "sort", "search", "return", "algorithm"] if w in p_low
@@ -3981,6 +4294,12 @@ def execute_interactive_lora_micro_forge(
     persist_leaderboard: bool = True,
 ) -> Dict[str, Any]:
     """Execute a fast interactive QLoRA Micro-Forge burst & Steam Rich Presence broadcast from the Web HUD."""
+    if not isinstance(gamer_tag, str) or not gamer_tag.strip():
+        raise ValueError("gamer_tag must be a non-empty string")
+    if not isinstance(contract_id, str) or not contract_id.strip():
+        raise ValueError("contract_id must be a non-empty string")
+    if not isinstance(require_cuda, bool) or not isinstance(persist_leaderboard, bool):
+        raise TypeError("require_cuda and persist_leaderboard must be booleans")
     ensure_local_drive_caches()
     contract_map = {c.contract_id: c for c in SEASON_6_EXTENDED_HF_BOUNTY_CONTRACTS}
     contract = contract_map.get(contract_id, SEASON_2_HF_BOUNTY_CONTRACTS[0])
@@ -4177,6 +4496,12 @@ def execute_interactive_joined_campaign(
     verifying that every peer agent immediately inherits the retraining effort on unseen
     holdout benchmarks (`knowledge_transfer_efficiency >= 0.95`).
     """
+    if not isinstance(lead_gamer_tag, str) or not lead_gamer_tag.strip():
+        raise ValueError("lead_gamer_tag must be a non-empty string")
+    if not isinstance(campaign_id, str) or not campaign_id.strip():
+        raise ValueError("campaign_id must be a non-empty string")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
     from hivemind.swarm.scientific_swarm_eval import (
         JoinedSwarmCampaignEngine,
         SwarmKnowledgeTransferEngine,

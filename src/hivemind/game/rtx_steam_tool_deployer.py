@@ -73,6 +73,16 @@ def run_intense_rtx_stress_suite(
     steam_concurrent_accounts: int = 50,
 ) -> Dict[str, Any]:
     """Execute the 6-Stage Intense RTX GPU & Steam Tool Torture Test Suite."""
+    for name, val in (
+        ("vram_cycles", vram_cycles),
+        ("udp_burst_packets", udp_burst_packets),
+        ("num_hotplug_experts", num_hotplug_experts),
+        ("steam_concurrent_accounts", steam_concurrent_accounts),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int) or val <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    if num_hotplug_experts < 2:
+        raise ValueError("num_hotplug_experts must be >= 2")
     t_start = time.perf_counter()
     hw = detect_local_hardware()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -974,6 +984,15 @@ def deploy_free_steam_rtx_tool_v1(
     output_root: Path | None = None,
 ) -> Dict[str, Any]:
     """Run (or attach) the RTX Stress Certification and deploy v1.0.0 of the Free Steam Tool."""
+    if output_root is not None and (isinstance(output_root, bool) or not isinstance(output_root, Path)):
+        raise ValueError("output_root must be a Path or None")
+    if stress_report is not None and (
+        not isinstance(stress_report, dict)
+        or not isinstance(stress_report.get("all_stages_passed"), bool)
+        or not isinstance(stress_report.get("certification_hmac"), str)
+        or not stress_report["certification_hmac"].strip()
+    ):
+        raise ValueError("stress_report must be a dict containing boolean all_stages_passed and non-empty certification_hmac")
     if stress_report is None:
         stress_report = run_intense_rtx_stress_suite()
 

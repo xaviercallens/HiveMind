@@ -94,6 +94,14 @@ def _docs(rows: list[dict[str, Any]], cols: list[str]) -> list[str]:
 
 
 def domain_ids(tok, domain: str, role: str, shard_index: int, need: int) -> list[int]:
+    if domain not in _SOURCES:
+        raise ValueError(f"unknown domain {domain!r}")
+    if role not in ("train", "eval"):
+        raise ValueError(f"role must be 'train' or 'eval', got {role!r}")
+    if isinstance(shard_index, bool) or not isinstance(shard_index, int) or shard_index < 0:
+        raise ValueError("shard_index must be a non-negative integer")
+    if isinstance(need, bool) or not isinstance(need, int) or need <= 0:
+        raise ValueError("need must be a positive integer")
     s = _SOURCES[domain]
     if role == "train":
         path = _file(s["ds"], s["train"])
@@ -109,6 +117,10 @@ def domain_ids(tok, domain: str, role: str, shard_index: int, need: int) -> list
 
 
 def _chunks(ids: list[int], seq_len: int, n: int) -> list[list[int]]:
+    if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 1:
+        raise ValueError("seq_len must be a positive integer")
+    if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+        raise ValueError("n must be a non-negative integer")
     return [ids[i * seq_len : (i + 1) * seq_len] for i in range(min(n, len(ids) // seq_len))]
 
 
@@ -118,6 +130,8 @@ MIX_DOMAINS = tuple(DOMAIN_ORDER[:6])  # the six the chain evaluates every round
 
 def mix_counts(n: int, k: int) -> list[int]:
     """Split ``n`` sequences over ``k`` domains as evenly as possible (the first domains take the remainder); sums to ``n``."""
+    if isinstance(n, bool) or not isinstance(n, int) or isinstance(k, bool) or not isinstance(k, int):
+        raise ValueError("n and k must be integers")
     if n < k or k <= 0:
         raise ValueError(f"need at least one sequence per domain: n={n}, k={k}")
     base, extra = divmod(n, k)
@@ -126,6 +140,8 @@ def mix_counts(n: int, k: int) -> list[int]:
 
 def interleave(parts: list[list[list[int]]]) -> list[list[int]]:
     """Round-robin the per-domain chunk lists so no domain forms a contiguous block of the shard."""
+    if isinstance(parts, (str, bytes)) or not isinstance(parts, list) or not all(isinstance(p, list) for p in parts):
+        raise ValueError("parts must be a list of per-domain chunk lists")
     out: list[list[int]] = []
     for i in range(max((len(p) for p in parts), default=0)):
         out += [p[i] for p in parts if i < len(p)]
@@ -135,6 +151,10 @@ def interleave(parts: list[list[list[int]]]) -> list[list[int]]:
 def load_custom_shards(custom_dir: Path | str, secret: bytes | None = None) -> tuple[list[list[int]], list[list[int]], dict[str, Any]]:
     """Read shards written by ``scripts/make_custom_shards.py`` and verify them against the manifest (sha256 of both files, HMAC of the training shard).
     Any mismatch raises: a tampered or truncated shard never becomes a workunit."""
+    if not isinstance(custom_dir, (Path, str)) or (isinstance(custom_dir, str) and not custom_dir.strip()):
+        raise ValueError("custom_dir must be a non-empty path or string")
+    if secret is not None and (not isinstance(secret, (bytes, bytearray)) or len(secret) == 0):
+        raise ValueError("secret must be None or non-empty bytes")
     import hashlib
     import hmac
 
@@ -171,6 +191,28 @@ def build_train_spec(
     custom_dir: str | None = None,
     custom_secret: bytes | None = None,
 ) -> dict[str, Any]:
+    if not isinstance(wu_id, str) or not wu_id.strip():
+        raise ValueError("wu_id must be a non-empty string")
+    if isinstance(shard_index, bool) or not isinstance(shard_index, int) or shard_index < 0:
+        raise ValueError("shard_index must be a non-negative integer")
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    for iname, ival in (
+        ("inner_steps", inner_steps),
+        ("segment_steps", segment_steps),
+        ("seq_len", seq_len),
+        ("n_seq", n_seq),
+        ("n_eval", n_eval),
+        ("micro_batch", micro_batch),
+        ("rank", rank),
+        ("alpha", alpha),
+    ):
+        if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+            raise ValueError(f"{iname} must be an integer >= 1")
+    if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not (0.0 < float(lr) < float("inf")):
+        raise ValueError("lr must be a positive finite number")
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int) or isinstance(init_seed, bool) or not isinstance(init_seed, int):
+        raise ValueError("rng_seed and init_seed must be integers")
     from transformers import AutoTokenizer
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -222,4 +264,18 @@ def build_train_spec(
 
 
 def build_infer_spec(wu_id: str, prompts: list[str], model_id: str = DEFAULT_MODEL, max_new_tokens: int = 24, rank: int = 8, alpha: int = 16, init_seed: int = 42) -> dict[str, Any]:
+    if not isinstance(wu_id, str) or not wu_id.strip():
+        raise ValueError("wu_id must be a non-empty string")
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    if not isinstance(prompts, list) or not prompts or not all(isinstance(p, str) and p.strip() for p in prompts):
+        raise ValueError("prompts must be a non-empty list of non-empty strings")
+    if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int) or max_new_tokens < 1:
+        raise ValueError("max_new_tokens must be a positive integer")
+    if isinstance(rank, bool) or not isinstance(rank, int) or rank < 1:
+        raise ValueError("rank must be a positive integer")
+    if isinstance(alpha, bool) or not isinstance(alpha, int) or alpha < 1:
+        raise ValueError("alpha must be a positive integer")
+    if isinstance(init_seed, bool) or not isinstance(init_seed, int):
+        raise ValueError("init_seed must be an integer")
     return {"wu_id": wu_id, "model_id": model_id, "prompts": prompts, "max_new_tokens": max_new_tokens, "rank": rank, "alpha": alpha, "init_seed": init_seed}

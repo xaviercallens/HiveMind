@@ -60,6 +60,28 @@ class NodeReputationRecord:
     reputation_score: float = 100.0
     flagged_byzantine: bool = False
 
+    def __post_init__(self) -> None:
+        for s_name in ("steam_id64", "worker_id"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for b_name in ("is_non_limited_steam_account", "flagged_byzantine"):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
+        for i_name in ("validated_workunits", "rejected_workunits"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        for f_name in ("contributed_tflops", "minted_api_credits", "reputation_score"):
+            val = getattr(self, f_name)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a finite non-negative number")
+
 
 class WorkunitRequestPayload(BaseModel):
     worker_id: str
@@ -82,6 +104,22 @@ class BOINCCoordinatorService:
         max_total_active_workunits: int = 512,
         workunit_ttl_s: float = 3600.0,
     ) -> None:
+        if not isinstance(base_model_sha256, str) or not base_model_sha256.strip():
+            raise ValueError("base_model_sha256 must be a non-empty string")
+        for iname, ival in (
+            ("vocab_size", vocab_size),
+            ("max_active_workunits_per_node", max_active_workunits_per_node),
+            ("max_total_active_workunits", max_total_active_workunits),
+        ):
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{iname} must be an integer >= 1")
+        if (
+            isinstance(workunit_ttl_s, bool)
+            or not isinstance(workunit_ttl_s, (int, float))
+            or not math.isfinite(float(workunit_ttl_s))
+            or float(workunit_ttl_s) <= 0.0
+        ):
+            raise ValueError("workunit_ttl_s must be a positive finite number")
         self.config = config
         self.base_model_sha256 = base_model_sha256
         self.vocab_size = vocab_size
@@ -119,6 +157,10 @@ class BOINCCoordinatorService:
 
     def prune_active_workunits(self, now_s: float | None = None) -> int:
         """Evict consumed, stale-outer-step, or TTL-expired entries from ``active_workunits`` (IP-249)."""
+        if now_s is not None and (
+            isinstance(now_s, bool) or not isinstance(now_s, (int, float)) or not math.isfinite(float(now_s))
+        ):
+            raise ValueError("now_s must be a finite number or None")
         now = time.monotonic() if now_s is None else float(now_s)
         consumed = self.fl_security_guard.consumed_workunit_ids
         to_remove: list[str] = []
@@ -144,8 +186,10 @@ class BOINCCoordinatorService:
         worker_id: str,
         is_non_limited: bool = True,
     ) -> NodeReputationRecord:
-        clean_sid = str(steam_id64).strip()
-        clean_wid = str(worker_id).strip()
+        if not isinstance(is_non_limited, bool):
+            raise ValueError("is_non_limited must be a bool")
+        clean_sid = steam_id64.strip() if isinstance(steam_id64, str) else ""
+        clean_wid = worker_id.strip() if isinstance(worker_id, str) else ""
         if (
             not clean_sid
             or not clean_wid
@@ -185,6 +229,20 @@ class BOINCCoordinatorService:
         rng_seed: int | None = None,
     ) -> tuple[BOINCWorkunit, dict[str, torch.Tensor]]:
         """Schedule a BOINC Workunit and generate a signed Parquet training shard."""
+        if isinstance(num_sequences, bool) or not isinstance(num_sequences, int) or num_sequences < 1:
+            raise ValueError("num_sequences must be an integer >= 1")
+        if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 1:
+            raise ValueError("seq_len must be an integer >= 1")
+        if inner_steps_H is not None and (
+            isinstance(inner_steps_H, bool) or not isinstance(inner_steps_H, int) or inner_steps_H < 1
+        ):
+            raise ValueError("inner_steps_H must be an integer >= 1 or None")
+        if spot_check_interval_s is not None and (
+            isinstance(spot_check_interval_s, bool) or not isinstance(spot_check_interval_s, int) or spot_check_interval_s < 1
+        ):
+            raise ValueError("spot_check_interval_s must be an integer >= 1 or None")
+        if rng_seed is not None and (isinstance(rng_seed, bool) or not isinstance(rng_seed, int)):
+            raise ValueError("rng_seed must be an integer or None")
         self.register_or_get_node(steam_id64=steam_id64, worker_id=worker_id)
 
         domains = list(self.branches.keys())
@@ -270,6 +328,19 @@ class BOINCCoordinatorService:
         micro_batch_size: int = 1,
     ) -> SpotCheckVerdict:
         """Run Phase S-3 federated envelope verification + 50-step segment spot-check validation, update reputation, and queue delta for Multi-Krum."""
+        if not isinstance(steam_id64, str) or not steam_id64.strip():
+            raise ValueError("steam_id64 must be a non-empty string")
+        if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not math.isfinite(float(lr)) or float(lr) <= 0.0:
+            raise ValueError("lr must be a positive finite float")
+        if (
+            isinstance(weight_decay, bool)
+            or not isinstance(weight_decay, (int, float))
+            or not math.isfinite(float(weight_decay))
+            or float(weight_decay) < 0.0
+        ):
+            raise ValueError("weight_decay must be a non-negative finite float")
+        if isinstance(micro_batch_size, bool) or not isinstance(micro_batch_size, int) or micro_batch_size < 1:
+            raise ValueError("micro_batch_size must be a positive integer")
         branch_state = self.branches.get(workunit.branch_name)
         coord_outer_step = (branch_state.outer_step + 1) if branch_state is not None else workunit.outer_step
         self.fl_security_guard.check_workunit_submission_envelope(
@@ -390,10 +461,18 @@ class BOINCCoordinatorService:
         delta_dict: dict[str, torch.Tensor],
     ) -> None:
         """Directly queue a worker pseudo-gradient into the pending branch pool (for Multi-Krum tests)."""
+        if branch_name not in self.branches:
+            raise ValueError(f"Unknown branch_name {branch_name!r}")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id must be a non-empty string")
+        if not isinstance(delta_dict, dict) or not delta_dict:
+            raise ValueError("delta_dict must be a non-empty dict of tensors")
         self.pending_branch_deltas[branch_name][worker_id] = delta_dict
 
     def step_branch_outer_loop(self, branch_name: str) -> OuterStepResult:
         """Execute Multi-Krum filtering + Nesterov outer update for `branch_name`."""
+        if branch_name not in self.branches:
+            raise ValueError(f"Unknown branch_name {branch_name!r}")
         branch = self.branches[branch_name]
         worker_deltas = self.pending_branch_deltas[branch_name]
         if not worker_deltas:
@@ -418,6 +497,8 @@ LOGGER = logging.getLogger(__name__)
 
 def _anonymous_id(steam_id64: str) -> str:
     """Stable, non-reversible label for a node in public listings (the raw SteamID64 stays inside the coordinator)."""
+    if not isinstance(steam_id64, str) or not steam_id64.strip():
+        raise ValueError("steam_id64 must be a non-empty string")
     return hashlib.sha256(b"hivemind-node:" + steam_id64.encode()).hexdigest()[:16]
 
 

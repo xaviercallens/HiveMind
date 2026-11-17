@@ -27,7 +27,7 @@ agent findings: re-check a line reference before acting on it.
 | C8. Training-round table and rollback ratchet | **Done** (PR #705): `build_training_round_table` & `select_round_head_with_rollback` in `scripts/t4_workgen.py`, `artifact_refs` in `router/opentrainer.py` |
 | C9. Time-to-first-token and tokens/s in settlement | **Done** (PR #703): `ttft_ms` and `tokens_per_s` persisted in `usage_events` via `accounts.settle` |
 | C10. Close the train-to-serve loop (BOINC adapter -> GGUF -> evaluated -> served tier) | **Pipeline done** (`scripts/adapter_to_served.py`, `docs/TRAIN_TO_SERVE_GATE.md`); the current adapter **fails the gate** (no measurable gain on the served files), so nothing is served from it |
-| C11. Run the smoke test nightly in CI | Open: needs a tiny GGUF in CI |
+| C11. Run the smoke test nightly in CI | **Done** (`scripts/mvp_e2e_smoke.py --pytorch-tiny-lm`, 15 checks in `tests/test_mvp_e2e_smoke.py`) |
 | D. Archive as simulation / validator fixture & fix `scripts/e8_qlora_moe_round.py` refs | **Done** (PR #706): `simulated: True` / `validator_fixture: True` on all listed modules; `scripts/e8_qlora_moe_round.py` present and SHA-256-pinned |
 
 ## The plan, as produced by the audit

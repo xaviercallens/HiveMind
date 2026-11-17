@@ -40,6 +40,35 @@ class GeoMeshNode:
     asn: int
     anchor_rtts_ms: dict[str, float]
 
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.node_id, str)
+            or not self.node_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.node_id)
+        ):
+            raise ValueError("node_id must be a non-empty string without control characters")
+        if (
+            isinstance(self.lat_deg, bool)
+            or not isinstance(self.lat_deg, (int, float))
+            or not math.isfinite(self.lat_deg)
+            or not (-90.0 <= float(self.lat_deg) <= 90.0)
+        ):
+            raise ValueError("lat_deg must be a finite number in [-90.0, 90.0]")
+        if (
+            isinstance(self.lon_deg, bool)
+            or not isinstance(self.lon_deg, (int, float))
+            or not math.isfinite(self.lon_deg)
+            or not (-180.0 <= float(self.lon_deg) <= 180.0)
+        ):
+            raise ValueError("lon_deg must be a finite number in [-180.0, 180.0]")
+        if isinstance(self.asn, bool) or not isinstance(self.asn, int) or self.asn <= 0:
+            raise ValueError("asn must be a positive integer")
+        if not isinstance(self.anchor_rtts_ms, dict):
+            raise ValueError("anchor_rtts_ms must be a dictionary")
+        for ak in self.anchor_rtts_ms:
+            if not isinstance(ak, str) or not ak.strip() or any(ord(c) < 32 or ord(c) == 127 for c in ak):
+                raise ValueError("anchor_rtts_ms keys must be non-empty strings without control characters")
+
 
 @dataclass(frozen=True)
 class SubSwarmAssignment:
@@ -49,6 +78,30 @@ class SubSwarmAssignment:
     nodes: tuple[GeoMeshNode, ...]
     mean_pairwise_km: float
     unique_asn_count: int
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.subswarm_id, str)
+            or not self.subswarm_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.subswarm_id)
+        ):
+            raise ValueError("subswarm_id must be a non-empty string without control characters")
+        if not isinstance(self.nodes, tuple) or len(self.nodes) == 0 or not all(isinstance(n, GeoMeshNode) for n in self.nodes):
+            raise ValueError("nodes must be a non-empty tuple of GeoMeshNode instances")
+        if (
+            isinstance(self.mean_pairwise_km, bool)
+            or not isinstance(self.mean_pairwise_km, (int, float))
+            or not math.isfinite(float(self.mean_pairwise_km))
+            or float(self.mean_pairwise_km) < 0.0
+        ):
+            raise ValueError("mean_pairwise_km must be a finite non-negative number")
+        if (
+            isinstance(self.unique_asn_count, bool)
+            or not isinstance(self.unique_asn_count, int)
+            or self.unique_asn_count < 1
+            or self.unique_asn_count > len(self.nodes)
+        ):
+            raise ValueError("unique_asn_count must be an integer >= 1 and <= len(nodes)")
 
 
 @dataclass(frozen=True)
@@ -61,9 +114,65 @@ class FuzzyConsensusResult:
     rejected_node_ids: tuple[str, ...]
     honest_cosine_fidelity: float
 
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.subswarm_id, str)
+            or not self.subswarm_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.subswarm_id)
+        ):
+            raise ValueError("subswarm_id must be a non-empty string without control characters")
+        if (
+            not isinstance(self.aggregated_gradient, np.ndarray)
+            or not np.issubdtype(self.aggregated_gradient.dtype, np.number)
+            or np.issubdtype(self.aggregated_gradient.dtype, np.bool_)
+            or self.aggregated_gradient.size == 0
+            or not bool(np.all(np.isfinite(self.aggregated_gradient)))
+        ):
+            raise ValueError("aggregated_gradient must be a non-empty finite numeric numpy array")
+        if not isinstance(self.node_weights, dict) or not self.node_weights:
+            raise ValueError("node_weights must be a non-empty dictionary")
+        for k, v in self.node_weights.items():
+            if (
+                not isinstance(k, str)
+                or not k.strip()
+                or any(ord(c) < 32 or ord(c) == 127 for c in k)
+                or isinstance(v, bool)
+                or not isinstance(v, (int, float))
+                or not math.isfinite(float(v))
+                or float(v) < 0.0
+            ):
+                raise ValueError("node_weights must map non-empty node IDs to finite non-negative floats")
+        if not isinstance(self.rejected_node_ids, tuple) or not all(
+            isinstance(r, str) and bool(r.strip()) and not any(ord(c) < 32 or ord(c) == 127 for c in r)
+            for r in self.rejected_node_ids
+        ):
+            raise ValueError("rejected_node_ids must be a tuple of non-empty strings without control characters")
+        if len(set(self.rejected_node_ids)) != len(self.rejected_node_ids):
+            raise ValueError("rejected_node_ids must not contain duplicates")
+        if (
+            isinstance(self.honest_cosine_fidelity, bool)
+            or not isinstance(self.honest_cosine_fidelity, (int, float))
+            or not math.isfinite(float(self.honest_cosine_fidelity))
+            or not (-1.0001 <= float(self.honest_cosine_fidelity) <= 1.0001)
+        ):
+            raise ValueError("honest_cosine_fidelity must be a finite number in [-1.0, 1.0]")
+
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance in kilometers between two WGS84 coordinates."""
+    for name, val, lo, hi in (
+        ("lat1", lat1, -90.0, 90.0),
+        ("lon1", lon1, -180.0, 180.0),
+        ("lat2", lat2, -90.0, 90.0),
+        ("lon2", lon2, -180.0, 180.0),
+    ):
+        if (
+            isinstance(val, bool)
+            or not isinstance(val, (int, float))
+            or not math.isfinite(val)
+            or not (lo <= float(val) <= hi)
+        ):
+            raise ValueError(f"{name} must be a finite coordinate in [{lo}, {hi}]")
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlambda = math.radians(lon2 - lon1)
@@ -84,13 +193,34 @@ def triangulate_rtt_consistency(
          A node claiming to be 8,000 km away from an anchor cannot respond in 5 ms.
       2. Upper bound (stretch): RTT <= max_routing_stretch * (2 * d_km / FIBER_SPEED_KM_PER_MS) + jitter.
     """
+    if not isinstance(node, GeoMeshNode):
+        raise TypeError("node must be a GeoMeshNode")
+    if not isinstance(anchors, dict):
+        raise TypeError("anchors must be a dictionary")
+    if (
+        isinstance(max_routing_stretch, bool)
+        or not isinstance(max_routing_stretch, (int, float))
+        or not math.isfinite(max_routing_stretch)
+        or max_routing_stretch <= 0.0
+    ):
+        raise ValueError("max_routing_stretch must be finite and > 0")
+    if (
+        isinstance(base_switching_jitter_ms, bool)
+        or not isinstance(base_switching_jitter_ms, (int, float))
+        or not math.isfinite(base_switching_jitter_ms)
+        or base_switching_jitter_ms < 0.0
+    ):
+        raise ValueError("base_switching_jitter_ms must be finite and >= 0")
     if not anchors:
         return False, "no_anchors"
     verified_count = 0
     for anchor_id, (alat, alon) in anchors.items():
         if anchor_id not in node.anchor_rtts_ms:
             continue
-        rtt_ms = float(node.anchor_rtts_ms[anchor_id])
+        raw_rtt = node.anchor_rtts_ms[anchor_id]
+        if isinstance(raw_rtt, bool) or not isinstance(raw_rtt, (int, float)):
+            return False, f"non_finite_rtt:{anchor_id}"
+        rtt_ms = float(raw_rtt)
         if not math.isfinite(rtt_ms):
             return False, f"non_finite_rtt:{anchor_id}"
         dist_km = haversine_km(node.lat_deg, node.lon_deg, alat, alon)
@@ -117,8 +247,25 @@ def partition_into_fuzzy_subswarms(
     Uses a deterministic VRF-style hash sort combined with round-robin ASN/latitude striping
     so co-located ASNs are spread across distinct sub-swarms rather than concentrated in one.
     """
-    if target_min_size < 5 or target_max_size < target_min_size:
+    if (
+        not isinstance(epoch_seed, str)
+        or not epoch_seed.strip()
+        or any(ord(c) < 32 or ord(c) == 127 for c in epoch_seed)
+    ):
+        raise ValueError("epoch_seed must be a non-empty string without control characters")
+    if (
+        isinstance(target_min_size, bool)
+        or not isinstance(target_min_size, int)
+        or isinstance(target_max_size, bool)
+        or not isinstance(target_max_size, int)
+        or target_min_size < 5
+        or target_max_size < target_min_size
+    ):
         raise ValueError("Invalid target sub-swarm bounds")
+    if isinstance(nodes, (str, bytes)) or not isinstance(nodes, Sequence) or not all(
+        isinstance(nd, GeoMeshNode) for nd in nodes
+    ):
+        raise TypeError("nodes must be a sequence of GeoMeshNode instances")
     n = len(nodes)
     if n == 0:
         return []
@@ -182,11 +329,47 @@ def fuzzy_subswarm_consensus(
       3. Assign fuzzy membership weights ``w_i = exp(score_i / temperature)`` for nodes above
          ``rejection_threshold``, zeroing out detected Byzantine outliers.
     """
-    if not node_gradients:
+    if (
+        not isinstance(subswarm_id, str)
+        or not subswarm_id.strip()
+        or any(ord(c) < 32 or ord(c) == 127 for c in subswarm_id)
+    ):
+        raise ValueError("subswarm_id must be a non-empty string without control characters")
+    if (
+        isinstance(temperature, bool)
+        or not isinstance(temperature, (int, float))
+        or not math.isfinite(temperature)
+        or temperature <= 0.0
+    ):
+        raise ValueError("temperature must be finite and > 0")
+    if (
+        isinstance(rejection_threshold, bool)
+        or not isinstance(rejection_threshold, (int, float))
+        or not math.isfinite(rejection_threshold)
+        or not (0.0 <= rejection_threshold <= 1.0)
+    ):
+        raise ValueError("rejection_threshold must be a finite number in [0.0, 1.0]")
+    if not isinstance(node_gradients, dict) or not node_gradients:
         raise ValueError("node_gradients must not be empty")
 
     node_ids = list(node_gradients.keys())
-    matrix = np.vstack([np.asarray(node_gradients[nid], dtype=np.float32).ravel() for nid in node_ids])
+    rows: list[np.ndarray] = []
+    expected_dim: int | None = None
+    for nid in node_ids:
+        if not isinstance(nid, str) or not nid.strip() or any(ord(c) < 32 or ord(c) == 127 for c in nid):
+            raise ValueError("node_gradients keys must be non-empty strings without control characters")
+        raw_arr = np.asarray(node_gradients[nid])
+        if not np.issubdtype(raw_arr.dtype, np.number) or np.issubdtype(raw_arr.dtype, np.bool_):
+            raise ValueError(f"gradient for '{nid}' must be numeric (non-boolean)")
+        vec = np.asarray(raw_arr, dtype=np.float32).ravel()
+        if vec.size == 0 or not np.all(np.isfinite(vec)):
+            raise ValueError(f"gradient for '{nid}' must be non-empty and finite")
+        if expected_dim is None:
+            expected_dim = int(vec.size)
+        elif int(vec.size) != expected_dim:
+            raise ValueError("all node_gradients must have identical dimensionality")
+        rows.append(vec)
+    matrix = np.vstack(rows)
     coord_median = np.median(matrix, axis=0)
     median_norm = float(np.linalg.norm(coord_median)) + 1e-12
 
@@ -219,7 +402,15 @@ def fuzzy_subswarm_consensus(
         weight_vec = np.array([weights[nid] for nid in node_ids], dtype=np.float32)[:, None]
         agg = np.sum(matrix * weight_vec, axis=0).astype(np.float32)
 
-    ref = coord_median if reference_gradient is None else np.asarray(reference_gradient, dtype=np.float32).ravel()
+    if reference_gradient is None:
+        ref = coord_median
+    else:
+        raw_ref = np.asarray(reference_gradient)
+        if not np.issubdtype(raw_ref.dtype, np.number) or np.issubdtype(raw_ref.dtype, np.bool_):
+            raise ValueError("reference_gradient must be numeric (non-boolean)")
+        ref = np.asarray(raw_ref, dtype=np.float32).ravel()
+        if int(ref.size) != expected_dim or not np.all(np.isfinite(ref)):
+            raise ValueError("reference_gradient must be finite and match gradient dimensionality")
     cos_fidelity = float(
         np.dot(agg, ref) / ((float(np.linalg.norm(agg)) + 1e-12) * (float(np.linalg.norm(ref)) + 1e-12))
     )

@@ -8,6 +8,7 @@ here: every number is copied from the report, and every string is HTML-escaped b
 from __future__ import annotations
 
 import json
+import math
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -17,23 +18,42 @@ DEFAULT_RESULTS_PATH = Path("artifacts/experiments/NIGHT_MOE_results.json")
 
 def load_night_moe(path: Path | str = DEFAULT_RESULTS_PATH) -> dict[str, Any] | None:
     """The report as a dict, or ``None`` when the file is absent or unreadable."""
+    if not isinstance(path, (Path, str)) or not str(path).strip():
+        raise ValueError("path must be a non-empty Path or string")
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return data if isinstance(data, dict) and "subjects" in data else None
+    return data if isinstance(data, dict) and isinstance(data.get("subjects"), dict) else None
 
 
 def _fmt(value: Any) -> str:
     if value is None:
         return "-"
     if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("value must be a finite float")
         return f"{value:.4g}"
     return escape(str(value))
 
 
 def render_night_moe_html(report: dict[str, Any] | None) -> str:
     """Self-contained HTML for the report (an explanatory stub page when ``report`` is ``None``)."""
+    if report is not None:
+        if not isinstance(report, dict) or not isinstance(report.get("subjects"), dict):
+            raise ValueError("report must be None or a dictionary containing 'subjects'")
+        for required_key in ("base_model", "alpha", "bonferroni_alpha", "n_other_cells"):
+            if required_key not in report:
+                raise ValueError(f"report is missing required key {required_key!r}")
+        if not isinstance(report["base_model"], str) or not report["base_model"].strip():
+            raise ValueError("report['base_model'] must be a non-empty string")
+        for alpha_key in ("alpha", "bonferroni_alpha"):
+            aval = report[alpha_key]
+            if isinstance(aval, bool) or not isinstance(aval, (int, float)) or not math.isfinite(float(aval)) or not (0.0 < float(aval) <= 1.0):
+                raise ValueError(f"report[{alpha_key!r}] must be a finite number in (0, 1]")
+        ncells = report["n_other_cells"]
+        if isinstance(ncells, bool) or not isinstance(ncells, int) or ncells < 0:
+            raise ValueError("report['n_other_cells'] must be a non-negative integer")
     head = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<title>NIGHT-MOE-1 results</title><style>body{font:15px system-ui,sans-serif;margin:0 auto;max-width:1100px;padding:16px;"

@@ -1,0 +1,22 @@
+{
+ "schema": "hivemind-solver-heldout-frozen/1",
+ "note": "Frozen before the solver was ever run on these problems. Do not edit any listed file; a change makes this a different problem set.",
+ "files": {
+  "coupled_oscillators_long.json": "f20bc0fb986aaa85da25d2251c8108ea1d232a2cffb00d605f511f581e1fcb2f",
+  "harmonic_long.json": "895f538f4fd40100c6df54c3dc28db1a4ca337d1bc908001660df7482dfc64c9",
+  "kepler_circular.json": "df094f58ad8962836ddf63d4ba3e3708d85df9fd49316c33d2a898d18e2791a5",
+  "kepler_eccentric.json": "0889419c7b08339125be5d92f45ae9d9e070d6e3297a1be07ef543db06dd9a46",
+  "kepler_eccentric_long.json": "8b54cfae13949d376d0bc91338f100fd15a6d9c8381d6cc400018aa899146e4b",
+  "logistic_growth.json": "87b4d2bd529c91485ddd10eda6e7a923f528bd2da07cc4d32f3cf8753a6a87a9",
+  "pendulum_damped.json": "70248939ff0ddd7414f108eab824abe971a4e24edfc7e1ddb62c5cf07c621278",
+  "pendulum_large_angle.json": "5c2692068e59555b6db410ba783eedd0381f5d79f7c0e794f22fac7e271f1a47",
+  "pendulum_small_angle.json": "c40330e6b9a46a9b8a858481bc409347bf1adafb1f4847a48b37ac6460c9d6e6",
+  "projectile_drag.json": "ad11cba47ee50eed1993e00599f3e43d0c868148e29945ace3d675d0e2abada7",
+  "projectile_no_drag.json": "abfe77499584ca8f9cbf03640e37ce9ab52ad9bf581352be82e9f58869d8e30b",
+  "seir_epidemic.json": "35bbc03ef43bef5e819b8c86e80d8d86de8dc97ed3396c0b3b7d75b8bb545b31",
+  "series_rlc.json": "e9cc4ec9a2f7d09b942efa855677098e455944a921da82606c76e398ccc75b4b",
+  "sir_epidemic.json": "1362d0667efcac74455fc7b1edb9a2adda2be70531664e1dd8811e97a5fd7388",
+  "spring_mass_damper.json": "5a8be37831b02bd18f7d400de53976ea1369667e058c245be0c7903710de58b2",
+  "stiff_reaction.json": "efc747e7e066c93af76696db22bb7a8b69107bf5bbe1cce89d8e31323af558e1"
+ }
+}

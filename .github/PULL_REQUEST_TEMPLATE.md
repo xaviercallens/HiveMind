@@ -29,3 +29,5 @@
   - Real functional implementation included (not a hollow "Code Boubou" timestamp/whitespace PR).
 - [ ] **Binding Non-Monetary & Zero-Payment Attestation ([`LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md`](../LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md)):**
   - I confirm that this contribution is strictly voluntary and non-monetary, contains **zero payment links, invoices, or cryptocurrency wallet addresses**, and that I waive any claim to fiat, cash, or monetary remuneration.
+- [ ] **Contributor License Agreement & Dual-License IP Protection ([`CLA.md`](../CLA.md)):**
+  - `I have read the CLA Document and I hereby sign the CLA` (I have read and agree to the Project Hive Mind Contributor License Agreement `CLA.md` v1.0, including Section 2 Dual-Licensing & Commercial Rights, Article L. 121-7 French IP Code, and Section 9 French Jurisdiction, and confirm that I have the legal authority to grant the rights therein).

@@ -1,0 +1,2675 @@
+{
+ "schema": "hivemind-s3-questions/1",
+ "experiment_id": "S3-science-bee-formulation",
+ "n_questions": 40,
+ "by_lang": {
+  "en": 24,
+  "fr": 16
+ },
+ "by_tier": {
+  "A": 13,
+  "B": 15,
+  "C": 12
+ },
+ "by_type": {
+  "chain": 4,
+  "kepler": 4,
+  "logistic": 4,
+  "msd": 4,
+  "pendulum": 4,
+  "projectile": 6,
+  "rlc": 4,
+  "seir": 3,
+  "sir": 4,
+  "stiff": 3
+ },
+ "state_order": "the full state vector y of the expected spec is compared at every requested time (pendulum [theta, omega]; projectile and kepler [x, y, vx, vy]; logistic [N]; SIR [S, I, R]; SEIR [S, E, I, R]; RLC [q, i]; spring-mass-damper [x, v]; chains [A, B, C])",
+ "comparison_policy": {
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "max_rel_err_factor": 100.0
+ },
+ "reference_generator": "artifacts/experiments/s3_reference.py (stdlib + mpmath)",
+ "questions": [
+  {
+   "id": "q01",
+   "tier": "A",
+   "lang": "en",
+   "type": "pendulum",
+   "text": "A pendulum has g_over_l = 9.81 and damping = 0.1. It starts with theta0 = 0.5 and omega0 = 0. What are theta and omega at t = 1, 2, 5 seconds?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q01",
+    "problem": {
+     "kind": "named",
+     "family": "pendulum",
+     "params": {
+      "g_over_l": 9.81,
+      "damping": 0.1
+     }
+    },
+    "y0": [
+     0.5,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     2.0,
+     5.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     2.0,
+     5.0
+    ],
+    "y": [
+     [
+      -0.47412455893921523,
+      -0.08206597206054167
+     ],
+     [
+      0.44844373670128035,
+      0.1500025864779969
+     ],
+     [
+      -0.37565901674572194,
+      -0.2868198077858981
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q02",
+   "tier": "A",
+   "lang": "fr",
+   "type": "pendulum",
+   "text": "Un pendule a g_over_l = 9,81 et damping = 0,2. Il part de theta0 = 0,3 avec omega0 = 0. Donne theta et omega à t = 1, 2, 4 secondes.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q02",
+    "problem": {
+     "kind": "named",
+     "family": "pendulum",
+     "params": {
+      "g_over_l": 9.81,
+      "damping": 0.2
+     }
+    },
+    "y0": [
+     0.3,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     2.0,
+     4.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     2.0,
+     4.0
+    ],
+    "y": [
+     [
+      -0.2709985721318932,
+      -0.02291180859974881
+     ],
+     [
+      0.24470048880259668,
+      0.039262598356416684
+     ],
+     [
+      0.1993682486638674,
+      0.05828832985755207
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q03",
+   "tier": "A",
+   "lang": "en",
+   "type": "projectile",
+   "text": "A projectile with g = 9.81 and no drag is launched from x0 = 0, y0 = 0 with vx0 = 10 and vy0 = 15. Give x, y, vx, vy at t = 0.5, 1, 2 seconds.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q03",
+    "problem": {
+     "kind": "named",
+     "family": "projectile_drag",
+     "params": {
+      "g": 9.81,
+      "k": 0.0
+     }
+    },
+    "y0": [
+     0.0,
+     0.0,
+     10.0,
+     15.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.5,
+     1.0,
+     2.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.5,
+     1.0,
+     2.0
+    ],
+    "y": [
+     [
+      5.0,
+      6.27375,
+      10.0,
+      10.095
+     ],
+     [
+      10.0,
+      10.095,
+      10.0,
+      5.19
+     ],
+     [
+      20.0,
+      10.38,
+      10.0,
+      -4.62
+     ]
+    ],
+    "method": "closed form (k=0) or mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q04",
+   "tier": "A",
+   "lang": "en",
+   "type": "projectile",
+   "text": "A projectile with g = 9.81 and drag coefficient k = 0.02 is launched from x0 = 0, y0 = 0 with vx0 = 20 and vy0 = 20. Give x, y, vx, vy at t = 1, 2, 3 seconds.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q04",
+    "problem": {
+     "kind": "named",
+     "family": "projectile_drag",
+     "params": {
+      "g": 9.81,
+      "k": 0.02
+     }
+    },
+    "y0": [
+     0.0,
+     0.0,
+     20.0,
+     20.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     2.0,
+     3.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     2.0,
+     3.0
+    ],
+    "y": [
+     [
+      16.097987451722627,
+      11.781974788018818,
+      13.38311227226775,
+      5.119019680980024
+     ],
+     [
+      27.923107893245444,
+      11.770099154749966,
+      10.494392061573205,
+      -4.733888147111896
+     ],
+     [
+      37.22319277434492,
+      3.064957512469358,
+      8.106900808387278,
+      -12.255670772061679
+     ]
+    ],
+    "method": "closed form (k=0) or mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q05",
+   "tier": "A",
+   "lang": "en",
+   "type": "kepler",
+   "text": "A body in a planar Kepler orbit with mu = 1 starts at x0 = 1, y0 = 0 with vx0 = 0 and vy0 = 1.2. Give x, y, vx, vy at t = 1, 3, 6 seconds.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q05",
+    "problem": {
+     "kind": "named",
+     "family": "kepler",
+     "params": {
+      "mu": 1.0
+     }
+    },
+    "y0": [
+     1.0,
+     0.0,
+     0.0,
+     1.2
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     3.0,
+     6.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     3.0,
+     6.0
+    ],
+    "y": [
+     [
+      0.5756971781441452,
+      1.0376962989118375,
+      -0.7287029920064775,
+      0.7709393393583194
+     ],
+     [
+      -1.0049321410239758,
+      1.5914382914720737,
+      -0.704611419869772,
+      -0.0782683751467965
+     ],
+     [
+      -2.401458916790422,
+      0.6828000912311267,
+      -0.22790616094992178,
+      -0.4348963229015349
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q06",
+   "tier": "A",
+   "lang": "en",
+   "type": "logistic",
+   "text": "Logistic growth with r = 0.5 and K = 100 starts from N0 = 10. What is N at t = 2, 5, 10?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q06",
+    "problem": {
+     "kind": "named",
+     "family": "logistic",
+     "params": {
+      "r": 0.5,
+      "K": 100.0
+     }
+    },
+    "y0": [
+     10.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     2.0,
+     5.0,
+     10.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     2.0,
+     5.0,
+     10.0
+    ],
+    "y": [
+     [
+      23.196931668407395
+     ],
+     [
+      57.512085136451475
+     ],
+     [
+      94.28256185740149
+     ]
+    ],
+    "method": "closed form, 30 digits"
+   }
+  },
+  {
+   "id": "q07",
+   "tier": "A",
+   "lang": "fr",
+   "type": "logistic",
+   "text": "Croissance logistique avec r = 0,8 et K = 50, N0 = 5. Quelle est N à t = 1, 4, 8 ?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q07",
+    "problem": {
+     "kind": "named",
+     "family": "logistic",
+     "params": {
+      "r": 0.8,
+      "K": 50.0
+     }
+    },
+    "y0": [
+     5.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     4.0,
+     8.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     4.0,
+     8.0
+    ],
+    "y": [
+     [
+      9.912844925110198
+     ],
+     [
+      36.58019548913157
+     ],
+     [
+      49.263315616727276
+     ]
+    ],
+    "method": "closed form, 30 digits"
+   }
+  },
+  {
+   "id": "q08",
+   "tier": "A",
+   "lang": "en",
+   "type": "sir",
+   "text": "An SIR epidemic has beta = 0.4 and gamma = 0.1, with s0 = 0.99 and i0 = 0.01 (population fractions). What are S, I, R at t = 10, 30, 60 (same time unit as the rates)?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q08",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "S",
+      "I",
+      "R"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "S": 1,
+        "I": 1
+       },
+       "products": {
+        "I": 2
+       },
+       "k": 0.4
+      },
+      {
+       "reactants": {
+        "I": 1
+       },
+       "products": {
+        "R": 1
+       },
+       "k": 0.1
+      }
+     ]
+    },
+    "y0": [
+     0.99,
+     0.01,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     10.0,
+     30.0,
+     60.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     10.0,
+     30.0,
+     60.0
+    ],
+    "y": [
+     [
+      0.7940742144675154,
+      0.1507937812457846,
+      0.05513200428670003
+     ],
+     [
+      0.05994417935149001,
+      0.23898303112673916,
+      0.7010727895217709
+     ],
+     [
+      0.02112979417741441,
+      0.017114992741691173,
+      0.9617552130808944
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q09",
+   "tier": "A",
+   "lang": "fr",
+   "type": "seir",
+   "text": "Une épidémie SEIR avec beta = 0,6, sigma = 0,3, gamma = 0,1, s0 = 0,98, e0 = 0,01, i0 = 0,01. Donne S, E, I, R à t = 10, 20, 40.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q09",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "S",
+      "E",
+      "I",
+      "R"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "S": 1,
+        "I": 1
+       },
+       "products": {
+        "E": 1,
+        "I": 1
+       },
+       "k": 0.6
+      },
+      {
+       "reactants": {
+        "E": 1
+       },
+       "products": {
+        "I": 1
+       },
+       "k": 0.3
+      },
+      {
+       "reactants": {
+        "I": 1
+       },
+       "products": {
+        "R": 1
+       },
+       "k": 0.1
+      }
+     ]
+    },
+    "y0": [
+     0.98,
+     0.01,
+     0.01,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     10.0,
+     20.0,
+     40.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     10.0,
+     20.0,
+     40.0
+    ],
+    "y": [
+     [
+      0.7875078464318964,
+      0.08792050917651993,
+      0.08812510484301303,
+      0.036446539548570675
+     ],
+     [
+      0.2185830037899828,
+      0.1831170126285604,
+      0.3482355253782166,
+      0.2500644582032402
+     ],
+     [
+      0.006290841892028584,
+      0.0056931484041071794,
+      0.14660639907063308,
+      0.8414096106332312
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q10",
+   "tier": "A",
+   "lang": "en",
+   "type": "rlc",
+   "text": "A series RLC circuit has R = 10, L = 0.5, C = 0.01 and a constant voltage V = 5. It starts with q0 = 0 and i0 = 0. Give q and i at t = 0.1, 0.5, 1 seconds.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q10",
+    "problem": {
+     "kind": "linear",
+     "A": [
+      [
+       0.0,
+       1.0
+      ],
+      [
+       -200.0,
+       -20.0
+      ]
+     ],
+     "b": [
+      0.0,
+      10.0
+     ]
+    },
+    "y0": [
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.1,
+     0.5,
+     1.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.1,
+     0.5,
+     1.0
+    ],
+    "y": [
+     [
+      0.024583700700023744,
+      0.3095598756531122
+     ],
+     [
+      0.050227494008376034,
+      -0.006461180938816702
+     ],
+     [
+      0.050003139615435475,
+      -2.4698520223686374e-05
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q11",
+   "tier": "A",
+   "lang": "fr",
+   "type": "msd",
+   "text": "Un système masse-ressort-amortisseur a m = 2, c = 0,4, k = 8 et aucune force extérieure. Il part de x0 = 1 avec v0 = 0. Donne x et v à t = 1, 2, 4 secondes.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q11",
+    "problem": {
+     "kind": "linear",
+     "A": [
+      [
+       0.0,
+       1.0
+      ],
+      [
+       -4.0,
+       -0.2
+      ]
+     ],
+     "b": [
+      0.0,
+      0.0
+     ]
+    },
+    "y0": [
+     1.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     2.0,
+     4.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     2.0,
+     4.0
+    ],
+    "y": [
+     [
+      -0.3332489860805094,
+      -1.6494745589282338
+     ],
+     [
+      -0.5691366934141853,
+      1.2354097646844333
+     ],
+     [
+      -0.0576427458789794,
+      -1.3299221926343079
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q12",
+   "tier": "A",
+   "lang": "fr",
+   "type": "chain",
+   "text": "Une chaîne de désintégration A -> B -> C a k1 = 1 et k2 = 0,5, avec A0 = 1 (B et C valent 0 au départ). Donne A, B, C à t = 1, 2, 5 secondes.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q12",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "A",
+      "B",
+      "C"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "A": 1
+       },
+       "products": {
+        "B": 1
+       },
+       "k": 1.0
+      },
+      {
+       "reactants": {
+        "B": 1
+       },
+       "products": {
+        "C": 1
+       },
+       "k": 0.5
+      }
+     ]
+    },
+    "y0": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     2.0,
+     5.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     2.0,
+     5.0
+    ],
+    "y": [
+     [
+      0.36787944117144233,
+      0.4773024370823822,
+      0.15481812174617549
+     ],
+     [
+      0.1353352832366127,
+      0.46508831586965926,
+      0.39957640089372803
+     ],
+     [
+      0.006737946999085467,
+      0.15069410324962665,
+      0.8425679497512879
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q13",
+   "tier": "A",
+   "lang": "fr",
+   "type": "stiff",
+   "text": "Réaction raide A -> B -> C avec k1 = 1000 et k2 = 1 ; A0 = 1. Donne A, B, C à t = 0,001, 0,01, 1.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q13",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "A",
+      "B",
+      "C"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "A": 1
+       },
+       "products": {
+        "B": 1
+       },
+       "k": 1000.0
+      },
+      {
+       "reactants": {
+        "B": 1
+       },
+       "products": {
+        "C": 1
+       },
+       "k": 1.0
+      }
+     ]
+    },
+    "y0": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.001,
+     0.01,
+     1.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.001,
+     0.01,
+     1.0
+    ],
+    "y": [
+     [
+      0.36787944117144233,
+      0.6317528114734061,
+      0.0003677473551516023
+     ],
+     [
+      4.5399929762484854e-05,
+      0.9909954292486542,
+      0.008959170821583292
+     ],
+     [
+      0.0,
+      0.3682476888603026,
+      0.6317523111396974
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q14",
+   "tier": "B",
+   "lang": "en",
+   "type": "pendulum",
+   "text": "Starting from rest at an angle of 0.8 radians, a pendulum with g_over_l of 20 and no friction swings. After 1, 3 and 6 seconds, what are its angle theta and angular velocity omega?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q14",
+    "problem": {
+     "kind": "named",
+     "family": "pendulum",
+     "params": {
+      "g_over_l": 20.0,
+      "damping": 0.0
+     }
+    },
+    "y0": [
+     0.8,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     3.0,
+     6.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     3.0,
+     6.0
+    ],
+    "y": [
+     [
+      -0.3289497429078422,
+      3.1602243011924664
+     ],
+     [
+      0.7616217142544945,
+      -1.0394443710383694
+     ],
+     [
+      0.6494562980025352,
+      -1.9970579618770419
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q15",
+   "tier": "B",
+   "lang": "fr",
+   "type": "projectile",
+   "text": "Une balle est lancée depuis l'origine avec une vitesse horizontale de 12 et une vitesse verticale de 8 (g = 9,81, pas de frottement). Où est-elle, et à quelle vitesse, après 0,5 ; 1 et 1,5 secondes ?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q15",
+    "problem": {
+     "kind": "named",
+     "family": "projectile_drag",
+     "params": {
+      "g": 9.81,
+      "k": 0.0
+     }
+    },
+    "y0": [
+     0.0,
+     0.0,
+     12.0,
+     8.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.5,
+     1.0,
+     1.5
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.5,
+     1.0,
+     1.5
+    ],
+    "y": [
+     [
+      6.0,
+      2.77375,
+      12.0,
+      3.095
+     ],
+     [
+      12.0,
+      3.095,
+      12.0,
+      -1.81
+     ],
+     [
+      18.0,
+      0.96375,
+      12.0,
+      -6.715
+     ]
+    ],
+    "method": "closed form (k=0) or mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q16",
+   "tier": "B",
+   "lang": "en",
+   "type": "projectile",
+   "text": "Air resistance is quadratic with coefficient 0.05 (g = 9.81). A cannonball leaves the origin with horizontal speed 30 and vertical speed 25. Report position and velocity after 1, 2 and 4 seconds.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q16",
+    "problem": {
+     "kind": "named",
+     "family": "projectile_drag",
+     "params": {
+      "g": 9.81,
+      "k": 0.05
+     }
+    },
+    "y0": [
+     0.0,
+     0.0,
+     30.0,
+     25.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     2.0,
+     4.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     2.0,
+     4.0
+    ],
+    "y": [
+     [
+      17.013133646074497,
+      10.525622438037855,
+      10.939188961084124,
+      2.2897925067949063
+     ],
+     [
+      25.68306500405802,
+      8.10960534878135,
+      6.8379276310061465,
+      -6.443825484573807
+     ],
+     [
+      34.009148391041194,
+      -13.462283202238398,
+      2.1134551971779465,
+      -13.171053777811487
+     ]
+    ],
+    "method": "closed form (k=0) or mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q17",
+   "tier": "B",
+   "lang": "en",
+   "type": "kepler",
+   "text": "Two-body motion with mu = 1: the body begins at (x, y) = (1, 0) moving with velocity (vx, vy) = (0, 0.8). Where is it, and how fast, at t = 2, 5, 9?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q17",
+    "problem": {
+     "kind": "named",
+     "family": "kepler",
+     "params": {
+      "mu": 1.0
+     }
+    },
+    "y0": [
+     1.0,
+     0.0,
+     0.0,
+     0.8
+    ],
+    "t0": 0.0,
+    "t_out": [
+     2.0,
+     5.0,
+     9.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     2.0,
+     5.0,
+     9.0
+    ],
+    "y": [
+     [
+      -0.4697567738038199,
+      -0.03261393836241266,
+      0.08657570573569297,
+      -1.6969982546805615
+     ],
+     [
+      0.4613778932110463,
+      0.6610002026235327,
+      -1.0250022462392152,
+      0.2654511829639834
+     ],
+     [
+      0.42138431256030184,
+      0.6702399141454272,
+      -1.0582311937535718,
+      0.21531702260417948
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q18",
+   "tier": "B",
+   "lang": "fr",
+   "type": "kepler",
+   "text": "Une planète de paramètre gravitationnel mu = 2 part de la position (2, 0) avec la vitesse (0, 0,8). Donne sa position et sa vitesse aux instants 1, 4 et 8.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q18",
+    "problem": {
+     "kind": "named",
+     "family": "kepler",
+     "params": {
+      "mu": 2.0
+     }
+    },
+    "y0": [
+     2.0,
+     0.0,
+     0.0,
+     0.8
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     4.0,
+     8.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     4.0,
+     8.0
+    ],
+    "y": [
+     [
+      1.7496677044290658,
+      0.7657061874630837,
+      -0.5011480025460947,
+      0.6951422093102932
+     ],
+     [
+      -0.9395135476076398,
+      -0.06522787672482531,
+      0.08657570573569297,
+      -1.6969982546805615
+     ],
+     [
+      1.9985260439251518,
+      0.06141202298515068,
+      -0.03839270041343994,
+      0.7994102611052
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q19",
+   "tier": "B",
+   "lang": "fr",
+   "type": "logistic",
+   "text": "La population N démarre à 2 ; elle suit une loi logistique de taux de croissance 0,3 et de capacité 40. Quelle est sa valeur à t = 3, 6, 12 ?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q19",
+    "problem": {
+     "kind": "named",
+     "family": "logistic",
+     "params": {
+      "r": 0.3,
+      "K": 40.0
+     }
+    },
+    "y0": [
+     2.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     3.0,
+     6.0,
+     12.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     3.0,
+     6.0,
+     12.0
+    ],
+    "y": [
+     [
+      4.584619945516495
+     ],
+     [
+      9.66025166303429
+     ],
+     [
+      26.330501182193228
+     ]
+    ],
+    "method": "closed form, 30 digits"
+   }
+  },
+  {
+   "id": "q20",
+   "tier": "B",
+   "lang": "en",
+   "type": "sir",
+   "text": "Epidemic model (SIR): 1% of people are infected at the start and everyone else is susceptible. The infection rate beta is 0.5 and the recovery rate gamma is 0.25. Tell me the susceptible, infected and recovered fractions at t = 5, 15, 30.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q20",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "S",
+      "I",
+      "R"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "S": 1,
+        "I": 1
+       },
+       "products": {
+        "I": 2
+       },
+       "k": 0.5
+      },
+      {
+       "reactants": {
+        "I": 1
+       },
+       "products": {
+        "R": 1
+       },
+       "k": 0.25
+      }
+     ]
+    },
+    "y0": [
+     0.99,
+     0.01,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     5.0,
+     15.0,
+     30.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     5.0,
+     15.0,
+     30.0
+    ],
+    "y": [
+     [
+      0.9434628023647765,
+      0.03246319550832731,
+      0.02407400212689611
+     ],
+     [
+      0.607653817509526,
+      0.14829638128223585,
+      0.24404980120823816
+     ],
+     [
+      0.24589141804949957,
+      0.05770113461039218,
+      0.6964074473401083
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q21",
+   "tier": "B",
+   "lang": "fr",
+   "type": "sir",
+   "text": "Sur une population normalisée, 2 % des individus sont infectés au départ et 98 % sont sains. On donne beta = 0,3 et gamma = 0,1. Que valent S, I et R à t = 20, 50, 100 ?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q21",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "S",
+      "I",
+      "R"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "S": 1,
+        "I": 1
+       },
+       "products": {
+        "I": 2
+       },
+       "k": 0.3
+      },
+      {
+       "reactants": {
+        "I": 1
+       },
+       "products": {
+        "R": 1
+       },
+       "k": 0.1
+      }
+     ]
+    },
+    "y0": [
+     0.98,
+     0.02,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     20.0,
+     50.0,
+     100.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     20.0,
+     50.0,
+     100.0
+    ],
+    "y": [
+     [
+      0.4368420911774149,
+      0.2938309790589714,
+      0.2693269297636137
+     ],
+     [
+      0.07457208840791613,
+      0.06683248342727657,
+      0.8585954281648073
+     ],
+     [
+      0.05831875470106986,
+      0.001138299614095398,
+      0.9405429456848348
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q22",
+   "tier": "B",
+   "lang": "en",
+   "type": "seir",
+   "text": "In an SEIR model with infection rate beta = 0.5, incubation rate sigma = 0.2 and recovery rate gamma = 0.1, begin with 1% exposed, 1% infectious and the rest susceptible. What are S, E, I and R at t = 10, 25, 50?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q22",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "S",
+      "E",
+      "I",
+      "R"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "S": 1,
+        "I": 1
+       },
+       "products": {
+        "E": 1,
+        "I": 1
+       },
+       "k": 0.5
+      },
+      {
+       "reactants": {
+        "E": 1
+       },
+       "products": {
+        "I": 1
+       },
+       "k": 0.2
+      },
+      {
+       "reactants": {
+        "I": 1
+       },
+       "products": {
+        "R": 1
+       },
+       "k": 0.1
+      }
+     ]
+    },
+    "y0": [
+     0.98,
+     0.01,
+     0.01,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     10.0,
+     25.0,
+     50.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     10.0,
+     25.0,
+     50.0
+    ],
+    "y": [
+     [
+      0.8739114950450202,
+      0.05772728386451764,
+      0.0454465280130219,
+      0.02291469307744031
+     ],
+     [
+      0.3105669919178426,
+      0.20253864992190737,
+      0.25706377044146145,
+      0.2298305877187886
+     ],
+     [
+      0.014506936121830735,
+      0.015554094093402191,
+      0.12735383310820378,
+      0.8425851366765633
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q23",
+   "tier": "B",
+   "lang": "fr",
+   "type": "rlc",
+   "text": "Un circuit RLC série est branché sur une source continue de 5 V ; sa résistance est 20, son inductance 1 et sa capacité 0,05. Le condensateur est déchargé et le courant est nul au départ. Donne la charge q et le courant i à t = 0,2 ; 1 et 3.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q23",
+    "problem": {
+     "kind": "linear",
+     "A": [
+      [
+       0.0,
+       1.0
+      ],
+      [
+       -20.0,
+       -20.0
+      ]
+     ],
+     "b": [
+      0.0,
+      5.0
+     ]
+    },
+    "y0": [
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.2,
+     1.0,
+     3.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.2,
+     1.0,
+     3.0
+    ],
+    "y": [
+     [
+      0.035973855599154995,
+      0.21998287370198893
+     ],
+     [
+      0.15788167048718038,
+      0.09725190650713197
+     ],
+     [
+      0.23884801217908727,
+      0.011773466801884852
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q24",
+   "tier": "B",
+   "lang": "en",
+   "type": "rlc",
+   "text": "With R = 2, L = 0.5 and C = 0.1 in series (a constant 3 V supply, empty capacitor, no initial current), how do the charge q and the current i evolve? Evaluate at t = 0.5, 1, 2.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q24",
+    "problem": {
+     "kind": "linear",
+     "A": [
+      [
+       0.0,
+       1.0
+      ],
+      [
+       -20.0,
+       -4.0
+      ]
+     ],
+     "b": [
+      0.0,
+      6.0
+     ]
+    },
+    "y0": [
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.5,
+     1.0,
+     2.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.5,
+     1.0,
+     2.0
+    ],
+    "y": [
+     [
+      0.29575078531637855,
+      0.5017677438588933
+     ],
+     [
+      0.34190162537811564,
+      -0.15363312008501057
+     ],
+     [
+      0.2980813685667494,
+      0.02718109256511761
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q25",
+   "tier": "B",
+   "lang": "en",
+   "type": "msd",
+   "text": "A 1.5 kg mass sits on a spring of stiffness 12 with damping coefficient 0.6; it is pulled 0.2 from equilibrium and released from rest. Give displacement x and velocity v at t = 1, 3, 6.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q25",
+    "problem": {
+     "kind": "linear",
+     "A": [
+      [
+       0.0,
+       1.0
+      ],
+      [
+       -8.0,
+       -0.39999999999999997
+      ]
+     ],
+     "b": [
+      0.0,
+      0.0
+     ]
+    },
+    "y0": [
+     0.2,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     3.0,
+     6.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     3.0,
+     6.0
+    ],
+    "y": [
+     [
+      -0.15176691262821446,
+      -0.14616340538007433
+     ],
+     [
+      -0.05650737233337815,
+      -0.2550914798561468
+     ],
+     [
+      -0.024704373794384185,
+      0.16041340808683693
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q26",
+   "tier": "B",
+   "lang": "fr",
+   "type": "chain",
+   "text": "Au départ il n'y a que 2 unités de A ; A se transforme en B avec le taux 0,8 et B en C avec le taux 0,3. Quelles quantités de A, B, C à t = 1, 3, 8 ?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q26",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "A",
+      "B",
+      "C"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "A": 1
+       },
+       "products": {
+        "B": 1
+       },
+       "k": 0.8
+      },
+      {
+       "reactants": {
+        "B": 1
+       },
+       "products": {
+        "C": 1
+       },
+       "k": 0.3
+      }
+     ]
+    },
+    "y0": [
+     2.0,
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     3.0,
+     8.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     3.0,
+     8.0
+    ],
+    "y": [
+     [
+      0.8986579282344432,
+      0.932765621006388,
+      0.16857645075916874
+     ],
+     [
+      0.181435906578825,
+      1.0107254606437972,
+      0.8078386327773779
+     ],
+     [
+      0.003323114546347869,
+      0.2849804672519634,
+      1.7116964182016887
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q27",
+   "tier": "B",
+   "lang": "en",
+   "type": "chain",
+   "text": "Substance A decays into B (rate 0.5) and B decays into C (rate 0.2). Initially only A is present, 3 units. How much A, B and C remain at t = 2, 6, 12?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q27",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "A",
+      "B",
+      "C"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "A": 1
+       },
+       "products": {
+        "B": 1
+       },
+       "k": 0.5
+      },
+      {
+       "reactants": {
+        "B": 1
+       },
+       "products": {
+        "C": 1
+       },
+       "k": 0.2
+      }
+     ]
+    },
+    "y0": [
+     3.0,
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     2.0,
+     6.0,
+     12.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     2.0,
+     6.0,
+     12.0
+    ],
+    "y": [
+     [
+      1.103638323514327,
+      1.512203024320985,
+      0.38415865216468814
+     ],
+     [
+      0.14936120510359183,
+      1.2570357177216909,
+      1.5936030771747174
+     ],
+     [
+      0.0074362565299990755,
+      0.44119600556373073,
+      2.5513677379062702
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q28",
+   "tier": "B",
+   "lang": "en",
+   "type": "stiff",
+   "text": "Consider A turning into B very quickly (rate 500) and B turning into C slowly (rate 0.4); starting from 1 unit of A, what are the three amounts at t = 0.002, 0.05, 2?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q28",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "A",
+      "B",
+      "C"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "A": 1
+       },
+       "products": {
+        "B": 1
+       },
+       "k": 500.0
+      },
+      {
+       "reactants": {
+        "B": 1
+       },
+       "products": {
+        "C": 1
+       },
+       "k": 0.4
+      }
+     ]
+    },
+    "y0": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.002,
+     0.05,
+     2.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.002,
+     0.05,
+     2.0
+    ],
+    "y": [
+     [
+      0.36787944117144233,
+      0.6318263398150935,
+      0.0002942190134641946
+     ],
+     [
+      1.3887943864964021e-11,
+      0.9809834600609161,
+      0.019016539925195964
+     ],
+     [
+      0.0,
+      0.44968871508929303,
+      0.550311284910707
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q29",
+   "tier": "C",
+   "lang": "fr",
+   "type": "pendulum",
+   "text": "Un pendule de longueur 0,8 m (g = 9,81 m/s²) est lâché sans vitesse initiale avec un angle de 0,4 rad, sans frottement. Quel est l'angle theta et la vitesse angulaire omega à 1, 2 et 4 secondes ?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q29",
+    "problem": {
+     "kind": "named",
+     "family": "pendulum",
+     "params": {
+      "g_over_l": 12.2625,
+      "damping": 0.0
+     }
+    },
+    "y0": [
+     0.4,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     1.0,
+     2.0,
+     4.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     1.0,
+     2.0,
+     4.0
+    ],
+    "y": [
+     [
+      -0.37916406337291353,
+      0.44054025907019817
+     ],
+     [
+      0.31872705293377135,
+      -0.8371256467220091
+     ],
+     [
+      0.10701981215216812,
+      -1.3400252830629826
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q30",
+   "tier": "C",
+   "lang": "en",
+   "type": "projectile",
+   "text": "A ball is launched from the origin at 50 m/s along a line that rises 3 metres for every 4 metres of horizontal distance, with no air resistance (g = 9.81 m/s²). Give its position and velocity components at 0.5, 1 and 2 seconds.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q30",
+    "problem": {
+     "kind": "named",
+     "family": "projectile_drag",
+     "params": {
+      "g": 9.81,
+      "k": 0.0
+     }
+    },
+    "y0": [
+     0.0,
+     0.0,
+     40.0,
+     30.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.5,
+     1.0,
+     2.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.5,
+     1.0,
+     2.0
+    ],
+    "y": [
+     [
+      20.0,
+      13.77375,
+      40.0,
+      25.095
+     ],
+     [
+      40.0,
+      25.095,
+      40.0,
+      20.19
+     ],
+     [
+      80.0,
+      40.38,
+      40.0,
+      10.38
+     ]
+    ],
+    "method": "closed form (k=0) or mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q31",
+   "tier": "C",
+   "lang": "fr",
+   "type": "projectile",
+   "text": "Une balle est lancée à 72 km/h horizontalement depuis une hauteur de 2 m (g = 9,81 m/s², traînée quadratique de coefficient 0,01). Donne x, y, vx, vy à 0,5 ; 1 et 1,5 s.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q31",
+    "problem": {
+     "kind": "named",
+     "family": "projectile_drag",
+     "params": {
+      "g": 9.81,
+      "k": 0.01
+     }
+    },
+    "y0": [
+     0.0,
+     2.0,
+     20.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.5,
+     1.0,
+     1.5
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.5,
+     1.0,
+     1.5
+    ],
+    "y": [
+     [
+      9.528752933873198,
+      0.8121280242090404,
+      18.164165792259066,
+      -4.678676847795861
+     ],
+     [
+      18.19958873485693,
+      -2.6102465464057976,
+      16.543621757171785,
+      -8.943936925906534
+     ],
+     [
+      26.08950348568048,
+      -8.063672670362658,
+      15.027957584939424,
+      -12.799406678538478
+     ]
+    ],
+    "method": "closed form (k=0) or mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q32",
+   "tier": "C",
+   "lang": "en",
+   "type": "kepler",
+   "text": "A satellite is on a circular orbit of radius 1 around a body with gravitational parameter mu = 4, starting at (1, 0) and moving counter-clockwise. Where is it, and how fast, at t = 0.5, 1 and 2?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q32",
+    "problem": {
+     "kind": "named",
+     "family": "kepler",
+     "params": {
+      "mu": 4.0
+     }
+    },
+    "y0": [
+     1.0,
+     0.0,
+     0.0,
+     2.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.5,
+     1.0,
+     2.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.5,
+     1.0,
+     2.0
+    ],
+    "y": [
+     [
+      0.5403023058681398,
+      0.8414709848078965,
+      -1.682941969615793,
+      1.0806046117362795
+     ],
+     [
+      -0.4161468365471424,
+      0.9092974268256817,
+      -1.8185948536513634,
+      -0.8322936730942848
+     ],
+     [
+      -0.6536436208636119,
+      -0.7568024953079282,
+      1.5136049906158564,
+      -1.3072872417272239
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q33",
+   "tier": "C",
+   "lang": "en",
+   "type": "logistic",
+   "text": "A bacterial culture of 10 cells grows logistically with a growth rate of 6% per minute and a carrying capacity of 1000 cells. Please work in seconds. What is the population at 60, 300 and 600 seconds?",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q33",
+    "problem": {
+     "kind": "named",
+     "family": "logistic",
+     "params": {
+      "r": 0.001,
+      "K": 1000.0
+     }
+    },
+    "y0": [
+     10.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     60.0,
+     300.0,
+     600.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     60.0,
+     300.0,
+     600.0
+    ],
+    "y": [
+     [
+      10.611803492647564
+     ],
+     [
+      13.451526724760019
+     ],
+     [
+      18.07260968198827
+     ]
+    ],
+    "method": "closed form, 30 digits"
+   }
+  },
+  {
+   "id": "q34",
+   "tier": "C",
+   "lang": "fr",
+   "type": "sir",
+   "text": "Une épidémie a un R0 de 3 et une période infectieuse de 5 jours ; au départ 1 % de la population est infectée et le reste est sain. Donne les fractions S, I, R aux jours 10, 30 et 60.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q34",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "S",
+      "I",
+      "R"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "S": 1,
+        "I": 1
+       },
+       "products": {
+        "I": 2
+       },
+       "k": 0.6
+      },
+      {
+       "reactants": {
+        "I": 1
+       },
+       "products": {
+        "R": 1
+       },
+       "k": 0.2
+      }
+     ]
+    },
+    "y0": [
+     0.99,
+     0.01,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     10.0,
+     30.0,
+     60.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     10.0,
+     30.0,
+     60.0
+    ],
+    "y": [
+     [
+      0.5844582665756933,
+      0.23986854509820638,
+      0.17567318832610027
+     ],
+     [
+      0.06831377779468206,
+      0.04048839812876468,
+      0.8911978240765532
+     ],
+     [
+      0.05886145073678048,
+      0.00029903146886275586,
+      0.9408395177943568
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q35",
+   "tier": "C",
+   "lang": "en",
+   "type": "seir",
+   "text": "R0 = 2.4, incubation period 4 days, infectious period 5 days. At the start 1% are infectious, 1% are exposed and the rest are susceptible. Give S, E, I, R on day 10, 30 and 60.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q35",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "S",
+      "E",
+      "I",
+      "R"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "S": 1,
+        "I": 1
+       },
+       "products": {
+        "E": 1,
+        "I": 1
+       },
+       "k": 0.48
+      },
+      {
+       "reactants": {
+        "E": 1
+       },
+       "products": {
+        "I": 1
+       },
+       "k": 0.25
+      },
+      {
+       "reactants": {
+        "I": 1
+       },
+       "products": {
+        "R": 1
+       },
+       "k": 0.2
+      }
+     ]
+    },
+    "y0": [
+     0.98,
+     0.01,
+     0.01,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     10.0,
+     30.0,
+     60.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     10.0,
+     30.0,
+     60.0
+    ],
+    "y": [
+     [
+      0.9023774132012916,
+      0.03489729969356763,
+      0.028342070050465153,
+      0.03438321705467564
+     ],
+     [
+      0.44446481628167517,
+      0.10592686532881361,
+      0.12015762117471682,
+      0.3294506972147944
+     ],
+     [
+      0.13475416890895386,
+      0.011696581006473871,
+      0.02684073997863851,
+      0.8267085101059337
+     ]
+    ],
+    "method": "mpmath.odefun Taylor, 30 digits"
+   }
+  },
+  {
+   "id": "q36",
+   "tier": "C",
+   "lang": "en",
+   "type": "rlc",
+   "text": "A series circuit has a 4 ohm resistor, a 250 mH inductor, a 10 mF capacitor and a 12 V battery switched on at t = 0 (capacitor empty, no current). Please work in seconds. Give the charge q and current i at 50, 200 and 500 milliseconds.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q36",
+    "problem": {
+     "kind": "linear",
+     "A": [
+      [
+       0.0,
+       1.0
+      ],
+      [
+       -400.0,
+       -16.0
+      ]
+     ],
+     "b": [
+      0.0,
+      48.0
+     ]
+    },
+    "y0": [
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.05,
+     0.2,
+     0.5
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.05,
+     0.2,
+     0.5
+    ],
+    "y": [
+     [
+      0.04318980591029627,
+      1.392813130842456
+     ],
+     [
+      0.1462660138829216,
+      -0.2647424302051355
+     ],
+     [
+      0.12187796312130642,
+      0.012312685679428942
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q37",
+   "tier": "C",
+   "lang": "fr",
+   "type": "msd",
+   "text": "Une masse de 500 g est reliée à un ressort de raideur 200 N/m ; le coefficient d'amortissement vaut 4 N·s/m. On l'écarte de 5 cm et on la lâche sans vitesse. Donne le déplacement (en mètres) et la vitesse (en m/s) à 0,05 ; 0,1 et 0,3 s.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q37",
+    "problem": {
+     "kind": "linear",
+     "A": [
+      [
+       0.0,
+       1.0
+      ],
+      [
+       -400.0,
+       -8.0
+      ]
+     ],
+     "b": [
+      0.0,
+      0.0
+     ]
+    },
+    "y0": [
+     0.05,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.05,
+     0.1,
+     0.3
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.05,
+     0.1,
+     0.3
+    ],
+    "y": [
+     [
+      0.02974831163189439,
+      -0.6938798621097209
+     ],
+     [
+      -0.006374222253104198,
+      -0.6330824697088732
+     ],
+     [
+      0.012635348896783341,
+      0.12095661973645573
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q38",
+   "tier": "C",
+   "lang": "en",
+   "type": "msd",
+   "text": "A 2 kg block sits on a spring with k = 50 N/m; a steady 10 N force pushes on it, and a damper resists with 6 N when the block moves at 2 m/s. It starts at rest at x = 0. Give x and v at 0.2, 0.5 and 1 second.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q38",
+    "problem": {
+     "kind": "linear",
+     "A": [
+      [
+       0.0,
+       1.0
+      ],
+      [
+       -25.0,
+       -1.5
+      ]
+     ],
+     "b": [
+      0.0,
+      5.0
+     ]
+    },
+    "y0": [
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.2,
+     0.5,
+     1.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.2,
+     0.5,
+     1.0
+    ],
+    "y": [
+     [
+      0.08354321784281103,
+      0.7271803749350929
+     ],
+     [
+      0.2948044556989489,
+      0.4316143896050643
+     ],
+     [
+      0.19231877216096063,
+      -0.4650769671776676
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q39",
+   "tier": "C",
+   "lang": "en",
+   "type": "chain",
+   "text": "A turns into B at 3 per minute and B turns into C at 1.2 per minute. We start with 1 unit of A. Please work in seconds. Give the amounts of A, B and C at 30, 60 and 120 seconds.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q39",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "A",
+      "B",
+      "C"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "A": 1
+       },
+       "products": {
+        "B": 1
+       },
+       "k": 0.05
+      },
+      {
+       "reactants": {
+        "B": 1
+       },
+       "products": {
+        "C": 1
+       },
+       "k": 0.02
+      }
+     ]
+    },
+    "y0": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     30.0,
+     60.0,
+     120.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     30.0,
+     60.0,
+     120.0
+    ],
+    "y": [
+     [
+      0.22313016014842982,
+      0.5428024599093276,
+      0.2340673799422425
+     ],
+     [
+      0.049787068367863944,
+      0.41901190590723025,
+      0.5312010257249058
+     ],
+     [
+      0.0024787521766663585,
+      0.14706533518791023,
+      0.8504559126354234
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  },
+  {
+   "id": "q40",
+   "tier": "C",
+   "lang": "en",
+   "type": "stiff",
+   "text": "Species A turns into B with a time constant of 1 ms, and B turns into C with a time constant of 2 s. We start with 1 mol of A. Please work in seconds. Give the amounts of A, B and C at 0.001, 0.01 and 1 second.",
+   "expected_spec": {
+    "schema": "hivemind-solver-spec/1",
+    "id": "s3-q40",
+    "problem": {
+     "kind": "mass_action",
+     "species": [
+      "A",
+      "B",
+      "C"
+     ],
+     "reactions": [
+      {
+       "reactants": {
+        "A": 1
+       },
+       "products": {
+        "B": 1
+       },
+       "k": 1000.0
+      },
+      {
+       "reactants": {
+        "B": 1
+       },
+       "products": {
+        "C": 1
+       },
+       "k": 0.5
+      }
+     ]
+    },
+    "y0": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "t0": 0.0,
+    "t_out": [
+     0.001,
+     0.01,
+     1.0
+    ],
+    "rtol": 1e-10,
+    "atol": 1e-12
+   },
+   "expected_answers": {
+    "t": [
+     0.001,
+     0.01,
+     1.0
+    ],
+    "y": [
+     [
+      0.36787944117144233,
+      0.6319366521337938,
+      0.0001839066947638325
+     ],
+     [
+      4.5399929762484854e-05,
+      0.9954648116687542,
+      0.00448978840148331
+     ],
+     [
+      0.0,
+      0.606834076751009,
+      0.3931659232489911
+     ]
+    ],
+    "method": "exact matrix exponential (mpmath.expm, 30 digits)"
+   }
+  }
+ ]
+}

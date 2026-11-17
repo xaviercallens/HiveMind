@@ -1,0 +1,30 @@
+"AppBuild"
+{
+	"AppID" "3133700"
+	"Desc" "USS HiveMind NCC-31337 v5.1 — Free-to-Play Astrophysics Exoplanet Hunter + Idle-GPU BOINC Citizen Science + GCP Community Hub"
+	"BuildOutput" "..\\output\\"
+	"ContentRoot" "..\\"
+	"SetLive" "default"
+	"Preview" "0"
+	"Local" ""
+	"StoreConfig"
+	{
+		"isfreeapp" "1"
+		"BillingType" "FreeOnDemand"
+		"PriceCharter" "0.00 EUR / 0.00 USD"
+		"BoincIdleGpuContribution" "AUTO_WHEN_GPU_IDLE_GT_4S"
+		"GcpCommunityHubUrl" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app"
+	}
+	"Depots"
+	{
+		"3133702"
+		{
+			"FileMapping"
+			{
+				"LocalPath" "*"
+				"DepotPath" "."
+				"recursive" "1"
+			}
+		}
+	}
+}

@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Phase 2 'Swarm Fabric' (M1–M4): Geo-Ring Transport, 3-Tier DMA Memory, Tree Speculation & OpenAI/OPoI Gateway.
 
 Implements the 4 Phase 2 Swarm Fabric milestones:
@@ -50,6 +51,17 @@ class GeoRingPeer:
     kademlia_id_hex: str = ""
 
     def __post_init__(self) -> None:
+        if not isinstance(self.peer_id, str) or not self.peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
+        if not isinstance(self.region, str) or not self.region.strip():
+            raise ValueError("region must be a non-empty string")
+        if (
+            isinstance(self.rtt_ms, bool)
+            or not isinstance(self.rtt_ms, (int, float))
+            or not math.isfinite(float(self.rtt_ms))
+            or float(self.rtt_ms) < 0.0
+        ):
+            raise ValueError("rtt_ms must be a finite non-negative number")
         if not self.kademlia_id_hex:
             self.kademlia_id_hex = hashlib.sha1(self.peer_id.encode("utf-8")).hexdigest()
 
@@ -58,20 +70,33 @@ class RegionalGeoRingTransport:
     """M1: Kademlia XOR routing table, GossipSub live expert table & <25ms regional failover."""
 
     def __init__(self, region: str = "EU-West-Paris", max_rtt_ms: float = 20.0) -> None:
-        self.region = region
-        self.max_rtt_ms = max_rtt_ms
+        if not isinstance(region, str) or not region.strip() or any(ord(c) < 32 for c in region):
+            raise ValueError("region must be a non-empty printable string")
+        if (
+            isinstance(max_rtt_ms, bool)
+            or not isinstance(max_rtt_ms, (int, float))
+            or not math.isfinite(float(max_rtt_ms))
+            or float(max_rtt_ms) <= 0.0
+        ):
+            raise ValueError("max_rtt_ms must be a finite positive number")
+        self.region = region.strip()
+        self.max_rtt_ms = float(max_rtt_ms)
         self.peers: Dict[str, GeoRingPeer] = {}
         self.gossip_log: List[Dict[str, Any]] = []
 
     @staticmethod
     def xor_distance(id_hex_a: str, id_hex_b: str) -> int:
         """Compute 160-bit Kademlia XOR distance between two peer/content IDs."""
+        if not isinstance(id_hex_a, str) or not id_hex_a.strip() or not isinstance(id_hex_b, str) or not id_hex_b.strip():
+            raise ValueError("id_hex_a and id_hex_b must be non-empty hex strings")
         a = int(id_hex_a[:40], 16)
         b = int(id_hex_b[:40], 16)
         return a ^ b
 
     def register_peer(self, peer: GeoRingPeer) -> bool:
         """Admit peer into the Regional Geo-Ring only if RTT <= max_rtt_ms."""
+        if not isinstance(peer, GeoRingPeer):
+            raise TypeError("peer must be a GeoRingPeer")
         if peer.region == self.region and peer.rtt_ms <= self.max_rtt_ms:
             self.peers[peer.peer_id] = peer
             return True
@@ -79,6 +104,10 @@ class RegionalGeoRingTransport:
 
     def find_closest_peers(self, target_key: str, k: int = 3) -> List[GeoRingPeer]:
         """Lookup top-k closest Geo-Ring peers by Kademlia XOR distance."""
+        if not isinstance(target_key, str) or not target_key.strip():
+            raise ValueError("target_key must be a non-empty string")
+        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+            raise ValueError("k must be a positive integer")
         target_hex = hashlib.sha1(target_key.encode("utf-8")).hexdigest()
         ranked = sorted(
             self.peers.values(),
@@ -93,6 +122,12 @@ class RegionalGeoRingTransport:
         active_game_exe: str = "cyberpunk2077.exe",
     ) -> Dict[str, Any]:
         """HM-M1-02: Broadcast `PREEMPTING_FOR_GAME` GossipSub frame & promote hot-standby peer in <25ms."""
+        if not isinstance(preempting_peer_id, str) or not preempting_peer_id.strip():
+            raise ValueError("preempting_peer_id must be a non-empty string")
+        if not isinstance(expert_domain, str) or not expert_domain.strip():
+            raise ValueError("expert_domain must be a non-empty string")
+        if not isinstance(active_game_exe, str) or not active_game_exe.strip():
+            raise ValueError("active_game_exe must be a non-empty string")
         t0 = time.perf_counter()
         self.peers.pop(preempting_peer_id, None)
         standby_candidates = self.find_closest_peers(expert_domain, k=2)
@@ -128,6 +163,12 @@ class TwoLevelMacroMicroRouter(nn.Module):
         top_k_micro: int = 2,
     ) -> None:
         super().__init__()
+        if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 1:
+            raise ValueError("hidden_size must be a positive integer")
+        if isinstance(top_k_micro, bool) or not isinstance(top_k_micro, int) or top_k_micro < 1:
+            raise ValueError("top_k_micro must be a positive integer")
+        if not isinstance(macro_clusters, dict) or not macro_clusters or any(not v for v in macro_clusters.values()):
+            raise ValueError("macro_clusters must be a non-empty dict of non-empty expert lists")
         self.hidden_size = hidden_size
         self.macro_clusters = macro_clusters
         self.macro_names = list(macro_clusters.keys())
@@ -143,6 +184,14 @@ class TwoLevelMacroMicroRouter(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> Dict[str, Any]:
         """Route token representations through G_macro first, then G_micro within the winning cluster."""
+        if (
+            not isinstance(hidden_states, torch.Tensor)
+            or hidden_states.ndim not in (2, 3)
+            or hidden_states.numel() == 0
+            or hidden_states.shape[-1] != self.hidden_size
+            or not bool(torch.isfinite(hidden_states).all().item())
+        ):
+            raise ValueError("hidden_states must be a finite 2D or 3D tensor ending in hidden_size")
         x_fp32 = hidden_states.detach().to(torch.float32)
         if x_fp32.dim() == 3:
             pooled = x_fp32.mean(dim=(0, 1))
@@ -183,6 +232,12 @@ class PinnedRAMExpertDMAStreamer:
         device: torch.device | None = None,
         max_pinned_ram_bytes: int = 4 * 1024 * 1024 * 1024,
     ) -> None:
+        if (
+            isinstance(max_pinned_ram_bytes, bool)
+            or not isinstance(max_pinned_ram_bytes, int)
+            or max_pinned_ram_bytes < 1
+        ):
+            raise ValueError("max_pinned_ram_bytes must be a positive integer")
         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.max_pinned_ram_bytes = max_pinned_ram_bytes
         self.current_pinned_bytes = 0
@@ -210,6 +265,10 @@ class PinnedRAMExpertDMAStreamer:
         lora_state_dict: Dict[str, torch.Tensor],
     ) -> int:
         """Stage a LoRA expert in page-locked Host RAM (`pin_memory`) with LRU eviction (`HM-M2-02`)."""
+        if not isinstance(expert_name, str) or not expert_name.strip():
+            raise ValueError("expert_name must be a non-empty string")
+        if not isinstance(lora_state_dict, dict) or not lora_state_dict:
+            raise ValueError("lora_state_dict must be a non-empty dict")
         pinned_dict: Dict[str, torch.Tensor] = {}
         total_bytes = 0
         for k, v in lora_state_dict.items():
@@ -247,6 +306,15 @@ class PinnedRAMExpertDMAStreamer:
         target_slot: str | None = None,
     ) -> Dict[str, Any]:
         """Stream an expert from Pinned Host RAM into a 2-slot double buffer (`slot_A`/`slot_B`) (`HM-M2-01`)."""
+        if (
+            isinstance(simulated_attention_compute_ms, bool)
+            or not isinstance(simulated_attention_compute_ms, (int, float))
+            or not math.isfinite(float(simulated_attention_compute_ms))
+            or float(simulated_attention_compute_ms) < 0.0
+        ):
+            raise ValueError("simulated_attention_compute_ms must be a finite non-negative number")
+        if layer_idx is not None and (isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0):
+            raise ValueError("layer_idx must be a non-negative integer when provided")
         if expert_name not in self.pinned_host_cache:
             raise KeyError(f"Expert '{expert_name}' not staged in Pinned Host RAM.")
 
@@ -306,6 +374,19 @@ class PinnedRAMExpertDMAStreamer:
         simulated_attention_compute_ms: float = 5.0,
     ) -> Dict[str, Any]:
         """HM-M2-01 (PR #7): Use `TwoLevelMacroMicroRouter` predictions at layer `L` to prefetch layer `L+1` into the alternating lookahead slot."""
+        if not isinstance(router, TwoLevelMacroMicroRouter):
+            raise TypeError("router must be a TwoLevelMacroMicroRouter")
+        if not isinstance(hidden_states, torch.Tensor):
+            raise TypeError("hidden_states must be a torch.Tensor")
+        if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0:
+            raise ValueError("layer_idx must be a non-negative integer")
+        if (
+            isinstance(simulated_attention_compute_ms, bool)
+            or not isinstance(simulated_attention_compute_ms, (int, float))
+            or not math.isfinite(float(simulated_attention_compute_ms))
+            or float(simulated_attention_compute_ms) < 0.0
+        ):
+            raise ValueError("simulated_attention_compute_ms must be a finite non-negative number")
         route_info = router(hidden_states)
         active_slot = "slot_A" if layer_idx % 2 == 0 else "slot_B"
         lookahead_slot = "slot_B" if active_slot == "slot_A" else "slot_A"
@@ -507,6 +588,7 @@ class PinnedRAMExpertDMAStreamer:
             "exposed_swap_latency_ms_simulated": round(
                 max(0.0, total_raw_ms - simulated_attention_compute_ms), 3
             ),
+            "latency_basis": "simulated: raw copy time minus an assumed attention window; not a measured pipeline stall",
             **car_out,
         }
 
@@ -526,6 +608,18 @@ class CompressedHiddenStatePacket:
     original_bytes: int
     compressed_bytes: int
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.fp8_data, torch.Tensor) or not isinstance(self.absmax_scale, torch.Tensor):
+            raise TypeError("fp8_data and absmax_scale must be torch.Tensors")
+        if not isinstance(self.original_shape, tuple) or not self.original_shape or any(
+            isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.original_shape
+        ):
+            raise ValueError("original_shape must be a non-empty tuple of positive integers")
+        for b_name in ("original_bytes", "compressed_bytes"):
+            bval = getattr(self, b_name)
+            if isinstance(bval, bool) or not isinstance(bval, int) or bval < 1:
+                raise ValueError(f"{b_name} must be an integer >= 1")
+
     @property
     def compression_ratio(self) -> float:
         return round(self.original_bytes / max(1, self.compressed_bytes), 2)
@@ -538,7 +632,9 @@ try:
     _HAS_TRITON = True
 
     @triton.jit
-    def _triton_fp8_quant_kernel(x_ptr, out_ptr, scale_ptr, n_cols, BLOCK_SIZE: tl.constexpr):
+    def _triton_fp8_quant_kernel(
+        x_ptr: Any, out_ptr: Any, scale_ptr: Any, n_cols: int, BLOCK_SIZE: tl.constexpr
+    ) -> None:
         row_idx = tl.program_id(0)
         col_offsets = tl.arange(0, BLOCK_SIZE)
         mask = col_offsets < n_cols
@@ -552,14 +648,14 @@ try:
 
     @triton.jit
     def _triton_fused_int4_fp8_moe_router_kernel(
-        x_ptr,
-        packed_w_ptr,
-        w_scale_ptr,
-        out_ptr,
-        n_cols,
-        half_cols,
+        x_ptr: Any,
+        packed_w_ptr: Any,
+        w_scale_ptr: Any,
+        out_ptr: Any,
+        n_cols: int,
+        half_cols: int,
         BLOCK_SIZE: tl.constexpr,
-    ):
+    ) -> None:
         row_idx = tl.program_id(0)
         half_offsets = tl.arange(0, BLOCK_SIZE)
         mask = half_offsets < half_cols
@@ -583,6 +679,11 @@ except Exception:
 
 def compress_hidden_states_fp8(hidden_states: torch.Tensor) -> CompressedHiddenStatePacket:
     """Quantize FP16/FP32 hidden states to `float8_e4m3fn` (`HM-M3-01` Triton kernel with PyTorch fallback)."""
+    if isinstance(hidden_states, torch.Tensor):
+        if hidden_states.numel() == 0 or not torch.isfinite(hidden_states).all():
+            raise ValueError("hidden_states must be a non-empty finite torch.Tensor")
+    elif not (hasattr(hidden_states, "detach") and hasattr(hidden_states, "numel")) or hidden_states.numel() == 0:
+        raise ValueError("hidden_states must be a non-empty finite torch.Tensor")
     orig_shape = tuple(hidden_states.shape)
     orig_bytes = hidden_states.numel() * hidden_states.element_size()
     x_fp32 = hidden_states.detach().to(torch.float32)
@@ -624,6 +725,10 @@ def decompress_hidden_states_fp8(
     target_dtype: torch.dtype = torch.float16,
 ) -> torch.Tensor:
     """Restore FP16/FP32 hidden states from an FP8 wire packet."""
+    if not isinstance(packet, CompressedHiddenStatePacket):
+        raise TypeError("packet must be a CompressedHiddenStatePacket")
+    if not isinstance(target_dtype, torch.dtype):
+        raise TypeError("target_dtype must be a torch.dtype")
     restored = packet.fp8_data.to(torch.float32) * packet.absmax_scale.to(torch.float32)
     return restored.reshape(packet.original_shape).to(target_dtype)
 
@@ -633,6 +738,8 @@ def pack_int4_nf4_weights(weight: torch.Tensor) -> Tuple[torch.Tensor, torch.Ten
     Packs a 2D expert weight tensor `(out_features, in_features)` into 4-bit signed
     nibbles stored two-per-byte (`uint8`) with per-row FP16 absmax scales (`HM-S3-02`).
     """
+    if not isinstance(weight, torch.Tensor) or weight.ndim != 2 or weight.numel() == 0 or not torch.isfinite(weight).all():
+        raise ValueError("weight must be a non-empty 2D finite torch.Tensor")
     w_fp32 = weight.detach().to(torch.float32)
     out_dim, in_dim = w_fp32.shape
     if in_dim % 2 != 0:
@@ -657,6 +764,12 @@ def unpack_int4_nf4_weights(
     Dequantizes packed `uint8` 2x4-bit expert weights and per-row FP16 scales
     on the fly back to floating-point representation (`HM-S3-02`).
     """
+    if not isinstance(packed_uint8, torch.Tensor) or packed_uint8.ndim != 2 or packed_uint8.numel() == 0:
+        raise ValueError("packed_uint8 must be a non-empty 2D torch.Tensor")
+    if not isinstance(scale_fp16, torch.Tensor) or scale_fp16.numel() == 0:
+        raise ValueError("scale_fp16 must be a non-empty torch.Tensor")
+    if original_in_dim is not None and (isinstance(original_in_dim, bool) or not isinstance(original_in_dim, int) or original_in_dim < 1):
+        raise ValueError("original_in_dim must be a positive integer when provided")
     packed_i16 = packed_uint8.to(torch.int16)
     even_q = (packed_i16 & 0x0F) - 8
     odd_q = ((packed_i16 >> 4) & 0x0F) - 8
@@ -680,6 +793,18 @@ def fused_int4_fp8_moe_route_and_project(
     Season 3 Milestone `HM-S3-02`: Fused Top-2 Sparse MoE Router + On-the-Fly INT4 Weight
     Dequantization + FP8 (`float8_e4m3fn`) Hidden-State Activation Projection.
     """
+    if not isinstance(hidden_states, torch.Tensor) or hidden_states.numel() == 0 or not torch.isfinite(hidden_states).all():
+        raise ValueError("hidden_states must be a non-empty finite torch.Tensor")
+    if not isinstance(router_weight, torch.Tensor) or router_weight.ndim != 2 or router_weight.numel() == 0 or not torch.isfinite(router_weight).all():
+        raise ValueError("router_weight must be a non-empty 2D finite torch.Tensor")
+    if (
+        not isinstance(expert_weights, Sequence)
+        or len(expert_weights) == 0
+        or any(not isinstance(w, torch.Tensor) or w.ndim != 2 or w.numel() == 0 for w in expert_weights)
+    ):
+        raise ValueError("expert_weights must be a non-empty sequence of 2D torch.Tensor")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError("top_k must be a positive integer")
     t0 = time.perf_counter()
     orig_shape = hidden_states.shape
     hidden_dim = int(orig_shape[-1])
@@ -759,6 +884,14 @@ def benchmark_fused_int4_fp8_moe_kernel(
     Benchmarks the Season 3 `HM-S3-02` INT4 + FP8 fused MoE router projection
     against full-precision reference execution and verifies `cosine_similarity >= 0.99`.
     """
+    for name, val in (
+        ("batch_tokens", batch_tokens),
+        ("hidden_dim", hidden_dim),
+        ("num_experts", num_experts),
+        ("top_k", top_k),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            raise ValueError(f"{name} must be a positive integer")
     torch.manual_seed(42)
     dev = torch.device(device) if device is not None else torch.device("cpu")
     x = torch.randn(batch_tokens, hidden_dim, dtype=torch.float32, device=dev)
@@ -803,6 +936,10 @@ class TokenTreeSpeculativeVerifier:
     """M3: Eagle/Medusa-style Token Tree Speculative Verifier (`gamma = 6..8`) & Prefix-Trie 2D Tree-Attention Mask (`HM-M3-01`)."""
 
     def __init__(self, gamma: int = 6, branching_factor: int = 2) -> None:
+        if isinstance(gamma, bool) or not isinstance(gamma, int) or gamma < 1:
+            raise ValueError("gamma must be a positive integer")
+        if isinstance(branching_factor, bool) or not isinstance(branching_factor, int) or branching_factor < 1:
+            raise ValueError("branching_factor must be a positive integer")
         self.gamma = max(6, min(8, gamma))
         self.branching_factor = branching_factor
 
@@ -899,6 +1036,18 @@ class MerkleInclusionProof:
     root: str
     tree_size: int
 
+    def __post_init__(self) -> None:
+        if isinstance(self.layer_idx, bool) or not isinstance(self.layer_idx, int) or self.layer_idx < 0:
+            raise ValueError("layer_idx must be a non-negative integer")
+        if not isinstance(self.leaf_hash, str) or not self.leaf_hash.strip():
+            raise ValueError("leaf_hash must be a non-empty string")
+        if not isinstance(self.root, str) or not self.root.strip():
+            raise ValueError("root must be a non-empty string")
+        if not isinstance(self.siblings, list) or not isinstance(self.directions, list) or len(self.siblings) != len(self.directions):
+            raise ValueError("siblings and directions must be lists of equal length")
+        if isinstance(self.tree_size, bool) or not isinstance(self.tree_size, int) or self.tree_size < 1:
+            raise ValueError("tree_size must be an integer >= 1")
+
     @property
     def proof_depth(self) -> int:
         """Number of sibling hashes carried by the inclusion path (`O(log L)`)."""
@@ -923,6 +1072,17 @@ _BATCH_DOMAIN = b"hivemind/opoi-batch/v1"
 
 
 def _batch_leaf_digest(step: int, layer: int, layer_leaf_hex: str) -> bytes:
+    if (
+        isinstance(step, bool)
+        or not isinstance(step, int)
+        or step < 0
+        or isinstance(layer, bool)
+        or not isinstance(layer, int)
+        or layer < 0
+    ):
+        raise ValueError("step and layer must be non-negative integers")
+    if not isinstance(layer_leaf_hex, str) or len(layer_leaf_hex) != 64:
+        raise ValueError("layer_leaf_hex must be a 64-character hex string")
     return hashlib.sha256(
         b"\x00"
         + _BATCH_DOMAIN
@@ -933,10 +1093,30 @@ def _batch_leaf_digest(step: int, layer: int, layer_leaf_hex: str) -> bytes:
 
 
 def _batch_node_digest(left: bytes, right: bytes) -> bytes:
+    if (
+        not isinstance(left, (bytes, bytearray))
+        or len(left) != 32
+        or not isinstance(right, (bytes, bytearray))
+        or len(right) != 32
+    ):
+        raise ValueError("left and right must be 32-byte digests")
     return hashlib.sha256(b"\x01" + left + right).digest()
 
 
 def _batch_root_hex(peer_id: str, num_steps: int, num_layers: int, top: bytes) -> str:
+    if not isinstance(peer_id, str) or not peer_id.strip():
+        raise ValueError("peer_id must be a non-empty string")
+    if (
+        isinstance(num_steps, bool)
+        or not isinstance(num_steps, int)
+        or num_steps < 1
+        or isinstance(num_layers, bool)
+        or not isinstance(num_layers, int)
+        or num_layers < 1
+    ):
+        raise ValueError("num_steps and num_layers must be positive integers")
+    if not isinstance(top, (bytes, bytearray)) or len(top) != 32:
+        raise ValueError("top must be a 32-byte digest")
     peer = peer_id.encode("utf-8")
     return hashlib.sha256(
         b"\x02"
@@ -950,6 +1130,8 @@ def _batch_root_hex(peer_id: str, num_steps: int, num_layers: int, top: bytes) -
 
 
 def _batch_level_sizes(leaf_count: int) -> List[int]:
+    if isinstance(leaf_count, bool) or not isinstance(leaf_count, int) or leaf_count < 1:
+        raise ValueError("leaf_count must be a positive integer")
     sizes = [leaf_count]
     while sizes[-1] > 1:
         sizes.append((sizes[-1] + 1) // 2)
@@ -968,6 +1150,19 @@ class SpeculativeBatchCommitment:
     root: str
     num_steps: int
     num_layers: int
+    signature: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.peer_id, str) or not self.peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
+        if not isinstance(self.root, str) or not self.root.strip():
+            raise ValueError("root must be a non-empty string")
+        if isinstance(self.num_steps, bool) or not isinstance(self.num_steps, int) or self.num_steps < 1:
+            raise ValueError("num_steps must be an integer >= 1")
+        if isinstance(self.num_layers, bool) or not isinstance(self.num_layers, int) or self.num_layers < 1:
+            raise ValueError("num_layers must be an integer >= 1")
+        if not isinstance(self.signature, str):
+            raise TypeError("signature must be a string")
 
     @property
     def leaf_count(self) -> int:
@@ -978,8 +1173,29 @@ class SpeculativeBatchCommitment:
         """Upper bound on sibling hashes in one opening: `ceil(log2(num_steps * num_layers))`."""
         return len(_batch_level_sizes(self.leaf_count)) - 1
 
+    def canonical_payload(self) -> bytes:
+        return f"hivemind/opoi-batch/commitment|{self.peer_id}|{self.root}|{self.num_steps}|{self.num_layers}".encode(
+            "utf-8"
+        )
+
+    def sign(self, secret: bytes) -> "SpeculativeBatchCommitment":
+        sig = hmac.new(bytes(secret), self.canonical_payload(), hashlib.sha256).hexdigest()
+        return SpeculativeBatchCommitment(
+            peer_id=self.peer_id,
+            root=self.root,
+            num_steps=self.num_steps,
+            num_layers=self.num_layers,
+            signature=sig,
+        )
+
+    def verify_signature(self, secret: bytes) -> bool:
+        if not self.signature or not self.signature.isascii():
+            return False
+        expected = hmac.new(bytes(secret), self.canonical_payload(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, self.signature)
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        out: Dict[str, Any] = {
             "peer_id": self.peer_id,
             "root": self.root,
             "num_steps": self.num_steps,
@@ -987,6 +1203,9 @@ class SpeculativeBatchCommitment:
             "leaf_count": self.leaf_count,
             "max_opening_siblings": self.max_opening_siblings,
         }
+        if self.signature:
+            out["signature"] = self.signature
+        return out
 
 
 @dataclass(frozen=True)
@@ -996,6 +1215,14 @@ class SpeculativeBatchOpening:
     step: int
     layer: int
     siblings: Tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if isinstance(self.step, bool) or not isinstance(self.step, int) or self.step < 0:
+            raise ValueError("step must be a non-negative integer")
+        if isinstance(self.layer, bool) or not isinstance(self.layer, int) or self.layer < 0:
+            raise ValueError("layer must be a non-negative integer")
+        if not isinstance(self.siblings, tuple) or any(not isinstance(s, str) or not s.strip() for s in self.siblings):
+            raise ValueError("siblings must be a tuple of non-empty strings")
 
     def to_dict(self) -> Dict[str, Any]:
         return {"step": self.step, "layer": self.layer, "siblings": list(self.siblings)}
@@ -1025,15 +1252,61 @@ class OptimisticProofOfInferenceAuditor:
         min_cosine_sim: float = 0.99,
         max_normalized_linf: float = 0.25,
     ) -> None:
-        self.audit_probability = audit_probability
-        self.min_cosine_sim = min_cosine_sim
-        self.max_normalized_linf = max_normalized_linf
+        if (
+            isinstance(audit_probability, bool)
+            or not isinstance(audit_probability, (int, float))
+            or not math.isfinite(float(audit_probability))
+            or not (0.0 <= float(audit_probability) <= 1.0)
+        ):
+            raise ValueError("audit_probability must be in [0.0, 1.0]")
+        if (
+            isinstance(min_cosine_sim, bool)
+            or not isinstance(min_cosine_sim, (int, float))
+            or not math.isfinite(float(min_cosine_sim))
+            or not (-1.0 <= float(min_cosine_sim) <= 1.0)
+        ):
+            raise ValueError("min_cosine_sim must be in [-1.0, 1.0]")
+        if (
+            isinstance(max_normalized_linf, bool)
+            or not isinstance(max_normalized_linf, (int, float))
+            or not math.isfinite(float(max_normalized_linf))
+            or float(max_normalized_linf) < 0.0
+        ):
+            raise ValueError("max_normalized_linf must be a finite non-negative number")
+        self.audit_probability = float(audit_probability)
+        self.min_cosine_sim = float(min_cosine_sim)
+        self.max_normalized_linf = float(max_normalized_linf)
         # HM-S4-03: layer-wise quantized activation commitment (Merkle) state
         self._merkle_leaves: List[str] = []
         self._merkle_levels: List[List[str]] = []
         self.merkle_root: str = ""
         self._batch_levels: List[List[bytes]] = []
         self._batch_commitment: Optional[SpeculativeBatchCommitment] = None
+        self._issued_commitments: set[Tuple[str, str, int, int]] = set()
+        self._peer_secrets: Dict[str, bytes] = {}
+
+    def register_peer_secret(self, peer_id: str, secret: bytes) -> None:
+        """Register a per-peer HMAC signing secret for batch commitment attribution (IP-107)."""
+        if not str(peer_id).strip():
+            raise ValueError("peer_id must be non-empty")
+        if len(secret) < 16:
+            raise ValueError("secret must be at least 16 bytes")
+        self._peer_secrets[str(peer_id)] = bytes(secret)
+
+    def is_commitment_attributed(self, commitment: SpeculativeBatchCommitment) -> bool:
+        """Return True iff `commitment` carries a valid peer HMAC signature or was produced by `commit_speculative_batch`."""
+        peer_secret = self._peer_secrets.get(str(commitment.peer_id))
+        if peer_secret is not None:
+            return commitment.verify_signature(peer_secret)
+        if commitment.signature:
+            return False
+        key = (
+            str(commitment.peer_id),
+            str(commitment.root),
+            int(commitment.num_steps),
+            int(commitment.num_layers),
+        )
+        return key in self._issued_commitments
 
     def should_spot_audit_token(self, rng_seed: int | None = None) -> bool:
         rng = random.Random(rng_seed)
@@ -1356,6 +1629,12 @@ class OptimisticProofOfInferenceAuditor:
             num_steps=len(step_activations),
             num_layers=num_layers,
         )
+        peer_secret = self._peer_secrets.get(str(peer_id))
+        if peer_secret is not None:
+            commitment = commitment.sign(peer_secret)
+        self._issued_commitments.add(
+            (commitment.peer_id, commitment.root, commitment.num_steps, commitment.num_layers)
+        )
         self._batch_levels = levels
         self._batch_commitment = commitment
         return commitment
@@ -1606,10 +1885,7 @@ class OptimisticProofOfInferenceAuditor:
         refunded_hive = 0.0
         if fraud_proven:
             if ledger is not None:
-                ledger.balances[peer_id] = 0.0
-                ledger.reputation_scores[peer_id] = 0
-                if peer_id not in ledger.slashed_registry:
-                    ledger.slashed_registry.append(peer_id)
+                ledger.slash(peer_id, fraction=1.0)
             if l2_channel is not None:
                 refunded_hive = l2_channel.refund_consumer_escrow()
 
@@ -1731,10 +2007,7 @@ class OptimisticProofOfInferenceAuditor:
 
         if fraud_proven:
             if ledger is not None:
-                ledger.balances[peer_id] = 0.0
-                ledger.reputation_scores[peer_id] = 0
-                if peer_id not in ledger.slashed_registry:
-                    ledger.slashed_registry.append(peer_id)
+                ledger.slash(peer_id, fraction=1.0)
                 ledger.credit_reward(
                     node_id=challenger_id,
                     amount_hive=challenger_bounty,
@@ -1785,40 +2058,117 @@ class StateChannelVoucher:
 class HiveLayer2StateChannel:
     """M4: Layer-2 `$HIVE` off-chain state channel with batch settlement to L1 `HiveSwarmLedger`."""
 
+    MIN_SECRET_KEY_BYTES = 16
+
     def __init__(
         self,
         consumer_id: str,
         provider_ids: List[str],
         escrow_hive: float = 5.0,
         rate_per_token: float = 0.005,
-        secret_key: bytes = b"HiveMind-L2-StateChannel-Key",
+        secret_key: Optional[bytes] = None,
+        ledger: Optional[HiveSwarmLedger] = None,
     ) -> None:
+        if not isinstance(consumer_id, str) or not consumer_id.strip():
+            raise ValueError("consumer_id must be a non-empty string")
+        if not isinstance(provider_ids, Sequence) or len(provider_ids) == 0:
+            raise ValueError("provider_ids must be a non-empty sequence")
+        if (
+            isinstance(escrow_hive, bool)
+            or not isinstance(escrow_hive, (int, float))
+            or not math.isfinite(float(escrow_hive))
+            or float(escrow_hive) <= 0.0
+        ):
+            raise ValueError("escrow_hive must be a finite positive number")
+        if (
+            isinstance(rate_per_token, bool)
+            or not isinstance(rate_per_token, (int, float))
+            or not math.isfinite(float(rate_per_token))
+            or float(rate_per_token) <= 0.0
+        ):
+            raise ValueError("rate_per_token must be a finite positive number")
+        if secret_key is not None:
+            if not isinstance(secret_key, (bytes, bytearray)) or len(secret_key) < self.MIN_SECRET_KEY_BYTES:
+                raise ValueError(f"secret_key must be at least {self.MIN_SECRET_KEY_BYTES} bytes")
+            resolved_key = bytes(secret_key)
+        else:
+            resolved_key = secrets.token_bytes(32)
         self.channel_id = f"l2-chan-{hashlib.sha256(f'{consumer_id}:{time.time()}'.encode()).hexdigest()[:12]}"
         self.consumer_id = consumer_id
-        self.provider_ids = provider_ids
-        self.escrow_hive = escrow_hive
-        self.rate_per_token = rate_per_token
-        self.secret_key = secret_key
+        self.provider_ids = list(provider_ids)
+        self.escrow_hive = round(float(escrow_hive), 6)
+        self.rate_per_token = float(rate_per_token)
+        self.secret_key = resolved_key
         self.nonce = 0
         self.cumulative_tokens = 0
         self.cumulative_hive_spent = 0.0
         self.latest_voucher: StateChannelVoucher | None = None
+        self.vouchers: List[StateChannelVoucher] = []
         self.disputed_and_refunded: bool = False
+        self.locked_escrow_hive: float = 0.0
+        self._escrow_locked_on_ledger: Optional[HiveSwarmLedger] = None
+        if ledger is not None:
+            self._lock_escrow_on_ledger(ledger)
+
+    def _lock_escrow_on_ledger(self, ledger: HiveSwarmLedger) -> None:
+        bal = ledger.balances.get(self.consumer_id, 0.0)
+        if bal < self.escrow_hive:
+            raise ValueError(
+                f"Consumer '{self.consumer_id}' has insufficient $HIVE ({bal} < {self.escrow_hive}) to lock L2 escrow"
+            )
+        ledger._in_transfer = True
+        try:
+            ledger.balances[self.consumer_id] = round(bal - self.escrow_hive, 6)
+        finally:
+            ledger._in_transfer = False
+        self.locked_escrow_hive = self.escrow_hive
+        self._escrow_locked_on_ledger = ledger
+        ledger._persist()
+
+    def _voucher_payload(self, nonce: int, cumulative_tokens: int, cumulative_hive_spent: float) -> str:
+        return (
+            f"{self.channel_id}:{self.consumer_id}:{nonce}:"
+            f"{cumulative_tokens}:{cumulative_hive_spent:.6f}"
+        )
+
+    def verify_voucher(self, voucher: StateChannelVoucher) -> bool:
+        """Verify HMAC signature, channel/consumer binding, and escrow ceiling of a voucher."""
+        if voucher.channel_id != self.channel_id or voucher.consumer_id != self.consumer_id:
+            return False
+        if voucher.nonce <= 0 or voucher.cumulative_tokens <= 0:
+            return False
+        if not math.isfinite(voucher.cumulative_hive_spent) or voucher.cumulative_hive_spent <= 0.0:
+            return False
+        if voucher.cumulative_hive_spent > self.escrow_hive + 1e-9:
+            return False
+        expected_spent = round(voucher.cumulative_tokens * self.rate_per_token, 6)
+        if abs(voucher.cumulative_hive_spent - expected_spent) > 1e-5:
+            return False
+        payload = self._voucher_payload(
+            voucher.nonce,
+            voucher.cumulative_tokens,
+            voucher.cumulative_hive_spent,
+        )
+        expected_sig = hmac.new(self.secret_key, payload.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+        return hmac.compare_digest(voucher.signature_hmac, expected_sig)
 
     def sign_micro_voucher(self, tokens_generated: int) -> StateChannelVoucher:
         """Issue an instant 0-latency off-chain `$HIVE` micro-voucher for `tokens_generated`."""
+        if isinstance(tokens_generated, bool) or not isinstance(tokens_generated, int) or tokens_generated <= 0:
+            raise ValueError("tokens_generated must be a positive integer")
         fee = round(tokens_generated * self.rate_per_token, 6)
         if self.cumulative_hive_spent + fee > self.escrow_hive:
             raise ValueError("L2 State Channel escrow exhausted.")
         self.nonce += 1
         self.cumulative_tokens += tokens_generated
         self.cumulative_hive_spent = round(self.cumulative_hive_spent + fee, 6)
-        payload = (
-            f"{self.channel_id}:{self.consumer_id}:{self.nonce}:"
-            f"{self.cumulative_tokens}:{self.cumulative_hive_spent:.6f}"
+        payload = self._voucher_payload(
+            self.nonce,
+            self.cumulative_tokens,
+            self.cumulative_hive_spent,
         )
         sig = hmac.new(self.secret_key, payload.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
-        self.latest_voucher = StateChannelVoucher(
+        voucher = StateChannelVoucher(
             channel_id=self.channel_id,
             consumer_id=self.consumer_id,
             provider_ids=list(self.provider_ids),
@@ -1827,14 +2177,30 @@ class HiveLayer2StateChannel:
             cumulative_hive_spent=self.cumulative_hive_spent,
             signature_hmac=sig,
         )
-        return self.latest_voucher
+        self.latest_voucher = voucher
+        self.vouchers.append(voucher)
+        return voucher
 
     def refund_consumer_escrow(self) -> float:
         """Refund accumulated off-chain vouchers back to the consumer if OPoI Merkle fraud is proven."""
         refunded = self.cumulative_hive_spent
+        if self._escrow_locked_on_ledger is not None and self.locked_escrow_hive > 0.0:
+            ledger = self._escrow_locked_on_ledger
+            ledger._in_transfer = True
+            try:
+                ledger.balances[self.consumer_id] = round(
+                    ledger.balances.get(self.consumer_id, 0.0) + self.locked_escrow_hive,
+                    6,
+                )
+            finally:
+                ledger._in_transfer = False
+            self.locked_escrow_hive = 0.0
+            self._escrow_locked_on_ledger = None
+            ledger._persist()
         self.cumulative_hive_spent = 0.0
         self.cumulative_tokens = 0
         self.latest_voucher = None
+        self.vouchers.clear()
         self.disputed_and_refunded = True
         return refunded
 
@@ -1844,20 +2210,41 @@ class HiveLayer2StateChannel:
         domain_expert: str = "Python_Systems_Code",
     ) -> Dict[str, Any]:
         """Close/checkpoint the L2 channel and settle accumulated `$HIVE` fees on L1 `HiveSwarmLedger`."""
-        if self.latest_voucher is None or self.cumulative_tokens == 0:
-            return {"status": "no_vouchers_to_settle", "settled_hive": 0.0}
+        if self.disputed_and_refunded or self.latest_voucher is None or self.cumulative_tokens == 0:
+            return {"status": "no_vouchers_to_settle", "settled_hive": 0.0, "settled_tokens": 0}
+        vouchers_to_check = [*self.vouchers, self.latest_voucher]
+        for v in vouchers_to_check:
+            if not self.verify_voucher(v):
+                raise ValueError("Invalid or forged L2 state channel voucher signature or amount exceeds escrow")
+        tokens_to_settle = int(self.latest_voucher.cumulative_tokens)
+        final_nonce = int(self.latest_voucher.nonce)
+        if self._escrow_locked_on_ledger is ledger and self.locked_escrow_hive > 0.0:
+            ledger._in_transfer = True
+            try:
+                ledger.balances[self.consumer_id] = round(
+                    ledger.balances.get(self.consumer_id, 0.0) + self.locked_escrow_hive,
+                    6,
+                )
+            finally:
+                ledger._in_transfer = False
+            self.locked_escrow_hive = 0.0
+            self._escrow_locked_on_ledger = None
         tx = ledger.settle_swarm_inference(
             consumer_node_id=self.consumer_id,
             provider_node_ids=self.provider_ids,
             domain_expert=domain_expert,
-            verified_tokens=self.cumulative_tokens,
+            verified_tokens=tokens_to_settle,
             rtt_speedup=None,
             rate_per_token=self.rate_per_token,
         )
+        self.cumulative_tokens = 0
+        self.cumulative_hive_spent = 0.0
+        self.latest_voucher = None
+        self.vouchers.clear()
         return {
             "channel_id": self.channel_id,
-            "final_nonce": self.nonce,
-            "settled_tokens": self.cumulative_tokens,
+            "final_nonce": final_nonce,
+            "settled_tokens": tokens_to_settle,
             "settled_hive": tx.fee_paid_hive,
             "l1_settlement_tx": tx,
         }
@@ -1871,6 +2258,28 @@ def fused_top2_moe_fp8_dispatch(
 ) -> Dict[str, Any]:
     """HM-S3-02: Fused FP32 Top-2 Sparse MoE Gating + FP8 (`E4M3`) Activation Quantization + Expert Dispatch."""
     import math
+
+    if isinstance(hidden_states, torch.Tensor):
+        if hidden_states.numel() == 0 or not torch.isfinite(hidden_states).all():
+            raise ValueError("hidden_states must be a non-empty finite torch.Tensor")
+    elif not hasattr(hidden_states, "to"):
+        raise ValueError("hidden_states must be a non-empty finite torch.Tensor")
+    if isinstance(router_weight, torch.Tensor):
+        if router_weight.ndim != 2 or router_weight.numel() == 0 or not torch.isfinite(router_weight).all():
+            raise ValueError("router_weight must be a non-empty 2D finite torch.Tensor")
+    elif not hasattr(router_weight, "to"):
+        raise ValueError("router_weight must be a non-empty 2D finite torch.Tensor")
+    if (
+        not isinstance(expert_down_weights, Sequence)
+        or len(expert_down_weights) == 0
+        or any(
+            (w.ndim != 2 or w.numel() == 0) if isinstance(w, torch.Tensor) else not hasattr(w, "to")
+            for w in expert_down_weights
+        )
+    ):
+        raise ValueError("expert_down_weights must be a non-empty sequence of 2D torch.Tensor")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError("top_k must be a positive integer")
 
     device = hidden_states.device
     orig_dtype = hidden_states.dtype

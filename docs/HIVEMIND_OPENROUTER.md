@@ -220,6 +220,70 @@ card otherwise empty):
 
   Add `--allow-model gpt-oss:20b` to the producer shield. `catalog.py` now lists 15 GB as the minimum for this tier.
 
+## Model residency: loaded models, `model_loading` and `Retry-After`
+
+A GPU holds only some models at once (a Tesla T4 with `OLLAMA_MAX_LOADED_MODELS=1` serves one), and a cold load can take minutes. Producers can therefore tell the gateway what is resident, and the gateway routes accordingly (HM-S16-06). All fields are optional.
+
+Heartbeat fields:
+
+- per model entry: `loaded` (bool), `vram_mib` (int, MiB the model occupies; 0 to 1,048,576), `cold_start_s` (float, your estimate of the seconds to load it; clamped to 0..600);
+- top level: `gpu_vram_mib` (int, the card's memory).
+
+`scripts/hivemind_producer_agent.py` fills them by asking your local Ollama which models are resident (read-only `GET /api/ps` on `--local-endpoint`, default `http://127.0.0.1:11434`, 2 s timeout; if it fails the heartbeat simply carries nothing). The card size comes from `--gpu-vram-mib` or `nvidia-smi`; `--cold-start-s` sets your load-time estimate (default 60). Pass `--no-residency` to turn all of this off.
+
+Routing:
+
+- Among the live producers of a model, the router tries the ones that report it loaded first, then producers that report nothing ("unknown"), then producers that report it not loaded. Within each group the usual capacity-weighted rotation applies.
+- If every candidate reports the model **not** loaded and the shortest `cold_start_s` is at least `cold_start_wait_budget_s` (gateway setting, default 20 s; 60 s is assumed when no estimate is given), the gateway does not forward and wait for a timeout. It answers at once with HTTP 503, `error.code = "model_loading"`, a message with the expected cold start, and `Retry-After: <seconds, rounded up>`. No escrow is taken and nothing is charged. It also sends one tiny background request (`max_tokens=1`, at most once per 30 s per server and model) so the model really starts loading, but only to a server that reports no model loaded at all, so a resident model is never evicted; disable with `warmup_unloaded=False`. A shorter cold start is forwarded normally.
+- An upstream timeout is never an opaque error. If the producer reported the model not loaded, the answer is the same 503 `model_loading`; if it reported it loaded or reports no residency, it is HTTP 504 with `error.code = "upstream_timeout"` and no claimed cause. In both cases the request is not charged.
+- Declared capacity must fit the card: if `gpu_vram_mib` and the `vram_mib` of the models marked loaded are given and they add up to more than the card, the models that do not fit (in listed order) are treated as not loaded and the endpoint's declared capacity is scaled by the share that fits. The reason is returned in the heartbeat response (`residency.capacity_note`) and stored with the endpoint for the monitor. All numbers are self-declared and clamped; the existing operator capacity clamp still applies.
+- `GET /v1/models` adds an aggregate `"loaded": true|false` to a model only when some live producer reports residency for it; no producer identity is exposed.
+
+Backward compatibility: a producer that sends none of these fields behaves exactly as before (rank "unknown", never deferred); a heartbeat without them clears an earlier report. Databases gain a nullable `residency_json` column in place.
+
+## Account kinds and the per-address starter-grant cap (HM-S16-07)
+
+Every account has a `kind`: `user` (the default, a real person or agent), `test` or `probe`. Scripted accounts that raised their max price used to
+price new users out and inflate the user counts; the kind keeps them out of both.
+
+- **Who can set it.** Only the admin key (`X-Admin-Key`). `POST /v1/hivemind/register` with `kind` (or the older `test: true`) and
+  `POST /v1/hivemind/admin/test-flag` with `{"account_id" | "handle", "kind": "user" | "test" | "probe"}` both answer 403 without it, so a user cannot hide
+  from the metrics or mark itself `probe`. `GET /v1/hivemind/me` shows the account's own kind.
+- **Market.** Bids of `test` and `probe` accounts are excluded from the equilibrium: they do not move the posted price or the number of active bidders
+  (`num_consumers`). Their requests are still served, at the price computed without them, through the same escrow and settlement path. Producers of
+  these kinds are not counted as supply for pricing either, so they are not offered traffic; there is no operator-side way to route to them.
+- **Metrics.** `GET /v1/hivemind/admin/users` reports `real`, `test` and `probe` as separate objects (`total`, `created`, `active`); the monitor
+  (`scripts/live_user_monitor.py`) passes the report through. The numbers for `real` are those of `kind = user` only.
+- **Starter grant cap.** `create_router_app(starter_grant_hmt=...)` mints a starter grant to each new real account (handle registration and every
+  sign-in that creates an account); the default 0 keeps the previous behaviour (no automatic grant). At most `starter_grants_per_ip_24h` (default 3)
+  grants go to one client address in a rolling 24 hours. Over the cap the account is still created, without the grant, and the response says so
+  (`starter_grant: 0`, `starter_grant_note`) without revealing any count. Accounts created by an admin as `test` or `probe` get no grant and use no slot.
+- **Which address.** The TCP peer. `X-Forwarded-For` is used only when the peer is one of `trusted_proxies` (addresses or CIDR networks; default empty =
+  never), and then the right-most entry that is not a trusted proxy, which a client cannot forge by prepending entries.
+- **Privacy.** The address is never logged or stored in clear: the database keeps an HMAC of it (keyed with the router secret) and a timestamp, and rows
+  older than 24 hours are deleted on the next claim. Behind several clients sharing one address (a campus, a mobile carrier) later sign-ups get no
+  grant until the window passes; an admin can grant by hand.
+
+## Remote control: pause, resume and VRAM cap
+
+A producer can stop taking requests, or cap the video memory it offers, without logging in to its machine.
+
+```bash
+# pause (your own producer key)
+curl -s $GATEWAY/v1/hivemind/producer/control -H "Authorization: Bearer $HIVEMIND_API_KEY" -H 'Content-Type: application/json' -d '{"paused": true}'
+# resume and cap the loaded models at 8000 MiB
+curl -s $GATEWAY/v1/hivemind/producer/control -H "Authorization: Bearer $HIVEMIND_API_KEY" -H 'Content-Type: application/json' -d '{"paused": false, "vram_cap_mib": 8000}'
+# clear everything: {"paused": false}   (each call replaces the whole state; vram_cap_mib omitted or null = no cap)
+```
+
+- **Who may set it.** The producer's own API key (a producer can pause itself) or the operator's admin key (`X-Admin-Key`, naming `account_id` or `handle`). No key is 401, a wrong admin key or another account's name is 403, a consumer account is 403. A producer without a key cannot be paused by strangers. `GET /v1/hivemind/producer/control` reads your own state.
+- **Values.** `paused` must be a JSON boolean; `vram_cap_mib` an integer from 1 to 1,048,576 or null. Anything else (negative, zero, NaN, floats, strings, extra fields such as commands or paths) is 400.
+- **Gateway, immediately.** From the moment of the call a paused producer is never selected and is not counted as supply (routing, `GET /v1/models`, the market), whatever its agent does. A cap below the sum of the `vram_mib` of its loaded models (from model residency, above) keeps the loaded models in the order listed while they fit, treats the rest as not loaded and scales the capacity by the share kept, with the same `capacity_note` style as the card check.
+- **Agent and shield, within one heartbeat interval.** Once a state exists, every heartbeat ack carries `control` (`paused`, `vram_cap_mib`, `version`, `updated_at`, `acknowledged`). The agent then sends zero capacity and `"paused": true`, leaves out models whose `vram_mib` would not fit the cap and reports `vram_cap_mib` back; when the state is cleared it resumes on the next heartbeat. With `--control-state-file PATH` it writes the state to an owner-only (0600) file; start the shield with the same `--control-state-file` and it answers chat requests with 503 `producer_paused` (OpenAI-style error) while paused. `GET /v1/models` keeps working. A missing or unreadable file means not paused. If the agent stops while paused, the file stays paused until the agent runs again.
+- **What it cannot do.** It carries only a boolean and a number. No command, file path, model name, price or process control is accepted, the agent ignores every other field, and a malformed `control` object is ignored with one log line. The cap cannot unload a model from Ollama; it stops the producer advertising capacity it was told not to use.
+
+Backward compatibility: with no state set the ack, the heartbeat and the shield behave exactly as before.
+
 ## Python and game developers
 
 The getting-started kit for people who write Python and small games, including GPU sharing, model tiers and editor setup, is

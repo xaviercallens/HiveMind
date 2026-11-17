@@ -15,9 +15,14 @@ import random
 import time
 from pathlib import Path
 
+import sys
+
 import torch
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from peft import LoraConfig, get_peft_model, get_peft_model_state_dict, prepare_model_for_kbit_training, set_peft_model_state_dict
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import e17_ckpt as ckpt  # noqa: E402  (resumable checkpoints; see that module)
 
 TARGETS = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 
@@ -46,6 +51,8 @@ def main() -> int:
     ap.add_argument("--max-len", type=int, default=768)
     ap.add_argument("--seed", type=int, default=17)
     ap.add_argument("--max-hours", type=float, default=4.0)
+    ap.add_argument("--ckpt-every", type=int, default=0, help="save a resumable checkpoint every N optimizer steps and resume from the newest one; 0 = off (the original behaviour)")
+    ap.add_argument("--ckpt-dir", default="", help="checkpoint directory (default: OUT.ckpt)")
     args = ap.parse_args()
     random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -71,13 +78,39 @@ def main() -> int:
     total = steps_per_epoch * args.epochs
     log = Path(args.out + ".train_log.jsonl")
     log.parent.mkdir(parents=True, exist_ok=True)
-    t0 = time.time()
-    step = 0
+    ckpt_root = Path(args.ckpt_dir or args.out + ".ckpt")
+    if args.ckpt_every > 0 and ckpt.is_complete(Path(args.out)):
+        print("adapter already trained to completion (TRAIN_COMPLETE present): nothing to do", flush=True)
+        return 0
+    fp = ckpt.fingerprint(base=args.base, pairs_file=Path(args.pairs), n_data=len(data), epochs=args.epochs, lr=args.lr,
+                          accum=args.accum, warmup=args.warmup, max_len=args.max_len, seed=args.seed)
+    step, start_epoch, start_s, elapsed0 = 0, 0, 0, 0.0
+    found = ckpt.latest_checkpoint(ckpt_root) if args.ckpt_every > 0 else None
+    if found is not None:
+        saved_step, st = found
+        if st["fingerprint"] != fp:
+            print(f"checkpoint at step {saved_step} ignored: it was written for a different configuration", flush=True)
+        else:
+            set_peft_model_state_dict(model, st["adapter"])
+            opt.load_state_dict(st["opt"])
+            scaler.load_state_dict(st["scaler"])
+            step, start_epoch, start_s, elapsed0 = st["step"], st["next_epoch"], st["next_s"], float(st["elapsed_s"])
+            random.setstate(st["epoch_rng"])  # python RNG as it was before the shuffle of next_epoch
+            torch.set_rng_state(st["rng"]["torch_cpu"])
+            if "torch_cuda" in st["rng"]:
+                torch.cuda.set_rng_state_all(st["rng"]["torch_cuda"])
+            print(f"resumed from checkpoint: step {step}, epoch {start_epoch}, step-in-epoch {start_s}, {elapsed0:.0f}s already spent", flush=True)
+            log.open("a").write(json.dumps({"event": "resumed", "step": step, "epoch": start_epoch, "step_in_epoch": start_s, "elapsed_s": round(elapsed0)}) + "\n")
+    t0 = time.time() - elapsed0
     model.train()
-    for epoch in range(args.epochs):
+    epoch_rng = random.getstate()
+    for epoch in range(start_epoch, args.epochs):
+        epoch_rng = random.getstate()  # python RNG before this epoch's shuffle: a resume replays the same order
         order = list(range(len(data)))
         random.shuffle(order)
         for s in range(steps_per_epoch):
+            if epoch == start_epoch and s < start_s:
+                continue
             batch = [data[i] for i in order[s * args.accum:(s + 1) * args.accum]]
             lr = args.lr * (min(1.0, (step + 1) / args.warmup) if step < args.warmup else 0.5 * (1 + math.cos(math.pi * (step - args.warmup) / max(1, total - args.warmup))))
             for g in opt.param_groups:
@@ -101,11 +134,21 @@ def main() -> int:
             rec = {"step": step, "epoch": epoch, "loss": round(loss_sum, 5), "lr": lr, "elapsed_s": round(time.time() - t0), "peak_gib": round(torch.cuda.max_memory_allocated() / 2**30, 2)}
             log.open("a").write(json.dumps(rec) + "\n")
             print(rec, flush=True)
-            if (time.time() - t0) / 3600 > args.max_hours:
+            ne, ns = ckpt.next_position(epoch, s, steps_per_epoch)
+            capped = (time.time() - t0) / 3600 > args.max_hours
+            if args.ckpt_every > 0 and step < total and (step % args.ckpt_every == 0 or capped):
+                ckpt.save_checkpoint(ckpt_root, step, {
+                    "fingerprint": fp, "step": step, "next_epoch": ne, "next_s": ns, "elapsed_s": time.time() - t0,
+                    "epoch_rng": random.getstate() if ns == 0 else epoch_rng, "rng": ckpt.capture_rng(),
+                    "adapter": {k: v.detach().cpu() for k, v in get_peft_model_state_dict(model).items()},
+                    "opt": opt.state_dict(), "scaler": scaler.state_dict()})
+            if capped:
                 print("max-hours reached: stopping early, adapter saved as is", flush=True)
                 model.save_pretrained(args.out)
                 return 4
     model.save_pretrained(args.out)
+    if args.ckpt_every > 0:
+        ckpt.mark_complete(Path(args.out), {"steps": step, "epochs": args.epochs})
     print("saved", args.out, flush=True)
     return 0
 

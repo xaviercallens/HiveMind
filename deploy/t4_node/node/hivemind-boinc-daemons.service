@@ -1,0 +1,24 @@
+# BOINC project daemons (feeder, transitioner, file_deleter, script_validator/assimilator per app). bin/start detaches them.
+[Unit]
+Description=HiveMind BOINC server: project daemons
+After=hivemind-boinc-db.service hivemind-boinc-apache.service
+Requires=hivemind-boinc-db.service hivemind-boinc-apache.service
+
+[Service]
+NoNewPrivileges=yes
+ProtectSystem=full
+Type=oneshot
+RemainAfterExit=yes
+User=callensxavier_gmail_com
+ExecStartPre=/opt/hivemind/t4/bin/boinc_ensure_daemons.sh --wait-db 240
+ExecStart=/opt/hivemind/t4/bin/boinc_project_env.sh bin/start
+# bin/start returns before the daemons are up and cannot tell that the feeder/transitioner exited: check, and start again if needed
+ExecStartPost=/opt/hivemind/t4/bin/boinc_ensure_daemons.sh --verify
+ExecStop=/opt/hivemind/t4/bin/boinc_project_env.sh bin/stop
+TimeoutStartSec=900
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

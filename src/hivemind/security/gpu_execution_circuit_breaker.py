@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 r"""Phase S-4: Federated GPU Execution & Hardware Safety Circuit-Breaker (`hivemind.security.gpu_execution_circuit_breaker`).
 
 Protects volunteer gaming GPUs (`8 GB – 12 GB VRAM`, e.g. NVIDIA RTX 2070 / 3060 / 4060, AMD Radeon,

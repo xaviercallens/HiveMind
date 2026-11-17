@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """FoMoE sigma-MoE routing with Ghost-Expert Skip-Token accounting (`arXiv:2606.19025`).
 
 FoMoE (Sani, Cao, Kurmanji, Iacob, Jovanovic, Gao, Zhao & Lane, CaMLSys / Flower Labs,
@@ -25,6 +26,7 @@ over whatever logits they are given.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Dict, List, Optional, Sequence
 
 import torch
@@ -44,6 +46,53 @@ class SigmaMoERoutingResult:
     ideal_skip_token_scaling: float
     empirical_skip_token_scaling: float
 
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.expert_indices, torch.Tensor)
+            or self.expert_indices.ndim != 2
+            or self.expert_indices.numel() == 0
+            or self.expert_indices.dtype == torch.bool
+            or self.expert_indices.is_floating_point()
+        ):
+            raise ValueError("expert_indices must be a non-empty 2D integer torch.Tensor")
+        if (
+            not isinstance(self.gate_values, torch.Tensor)
+            or self.gate_values.shape != self.expert_indices.shape
+            or self.gate_values.dtype == torch.bool
+            or not bool(torch.isfinite(self.gate_values).all())
+        ):
+            raise ValueError("gate_values must match expert_indices.shape and contain finite numeric values")
+        if (
+            not isinstance(self.skipped_slots, torch.Tensor)
+            or self.skipped_slots.shape != self.expert_indices.shape
+            or self.skipped_slots.dtype != torch.bool
+        ):
+            raise ValueError("skipped_slots must match expert_indices.shape and have bool dtype")
+        if isinstance(self.total_experts, bool) or not isinstance(self.total_experts, int) or self.total_experts < 1:
+            raise ValueError("total_experts must be an integer >= 1")
+        if (
+            isinstance(self.resident_experts, bool)
+            or not isinstance(self.resident_experts, int)
+            or not (1 <= self.resident_experts <= self.total_experts)
+        ):
+            raise ValueError("resident_experts must satisfy 1 <= resident_experts <= total_experts")
+        if (
+            isinstance(self.top_k, bool)
+            or not isinstance(self.top_k, int)
+            or not (1 <= self.top_k <= self.total_experts)
+        ):
+            raise ValueError("top_k must satisfy 1 <= top_k <= total_experts")
+        if int(self.expert_indices.shape[1]) != self.top_k:
+            raise ValueError("expert_indices second dimension must equal top_k")
+        if not bool((self.expert_indices >= 0).all()) or not bool((self.expert_indices < self.total_experts).all()):
+            raise ValueError("expert_indices entries must be in [0, total_experts)")
+        for field_name in ("ghost_assignment_fraction", "ideal_skip_token_scaling", "empirical_skip_token_scaling"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+                raise ValueError(f"{field_name} must be a finite number in [0.0, 1.0]")
+        if abs(float(self.ghost_assignment_fraction) + float(self.empirical_skip_token_scaling) - 1.0) > 1e-5:
+            raise ValueError("empirical_skip_token_scaling must equal 1 - ghost_assignment_fraction")
+
 
 def sigmoid_independent_topk_routing(
     router_logits: torch.Tensor,
@@ -57,17 +106,23 @@ def sigmoid_independent_topk_routing(
     expert is not resident are marked skipped and their gate is zeroed; the realised
     ghost-assignment fraction is `skipped_slots / (tokens * k)`.
     """
-    if router_logits.dim() != 2:
+    if not isinstance(router_logits, torch.Tensor) or router_logits.dim() != 2 or router_logits.dtype == torch.bool:
         raise ValueError("router_logits must be [tokens, experts]")
     tokens, num_experts = router_logits.shape
     if tokens < 1 or num_experts < 1:
         raise ValueError("router_logits must be non-empty")
-    if not (1 <= top_k <= num_experts):
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or not (1 <= top_k <= num_experts):
         raise ValueError("top_k must satisfy 1 <= k <= experts")
+    if not bool(torch.isfinite(router_logits).all().item()):
+        raise ValueError("router_logits must be finite")
     if resident_mask is None:
         resident = torch.ones(num_experts, dtype=torch.bool, device=router_logits.device)
     else:
-        if resident_mask.shape != (num_experts,) or resident_mask.dtype != torch.bool:
+        if (
+            not isinstance(resident_mask, torch.Tensor)
+            or resident_mask.shape != (num_experts,)
+            or resident_mask.dtype != torch.bool
+        ):
             raise ValueError("resident_mask must be a bool tensor of shape [experts]")
         resident = resident_mask.to(router_logits.device)
     resident_count = int(resident.sum().item())
@@ -113,6 +168,10 @@ def skip_token_flops_per_token(
     `N_le,l / N_e,l` for a partitioned router or `1` for FoMoE's unpartitioned ghost-expert
     router. Returns both the full-replica and partial-replica estimates.
     """
+    if not isinstance(router_partitioned, bool):
+        raise ValueError("router_partitioned must be a bool")
+    if not isinstance(ffn_flops_per_layer, Sequence) or isinstance(ffn_flops_per_layer, (str, bytes)):
+        raise ValueError("ffn_flops_per_layer must be a sequence")
     layers = len(ffn_flops_per_layer)
     if layers == 0:
         raise ValueError("at least one layer is required")
@@ -121,30 +180,59 @@ def skip_token_flops_per_token(
         ("local_experts_per_layer", local_experts_per_layer),
         ("total_experts_per_layer", total_experts_per_layer),
     ):
-        if len(seq) != layers:
+        if not isinstance(seq, Sequence) or isinstance(seq, (str, bytes)) or len(seq) != layers:
             raise ValueError(f"{name} must have one entry per layer")
-    if empirical_ghost_fraction_per_layer is not None and len(empirical_ghost_fraction_per_layer) != layers:
-        raise ValueError("empirical_ghost_fraction_per_layer must have one entry per layer")
-    if dense_flops < 0.0 or top_k < 1:
+    if empirical_ghost_fraction_per_layer is not None:
+        if (
+            not isinstance(empirical_ghost_fraction_per_layer, Sequence)
+            or isinstance(empirical_ghost_fraction_per_layer, (str, bytes))
+            or len(empirical_ghost_fraction_per_layer) != layers
+        ):
+            raise ValueError("empirical_ghost_fraction_per_layer must have one entry per layer")
+    if (
+        isinstance(dense_flops, bool)
+        or not isinstance(dense_flops, (int, float))
+        or not math.isfinite(float(dense_flops))
+        or dense_flops < 0.0
+        or isinstance(top_k, bool)
+        or not isinstance(top_k, int)
+        or top_k < 1
+    ):
         raise ValueError("dense_flops must be >= 0 and top_k >= 1")
 
     partial_total = float(dense_flops)
     full_total = float(dense_flops)
     per_layer: List[Dict[str, float]] = []
     for layer in range(layers):
-        n_le = int(local_experts_per_layer[layer])
-        n_e = int(total_experts_per_layer[layer])
+        raw_le = local_experts_per_layer[layer]
+        raw_e = total_experts_per_layer[layer]
+        if isinstance(raw_le, bool) or isinstance(raw_e, bool) or not isinstance(raw_le, int) or not isinstance(raw_e, int):
+            raise ValueError("local experts must satisfy 1 <= N_le <= N_e")
+        n_le = int(raw_le)
+        n_e = int(raw_e)
         if n_e < 1 or not (1 <= n_le <= n_e):
             raise ValueError("local experts must satisfy 1 <= N_le <= N_e")
-        f_ffn = float(ffn_flops_per_layer[layer])
-        f_gate = float(gate_flops_per_layer[layer])
-        if f_ffn < 0.0 or f_gate < 0.0:
+        raw_ffn = ffn_flops_per_layer[layer]
+        raw_gate = gate_flops_per_layer[layer]
+        if (
+            isinstance(raw_ffn, bool)
+            or isinstance(raw_gate, bool)
+            or not isinstance(raw_ffn, (int, float))
+            or not isinstance(raw_gate, (int, float))
+        ):
+            raise ValueError("FLOP counts must be >= 0")
+        f_ffn = float(raw_ffn)
+        f_gate = float(raw_gate)
+        if not math.isfinite(f_ffn) or not math.isfinite(f_gate) or f_ffn < 0.0 or f_gate < 0.0:
             raise ValueError("FLOP counts must be >= 0")
         ideal_sigma = n_le / n_e
         if empirical_ghost_fraction_per_layer is None:
             sigma_st = ideal_sigma
         else:
-            ghost = float(empirical_ghost_fraction_per_layer[layer])
+            raw_ghost = empirical_ghost_fraction_per_layer[layer]
+            if isinstance(raw_ghost, bool) or not isinstance(raw_ghost, (int, float)) or not math.isfinite(float(raw_ghost)):
+                raise ValueError("ghost fractions must be in [0, 1]")
+            ghost = float(raw_ghost)
             if not (0.0 <= ghost <= 1.0):
                 raise ValueError("ghost fractions must be in [0, 1]")
             sigma_st = 1.0 - ghost

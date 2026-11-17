@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """End users share verified knowledge as public data and receive a lump-sum HMT bonus.
 
 A HiveMinder who opts in publishes a verified triple (task, accepted solution, the tests that accepted it) under an
@@ -32,16 +33,23 @@ class KnowledgeShare:
     verified: bool
     epoch: int
     text_sha256: str
+    verifier_receipt_sha256: str = ""
 
     def __post_init__(self) -> None:
-        if not self.account_id:
-            raise ValueError("account_id must be non-empty")
+        if not isinstance(self.account_id, str) or not self.account_id.strip() or any(c in self.account_id for c in ("\r", "\n", "\x00")):
+            raise ValueError("account_id must be non-empty and without control characters")
+        if not isinstance(self.licence, str) or not self.licence.strip() or any(c in self.licence for c in ("\r", "\n", "\x00")):
+            raise ValueError("licence must be a non-empty string without control characters")
+        if not isinstance(self.verified, bool):
+            raise ValueError("verified must be a bool")
         if self.kind not in SHARE_KINDS:
             raise ValueError(f"kind must be one of {sorted(SHARE_KINDS)}")
-        if self.epoch < 0:
+        if isinstance(self.epoch, bool) or not isinstance(self.epoch, int) or self.epoch < 0:
             raise ValueError("epoch must be >= 0")
-        if len(self.text_sha256) != 64:
-            raise ValueError("text_sha256 must be a hex sha256")
+        if not isinstance(self.text_sha256, str) or len(self.text_sha256) != 64 or any(c not in "0123456789abcdef" for c in self.text_sha256.lower()):
+            raise ValueError("text_sha256 must be a 64-char hex sha256")
+        if not isinstance(self.verifier_receipt_sha256, str) or any(c in self.verifier_receipt_sha256 for c in ("\r", "\n", "\x00")):
+            raise ValueError("verifier_receipt_sha256 must be a string without control characters")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -53,42 +61,195 @@ class Admission:
     reason: str
     share: KnowledgeShare
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.admitted, bool):
+            raise ValueError("admitted must be a boolean")
+        if not isinstance(self.reason, str) or not self.reason.strip() or any(c in self.reason for c in ("\r", "\n", "\x00")):
+            raise ValueError("reason must be a non-empty string without control characters")
+        if not isinstance(self.share, KnowledgeShare):
+            raise ValueError("share must be a KnowledgeShare")
+
 
 Scanner = Callable[[str], bool]  # True when the text is clean
 
 
 def firewall_scanner(text: str) -> bool:
     """The repository's prompt-injection scan; shared text is data and must not carry instructions."""
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     from hivemind.security.hivemind_firewall import scan_text_for_injection
 
     return scan_text_for_injection(text).verdict.value == "CLEAN"
 
 
-def admit_share(share: KnowledgeShare, text: str, *, scanner: Scanner = firewall_scanner, prior_points_this_epoch: int = 0,
-                cap_per_identity_per_epoch: int = 20) -> Admission:
+def admit_share(
+    share: KnowledgeShare,
+    text: str,
+    *,
+    scanner: Scanner = firewall_scanner,
+    prior_points_this_epoch: int = 0,
+    cap_per_identity_per_epoch: int = 20,
+    expected_epoch: int | None = None,
+    seen_shares: set[tuple[str, str]] | None = None,
+    epoch_counts: dict[tuple[int, str], int] | None = None,
+    verifier_receipt_sha256: str | None = None,
+) -> Admission:
     """Admit or refuse a share. The hash in the share must match the text, so the record cannot be swapped later."""
-    if cap_per_identity_per_epoch < 1:
+    if not isinstance(share, KnowledgeShare):
+        raise ValueError("share must be a KnowledgeShare")
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
+    if not callable(scanner):
+        raise ValueError("scanner must be callable")
+    if isinstance(cap_per_identity_per_epoch, bool) or not isinstance(cap_per_identity_per_epoch, int) or cap_per_identity_per_epoch < 1:
         raise ValueError("cap_per_identity_per_epoch must be >= 1")
+    if isinstance(prior_points_this_epoch, bool) or not isinstance(prior_points_this_epoch, int) or prior_points_this_epoch < 0:
+        raise ValueError("prior_points_this_epoch must be >= 0")
+    if expected_epoch is not None and (isinstance(expected_epoch, bool) or not isinstance(expected_epoch, int) or expected_epoch < 0):
+        raise ValueError("expected_epoch must be a non-negative integer when provided")
+    if seen_shares is not None and (
+        not isinstance(seen_shares, set)
+        or any(
+            not isinstance(item, tuple)
+            or len(item) != 2
+            or not isinstance(item[0], str)
+            or not item[0].strip()
+            or not isinstance(item[1], str)
+            or not item[1].strip()
+            for item in seen_shares
+        )
+    ):
+        raise ValueError("seen_shares must be a set of (account_id, text_sha256) string tuples or None")
+    if epoch_counts is not None and (
+        not isinstance(epoch_counts, dict)
+        or any(
+            not isinstance(k, tuple)
+            or len(k) != 2
+            or isinstance(k[0], bool)
+            or not isinstance(k[0], int)
+            or k[0] < 0
+            or not isinstance(k[1], str)
+            or not k[1].strip()
+            or isinstance(v, bool)
+            or not isinstance(v, int)
+            or v < 0
+            for k, v in epoch_counts.items()
+        )
+    ):
+        raise ValueError("epoch_counts must be a dict mapping (epoch, account_id) to non-negative int counts or None")
+    if verifier_receipt_sha256 is not None and not isinstance(verifier_receipt_sha256, str):
+        raise ValueError("verifier_receipt_sha256 must be a string or None")
+    if expected_epoch is not None and share.epoch != expected_epoch:
+        return Admission(False, "epoch_mismatch", share)
     if not share.verified:
         return Admission(False, "not_verified", share)
+    receipt = verifier_receipt_sha256 if verifier_receipt_sha256 is not None else share.verifier_receipt_sha256
+    if not receipt or len(receipt) != 64 or any(c not in "0123456789abcdef" for c in receipt.lower()):
+        return Admission(False, "missing_verifier_receipt", share)
     if share.licence not in PERMITTED_LICENCES:
         return Admission(False, "licence_not_permitted", share)
     if hashlib.sha256(text.encode("utf-8")).hexdigest() != share.text_sha256:
         return Admission(False, "hash_mismatch", share)
-    if prior_points_this_epoch >= cap_per_identity_per_epoch:
+    key = (share.account_id, share.text_sha256)
+    if seen_shares is not None and key in seen_shares:
+        return Admission(False, "duplicate_share", share)
+    tracked_prior = (epoch_counts or {}).get((share.epoch, share.account_id), 0)
+    if max(prior_points_this_epoch, tracked_prior) >= cap_per_identity_per_epoch:
         return Admission(False, "identity_cap_reached", share)
     if not scanner(text):
         return Admission(False, "injection_scan_failed", share)
+    if seen_shares is not None:
+        seen_shares.add(key)
+    if epoch_counts is not None:
+        epoch_counts[(share.epoch, share.account_id)] = tracked_prior + 1
     return Admission(True, "admitted", share)
 
 
-def knowledge_points(admissions: Iterable[Admission]) -> dict[str, int]:
-    """One point per admitted share, per account."""
+def knowledge_points(
+    admissions: Iterable[Admission],
+    *,
+    expected_epoch: int | None = None,
+    cap_per_identity_per_epoch: int = 20,
+) -> dict[str, int]:
+    """One point per unique admitted (account_id, text_sha256) share in the epoch, capped per identity."""
+    if isinstance(cap_per_identity_per_epoch, bool) or not isinstance(cap_per_identity_per_epoch, int) or cap_per_identity_per_epoch < 1:
+        raise ValueError("cap_per_identity_per_epoch must be >= 1")
+    if expected_epoch is not None and (isinstance(expected_epoch, bool) or not isinstance(expected_epoch, int) or expected_epoch < 0):
+        raise ValueError("expected_epoch must be a non-negative integer when provided")
+    if isinstance(admissions, (str, bytes)):
+        raise ValueError("admissions must be an iterable of Admission instances, not str/bytes")
     out: dict[str, int] = {}
+    seen: set[tuple[str, str]] = set()
+    active_epoch = expected_epoch
     for a in admissions:
-        if a.admitted:
-            out[a.share.account_id] = out.get(a.share.account_id, 0) + 1
+        if not isinstance(a, Admission):
+            raise ValueError("admissions must contain Admission instances")
+        if not a.admitted:
+            continue
+        if active_epoch is None:
+            active_epoch = a.share.epoch
+        elif a.share.epoch != active_epoch:
+            raise ValueError(f"Mixed share epochs in knowledge_points: expected {active_epoch}, got {a.share.epoch}")
+        key = (a.share.account_id, a.share.text_sha256)
+        if key in seen:
+            continue
+        current = out.get(a.share.account_id, 0)
+        if current >= cap_per_identity_per_epoch:
+            continue
+        seen.add(key)
+        out[a.share.account_id] = current + 1
     return out
+
+
+class KnowledgeMarket:
+    """Stateful per-epoch knowledge share registry enforcing epoch binding, deduplication, and per-identity caps."""
+
+    def __init__(
+        self,
+        epoch: int,
+        *,
+        cap_per_identity_per_epoch: int = 20,
+        scanner: Scanner = firewall_scanner,
+    ) -> None:
+        if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+            raise ValueError("epoch must be >= 0")
+        if isinstance(cap_per_identity_per_epoch, bool) or not isinstance(cap_per_identity_per_epoch, int) or cap_per_identity_per_epoch < 1:
+            raise ValueError("cap_per_identity_per_epoch must be >= 1")
+        if not callable(scanner):
+            raise ValueError("scanner must be callable")
+        self.epoch = epoch
+        self.cap_per_identity_per_epoch = cap_per_identity_per_epoch
+        self.scanner = scanner
+        self._seen_shares: set[tuple[str, str]] = set()
+        self._epoch_counts: dict[tuple[int, str], int] = {}
+        self._admissions: list[Admission] = []
+
+    def admit(
+        self,
+        share: KnowledgeShare,
+        text: str,
+        *,
+        verifier_receipt_sha256: str | None = None,
+    ) -> Admission:
+        admission = admit_share(
+            share,
+            text,
+            scanner=self.scanner,
+            cap_per_identity_per_epoch=self.cap_per_identity_per_epoch,
+            expected_epoch=self.epoch,
+            seen_shares=self._seen_shares,
+            epoch_counts=self._epoch_counts,
+            verifier_receipt_sha256=verifier_receipt_sha256,
+        )
+        self._admissions.append(admission)
+        return admission
+
+    def points(self) -> dict[str, int]:
+        return knowledge_points(
+            self._admissions,
+            expected_epoch=self.epoch,
+            cap_per_identity_per_epoch=self.cap_per_identity_per_epoch,
+        )
 
 
 @dataclass(frozen=True)
@@ -100,6 +261,18 @@ class KnowledgeSettlement:
     payouts_hmt: Mapping[str, float]
     points: Mapping[str, int]
 
+    def __post_init__(self) -> None:
+        if isinstance(self.epoch, bool) or not isinstance(self.epoch, int) or self.epoch < 0:
+            raise ValueError("epoch must be >= 0")
+        if isinstance(self.validator_fee_hmt, bool) or not isinstance(self.validator_fee_hmt, (int, float)) or not math.isfinite(float(self.validator_fee_hmt)) or float(self.validator_fee_hmt) < 0.0:
+            raise ValueError("validator_fee_hmt must be finite and >= 0")
+        if isinstance(self.bonus_share, bool) or not isinstance(self.bonus_share, (int, float)) or not math.isfinite(float(self.bonus_share)) or not (0.0 <= float(self.bonus_share) <= 1.0):
+            raise ValueError("bonus_share must be in [0, 1]")
+        if isinstance(self.pool_hmt, bool) or not isinstance(self.pool_hmt, (int, float)) or not math.isfinite(float(self.pool_hmt)) or float(self.pool_hmt) < 0.0:
+            raise ValueError("pool_hmt must be finite and >= 0")
+        if not isinstance(self.payouts_hmt, Mapping) or not isinstance(self.points, Mapping):
+            raise ValueError("payouts_hmt and points must be mappings")
+
     def to_dict(self) -> dict[str, Any]:
         return {"epoch": self.epoch, "validator_fee_hmt": self.validator_fee_hmt, "bonus_share": self.bonus_share,
                 "pool_hmt": self.pool_hmt, "payouts_hmt": dict(self.payouts_hmt), "points": dict(self.points)}
@@ -108,12 +281,17 @@ class KnowledgeSettlement:
 def settle_knowledge_bonus(epoch: int, validator_fee_hmt: float, bonus_share: float, points: Mapping[str, int]) -> KnowledgeSettlement:
     """Split `bonus_share` of the validator fee in proportion to points. Accounts with zero points get nothing; with no
     points at all the pool is not paid (it stays with the validators)."""
-    if not math.isfinite(validator_fee_hmt) or validator_fee_hmt < 0.0:
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+        raise ValueError("epoch must be >= 0")
+    if isinstance(validator_fee_hmt, bool) or not isinstance(validator_fee_hmt, (int, float)) or not math.isfinite(validator_fee_hmt) or validator_fee_hmt < 0.0:
         raise ValueError("validator_fee_hmt must be finite and >= 0")
-    if not (0.0 <= bonus_share <= 1.0):
+    if isinstance(bonus_share, bool) or not isinstance(bonus_share, (int, float)) or not math.isfinite(bonus_share) or not (0.0 <= bonus_share <= 1.0):
         raise ValueError("bonus_share must be in [0, 1]")
-    if any(p < 0 for p in points.values()):
-        raise ValueError("points must be >= 0")
+    if not isinstance(points, Mapping) or any(
+        not isinstance(a, str) or not a.strip() or isinstance(p, bool) or not isinstance(p, int) or p < 0
+        for a, p in points.items()
+    ):
+        raise ValueError("points must map non-empty account_id strings to non-negative integers")
     pool = validator_fee_hmt * bonus_share
     total = sum(points.values())
     payouts = {a: pool * p / total for a, p in points.items() if p > 0} if total > 0 else {}
@@ -128,6 +306,19 @@ class KnowledgeCertificate:
     pool_within_validator_fee: bool
     nobody_paid_without_points: bool
     win_win_preserved: bool
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "price_unchanged",
+            "supply_unchanged",
+            "payouts_within_pool",
+            "pool_within_validator_fee",
+            "nobody_paid_without_points",
+            "win_win_preserved",
+        ):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -145,12 +336,43 @@ def certify_knowledge_bonus(before: MarketEquilibrium, after: MarketEquilibrium,
     equilibria because the bonus is a lump sum paid outside the bidding game. `epoch_payment_hmt` is the total paid by
     consumers in the epoch, from which the validator fee is `fee.validator_share * epoch_payment_hmt`.
     """
+    if not isinstance(before, MarketEquilibrium) or not isinstance(after, MarketEquilibrium):
+        raise ValueError("before and after must be MarketEquilibrium instances")
+    if not isinstance(settlement, KnowledgeSettlement):
+        raise ValueError("settlement must be a KnowledgeSettlement instance")
+    if not isinstance(fee, FeePolicy):
+        raise ValueError("fee must be a FeePolicy instance")
+    if isinstance(epoch_payment_hmt, bool) or not isinstance(epoch_payment_hmt, (int, float)) or not math.isfinite(float(epoch_payment_hmt)) or float(epoch_payment_hmt) < 0.0:
+        raise ValueError("epoch_payment_hmt must be finite and >= 0")
+    if not isinstance(win_win_before, bool) or not isinstance(win_win_after, bool):
+        raise ValueError("win_win_before and win_win_after must be booleans")
     tol = 1e-9 * max(1.0, abs(before.price_per_1k), abs(before.supply_1k))
-    price_same = abs(before.price_per_1k - after.price_per_1k) <= tol and before.mechanism == after.mechanism
-    supply_same = abs(before.supply_1k - after.supply_1k) <= tol and before.active_producers == after.active_producers
-    paid = sum(settlement.payouts_hmt.values())
-    within_pool = paid <= settlement.pool_hmt + 1e-9 * max(1.0, settlement.pool_hmt)
+    price_same = (
+        math.isfinite(before.price_per_1k)
+        and math.isfinite(after.price_per_1k)
+        and abs(before.price_per_1k - after.price_per_1k) <= tol
+        and before.mechanism == after.mechanism
+    )
+    supply_same = (
+        math.isfinite(before.supply_1k)
+        and math.isfinite(after.supply_1k)
+        and abs(before.supply_1k - after.supply_1k) <= tol
+        and before.active_producers == after.active_producers
+    )
+    payouts_nonneg_finite = all(
+        math.isfinite(float(v)) and float(v) >= 0.0 for v in settlement.payouts_hmt.values()
+    )
+    pool_nonneg_finite = math.isfinite(float(settlement.pool_hmt)) and float(settlement.pool_hmt) >= 0.0
+    paid = sum(settlement.payouts_hmt.values()) if payouts_nonneg_finite else float("inf")
+    within_pool = (
+        payouts_nonneg_finite
+        and pool_nonneg_finite
+        and paid <= settlement.pool_hmt + 1e-9 * max(1.0, settlement.pool_hmt)
+    )
     validator_fee = fee.validator_share * epoch_payment_hmt
-    pool_ok = settlement.pool_hmt <= validator_fee + 1e-9 * max(1.0, validator_fee)
-    nobody = all(settlement.points.get(a, 0) > 0 for a in settlement.payouts_hmt)
+    pool_ok = (
+        pool_nonneg_finite
+        and settlement.pool_hmt <= validator_fee + 1e-9 * max(1.0, validator_fee)
+    )
+    nobody = payouts_nonneg_finite and all(settlement.points.get(a, 0) > 0 for a in settlement.payouts_hmt)
     return KnowledgeCertificate(price_same, supply_same, within_pool, pool_ok, nobody, win_win_before == win_win_after)

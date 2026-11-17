@@ -1,0 +1,38 @@
+#!/bin/bash
+# HiveMind QLoRA-MoE BOINC app (main program). Self-contained: the Python runtime, the hivemind code and the base model arrive as separate SIGNED BOINC files
+# in the project directory (the standard download channel) and are unpacked once into <project dir>/hivemind_env/. Needs only tar, xz and flock (util-linux)
+# and an NVIDIA driver; nothing is installed system-wide and nothing is fetched from the internet at run time.
+# Rendered by scripts/boinc_publish_app_version.py (@...@ are filled in with the content-hashed file names).
+set -u
+RUNTIME="@RUNTIME@"; SRC="@SRC@"; MODEL="@MODEL@"; MODE="@MODE@"
+here="$(dirname "$(readlink -f "$0")")"   # the project directory: the slot entry for this program is a link into it
+env_root="$here/hivemind_env"
+mkdir -p "$env_root" || exit 195
+
+unpack() {  # unpack <archive file name> -> prints the directory; unpacked once, atomically, under a lock (several tasks may start together)
+  local arc="$here/$1" dest="$env_root/${1%.tar*}"
+  if [ ! -f "$dest/.complete" ]; then
+    (
+      flock 9
+      [ -f "$dest/.complete" ] && exit 0
+      rm -rf "$dest.part"; mkdir -p "$dest.part"
+      tar -C "$dest.part" -xf "$arc" || { echo "hivemind: unpacking $1 failed" >&2; rm -rf "$dest.part"; exit 1; }   # tar detects xz itself
+      touch "$dest.part/.complete"; rm -rf "$dest"; mv "$dest.part" "$dest"
+    ) 9>"$env_root/.lock" || exit 195
+  fi
+  echo "$dest"
+}
+
+runtime_dir="$(unpack "$RUNTIME")"; [ -n "$runtime_dir" ] || exit 195
+src_dir="$(unpack "$SRC")"
+model_dir="$(unpack "$MODEL")"
+# forget unpacked versions nobody has used for a week (older app versions leave their directories behind)
+find "$env_root" -maxdepth 1 -mindepth 1 -type d -name 'hivemind_*' -mtime +7 ! -path "$runtime_dir" ! -path "$src_dir" ! -path "$model_dir" -exec rm -rf {} + 2>/dev/null
+touch "$runtime_dir/.complete" "$src_dir/.complete" "$model_dir/.complete"
+
+unset LD_LIBRARY_PATH PYTHONHOME PYTHONSTARTUP
+export PYTHONNOUSERSITE=1                       # never pick up a volunteer's own packages: the pinned runtime is what validation assumes
+export PYTHONPATH="$src_dir"
+export HIVEMIND_REAL_HF_CACHE="$model_dir"      # the model is a Hugging Face cache directory
+export HF_HUB_OFFLINE=1
+exec "$runtime_dir/bin/python3.10" -W ignore -m hivemind.boinc.real_client.moe_app --mode "$MODE" "$@"

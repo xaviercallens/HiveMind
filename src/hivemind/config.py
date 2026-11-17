@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Hardware & Algorithmic Configuration for Project HiveMind.
 
 Automatically configures local disk caches on D:\\xdev\\DecentralizedAI\\.cache to protect C: drive,
@@ -11,6 +12,7 @@ unified memory, exposing a single `detect_gpu_backend()` contract for the rest o
 
 from __future__ import annotations
 
+import math
 import os
 import random
 from dataclasses import dataclass, field
@@ -53,11 +55,19 @@ def ensure_local_drive_caches() -> dict[str, str]:
     }
     for env_key, dir_path in cache_dirs.items():
         if env_key not in ("CUBLAS_WORKSPACE_CONFIG", "HF_HUB_DISABLE_SYMLINKS_WARNING"):
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
-            os.environ[env_key] = dir_path
+            try:
+                Path(dir_path).mkdir(parents=True, exist_ok=True)
+                os.environ[env_key] = dir_path
+            except OSError:
+                fallback = Path("/tmp/hivemind_cache") / Path(dir_path).name
+                fallback.mkdir(parents=True, exist_ok=True)
+                os.environ[env_key] = str(fallback)
         else:
             os.environ.setdefault(env_key, dir_path)
-    ARTIFACTS_ROOT.mkdir(parents=True, exist_ok=True)
+    try:
+        ARTIFACTS_ROOT.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
     return cache_dirs
 
 
@@ -120,6 +130,19 @@ class VRAMBudget:
     activations_kv_cache_gb: float
     cuda_context_overhead_gb: float
 
+    def __post_init__(self) -> None:
+        for field_name in (
+            "frozen_base_nf4_gb",
+            "lora_trainable_r64_gb",
+            "paged_adamw_8bit_gb",
+            "activations_kv_cache_gb",
+            "cuda_context_overhead_gb",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a non-negative finite number")
+            setattr(self, field_name, float(val))
+
     @property
     def total_peak_vram_gb(self) -> float:
         return round(
@@ -173,6 +196,24 @@ class HardwareProfile:
             cuda_context_overhead_gb=0.60,
         )
     )
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("name must be a non-empty string")
+        if not isinstance(self.hf_model_id, str) or not self.hf_model_id.strip():
+            raise ValueError("hf_model_id must be a non-empty string")
+        for field_name in ("target_vram_gb", "available_vram_budget_gb"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a positive finite number")
+        for field_name in ("lora_rank_r", "lora_alpha", "micro_batch_size", "seq_len"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        for field_name in ("double_quantization", "gradient_checkpointing"):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
 
 
 @dataclass
@@ -383,6 +424,8 @@ def detect_gpu_backend(device: Any | None = None) -> str:
     ROCm builds expose the `torch.cuda` namespace, so they are discriminated through
     `torch.version.hip` rather than through the device type.
     """
+    if isinstance(device, bool):
+        raise ValueError("device must not be a boolean")
     import torch
 
     if device is None:
@@ -397,6 +440,8 @@ def detect_gpu_backend(device: Any | None = None) -> str:
 
 def detect_gpu_vendor(backend: str) -> str:
     """Map a resolved GPU backend onto its silicon vendor."""
+    if isinstance(backend, bool) or not isinstance(backend, str):
+        raise ValueError("backend must be a string")
     if backend == GPU_BACKEND_CUDA:
         return GPU_VENDOR_NVIDIA
     if backend == GPU_BACKEND_ROCM:
@@ -410,6 +455,8 @@ def detect_gpu_vendor(backend: str) -> str:
 
 def detect_rocm_gcn_arch(device: Any | None = None) -> str | None:
     """Return the AMD GCN/RDNA architecture identifier (e.g. `gfx1100`, `gfx1030`)."""
+    if isinstance(device, bool):
+        raise ValueError("device must not be a boolean")
     import torch
 
     if not is_rocm_available() or not torch.cuda.is_available():
@@ -434,6 +481,8 @@ def rocm_supports_native_bf16(gcn_arch: str | None) -> bool:
     RDNA3 (`gfx11xx`, Radeon RX 7000) and CDNA2+ (`gfx9xx`) do; RDNA2 (`gfx10xx`, Radeon RX 6000)
     only exposes FP16 matrix paths and therefore falls back to `float16` compute.
     """
+    if gcn_arch is not None and not isinstance(gcn_arch, str):
+        raise ValueError("gcn_arch must be a string or None")
     if not gcn_arch:
         return False  # Unknown target: stay on the universally supported FP16 path.
     arch = str(gcn_arch).lower()
@@ -451,8 +500,12 @@ def rocm_supports_native_bf16(gcn_arch: str | None) -> bool:
     return False
 
 
-def configure_deterministic_runtime(seed: int = 42, warn_only: bool = True) -> None:
-    """Enforce deterministic CUDA/CPU kernels for BOINC Spot-Check Verification."""
+def configure_deterministic_runtime(seed: int = 42, warn_only: bool = False) -> None:
+    """Enforce deterministic CUDA/CPU kernels for BOINC Spot-Check Verification (IP-43)."""
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if not isinstance(warn_only, bool):
+        raise ValueError("warn_only must be a boolean")
     import torch
 
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"

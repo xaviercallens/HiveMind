@@ -1,0 +1,353 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
+"""Backend coordinator and wire format for the CrowdGPT GPU loss check (see `crowdgpt_loss_check`).
+
+The CPU-only CrowdGPT backend opens one job per round: the base and candidate weights (by URL, identified by the SHA-256
+of their bf16 bytes), the held-out tokens (URL, optional byte range, SHA-256) and the window plan. GPU evaluators fetch
+the job, compute the losses and post a signed receipt; the backend verifies it with a few CPU spot checks and records a
+decision. Framework-agnostic: `handle_get_job` / `handle_post_receipt` return (HTTP status, JSON body) so any web stack
+can expose them, and `fastapi_router` wires them into FastAPI when it is installed.
+
+  GET  /fl/loss_check/job?evaluator_id=ID   -> 200 job JSON | 204 no job
+  POST /fl/loss_check/receipt   body = receipt JSON   -> 200 verdict JSON | 400 | 404 | 409 | 410
+
+State is one JSON file (atomic rename), so a restart keeps open jobs and decisions. Standard library plus the core module.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import secrets
+import tempfile
+import threading
+import time
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any, Callable, Mapping
+
+try:  # inside HiveMind
+    from hivemind.swarm import crowdgpt_loss_check as lc
+except ImportError:  # copied next to it in the CrowdGPT repository
+    import hivemind_loss_check as lc  # type: ignore[no-redef]
+
+JOB_SCHEMA = "hivemind.crowdgpt.loss_check_job.v1"
+
+
+@dataclass(frozen=True)
+class LossCheckJob:
+    job_id: str
+    base_url: str
+    base_sha256: str
+    candidate_url: str
+    candidate_sha256: str
+    heldout_url: str
+    heldout_sha256: str
+    window: int
+    n: int
+    seed: int
+    created_at: float
+    expires_at: float
+    heldout_range: str = ""  # "start-end" byte range of heldout_url, inclusive, empty for the whole file
+    schema: str = JOB_SCHEMA
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("job_id", self.job_id),
+            ("base_url", self.base_url),
+            ("base_sha256", self.base_sha256),
+            ("candidate_url", self.candidate_url),
+            ("candidate_sha256", self.candidate_sha256),
+            ("heldout_url", self.heldout_url),
+            ("heldout_sha256", self.heldout_sha256),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+            if any(ord(c) < 32 or ord(c) == 127 for c in val):
+                raise ValueError(f"{field_name} must not contain control characters")
+        for sha_name, sha_val in (
+            ("base_sha256", self.base_sha256),
+            ("candidate_sha256", self.candidate_sha256),
+            ("heldout_sha256", self.heldout_sha256),
+        ):
+            if len(sha_val) != 64 or any(c not in "0123456789abcdefABCDEF" for c in sha_val):
+                raise ValueError(f"{sha_name} must be a 64-character hex string")
+        if isinstance(self.window, bool) or not isinstance(self.window, int) or self.window < 2:
+            raise ValueError("window must be an integer >= 2")
+        if isinstance(self.n, bool) or not isinstance(self.n, int) or self.n < 1:
+            raise ValueError("n must be an integer >= 1")
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int) or self.seed < 0:
+            raise ValueError("seed must be a non-negative integer")
+        if (
+            isinstance(self.created_at, bool)
+            or not isinstance(self.created_at, (int, float))
+            or not math.isfinite(float(self.created_at))
+            or isinstance(self.expires_at, bool)
+            or not isinstance(self.expires_at, (int, float))
+            or not math.isfinite(float(self.expires_at))
+            or float(self.expires_at) < float(self.created_at)
+        ):
+            raise ValueError("created_at and expires_at must be finite numbers with expires_at >= created_at")
+        if not isinstance(self.heldout_range, str) or any(
+            ord(c) < 32 or ord(c) == 127 for c in self.heldout_range
+        ):
+            raise ValueError("heldout_range must be a string without control characters")
+        if self.schema != JOB_SCHEMA:
+            raise ValueError(f"unknown job schema {self.schema!r}")
+
+    def to_wire(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_wire(cls, d: Mapping[str, Any]) -> "LossCheckJob":
+        if not isinstance(d, Mapping):
+            raise TypeError("wire payload must be a mapping")
+        if d.get("schema") != JOB_SCHEMA:
+            raise ValueError(f"unknown job schema {d.get('schema')!r}")
+        return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
+
+
+@dataclass
+class _State:
+    jobs: dict[str, dict] = field(default_factory=dict)
+    receipts: dict[str, list[dict]] = field(default_factory=dict)  # job_id -> verified receipts (wire form + verdict)
+    decisions: dict[str, dict] = field(default_factory=dict)
+
+
+def _finite_or_none(x: float) -> float | None:
+    """Early rejections carry NaN losses, which strict JSON encoders (e.g. FastAPI's JSONResponse) refuse."""
+    return x if isinstance(x, (int, float)) and math.isfinite(x) else None
+
+
+# (base, candidate, heldout) for a job; the backend has these in memory or on disk, since it built the candidate itself
+WeightsLoader = Callable[[LossCheckJob], tuple[Any, Any, Any]]
+
+
+class LossCheckCoordinator:
+    def __init__(self, *, evaluator_keys: Mapping[str, bytes], server_secret: bytes, state_path: Path | str, loader: WeightsLoader,
+                 model_factory: Callable[[], Any] | None = None, k: int = 2, tol: float = 2e-3, max_regression_tolerance: float = 0.0,
+                 min_windows: int = 8, required_receipts: int = 1, agreement_tol: float = 2e-3, job_ttl_s: float = 3600.0,
+                 clock: Callable[[], float] = time.time) -> None:
+        if (
+            isinstance(required_receipts, bool)
+            or not isinstance(required_receipts, int)
+            or required_receipts < 1
+            or not isinstance(evaluator_keys, Mapping)
+            or not evaluator_keys
+        ):
+            raise ValueError("need at least one evaluator key and required_receipts >= 1")
+        for ek, ev in evaluator_keys.items():
+            if (
+                not isinstance(ek, str)
+                or not ek.strip()
+                or any(ord(c) < 32 or ord(c) == 127 for c in ek)
+                or not isinstance(ev, (bytes, bytearray))
+                or len(ev) == 0
+            ):
+                raise ValueError(
+                    "evaluator_keys must map non-empty evaluator IDs (without control characters) to non-empty bytes"
+                )
+        if not callable(loader):
+            raise TypeError("loader must be callable")
+        if not callable(clock):
+            raise TypeError("clock must be callable")
+        if model_factory is not None and not callable(model_factory):
+            raise TypeError("model_factory must be callable or None")
+        if required_receipts > len(evaluator_keys):
+            raise ValueError("required_receipts cannot exceed the number of known evaluators")
+        if not isinstance(server_secret, (bytes, bytearray)) or not server_secret:
+            raise ValueError("server_secret must be non-empty bytes")
+        if (
+            isinstance(k, bool)
+            or not isinstance(k, int)
+            or k < 1
+            or isinstance(min_windows, bool)
+            or not isinstance(min_windows, int)
+            or min_windows < 1
+        ):
+            raise ValueError("k and min_windows must be integers >= 1")
+        if (
+            isinstance(tol, bool)
+            or not isinstance(tol, (int, float))
+            or not math.isfinite(float(tol))
+            or float(tol) < 0.0
+            or isinstance(agreement_tol, bool)
+            or not isinstance(agreement_tol, (int, float))
+            or not math.isfinite(float(agreement_tol))
+            or float(agreement_tol) < 0.0
+        ):
+            raise ValueError("tol and agreement_tol must be finite non-negative numbers")
+        if (
+            isinstance(max_regression_tolerance, bool)
+            or not isinstance(max_regression_tolerance, (int, float))
+            or not math.isfinite(float(max_regression_tolerance))
+        ):
+            raise ValueError("max_regression_tolerance must be a finite number")
+        if (
+            isinstance(job_ttl_s, bool)
+            or not isinstance(job_ttl_s, (int, float))
+            or not math.isfinite(float(job_ttl_s))
+            or float(job_ttl_s) <= 0.0
+        ):
+            raise ValueError("job_ttl_s must be a finite number > 0")
+        self.keys, self.secret, self.loader = dict(evaluator_keys), server_secret, loader
+        self.model_factory = model_factory or lc.CrowdV1
+        self.k, self.tol, self.max_regression, self.min_windows = k, tol, max_regression_tolerance, min_windows
+        self.required, self.agreement_tol, self.ttl, self.clock = required_receipts, agreement_tol, job_ttl_s, clock
+        self.path = Path(state_path)
+        self._lock = threading.Lock()
+        self.state = self._load()
+
+    # ---------------------------------------------------------------- persistence
+    def _load(self) -> _State:
+        if not self.path.exists():
+            return _State()
+        d = json.loads(self.path.read_text())
+        return _State(d.get("jobs", {}), d.get("receipts", {}), d.get("decisions", {}))
+
+    def _save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=".loss_check_state.")
+        with os.fdopen(fd, "w") as fh:
+            json.dump(asdict(self.state), fh, sort_keys=True)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, self.path)
+
+    # ---------------------------------------------------------------- backend API
+    def open_job(self, *, base_url: str, base_sha256: str, candidate_url: str, candidate_sha256: str, heldout_url: str,
+                 heldout_sha256: str, window: int = 2048, n: int = 32, heldout_range: str = "", job_id: str | None = None) -> LossCheckJob:
+        """One job per candidate. The seed is drawn here, after the candidate is fixed."""
+        for field_name, val in (
+            ("base_url", base_url),
+            ("base_sha256", base_sha256),
+            ("candidate_url", candidate_url),
+            ("candidate_sha256", candidate_sha256),
+            ("heldout_url", heldout_url),
+            ("heldout_sha256", heldout_sha256),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(window, bool) or not isinstance(window, int) or window < 2:
+            raise ValueError("window must be an integer >= 2")
+        if isinstance(n, bool) or not isinstance(n, int) or n < self.min_windows:
+            raise ValueError(f"n={n} is below min_windows={self.min_windows}: every receipt would be rejected")
+        now = self.clock()
+        job = LossCheckJob(job_id=job_id or secrets.token_hex(8), base_url=base_url, base_sha256=base_sha256, candidate_url=candidate_url,
+                           candidate_sha256=candidate_sha256, heldout_url=heldout_url, heldout_sha256=heldout_sha256, window=window, n=n,
+                           seed=secrets.randbelow(2**31), created_at=now, expires_at=now + self.ttl, heldout_range=heldout_range)
+        with self._lock:
+            if job.job_id in self.state.jobs:
+                raise ValueError(f"job {job.job_id} already exists")
+            self.state.jobs[job.job_id] = job.to_wire()
+            self._save()
+        return job
+
+    def decision(self, job_id: str) -> dict | None:
+        if not isinstance(job_id, str) or not job_id.strip():
+            raise ValueError("job_id must be a non-empty string")
+        return self.state.decisions.get(job_id)
+
+    def next_job(self, evaluator_id: str) -> LossCheckJob | None:
+        """The oldest open, unexpired, undecided job this evaluator has not answered yet."""
+        if not isinstance(evaluator_id, str) or not evaluator_id.strip():
+            raise ValueError("evaluator_id must be a non-empty string")
+        if evaluator_id not in self.keys:
+            return None
+        now = self.clock()
+        with self._lock:  # submit() and open_job() mutate these dicts from other threads
+            for jid, d in sorted(self.state.jobs.items(), key=lambda kv: kv[1]["created_at"]):
+                if jid in self.state.decisions or d["expires_at"] < now:
+                    continue
+                if any(r["receipt"]["evaluator_id"] == evaluator_id for r in self.state.receipts.get(jid, [])):
+                    continue
+                return LossCheckJob.from_wire(d)
+        return None
+
+    def submit(self, receipt_json: str) -> tuple[int, dict]:
+        """Verify one receipt; record a decision once enough verified, mutually agreeing receipts are in."""
+        try:
+            r = lc.LossCheckReceipt.from_json(receipt_json)
+        except (ValueError, TypeError, KeyError) as e:
+            return 400, {"error": f"malformed receipt: {e}"}
+        # Authenticate before anything that costs memory or CPU: the evaluator id is not secret and
+        # GET /job hands out the job parameters, so an unsigned receipt must not reach the loader.
+        key = self.keys.get(r.evaluator_id)
+        if key is None or not r.verify_signature(key):
+            reason = "REJECTED_UNKNOWN_EVALUATOR" if key is None else "REJECTED_BAD_SIGNATURE"
+            return 200, {"recorded": False, "verdict": {"accepted": False, "reason": reason}}
+        with self._lock:
+            jd = self.state.jobs.get(r.round_id)
+            if jd is None:
+                return 404, {"error": "unknown job (receipt.round_id must be the job_id)"}
+            job = LossCheckJob.from_wire(jd)
+            if r.round_id in self.state.decisions:
+                return 409, {"error": "job already decided", "decision": self.state.decisions[r.round_id]}
+            if job.expires_at < self.clock():
+                return 410, {"error": "job expired"}
+            if any(x["receipt"]["evaluator_id"] == r.evaluator_id for x in self.state.receipts.get(r.round_id, [])):
+                return 409, {"error": "this evaluator already answered this job"}
+            if (r.window, len(r.starts), r.seed) != (job.window, job.n, job.seed):
+                return 400, {"error": "receipt does not follow the job's window plan (window, n, seed)"}
+            base, cand, held = self.loader(job)
+            v = lc.verify_receipt(r, evaluator_keys=self.keys, server_secret=self.secret, expected_base_sha256=job.base_sha256,
+                                  expected_candidate_sha256=job.candidate_sha256, heldout=held,
+                                  recompute=lc.cpu_recompute_fn(self.model_factory, base, cand, held, job.window), k=self.k, tol=self.tol,
+                                  max_regression_tolerance=self.max_regression, min_windows=self.min_windows)
+            verdict = {"accepted": v.accepted, "reason": v.reason, "loss_before": _finite_or_none(v.loss_before),
+                       "loss_after": _finite_or_none(v.loss_after), "delta_loss": _finite_or_none(v.delta_loss), "checked": list(v.checked)}
+            if v.reason.startswith("REJECTED"):
+                # a receipt that fails verification never counts; a held candidate (honest numbers, loss went up) does count
+                return 200, {"recorded": False, "verdict": verdict}
+            self.state.receipts.setdefault(r.round_id, []).append({"receipt": json.loads(r.to_json()), "verdict": verdict})
+            rs = self.state.receipts[r.round_id]
+            out: dict[str, Any] = {"recorded": True, "verdict": verdict, "receipts": len(rs), "required": self.required}
+            if len(rs) >= self.required:
+                parsed = [lc.LossCheckReceipt.from_json(json.dumps(x["receipt"])) for x in rs]
+                disagree = [lc.receipts_agree(a, b, self.agreement_tol)[1] for i, a in enumerate(parsed) for b in parsed[i + 1:]
+                            if not lc.receipts_agree(a, b, self.agreement_tol)[0]]
+                if disagree:
+                    dec = {"accepted": False, "reason": f"EVALUATORS_DISAGREE ({disagree[0]})", "evaluators": [p.evaluator_id for p in parsed]}
+                else:
+                    dec = {"accepted": all(x["verdict"]["accepted"] for x in rs), "reason": rs[-1]["verdict"]["reason"],
+                           "loss_before": verdict["loss_before"], "loss_after": verdict["loss_after"], "delta_loss": verdict["delta_loss"],
+                           "evaluators": [p.evaluator_id for p in parsed]}
+                dec["decided_at"] = self.clock()
+                self.state.decisions[r.round_id] = dec
+                out["decision"] = dec
+            self._save()
+            return 200, out
+
+    # ---------------------------------------------------------------- HTTP-shaped handlers
+    def handle_get_job(self, evaluator_id: str) -> tuple[int, dict | None]:
+        job = self.next_job(evaluator_id)
+        return (204, None) if job is None else (200, job.to_wire())
+
+    def handle_post_receipt(self, body: bytes | str) -> tuple[int, dict]:
+        if not isinstance(body, (bytes, bytearray, str)):
+            raise TypeError("body must be bytes or str")
+        return self.submit(bytes(body).decode() if isinstance(body, (bytes, bytearray)) else body)
+
+
+def fastapi_router(coord: LossCheckCoordinator, prefix: str = "/fl/loss_check") -> Any:
+    """Optional FastAPI wiring of the two handlers (the receipt's HMAC is the authentication)."""
+    if not isinstance(coord, LossCheckCoordinator):
+        raise TypeError("coord must be a LossCheckCoordinator")
+    if not isinstance(prefix, str) or not prefix.strip() or not prefix.startswith("/"):
+        raise ValueError("prefix must be a non-empty string starting with '/'")
+    from fastapi import APIRouter, Request, Response
+    from fastapi.responses import JSONResponse
+
+    router = APIRouter(prefix=prefix)
+
+    @router.get("/job")
+    def get_job(evaluator_id: str) -> Response:
+        status, body = coord.handle_get_job(evaluator_id)
+        return Response(status_code=204) if body is None else JSONResponse(body, status_code=status)
+
+    @router.post("/receipt")
+    async def post_receipt(request: Request) -> Response:
+        status, body = coord.handle_post_receipt(await request.body())
+        return JSONResponse(body, status_code=status)
+
+    return router

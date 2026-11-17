@@ -1,0 +1,91 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "fx-harmonic",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "fx-harmonic",
+  "problem": {
+   "kind": "linear",
+   "A": [
+    [
+     0.0,
+     1.0
+    ],
+    [
+     -1.0,
+     0.0
+    ]
+   ],
+   "b": [
+    0.0,
+    0.0
+   ]
+  },
+  "y0": [
+   1.0,
+   0.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   0.5,
+   1.0,
+   2.0,
+   3.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   0.5,
+   1.0,
+   2.0,
+   3.0
+  ],
+  "y": [
+   [
+    0.8775825618903728,
+    -0.479425538604203
+   ],
+   [
+    0.5403023058681398,
+    -0.8414709848078965
+   ],
+   [
+    -0.4161468365471424,
+    -0.9092974268256817
+   ],
+   [
+    -0.9899924966004454,
+    -0.1411200080598672
+   ]
+  ],
+  "max_abs_error_bound": 1e-15,
+  "method": "closed form (hand-made test fixture)",
+  "tool": "none",
+  "tool_versions": {}
+ },
+ "invariants": [
+  {
+   "name": "energy",
+   "kind": "energy",
+   "matrix": [
+    [
+     1.0,
+     0.0
+    ],
+    [
+     0.0,
+     1.0
+    ]
+   ],
+   "value": 0.5,
+   "tol": 1e-06
+  }
+ ],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

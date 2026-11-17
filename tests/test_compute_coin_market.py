@@ -40,6 +40,20 @@ def test_credit_is_zero_unless_verified_and_capped_by_class_peak_and_canonical_r
     assert e.verified_credit(ok, [unverified_replica]).cobblestones == pytest.approx(2.0)
 
 
+def test_non_finite_wall_time_or_flop_claim_is_rejected_and_cannot_set_the_canonical_replica() -> None:
+    # IP-159 (#500): NaN wall time used to disable the class-peak cap and grant 2.3e18 cobblestones "verified".
+    for wall, flops in ((math.nan, 1e30), (math.inf, 1e30), (-1.0, 1e30), (100.0, math.nan), (100.0, math.inf), (100.0, -1.0)):
+        g = e.verified_credit(e.CreditClaim("n1", "wu", flops, wall, 8000.0, True, True))
+        assert g.capped_by == "rejected" and g.cobblestones == 0.0, (wall, flops, g)
+    bad_peak = e.verified_credit(e.CreditClaim("n1", "wu", 1e12, 100.0, math.nan, True, True))
+    assert bad_peak.capped_by == "rejected" and bad_peak.cobblestones == 0.0
+    honest = e.CreditClaim("n1", "wu", 864e9, 100.0, 10.0, True, True)
+    nan_replica = e.CreditClaim("n2", "wu", 1e9, math.nan, 10.0, True, True)
+    g = e.verified_credit(honest, [nan_replica])
+    assert g.capped_by == "verified" and g.cobblestones == pytest.approx(2.0) and math.isfinite(g.cobblestones)
+    assert e.claim_figures_are_finite_and_positive(honest) and not e.claim_figures_are_finite_and_positive(nan_replica)
+
+
 @settings(max_examples=100, deadline=None)
 @given(st.floats(min_value=0.0, max_value=1e15, allow_nan=False), st.floats(min_value=0.1, max_value=1e4), st.floats(min_value=0.1, max_value=200.0))
 def test_credit_never_exceeds_claim_or_class_peak(flops: float, wall: float, peak_gflops: float) -> None:
@@ -166,3 +180,56 @@ def test_routing_always_returns_a_certificate_and_a_feasible_allocation(wspec: l
     assert r.max_deviation_gain_rel >= 0.0
     if r.converged:
         assert r.is_epsilon_nash, r.max_deviation_gain_rel
+
+
+@pytest.mark.parametrize("bad", ["cost", "capacity", "pool"])
+def test_route_supply_equilibrium_rejects_nan_inputs_instead_of_certifying_them(bad: str) -> None:
+    nan = float("nan")
+    ws = [e.Worker("a", nan if bad == "cost" else 1.0, nan if bad == "capacity" else 5.0), e.Worker("b", 1.0, 5.0)]
+    qs = [e.Queue("train", nan if bad == "pool" else 100.0)]
+    with pytest.raises(ValueError):
+        e.route_supply_equilibrium(ws, qs)
+    good = e.route_supply_equilibrium([e.Worker("a", 1.0, 5.0), e.Worker("b", 1.0, 5.0)], [e.Queue("train", 100.0)])
+    assert good.is_epsilon_nash and math.isfinite(good.max_deviation_gain_rel)
+
+
+def _grant(node: str, wu: str, cobblestones: float) -> e.CreditGrant:
+    return e.CreditGrant(node, wu, cobblestones, "verified", "test")
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_settle_epoch_rejects_non_finite_inputs(bad: float) -> None:
+    # NaN and inf pass every `< 0.0` check, so an inf grant gave minted_by_node == {"n": nan}.
+    with pytest.raises(ValueError, match="finite"):
+        e.settle_epoch(0, [_grant("n", "w1", bad)], 0.0, 0.0)
+    with pytest.raises(ValueError, match="finite"):
+        e.settle_epoch(0, [_grant("n", "w1", 5.0)], bad, 0.0)
+    with pytest.raises(ValueError, match="finite"):
+        e.settle_epoch(0, [_grant("n", "w1", 5.0)], 0.0, bad)
+    ok = e.settle_epoch(0, [_grant("n", "w1", 5.0)], 1.0, 0.0)
+    assert math.isfinite(ok.minted_hive) and math.isfinite(ok.minted_by_node["n"])
+
+
+@pytest.mark.parametrize("field", ["initial_hive_per_cobblestone", "decay_per_epoch", "max_supply_hive"])
+def test_emission_schedule_rejects_non_finite_parameters(field: str) -> None:
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="finite"):
+            e.EmissionSchedule(**{field: bad})
+
+
+def test_settle_epoch_pays_a_repeated_grant_only_once() -> None:
+    once = e.settle_epoch(0, [_grant("n", "w1", 5.0)], 0.0, 0.0)
+    twice = e.settle_epoch(0, [_grant("n", "w1", 5.0), _grant("n", "w1", 5.0)], 0.0, 0.0)
+    assert twice.total_verified_cobblestones == once.total_verified_cobblestones == 5.0
+    assert twice.minted_by_node == once.minted_by_node
+    assert e.settle_epoch(0, [_grant("n", "w1", 5.0), _grant("n", "w2", 5.0)], 0.0, 0.0).total_verified_cobblestones == 10.0
+
+
+def test_ip207_settle_epoch_zero_verified_work_refunds_worker_pool() -> None:
+    """IP-207: settle_epoch with zero verified work gives validators only their 15% share and refunds the 80% worker pool."""
+    empty = e.settle_epoch(0, [], 100.0, 0.0)
+    assert empty.fees_to_validators == pytest.approx(15.0)
+    assert empty.refund_to_consumer == pytest.approx(80.0)
+    assert empty.fees_burned == pytest.approx(5.0)
+    assert empty.fees_to_workers == {}
+    assert empty.to_dict()["refund_to_consumer"] == pytest.approx(80.0)

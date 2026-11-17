@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Display wording: HiveMind runs on HiveMind Reflexion Points (HMT) only; no euro or dollar amount is ever shown.
 
 `to_points_wording` rewrites user-facing text (pages and account JSON, never model output). Rules, in order:
@@ -42,6 +43,8 @@ LEFTOVER_CURRENCY: re.Pattern[str] = re.compile(r"\bEUR\b|\bUSD\b|€|\$\d")
 
 def to_points_wording(text: str) -> str:
     """Apply the rules above; idempotent."""
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     for pattern, replacement in _RULES:
         text = pattern.sub(replacement, text)
     return text
@@ -49,4 +52,6 @@ def to_points_wording(text: str) -> str:
 
 def currency_leftovers(text: str) -> list[str]:
     """Currency mentions a rewrite did not cover, with 40 characters of context each (empty when clean)."""
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     return [text[max(0, m.start() - 40): m.end() + 40] for m in LEFTOVER_CURRENCY.finditer(text)]

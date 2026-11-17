@@ -1,0 +1,109 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Project HiveMind//Season 19 Qwen 3.5 & International Launch//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Project HiveMind — S19 Qwen 3.5, AMCP/EDA & International Launch
+X-WR-TIMEZONE:Europe/Paris
+X-WR-CALDESC:Season 19 Qwen 3.5 Coding + Idle/Nocturnal MoE Plan, Sunday Nov 1 Producer-First Launch, and Nov 2-8 International Consumer/Mix Waves.
+BEGIN:VEVENT
+UID:hm-s19-day1-20261028@hivemind.ai
+DTSTAMP:20261027T134500Z
+DTSTART;TZID=Europe/Paris:20261028T090000
+DTEND;TZID=Europe/Paris:20261028T180000
+SUMMARY:[HiveMind S19 Day 1] Producer Hardware Auto-Tiering (std_8gb / big_12gb / xl_16gb_plus)
+DESCRIPTION:HM-S19-Q35-01 (#239): Auto-classify producer GPUs into std_8gb (<=6,656 MiB WDDM cap), big_12gb (12-16 GB: Qwen3.5-Coder-14B), and xl_16gb_plus (16-24 GB+: Qwen3.5-Coder-30B-A3B-MoE). Verify HM-S16-06 residency routing (#249) and HM-S16-05 remote VRAM cap (#252).\nGitHub Issue: https://github.com/xaviercallens/HiveMind/issues/239
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hm-s19-day2-20261029@hivemind.ai
+DTSTAMP:20261027T134500Z
+DTSTART;TZID=Europe/Paris:20261029T090000
+DTEND;TZID=Europe/Paris:20261029T180000
+SUMMARY:[HiveMind S19 Day 2] Usage-Driven 13-Bee MoE Workunit Allocator (65% Coding / 25% Science / 10% BYOB)
+DESCRIPTION:HM-S19-Q35-02 (#240): Wire 24h rolling OpenRouter usage telemetry into nocturnal and idle training workunit scheduling across the 13 domain Bees (7 Coding, 3 Science/Astrophysics, 3 Multilingual/BYOB).\nGitHub Issue: https://github.com/xaviercallens/HiveMind/issues/240
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hm-s19-day3-20261030@hivemind.ai
+DTSTAMP:20261027T134500Z
+DTSTART;TZID=Europe/Paris:20261030T090000
+DTEND;TZID=Europe/Paris:20261030T180000
+SUMMARY:[HiveMind S19 Day 3] Daytime Micro-Idle Harvester (>=30s Idle, <1.0s Preemption) & Nocturnal Scheduler
+DESCRIPTION:HM-S19-Q35-03 (#241): Enable dual-window idle training: Nocturnal Deep DiLoCo (22:00-07:00 local, H=250 inner steps) and Daytime Micro-Idle Harvester (>=30s GPU idle, H=25 micro-steps, <1.0s preemption).\nGitHub Issue: https://github.com/xaviercallens/HiveMind/issues/241
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hm-s19-day4-20261031@hivemind.ai
+DTSTAMP:20261027T134500Z
+DTSTART;TZID=Europe/Paris:20261031T090000
+DTEND;TZID=Europe/Paris:20261031T190000
+SUMMARY:[HiveMind S19 Day 4] Big-Producer Teacher-to-Student SVD LoRA Projection & AMCP v1.5 EDA Pre-Launch Gate
+DESCRIPTION:HM-S19-Q35-04 (#242) + HM-S19-AMCP-EDA (#250): Project rank-32 LoRA updates from Big/XL producers down to 18 MB rank-16 .safetensors grafts for 8 GB nodes (>94% Frobenius energy), and verify AMCP v1.5 CloudEvents 1.0 EDA partition scaling + HM-S16-07 per-IP starter-grant cap (#253) ahead of Sunday Producer Launch.\nGitHub Issue: https://github.com/xaviercallens/HiveMind/issues/242
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hm-s19-sunday-producer-launch-20261101@hivemind.ai
+DTSTAMP:20261027T134500Z
+DTSTART;TZID=Europe/Paris:20261101T140000
+DTEND;TZID=Europe/Paris:20261101T220000
+SUMMARY:🚀 [SUNDAY LAUNCH — PHASE 1] Producer-First International Onboarding Wave (r/BOINC, r/homelab, r/gpumining, CrowdGPT)
+DESCRIPTION:HM-S19-INTL Phase 1 Producer-First Launch (Sunday, Nov 1, 2026, 13:00 UTC / 14:00 CET):\n- Target channels: r/BOINC, r/homelab, r/gpumining, @Vxtzq CrowdGPT 100-node pool, and internal 3,000-developer cohort.\n- Goal: Onboard >=30 new GPU producers (>=38 active GPUs total, >=2,200 tok/s aggregate capacity) BEFORE consumer launch.\n- Early-Producer 2.0x Pioneer Multiplier + 100 HMT Producer Readiness Grant.\n- Speculative Decoding (HM-S19-Q35-05, #243) and BYOB Campaign (HM-S19-Q35-06, #244).\nGitHub Issues: https://github.com/xaviercallens/HiveMind/issues/251 & https://github.com/xaviercallens/HiveMind/issues/247
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hm-s19-day5-specdecode-20261101@hivemind.ai
+DTSTAMP:20261027T134500Z
+DTSTART;TZID=Europe/Paris:20261101T100000
+DTEND;TZID=Europe/Paris:20261101T140000
+SUMMARY:[HiveMind S19 Day 5] Speculative Decoding Rollout (Qwen3.5-Coder-3B Draft -> 14B / 30B-A3B Target)
+DESCRIPTION:HM-S19-Q35-05 (#243): Enable speculative decoding between 8 GB draft nodes (Qwen3.5-Coder-3B-Instruct) and 12-24 GB target nodes (Qwen3.5-Coder-14B / 30B-A3B-MoE) for 1.85x-2.15x coding speedup and p50 TTFT <=420 ms.\nGitHub Issue: https://github.com/xaviercallens/HiveMind/issues/243
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hm-s19-day6-7-byob-20261102@hivemind.ai
+DTSTAMP:20261027T134500Z
+DTSTART;TZID=Europe/Paris:20261102T090000
+DTEND;TZID=Europe/Paris:20261102T170000
+SUMMARY:[HiveMind S19 Day 6-7] Bring Your Own Bee (BYOB) & Crowd-v1 Swarm Integration (@Vxtzq + 3,000 Devs)
+DESCRIPTION:HM-S19-Q35-06 (#244): Complete 1-command Bring Your Own Bee (BYOB) registration + Vxtzq/Crowd-v1 integration and internal 3,000-developer IDE onboarding (OpenCode, Continue.dev, Cline, Zed).\nGitHub Issue: https://github.com/xaviercallens/HiveMind/issues/244
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hm-s19-phase2-localllama-20261102@hivemind.ai
+DTSTAMP:20261027T134500Z
+DTSTART;TZID=Europe/Paris:20261102T170000
+DTEND;TZID=Europe/Paris:20261105T210000
+SUMMARY:🌍 [PHASE 2 LAUNCH] English Prosumer & Open-Weights Dev Mix Wave (r/LocalLLaMA, r/SelfHosted)
+DESCRIPTION:HM-S19-INTL Phase 2 (Mon Nov 2 - Thu Nov 5, 2026):\n- Gate to open: >=25 active GPUs online from Sunday Producer Launch (>=1,400 tok/s).\n- Target: r/LocalLLaMA, r/SelfHosted, Continue.dev / Cline / OpenCode communities.\n- AMCP v1.5 replicate() + federateWith() elastic scaling to 55 active GPUs (rho_elastic = 0.64 <= 0.78).\nGitHub Epic: https://github.com/xaviercallens/HiveMind/issues/238
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hm-s19-phase3-showhn-20261106@hivemind.ai
+DTSTAMP:20261027T134500Z
+DTSTART;TZID=Europe/Paris:20261106T150000
+DTEND;TZID=Europe/Paris:20261108T220000
+SUMMARY:🔥 [PHASE 3 GLOBAL LAUNCH] Show HN + Global English Consumer/Prosumer Mix Wave
+DESCRIPTION:HM-S19-INTL Phase 3 Global Launch (Fri Nov 6 - Sun Nov 8, 2026):\n- Gate to open: >=45 active GPUs online (>=3,200 tok/s) and p95 latency <=6.0s.\n- Target: Hacker News (Show HN), r/MachineLearning, r/programming, X/Twitter.\n- Sustained by AMCP v1.5 + CloudEvents 1.0 EDA (up to 114 active GPUs, 24.0 req/s capacity) + Kelly Surge Pricing (up to 2.84x producer reward) + Two-Lane Priority QoS.\nGitHub Issue: https://github.com/xaviercallens/HiveMind/issues/247
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hm-s19-nocturnal-moe-window-20261101@hivemind.ai
+DTSTAMP:20261027T134500Z
+DTSTART;TZID=Europe/Paris:20261101T220000
+DTEND;TZID=Europe/Paris:20261102T070000
+SUMMARY:🌙 [Nocturnal Swarm Window] DiLoCo + Evolutionary MoE Training & Rank-32->16 SVD Broadcast (22:00-07:00)
+DESCRIPTION:Nightly 22:00-07:00 local window: 70% GPU allocation to DiLoCo outer synchronization (H=250 inner steps), GWAYA Level B exact paired McNemar sandbox verification, and 06:30 morning SVD rank-16 LoRA broadcast.
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

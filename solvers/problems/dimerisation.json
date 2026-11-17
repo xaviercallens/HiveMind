@@ -1,0 +1,113 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "dimerisation",
+ "description": "Reversible dimerisation 2A<->D (nonlinear mass action, k=1/0.5); A+2D conserved.",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "dimerisation",
+  "problem": {
+   "kind": "mass_action",
+   "species": [
+    "A",
+    "D"
+   ],
+   "reactions": [
+    {
+     "reactants": {
+      "A": 2
+     },
+     "products": {
+      "D": 1
+     },
+     "k": 1.0
+    },
+    {
+     "reactants": {
+      "D": 1
+     },
+     "products": {
+      "A": 2
+     },
+     "k": 0.5
+    }
+   ]
+  },
+  "y0": [
+   1.0,
+   0.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   0.5,
+   1.0,
+   5.0,
+   20.0,
+   50.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   0.5,
+   1.0,
+   5.0,
+   20.0,
+   50.0
+  ],
+  "y": [
+   [
+    0.5479229641624999,
+    0.2260385179187501
+   ],
+   [
+    0.4415552408737254,
+    0.2792223795631373
+   ],
+   [
+    0.3904009873424741,
+    0.30479950632876296
+   ],
+   [
+    0.3903882032022076,
+    0.3048058983988962
+   ],
+   [
+    0.3903882032022076,
+    0.3048058983988962
+   ]
+  ],
+  "max_abs_error_bound": 1.05e-13,
+  "method": "taylor (mpmath.odefun)",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.3.0",
+   "scipy": "1.13.1",
+   "numpy": "2.2.6"
+  },
+  "cross_check": {
+   "method": "scipy DOP853 rtol=1e-13",
+   "max_abs_diff": 1.05e-13,
+   "max_diff_over_spec_tolerance": 2.61e-05,
+   "min_spec_tolerance_over_bound": 22600.0
+  }
+ },
+ "invariants": [
+  {
+   "name": "A_plus_2D",
+   "kind": "linear",
+   "weights": [
+    1.0,
+    2.0
+   ],
+   "value": 1.0,
+   "tol": 1e-07
+  }
+ ],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

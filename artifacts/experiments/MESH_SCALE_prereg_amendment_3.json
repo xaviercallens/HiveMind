@@ -1,0 +1,24 @@
+{
+  "experiment_id": "MESH-SCALE-1",
+  "amendment": 3,
+  "registered_utc": "2026-10-27T15:37:17Z",
+  "amends": "artifacts/experiments/MESH_SCALE_prereg.json, MESH_SCALE_prereg_amendment_1.json and MESH_SCALE_prereg_amendment_2.json",
+  "written_before": "the smoke re-run that tests this change (40 bees, 30 s, non-prereg) and any run with N >= 100",
+  "thresholds_changed": false,
+  "population_changed": false,
+  "mesh_code_changed": false,
+  "change": {
+    "loadgen_readiness_barrier": "Before its first task submission, the loadgen waits until both of its own subscriptions (its reply topic and task.done) have delivered a probe. The probes are harness messages, not tasks: a probe on the reply topic has a taskId that begins with 'probe-' and is not counted, not written to the JSONL, and not part of any percentile. A probe on task.done has hostId '__probe__', so both hosts ignore it. Probes are re-sent once per second until both are seen, with a 60 s limit. The load clock (startMs, and therefore the kill time for LoadStart) starts after the barrier.",
+    "reason": "With topics pre-created (MESH_SCALE_prereg_amendment_2.json), the smoke run N=40 decomposition showed the host-to-bee-to-host leg in the first 5 s at p50 140 ms, down from 2528 ms. The remaining early delay was in the submit-plus-reply leg, p50 3603 ms in 0-5 s, and it falls back to 57 ms in 5-10 s. The loadgen's reply consumer is a new group that joins at load start, so replies to the first seconds wait for partition assignment. That is a measurement-client warm-up artifact, not a mesh behaviour. Under the pre-registered population, a task submitted at time t is counted from t, so the barrier is the only way to start the clock with the client ready.",
+    "what_is_not_changed": [
+      "every threshold A1 to A4",
+      "the task population: every task after the barrier is counted and none is excluded",
+      "rates, durations, bee and host counts, Xmx values, latencies, heartbeat, attempt timeout, tier, kill fraction and kill timing (still relative to load start)",
+      "Host, Registry and BeeAgent routing and retry behaviour, and the publish error handling of the mesh"
+    ]
+  },
+  "still_open_for_the_lead": [
+    "Host ignores the future returned by bus.publish. A failed assignment or TaskDone is recovered only by the attempt timeout (10 s). The smoke runs show Kafka 'Error publishing' lines from host JVMs. That is a mesh issue and needs its own decision and amendment. It is not changed here.",
+    "Expected effect of the barrier: the 0-5 s overhead should fall to the steady-state range, so the verdict of A2 at N=1000 should depend on the steady state, not on the startup. The smoke re-run will show whether that is so."
+  ]
+}

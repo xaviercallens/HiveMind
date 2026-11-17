@@ -1,0 +1,18 @@
+# Serving-first GCP Spot Tesla T4 Sparse-MoE OpenDiLoCo Co-Trainer for CrowdGPT Weekend Raid (14-15 Nov 2026).
+# Writes strictly to /mnt/disks/disk-socrateai-local-1/gcpcrowd_moe (never /opt/hivemind/t4/).
+[Unit]
+Description=HiveMind GCP T4 CrowdGPT-MoE Decoupled OpenDiLoCo Co-Trainer (>= 4300 MiB free VRAM guard)
+After=hivemind-t4-governor.service nginx.service
+
+[Service]
+NoNewPrivileges=yes
+ProtectSystem=full
+User=callensxavier_gmail_com
+Environment=PYTHONPATH=/opt/hivemind/HiveMind/src
+ExecStartPre=/usr/bin/install -d -m 0755 /mnt/disks/disk-socrateai-local-1/gcpcrowd_moe
+ExecStart=/mnt/disks/disk-socrateai-local-1/boinc/venv/bin/python /opt/hivemind/HiveMind/scripts/gcp_t4_crowd_diloco_worker.py --mode moe-opendiloco-round --moe-split-mode lora_domain_experts --outer-optimizer opendiloco_nesterov --resident-experts 0,1,2,3,4,5,6,7 --rounds 4 --inner-steps 8 --work-dir /mnt/disks/disk-socrateai-local-1/gcpcrowd_moe --governor-state /mnt/disks/disk-socrateai-local-1/hivemind_telemetry/governor_state.json --hold-file /mnt/disks/disk-socrateai-local-1/hivemind_telemetry/HOLD --nginx-status-url http://127.0.0.1:8091/nginx_status --min-free-vram-mib 4300 --check-spot-preemption --submit-opentrainer --campaign-id CROWDGPT-WE-NOV14-15-2026-MOE-OPENDILOCO
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

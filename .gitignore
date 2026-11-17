@@ -17,9 +17,13 @@ build/
 .cache/
 artifacts/*
 !artifacts/*.json
+artifacts/*session*.json
 !artifacts/experiments/
 artifacts/experiments/*
 !artifacts/experiments/*.json
+!artifacts/mvp/
+artifacts/mvp/*
+!artifacts/mvp/*.json
 checkpoints/
 shards/
 models_cache/
@@ -36,3 +40,6 @@ models_cache/
 
 # Local Lean compiler build products
 /lean4/.lake/
+*.exe
+steam_dist/steamcmd/
+steam_dist/*.zip

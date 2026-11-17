@@ -1,0 +1,192 @@
+{
+  "experiment_id": "E18b",
+  "issue_ref": "https://github.com/xaviercallens/HiveMind/issues/308",
+  "lean_theorem": "Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.e18_cosine_damped_outer_momentum_bounds_iid_amplification",
+  "executed_utc": "2026-10-29T10:49:54.265979+00:00",
+  "hardware": {
+    "cuda_available": true,
+    "device_name": "Tesla T4",
+    "free_vram_before_mib": 9970.69,
+    "free_vram_after_mib": 9914.69,
+    "t4_policy_4300mib_floor_respected": true
+  },
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "aggregate_mean_val_loss": {
+    "IID": {
+      "O0_fedavg": 0.058094,
+      "O1_fixed_nesterov": 0.061332,
+      "O2_cosine_damped": 0.043058,
+      "O_neg_inverted_control": 0.050879
+    },
+    "Non_IID_Dirichlet_0_1": {
+      "O0_fedavg": 3.136137,
+      "O1_fixed_nesterov": 0.981547,
+      "O2_cosine_damped": 0.676422,
+      "O_neg_inverted_control": 3.005443
+    }
+  },
+  "per_seed_results": {
+    "seed_42": {
+      "IID": {
+        "O0_fedavg": {
+          "val_loss": 0.056233,
+          "mean_pairwise_cosine": 0.6929,
+          "mean_effective_momentum": 0.0
+        },
+        "O1_fixed_nesterov": {
+          "val_loss": 0.0617,
+          "mean_pairwise_cosine": 0.7936,
+          "mean_effective_momentum": 0.9
+        },
+        "O2_cosine_damped": {
+          "val_loss": 0.041908,
+          "mean_pairwise_cosine": 0.63,
+          "mean_effective_momentum": 0.333
+        },
+        "O_neg_inverted_control": {
+          "val_loss": 0.051028,
+          "mean_pairwise_cosine": 0.6928,
+          "mean_effective_momentum": 0.6235
+        }
+      },
+      "Non_IID_Dirichlet_0_1": {
+        "O0_fedavg": {
+          "val_loss": 3.018101,
+          "mean_pairwise_cosine": 0.0511,
+          "mean_effective_momentum": 0.0
+        },
+        "O1_fixed_nesterov": {
+          "val_loss": 0.946827,
+          "mean_pairwise_cosine": 0.0545,
+          "mean_effective_momentum": 0.9
+        },
+        "O2_cosine_damped": {
+          "val_loss": 0.692616,
+          "mean_pairwise_cosine": 0.0498,
+          "mean_effective_momentum": 0.8552
+        },
+        "O_neg_inverted_control": {
+          "val_loss": 2.909246,
+          "mean_pairwise_cosine": 0.0518,
+          "mean_effective_momentum": 0.0467
+        }
+      }
+    },
+    "seed_43": {
+      "IID": {
+        "O0_fedavg": {
+          "val_loss": 0.058435,
+          "mean_pairwise_cosine": 0.6747,
+          "mean_effective_momentum": 0.0
+        },
+        "O1_fixed_nesterov": {
+          "val_loss": 0.063732,
+          "mean_pairwise_cosine": 0.7687,
+          "mean_effective_momentum": 0.9
+        },
+        "O2_cosine_damped": {
+          "val_loss": 0.043321,
+          "mean_pairwise_cosine": 0.6056,
+          "mean_effective_momentum": 0.355
+        },
+        "O_neg_inverted_control": {
+          "val_loss": 0.052695,
+          "mean_pairwise_cosine": 0.6588,
+          "mean_effective_momentum": 0.5929
+        }
+      },
+      "Non_IID_Dirichlet_0_1": {
+        "O0_fedavg": {
+          "val_loss": 3.321256,
+          "mean_pairwise_cosine": 0.0503,
+          "mean_effective_momentum": 0.0
+        },
+        "O1_fixed_nesterov": {
+          "val_loss": 1.006555,
+          "mean_pairwise_cosine": 0.0575,
+          "mean_effective_momentum": 0.9
+        },
+        "O2_cosine_damped": {
+          "val_loss": 0.658909,
+          "mean_pairwise_cosine": 0.0527,
+          "mean_effective_momentum": 0.8526
+        },
+        "O_neg_inverted_control": {
+          "val_loss": 3.197678,
+          "mean_pairwise_cosine": 0.0511,
+          "mean_effective_momentum": 0.046
+        }
+      }
+    },
+    "seed_44": {
+      "IID": {
+        "O0_fedavg": {
+          "val_loss": 0.059614,
+          "mean_pairwise_cosine": 0.6858,
+          "mean_effective_momentum": 0.0
+        },
+        "O1_fixed_nesterov": {
+          "val_loss": 0.058565,
+          "mean_pairwise_cosine": 0.7839,
+          "mean_effective_momentum": 0.9
+        },
+        "O2_cosine_damped": {
+          "val_loss": 0.043946,
+          "mean_pairwise_cosine": 0.6162,
+          "mean_effective_momentum": 0.3454
+        },
+        "O_neg_inverted_control": {
+          "val_loss": 0.048913,
+          "mean_pairwise_cosine": 0.6736,
+          "mean_effective_momentum": 0.6062
+        }
+      },
+      "Non_IID_Dirichlet_0_1": {
+        "O0_fedavg": {
+          "val_loss": 3.069055,
+          "mean_pairwise_cosine": 0.0677,
+          "mean_effective_momentum": 0.0
+        },
+        "O1_fixed_nesterov": {
+          "val_loss": 0.991259,
+          "mean_pairwise_cosine": 0.0663,
+          "mean_effective_momentum": 0.9
+        },
+        "O2_cosine_damped": {
+          "val_loss": 0.67774,
+          "mean_pairwise_cosine": 0.0609,
+          "mean_effective_momentum": 0.8451
+        },
+        "O_neg_inverted_control": {
+          "val_loss": 2.909404,
+          "mean_pairwise_cosine": 0.0687,
+          "mean_effective_momentum": 0.0619
+        }
+      }
+    }
+  },
+  "hypothesis_verdicts": {
+    "P18b_1_iid_overshoot_eliminated": {
+      "o2_cosine_damped_loss": 0.043058,
+      "o1_fixed_nesterov_loss": 0.061332,
+      "passed": true
+    },
+    "P18b_2_non_iid_gain_preserved": {
+      "o2_cosine_damped_loss": 0.676422,
+      "o0_fedavg_loss": 3.136137,
+      "passed": true
+    },
+    "P18b_3_uniform_dominance_over_inverted_control": {
+      "o2_iid_loss": 0.043058,
+      "neg_ctrl_iid_loss": 0.050879,
+      "o2_non_iid_loss": 0.676422,
+      "neg_ctrl_non_iid_loss": 3.005443,
+      "passed": true
+    }
+  },
+  "all_preregistered_hypotheses_passed": true
+}

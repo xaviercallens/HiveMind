@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """SI-12: Decoupled DiLoCo syncer primitives (Google DeepMind, `arXiv:2604.21428`).
 
 Decoupled DiLoCo (Douillard, Rush, Donchev, Charles et al., Google DeepMind / Google
@@ -62,11 +63,22 @@ class LearnerArrival:
     tokens_since_sync: int
 
     def __post_init__(self) -> None:
-        if not self.learner_id:
+        if not isinstance(self.learner_id, str) or not self.learner_id.strip():
             raise ValueError("learner_id must be non-empty")
-        if not math.isfinite(self.arrival_time_s):
+        if (
+            isinstance(self.arrival_time_s, bool)
+            or not isinstance(self.arrival_time_s, (int, float))
+            or not math.isfinite(float(self.arrival_time_s))
+        ):
             raise ValueError("arrival_time_s must be finite")
-        if self.steps_since_sync < 0 or self.tokens_since_sync < 0:
+        if (
+            isinstance(self.steps_since_sync, bool)
+            or not isinstance(self.steps_since_sync, int)
+            or isinstance(self.tokens_since_sync, bool)
+            or not isinstance(self.tokens_since_sync, int)
+            or self.steps_since_sync < 0
+            or self.tokens_since_sync < 0
+        ):
             raise ValueError("steps_since_sync and tokens_since_sync must be >= 0")
 
 
@@ -81,6 +93,33 @@ class QuorumSelection:
     deferred_learner_ids: Tuple[str, ...]
     quorum_reached_at_s: Optional[float]
     window_close_s: Optional[float]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reached, bool):
+            raise TypeError("reached must be a bool")
+        if isinstance(self.min_quorum_k, bool) or not isinstance(self.min_quorum_k, int) or self.min_quorum_k < 1:
+            raise ValueError("min_quorum_k must be an integer >= 1")
+        if (
+            isinstance(self.grace_window_s, bool)
+            or not isinstance(self.grace_window_s, (int, float))
+            or not math.isfinite(float(self.grace_window_s))
+            or float(self.grace_window_s) < 0.0
+        ):
+            raise ValueError("grace_window_s must be a non-negative finite number")
+        if not isinstance(self.admitted_learner_ids, tuple) or any(
+            not isinstance(lid, str) or not lid.strip() for lid in self.admitted_learner_ids
+        ):
+            raise ValueError("admitted_learner_ids must be a tuple of non-empty strings")
+        if not isinstance(self.deferred_learner_ids, tuple) or any(
+            not isinstance(lid, str) or not lid.strip() for lid in self.deferred_learner_ids
+        ):
+            raise ValueError("deferred_learner_ids must be a tuple of non-empty strings")
+        for opt_t_name in ("quorum_reached_at_s", "window_close_s"):
+            tval = getattr(self, opt_t_name)
+            if tval is not None and (
+                isinstance(tval, bool) or not isinstance(tval, (int, float)) or not math.isfinite(float(tval))
+            ):
+                raise ValueError(f"{opt_t_name} must be None or a finite number")
 
 
 @dataclass(frozen=True)
@@ -102,20 +141,69 @@ class SyncerRoundTelemetry:
     direct_average_norm: float
     mean_learner_delta_norm: float
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.fragment_name, str) or not self.fragment_name.strip():
+            raise ValueError("fragment_name must be a non-empty string")
+        if self.merge_mode not in ("rda", "direct"):
+            raise ValueError("merge_mode must be 'rda' or 'direct'")
+        for int_name in ("num_arrivals", "num_admitted", "num_deferred", "admitted_tokens", "deferred_tokens"):
+            ival = getattr(self, int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 0:
+                raise ValueError(f"{int_name} must be a non-negative integer")
+        if isinstance(self.min_quorum_k, bool) or not isinstance(self.min_quorum_k, int) or self.min_quorum_k < 1:
+            raise ValueError("min_quorum_k must be an integer >= 1")
+        for float_name in ("grace_window_s", "merged_delta_norm", "direct_average_norm", "mean_learner_delta_norm"):
+            fval = getattr(self, float_name)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)) or float(fval) < 0.0:
+                raise ValueError(f"{float_name} must be a non-negative finite number")
+        if not isinstance(self.admitted_learner_ids, tuple) or any(
+            not isinstance(lid, str) or not lid.strip() for lid in self.admitted_learner_ids
+        ):
+            raise ValueError("admitted_learner_ids must be a tuple of non-empty strings")
+        if not isinstance(self.learner_weights, dict):
+            raise TypeError("learner_weights must be a dict")
 
-def token_weighted_quality_weight(tokens_since_sync: int, steps_since_sync: int) -> float:
+
+def token_weighted_quality_weight(
+    tokens_since_sync: int,
+    steps_since_sync: int,
+    *,
+    max_total_tokens: float = 65_536.0,
+    max_tokens_per_step: float = 256.0,
+) -> float:
     """Decoupled DiLoCo learner weight `Weight(c_tokens, c_steps) = c_tokens * (c_tokens / c_steps)`.
 
     The paper reads this as `(quantity) x (quality)`: more tokens are worth more, and the
     same tokens are worth more when amortised over fewer inner steps. A learner that took
     no inner step since the last sync has no new information and receives weight `0`.
+    Both quantity and per-step token rate are bounded (IP-113) so an adversary reporting
+    inflated `tokens_since_sync` with `steps_since_sync=1` cannot obtain unbounded quadratic weight.
     """
-    if tokens_since_sync < 0 or steps_since_sync < 0:
+    if (
+        isinstance(tokens_since_sync, bool)
+        or not isinstance(tokens_since_sync, int)
+        or isinstance(steps_since_sync, bool)
+        or not isinstance(steps_since_sync, int)
+        or tokens_since_sync < 0
+        or steps_since_sync < 0
+    ):
         raise ValueError("tokens_since_sync and steps_since_sync must be >= 0")
+    if (
+        isinstance(max_total_tokens, bool)
+        or not isinstance(max_total_tokens, (int, float))
+        or not math.isfinite(float(max_total_tokens))
+        or float(max_total_tokens) <= 0.0
+        or isinstance(max_tokens_per_step, bool)
+        or not isinstance(max_tokens_per_step, (int, float))
+        or not math.isfinite(float(max_tokens_per_step))
+        or float(max_tokens_per_step) <= 0.0
+    ):
+        raise ValueError("max_total_tokens and max_tokens_per_step must be finite and > 0")
     if steps_since_sync == 0:
         return 0.0
-    tokens = float(tokens_since_sync)
-    return tokens * (tokens / float(steps_since_sync))
+    tokens = min(float(tokens_since_sync), float(max_total_tokens))
+    quality = min(tokens / float(steps_since_sync), float(max_tokens_per_step))
+    return tokens * quality
 
 
 def select_quorum(
@@ -128,9 +216,14 @@ def select_quorum(
     Ties on arrival time are broken by `learner_id` so the selection is deterministic.
     If fewer than `K` learners have arrived the quorum is not reached and nothing is admitted.
     """
-    if min_quorum_k < 1:
+    if isinstance(min_quorum_k, bool) or not isinstance(min_quorum_k, int) or min_quorum_k < 1:
         raise ValueError("min_quorum_k must be >= 1")
-    if grace_window_s < 0.0 or not math.isfinite(grace_window_s):
+    if (
+        isinstance(grace_window_s, bool)
+        or not isinstance(grace_window_s, (int, float))
+        or grace_window_s < 0.0
+        or not math.isfinite(float(grace_window_s))
+    ):
         raise ValueError("grace_window_s must be finite and >= 0")
     ids = [a.learner_id for a in arrivals]
     if len(set(ids)) != len(ids):
@@ -186,13 +279,26 @@ class AdaptiveGraceWindowController:
         ema_beta: float = 0.9,
         sync_duration_s: float = 0.0,
     ) -> None:
-        if overlap_steps_tau < 1:
+        if isinstance(overlap_steps_tau, bool) or not isinstance(overlap_steps_tau, int) or overlap_steps_tau < 1:
             raise ValueError("overlap_steps_tau must be >= 1")
-        if not (0.0 <= safety_margin_gamma < 1.0):
+        if (
+            isinstance(safety_margin_gamma, bool)
+            or not isinstance(safety_margin_gamma, (int, float))
+            or not (0.0 <= float(safety_margin_gamma) < 1.0)
+        ):
             raise ValueError("safety_margin_gamma must be in [0, 1)")
-        if not (0.0 <= ema_beta < 1.0):
+        if (
+            isinstance(ema_beta, bool)
+            or not isinstance(ema_beta, (int, float))
+            or not (0.0 <= float(ema_beta) < 1.0)
+        ):
             raise ValueError("ema_beta must be in [0, 1)")
-        if sync_duration_s < 0.0 or not math.isfinite(sync_duration_s):
+        if (
+            isinstance(sync_duration_s, bool)
+            or not isinstance(sync_duration_s, (int, float))
+            or sync_duration_s < 0.0
+            or not math.isfinite(float(sync_duration_s))
+        ):
             raise ValueError("sync_duration_s must be finite and >= 0")
         self.overlap_steps_tau = int(overlap_steps_tau)
         self.safety_margin_gamma = float(safety_margin_gamma)
@@ -203,7 +309,12 @@ class AdaptiveGraceWindowController:
 
     @staticmethod
     def _ema(previous: Optional[float], observation: float, beta: float) -> float:
-        if observation < 0.0 or not math.isfinite(observation):
+        if (
+            isinstance(observation, bool)
+            or not isinstance(observation, (int, float))
+            or observation < 0.0
+            or not math.isfinite(float(observation))
+        ):
             raise ValueError("durations must be finite and >= 0")
         if previous is None:
             return float(observation)
@@ -246,18 +357,24 @@ def _validate_vectors_and_weights(
     vectors: Sequence[torch.Tensor],
     weights: Optional[Sequence[float]],
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    if len(vectors) == 0:
+    if isinstance(vectors, (str, bytes)) or not isinstance(vectors, Sequence) or len(vectors) == 0:
         raise ValueError("at least one vector is required")
+    if any(not isinstance(v, torch.Tensor) for v in vectors):
+        raise ValueError("all vectors must be torch.Tensor instances")
     shape = vectors[0].shape
     for v in vectors:
         if v.shape != shape:
             raise ValueError("all vectors must share the same shape")
     stacked = torch.stack([v.detach().to(torch.float32).reshape(-1) for v in vectors], dim=0)
+    if not bool(torch.isfinite(stacked).all()):
+        raise ValueError("all vectors must contain finite values")
     if weights is None:
         w = torch.ones(stacked.shape[0], dtype=torch.float32)
     else:
-        if len(weights) != stacked.shape[0]:
+        if isinstance(weights, (str, bytes)) or not isinstance(weights, Sequence) or len(weights) != stacked.shape[0]:
             raise ValueError("weights must have one entry per vector")
+        if any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in weights):
+            raise ValueError("weights must be finite numbers, not bool")
         w = torch.tensor([float(x) for x in weights], dtype=torch.float32)
         if bool((w < 0).any()) or not bool(torch.isfinite(w).all()):
             raise ValueError("weights must be finite and >= 0")
@@ -287,6 +404,8 @@ def radial_directional_average(
     learners contributed. If the weighted mean direction vanishes (perfectly cancelling
     directions) the zero vector is returned; the all-zero input also yields zero.
     """
+    if isinstance(eps, bool) or not isinstance(eps, (int, float)) or not math.isfinite(float(eps)) or float(eps) <= 0.0:
+        raise ValueError("eps must be a positive finite number")
     stacked, w = _validate_vectors_and_weights(vectors, weights)
     norms = stacked.norm(dim=1)
     units = stacked / norms.clamp_min(eps).unsqueeze(1)
@@ -311,16 +430,19 @@ class DecoupledDiLoCoQuorumSyncer:
         merge_mode: str = "rda",
         grace_controller: Optional[AdaptiveGraceWindowController] = None,
     ) -> None:
-        if num_learners_m < 1:
+        if isinstance(num_learners_m, bool) or not isinstance(num_learners_m, int) or num_learners_m < 1:
             raise ValueError("num_learners_m must be >= 1")
-        if not (1 <= min_quorum_k <= num_learners_m):
+        if isinstance(min_quorum_k, bool) or not isinstance(min_quorum_k, int) or not (1 <= min_quorum_k <= num_learners_m):
             raise ValueError("min_quorum_k must satisfy 1 <= K <= M")
         if merge_mode not in self.MERGE_MODES:
             raise ValueError(f"merge_mode must be one of {self.MERGE_MODES}")
+        if grace_controller is not None and not isinstance(grace_controller, AdaptiveGraceWindowController):
+            raise TypeError("grace_controller must be an AdaptiveGraceWindowController or None")
         self.num_learners_m = int(num_learners_m)
         self.min_quorum_k = int(min_quorum_k)
         self.merge_mode = merge_mode
         self.grace_controller = grace_controller
+        self.max_tokens_per_step = 256
 
     @torch.no_grad()
     def merge_fragment(
@@ -337,6 +459,12 @@ class DecoupledDiLoCoQuorumSyncer:
         `Delta_p = Merge({theta_m, w_m}, Theta_prev)` aggregates per-learner outer gradients
         `Delta_m = Theta_prev - theta_m` with weights `w_m = Weight(c_tokens, c_steps)`.
         """
+        if not isinstance(fragment_name, str) or not fragment_name.strip():
+            raise ValueError("fragment_name must be a non-empty string")
+        if not isinstance(global_prev, torch.Tensor):
+            raise TypeError("global_prev must be a torch.Tensor")
+        if not isinstance(learner_fragments, dict):
+            raise TypeError("learner_fragments must be a dict")
         if len(arrivals) > self.num_learners_m:
             raise ValueError("more arrivals than learners in the swarm")
         if grace_window_s is None:
@@ -367,9 +495,12 @@ class DecoupledDiLoCoQuorumSyncer:
             return None, selection, telemetry
 
         prev32 = global_prev.detach().to(torch.float32)
+        if not bool(torch.isfinite(prev32).all()):
+            raise ValueError("global_prev must contain finite values")
         deltas: List[torch.Tensor] = []
         weights: List[float] = []
         learner_weights: Dict[str, float] = {}
+        admitted_ids: List[str] = []
         admitted_tokens = 0
         for learner_id in selection.admitted_learner_ids:
             if learner_id not in learner_fragments:
@@ -377,13 +508,18 @@ class DecoupledDiLoCoQuorumSyncer:
             theta_m = learner_fragments[learner_id].detach().to(torch.float32)
             if theta_m.shape != prev32.shape:
                 raise ValueError(f"fragment shape mismatch for learner {learner_id!r}")
+            if not bool(torch.isfinite(theta_m).all()):
+                # Drop poisoned NaN/Inf learner fragments before merging (IP-113)
+                continue
             a = by_id[learner_id]
-            w_m = token_weighted_quality_weight(a.tokens_since_sync, a.steps_since_sync)
+            eff_tokens = min(int(a.tokens_since_sync), int(a.steps_since_sync) * self.max_tokens_per_step)
+            w_m = token_weighted_quality_weight(eff_tokens, a.steps_since_sync)
             deltas.append(prev32 - theta_m)
             weights.append(w_m)
             learner_weights[learner_id] = w_m
+            admitted_ids.append(learner_id)
             admitted_tokens += a.tokens_since_sync
-        if sum(weights) <= 0.0:
+        if len(deltas) < self.min_quorum_k or sum(weights) <= 0.0:
             raise ValueError("no admitted learner performed any inner step since the last sync")
 
         direct = direct_weighted_average(deltas, weights)
@@ -394,11 +530,11 @@ class DecoupledDiLoCoQuorumSyncer:
             fragment_name=fragment_name,
             merge_mode=self.merge_mode,
             num_arrivals=len(arrivals),
-            num_admitted=len(selection.admitted_learner_ids),
+            num_admitted=len(admitted_ids),
             num_deferred=len(selection.deferred_learner_ids),
             min_quorum_k=self.min_quorum_k,
             grace_window_s=float(grace_window_s),
-            admitted_learner_ids=selection.admitted_learner_ids,
+            admitted_learner_ids=tuple(admitted_ids),
             learner_weights=learner_weights,
             admitted_tokens=int(admitted_tokens),
             deferred_tokens=int(deferred_tokens),
@@ -432,15 +568,19 @@ class ContinuousAsyncLearnerCoordinator:
         merge_mode: str = "rda",
         staleness_decay: float = 0.85,
     ) -> None:
-        if num_learners_m < 1:
+        if isinstance(num_learners_m, bool) or not isinstance(num_learners_m, int) or num_learners_m < 1:
             raise ValueError("num_learners_m must be >= 1")
-        if not (1 <= min_quorum_k <= num_learners_m):
+        if isinstance(min_quorum_k, bool) or not isinstance(min_quorum_k, int) or not (1 <= min_quorum_k <= num_learners_m):
             raise ValueError("min_quorum_k must satisfy 1 <= K <= M")
         if straggler_mode not in self.STRAGGLER_MODES:
             raise ValueError(f"straggler_mode must be one of {self.STRAGGLER_MODES}")
         if merge_mode not in DecoupledDiLoCoQuorumSyncer.MERGE_MODES:
             raise ValueError(f"merge_mode must be one of {DecoupledDiLoCoQuorumSyncer.MERGE_MODES}")
-        if not (0.0 < staleness_decay <= 1.0):
+        if (
+            isinstance(staleness_decay, bool)
+            or not isinstance(staleness_decay, (int, float))
+            or not (0.0 < float(staleness_decay) <= 1.0)
+        ):
             raise ValueError("staleness_decay must be in (0, 1]")
 
         self.num_learners_m = int(num_learners_m)
@@ -468,11 +608,36 @@ class ContinuousAsyncLearnerCoordinator:
         steps_since_sync: int,
         arrival_time_s: float = 0.0,
     ) -> Dict[str, object]:
-        """Submit a learner's outer delta `Delta_m = Theta_origin - theta_m`."""
-        if tokens_since_sync < 0 or steps_since_sync < 0:
+        """Submit a learner's outer delta `Delta_m = Theta_origin - theta_m`.
+
+        Future rounds and a second pending fresh update from the same learner
+        are rejected before changing queued work or token accounting.
+        """
+        if not isinstance(learner_id, str) or not learner_id.strip():
+            raise ValueError("learner_id must be a non-empty string")
+        if isinstance(origin_round, bool) or not isinstance(origin_round, int) or origin_round < 0:
+            raise ValueError("origin_round must be a non-negative integer")
+        if not isinstance(delta, torch.Tensor) or delta.numel() == 0:
+            raise ValueError("delta must be a non-empty torch.Tensor")
+        if (
+            isinstance(tokens_since_sync, bool)
+            or not isinstance(tokens_since_sync, int)
+            or isinstance(steps_since_sync, bool)
+            or not isinstance(steps_since_sync, int)
+            or tokens_since_sync < 0
+            or steps_since_sync < 0
+        ):
             raise ValueError("tokens_since_sync and steps_since_sync must be >= 0")
+        if isinstance(arrival_time_s, bool) or not isinstance(arrival_time_s, (int, float)) or not math.isfinite(float(arrival_time_s)):
+            raise ValueError("arrival_time_s must be finite")
         lid = str(learner_id)
+        if int(origin_round) > self.current_round:
+            raise ValueError("origin_round must not be in the future")
+        if int(origin_round) == self.current_round and lid in self._fresh_inbox:
+            raise ValueError("learner already has a pending update for the current round")
         d32 = delta.detach().to(torch.float32).clone()
+        if not bool(torch.isfinite(d32).all()):
+            raise ValueError("delta must contain only finite values")
         self.total_submitted_tokens += int(tokens_since_sync)
 
         if int(origin_round) == self.current_round:
@@ -550,33 +715,65 @@ class ContinuousAsyncLearnerCoordinator:
         Eager stale steps apply independently. While waiting, ``round_closed`` is ``None``
         and ``quorum_reached`` is false; the current quorum round does not advance.
         """
+        if not isinstance(global_param, torch.Tensor) or global_param.numel() == 0:
+            raise ValueError("global_param must be a non-empty torch.Tensor")
+        if isinstance(outer_lr, bool) or not isinstance(outer_lr, (int, float)) or not math.isfinite(float(outer_lr)) or float(outer_lr) <= 0.0:
+            raise ValueError("outer_lr must be finite and > 0")
         p32 = global_param.detach().to(torch.float32).clone()
 
-        # 1. If eager_one_step items are queued, apply them immediately with staleness damping
-        eager_ids: List[str] = []
-        for item in self._eager_queue:
-            lag = int(item["lag_rounds"])  # type: ignore[arg-type]
-            damp = self.staleness_decay ** lag
-            d_vec = item["delta"]  # type: ignore[assignment]
-            p32 = p32 - float(outer_lr) * damp * d_vec  # type: ignore[operator]
-            self.merged_tokens += int(item["tokens"])  # type: ignore[arg-type]
-            self.eager_applied_steps += 1
-            eager_ids.append(str(item["learner_id"]))
-        self._eager_queue.clear()
-
-        # 2. Combine fresh inbox + deferred carry learners for the quorum selection
-        combined: Dict[str, Dict[str, object]] = dict(self._deferred_carry)
+        # 1. Combine fresh inbox + deferred carry learners, dropping zero-step or malformed entries
+        #    before mutating eager updates or merged_tokens so a bad submission cannot wedge the round (IP-132).
+        raw_combined: Dict[str, Dict[str, object]] = dict(self._deferred_carry)
         for lid, entry in self._fresh_inbox.items():
-            if lid in combined:
-                prev = combined[lid]
-                combined[lid] = {
+            if lid in raw_combined:
+                prev = raw_combined[lid]
+                if prev["delta"].shape != entry["delta"].shape:  # type: ignore[union-attr]
+                    self.dropped_tokens += int(entry["tokens"])  # type: ignore[arg-type]
+                    continue
+                raw_combined[lid] = {
                     "delta": prev["delta"] + entry["delta"],  # type: ignore[operator]
                     "tokens": int(prev["tokens"]) + int(entry["tokens"]),  # type: ignore[arg-type]
                     "steps": int(prev["steps"]) + int(entry["steps"]),  # type: ignore[arg-type]
                     "arrival_time_s": float(entry["arrival_time_s"]),  # type: ignore[arg-type]
                 }
             else:
+                raw_combined[lid] = entry
+
+        combined: Dict[str, Dict[str, object]] = {}
+        invalid_learners: List[str] = []
+        for lid, entry in raw_combined.items():
+            d_tensor = entry["delta"]  # type: ignore[assignment]
+            steps = int(entry["steps"])  # type: ignore[arg-type]
+            tokens = int(entry["tokens"])  # type: ignore[arg-type]
+            if (
+                steps <= 0
+                or tokens <= 0
+                or d_tensor.shape != p32.shape
+                or not bool(torch.isfinite(d_tensor).all())
+            ):
+                self.dropped_tokens += max(0, tokens)
+                self._fresh_inbox.pop(lid, None)
+                self._deferred_carry.pop(lid, None)
+                invalid_learners.append(lid)
+            else:
                 combined[lid] = entry
+
+        # 2. If eager_one_step items are queued, apply valid ones with staleness damping
+        eager_ids: List[str] = []
+        for item in self._eager_queue:
+            lag = int(item["lag_rounds"])  # type: ignore[arg-type]
+            damp = self.staleness_decay ** lag
+            d_vec = item["delta"]  # type: ignore[assignment]
+            e_tokens = int(item["tokens"])  # type: ignore[arg-type]
+            e_steps = int(item["steps"])  # type: ignore[arg-type]
+            if e_steps <= 0 or e_tokens <= 0 or d_vec.shape != p32.shape or not bool(torch.isfinite(d_vec).all()):
+                self.dropped_tokens += max(0, e_tokens)
+                continue
+            p32 = p32 - float(outer_lr) * damp * d_vec  # type: ignore[operator]
+            self.merged_tokens += e_tokens
+            self.eager_applied_steps += 1
+            eager_ids.append(str(item["learner_id"]))
+        self._eager_queue.clear()
 
         arrivals = [
             LearnerArrival(
@@ -593,12 +790,13 @@ class ContinuousAsyncLearnerCoordinator:
 
         admitted_deltas: List[torch.Tensor] = []
         admitted_weights: List[float] = []
+        admitted_token_sum = 0
         for lid in selection.admitted_learner_ids:
             v = combined[lid]
             admitted_deltas.append(v["delta"])  # type: ignore[arg-type]
             w_m = token_weighted_quality_weight(int(v["tokens"]), int(v["steps"]))  # type: ignore[arg-type]
             admitted_weights.append(w_m)
-            self.merged_tokens += int(v["tokens"])  # type: ignore[arg-type]
+            admitted_token_sum += int(v["tokens"])  # type: ignore[arg-type]
 
         if admitted_deltas:
             merged_delta = (
@@ -607,6 +805,7 @@ class ContinuousAsyncLearnerCoordinator:
                 else direct_weighted_average(admitted_deltas, admitted_weights)
             )
             p32 = p32 - float(outer_lr) * merged_delta
+            self.merged_tokens += admitted_token_sum
 
         round_closed: Optional[int] = None
         if selection.reached:
@@ -633,6 +832,7 @@ class ContinuousAsyncLearnerCoordinator:
             "straggler_mode": self.straggler_mode,
             "admitted_learners": list(selection.admitted_learner_ids),
             "deferred_learners": list(selection.deferred_learner_ids),
+            "dropped_invalid_learners": invalid_learners,
             "eager_applied_learners": eager_ids,
             "total_submitted_tokens": self.total_submitted_tokens,
             "merged_tokens": self.merged_tokens,
@@ -659,6 +859,10 @@ def analyze_campaign_rda_and_delta_cosine(
          `r_theory(c_bar, M) = 1 / sqrt(1/M + ((M - 1)/M) * c_bar)`.
       5. Whether the campaign sits in the pre-registered P2 low-cosine regime (`mean_cosine <= 0.30`).
     """
+    if not isinstance(base_lora_state, dict) or not base_lora_state:
+        raise ValueError("base_lora_state must be a non-empty dictionary")
+    if isinstance(low_cosine_threshold, bool) or not isinstance(low_cosine_threshold, (int, float)) or not math.isfinite(float(low_cosine_threshold)) or not (-1.0 <= float(low_cosine_threshold) <= 1.0):
+        raise ValueError("low_cosine_threshold must be a finite number in [-1.0, 1.0]")
     domain_names = list(branch_lora_states.keys())
     m = len(domain_names)
     if m < 2:
@@ -710,4 +914,66 @@ def analyze_campaign_rda_and_delta_cosine(
         "theoretical_common_norm_ratio": round(rt_theoretical, 6),
         "low_cosine_threshold": float(low_cosine_threshold),
         "low_cosine_regime_active": bool(mean_cos <= low_cosine_threshold),
+    }
+
+
+@torch.no_grad()
+def compute_cosine_damped_outer_hyperparams(
+    deltas: Sequence[torch.Tensor],
+    base_lr: float = 0.7,
+    base_momentum: float = 0.9,
+    fedavg_target_lr: float = 1.0,
+) -> Dict[str, float | str]:
+    """Compute alignment-adaptive outer optimizer hyperparameters (Issue #308 / E18b).
+
+    Resolves the IID vs non-IID outer-momentum crossover identified in E18 (#308):
+    - When peer deltas are nearly orthogonal (`mean_cosine <= 0`, non-IID specialist branches),
+      retains full Nesterov momentum (`effective_momentum = base_momentum = 0.9`) and `base_lr = 0.7`.
+    - As peer deltas align (`mean_cosine -> 1.0`, IID replicas), damps outer momentum by
+      `(1 - alpha)` where `alpha = clamp(mean_cosine, 0, 1)` and interpolates `effective_lr -> 1.0`,
+      recovering exact FedAvg at `mean_cosine = 1.0` and preventing velocity carryover overshoot.
+    """
+    if len(deltas) < 2:
+        raise ValueError("at least 2 peer deltas are required to compute pairwise cosine alignment")
+    if (
+        isinstance(base_lr, bool)
+        or not isinstance(base_lr, (int, float))
+        or not math.isfinite(float(base_lr))
+        or float(base_lr) <= 0.0
+        or isinstance(fedavg_target_lr, bool)
+        or not isinstance(fedavg_target_lr, (int, float))
+        or not math.isfinite(float(fedavg_target_lr))
+        or float(fedavg_target_lr) <= 0.0
+    ):
+        raise ValueError("learning rates must be positive")
+    if (
+        isinstance(base_momentum, bool)
+        or not isinstance(base_momentum, (int, float))
+        or not (0.0 <= float(base_momentum) < 1.0)
+    ):
+        raise ValueError("base_momentum must be in [0, 1)")
+
+    stacked, _ = _validate_vectors_and_weights(deltas, None)
+    m = stacked.shape[0]
+    norms = stacked.norm(dim=1).clamp_min(1e-12)
+    units = stacked / norms.unsqueeze(1)
+    cos_mat = (units @ units.t()).clamp(-1.0, 1.0)
+
+    pairwise: List[float] = []
+    for i in range(m):
+        for j in range(i + 1, m):
+            pairwise.append(float(cos_mat[i, j].item()))
+
+    mean_cos = sum(pairwise) / len(pairwise)
+    alpha = max(0.0, min(1.0, mean_cos))
+    effective_momentum = base_momentum * (1.0 - alpha)
+    effective_lr = base_lr + (fedavg_target_lr - base_lr) * alpha
+    regime = "iid_fedavg_damped" if alpha >= 0.5 else "non_iid_nesterov"
+
+    return {
+        "mean_pairwise_cosine": round(mean_cos, 6),
+        "alignment_alpha": round(alpha, 6),
+        "effective_momentum": round(effective_momentum, 6),
+        "effective_lr": round(effective_lr, 6),
+        "regime": regime,
     }

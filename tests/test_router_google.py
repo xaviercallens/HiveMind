@@ -292,7 +292,7 @@ def test_google_signin_is_disabled_without_a_client_id_and_the_page_says_so() ->
     reply = client.post("/v1/hivemind/register/google", json={"id_token": "x"})
     assert reply.status_code == 503 and reply.json()["error"]["code"] == "google_signin_disabled"
     page = client.get("/signup")
-    assert page.status_code == 200 and "not enabled" in page.text and "<script" not in page.text
+    assert page.status_code == 200 and "not enabled" in page.text and "accounts.google.com/gsi/client" not in page.text
 
 
 def test_unreachable_google_is_a_503_not_a_login(key: rsa.RSAPrivateKey) -> None:

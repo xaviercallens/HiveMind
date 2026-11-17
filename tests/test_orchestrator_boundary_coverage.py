@@ -59,7 +59,7 @@ def test_quality_audit_handles_corrupt_report_files(tmp_path, monkeypatch):
         path = tmp_path / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("{invalid json", encoding="utf-8")
-    monkeypatch.setattr(orchestrator, "verify_local_git_owner_identity", lambda root: {"owner_identity_verified": False, "allow_local_git_directive_authority": False})
+    monkeypatch.setattr(orchestrator, "verify_local_git_owner_identity", lambda root: {"git_config_email_matches_owner": False, "signature_verified": False, "allow_local_git_directive_authority": False})
     report = orchestrator.run_hourly_quality_and_experiment_audit(tmp_path)
     assert report["hypotheses_passed"] == "0/0"
     assert report["decoupled_diloco_h11_passed"] is False

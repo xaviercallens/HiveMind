@@ -1,0 +1,17 @@
+{
+  "name": "projects/10018415280079892710/screens/8d146bd4419d4e8c800103058db97033",
+  "title": "USS Hivemind - Stage 2: Orbit Bee",
+  "screenshot": {
+    "name": "projects/10018415280079892710/screens/8d146bd4419d4e8c800103058db97033/fileEntries/screenshot",
+    "downloadUrl": "https://stitch.googleapis.com/v1/projects/10018415280079892710/files/screenshot_00065ee22b0c1a6305f11deeda1abc13:download",
+    "mimeType": "image/png"
+  },
+  "htmlCode": {
+    "name": "projects/10018415280079892710/screens/8d146bd4419d4e8c800103058db97033/fileEntries/html",
+    "downloadUrl": "https://stitch.googleapis.com/v1/projects/10018415280079892710/files/8d146bd4419d4e8c800103058db97033:download",
+    "mimeType": "text/html"
+  },
+  "width": "780",
+  "height": "2804",
+  "deviceType": "MOBILE"
+}

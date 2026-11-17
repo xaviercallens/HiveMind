@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Windows Zero-Intrusion Daemon (GetLastInputInfo, Active Game Process & GPU Hardware Safety Monitor).
 
 Monitors OS input hooks (GetLastInputInfo on Windows via ctypes), active process tables,
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.wintypes
+import math
 import sys
 from dataclasses import dataclass
 from enum import Enum
@@ -62,6 +64,28 @@ class DaemonTelemetry:
     seti_agent_state: str = SETIAgentState.STATE_2_IDLE_SETI_MINER.value
     hardware_circuit_breaker_tripped: bool = False
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.should_yield_vram, bool):
+            raise ValueError("should_yield_vram must be a boolean")
+        if isinstance(self.os_idle_seconds, bool) or not isinstance(self.os_idle_seconds, (int, float)):
+            raise ValueError("os_idle_seconds must be a numeric value")
+        if (
+            not math.isfinite(float(self.os_idle_seconds))
+            or float(self.os_idle_seconds) < 0.0
+        ) and not self.should_yield_vram:
+            raise ValueError("os_idle_seconds must be finite and >= 0 when should_yield_vram is False")
+        if (
+            isinstance(self.idle_threshold_seconds, bool)
+            or not isinstance(self.idle_threshold_seconds, (int, float))
+            or not math.isfinite(float(self.idle_threshold_seconds))
+            or float(self.idle_threshold_seconds) <= 0.0
+        ):
+            raise ValueError("idle_threshold_seconds must be finite and > 0")
+        if not isinstance(self.hardware_circuit_breaker_tripped, bool):
+            raise ValueError("hardware_circuit_breaker_tripped must be a boolean")
+        if isinstance(self.reason, bool) or not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+
 
 def get_windows_idle_seconds() -> float:
     """Query Win32 user32.GetLastInputInfo to return seconds since last mouse/keyboard event."""
@@ -81,6 +105,12 @@ def get_windows_idle_seconds() -> float:
 
 def detect_running_game_process(extra_watchlist: set[str] | None = None) -> str | None:
     """Scan process table for active Steam games that require 100% of GPU VRAM."""
+    if extra_watchlist is not None and (
+        isinstance(extra_watchlist, (str, bytes))
+        or not isinstance(extra_watchlist, (set, list, tuple, frozenset))
+        or any(not isinstance(item, str) or not item.strip() for item in extra_watchlist)
+    ):
+        raise ValueError("extra_watchlist must be a collection of non-empty strings or None")
     watchlist = set(KNOWN_GAME_EXECUTABLES)
     if extra_watchlist:
         watchlist.update(n.lower() for n in extra_watchlist)
@@ -107,9 +137,26 @@ class ZeroIntrusionDaemon:
         consumer_query_active: bool = False,
         hardware_circuit_breaker: GPUExecutionCircuitBreaker | None = None,
     ) -> None:
-        self.idle_threshold_seconds = idle_threshold_seconds
+        if isinstance(idle_threshold_seconds, bool) or not isinstance(idle_threshold_seconds, (int, float)) or not math.isfinite(float(idle_threshold_seconds)) or float(idle_threshold_seconds) <= 0.0:
+            raise ValueError("idle_threshold_seconds must be finite and > 0")
+        if not isinstance(enforce_os_idle_hook, bool):
+            raise ValueError("enforce_os_idle_hook must be a boolean")
+        if not isinstance(consumer_query_active, bool):
+            raise ValueError("consumer_query_active must be a boolean")
+        if simulated_idle_seconds is not None and (
+            isinstance(simulated_idle_seconds, bool)
+            or not isinstance(simulated_idle_seconds, (int, float))
+            or not math.isfinite(float(simulated_idle_seconds))
+            or float(simulated_idle_seconds) < 0.0
+        ):
+            raise ValueError("simulated_idle_seconds must be finite and >= 0")
+        if simulated_active_game is not None and (not isinstance(simulated_active_game, str) or not simulated_active_game.strip()):
+            raise ValueError("simulated_active_game must be a non-empty string when provided")
+        self.idle_threshold_seconds = float(idle_threshold_seconds)
         self.enforce_os_idle_hook = enforce_os_idle_hook
-        self.simulated_idle_seconds = simulated_idle_seconds
+        self.simulated_idle_seconds = (
+            float(simulated_idle_seconds) if simulated_idle_seconds is not None else None
+        )
         self.simulated_active_game = simulated_active_game
         self.consumer_query_active = consumer_query_active
         self.hardware_circuit_breaker = hardware_circuit_breaker
@@ -159,14 +206,20 @@ class ZeroIntrusionDaemon:
                 seti_agent_state=SETIAgentState.STATE_3_SWARM_CONSUMER.value,
             )
 
-        if self.enforce_os_idle_hook and idle_sec < self.idle_threshold_seconds:
+        if self.enforce_os_idle_hook and (
+            not math.isfinite(float(idle_sec))
+            or float(idle_sec) < 0.0
+            or float(idle_sec) < self.idle_threshold_seconds
+        ):
             return DaemonTelemetry(
                 os_idle_seconds=idle_sec,
                 idle_threshold_seconds=self.idle_threshold_seconds,
                 active_game_detected=None,
                 should_yield_vram=True,
                 reason=(
-                    f"User input activity detected (idle {idle_sec:.1f}s < {self.idle_threshold_seconds:.1f}s)."
+                    f"User input activity or invalid idle reading detected (idle {idle_sec}s < {self.idle_threshold_seconds:.1f}s)."
+                    if not math.isfinite(float(idle_sec)) or float(idle_sec) < 0.0
+                    else f"User input activity detected (idle {idle_sec:.1f}s < {self.idle_threshold_seconds:.1f}s)."
                 ),
                 seti_agent_state=SETIAgentState.STATE_1_GAMING_SEED_ONLY.value,
             )
@@ -183,6 +236,8 @@ class ZeroIntrusionDaemon:
     def resolve_seti_agent_state(self, consumer_query_active: bool | None = None) -> SETIAgentState:
         """Resolve the current 3-state SETI-Swarm lifecycle state."""
         if consumer_query_active is not None:
+            if not isinstance(consumer_query_active, bool):
+                raise ValueError("consumer_query_active must be a boolean")
             self.consumer_query_active = consumer_query_active
         telemetry = self.poll()
         return SETIAgentState(telemetry.seti_agent_state)

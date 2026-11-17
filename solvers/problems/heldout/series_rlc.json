@@ -1,0 +1,104 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "series_rlc",
+ "description": "Series RLC step response, y=[q, i], L=0.5, R=0.8, C=0.25, V=2 (q'=i, i'=(V-R i-q/C)/L), underdamped; exact.",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "series_rlc",
+  "problem": {
+   "kind": "linear",
+   "A": [
+    [
+     0.0,
+     1.0
+    ],
+    [
+     -8.0,
+     -1.6
+    ]
+   ],
+   "b": [
+    0.0,
+    4.0
+   ]
+  },
+  "y0": [
+   0.0,
+   0.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   0.25,
+   0.5,
+   1.0,
+   2.0,
+   5.0,
+   10.0,
+   20.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   0.25,
+   0.5,
+   1.0,
+   2.0,
+   5.0,
+   10.0,
+   20.0
+  ],
+  "y": [
+   [
+    0.10549537344191993,
+    0.757389379269082
+   ],
+   [
+    0.3321418672059409,
+    0.9657189881785789
+   ],
+   [
+    0.6768005855419487,
+    0.2753698789862337
+   ],
+   [
+    0.4564402484672715,
+    -0.22507365148268382
+   ],
+   [
+    0.49276894623215534,
+    0.02269887729818197
+   ],
+   [
+    0.5000242334804625,
+    0.0004504515966122796
+   ],
+   [
+    0.5000000495521371,
+    -1.2482669621955085e-07
+   ]
+  ],
+  "max_abs_error_bound": 8.88e-16,
+  "method": "exact_expm",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.2.1",
+   "scipy": "1.8.0",
+   "numpy": "1.21.5"
+  },
+  "cross_check": {
+   "method": "scipy.linalg.expm",
+   "max_abs_diff": 8.88e-16,
+   "max_diff_over_spec_tolerance": 1.65e-06,
+   "min_spec_tolerance_over_bound": 113000.0
+  }
+ },
+ "invariants": [],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

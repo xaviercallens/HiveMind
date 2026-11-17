@@ -1,0 +1,15 @@
+{
+  "experiment_id": "S3-science-bee-formulation",
+  "amendment": 1,
+  "registered_utc": "2026-10-27T21:58:00Z",
+  "amends": "artifacts/experiments/S3_formulation_prereg.json",
+  "written_before": "the re-run of the baseline arm with the 10-family solver binary (no model is involved in that arm)",
+  "reason": "The committed baseline arm file (S3_formulation_baseline_baseline_cpu.json) was produced with a solver binary that lists only 6 families (binary sha256 478013c4498c...). The model arm (GPU, qwen2.5-coder:7b-instruct) was produced with the 10-family binary built from the merged families branch (sha256 999de3f11e7c..., same pinned solver rev 4e3e32de9ff1). Questions on the four new families (pendulum, projectile_drag, kepler, logistic) therefore ended UNVERIFIED for the baseline for a reason unrelated to its formulation. The comparison of the two arms was not like for like.",
+  "change": "The baseline arm is re-run, deterministically and with no model, using the same 10-family binary as the model arm. The original baseline file is kept unchanged. Both baseline files are reported; the paired tests use the re-run file. No question, threshold, metric, rule or acceptance criterion changes.",
+  "thresholds_changed": false,
+  "questions_changed": false,
+  "notes": [
+    "The CPU model arm (qwen2.5-coder:1.5b through a private CPU-only server) was attempted and abandoned: every model call hit the 300 s client timeout because the shared machine had no free CPU (load average about 11 on 8 vCPUs). Those records are infrastructure failures, not results, and no CPU arm file is reported. Rule A1 (defined for the CPU arm) is therefore not evaluable.",
+    "The model arm was run once, with temperature 0 as pre-registered, one request at a time, through the live node's Ollama in the owner's night window."
+  ]
+}

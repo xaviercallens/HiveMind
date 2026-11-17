@@ -1,0 +1,41 @@
+{
+  "experiment_id": "MESH-SCALE-1",
+  "registered_utc": "2026-10-27T14:48:44Z",
+  "question": "Does the AMCP+Kafka bee mesh control plane (hosts, inbox shards, heartbeats, reassignment) sustain 1000 simulated bees on one VM?",
+  "design": {
+    "bees": [100, 300, 1000],
+    "bee_jvms": 4,
+    "xmx_per_jvm_mb": 768,
+    "hosts": 2,
+    "host_xmx_mb": 512,
+    "kafka": "single broker 127.0.0.1:9092, heap 512 MB",
+    "sim_latency_ms": 50,
+    "sim_jitter_ms": 10,
+    "max_concurrent_per_bee": 4,
+    "heartbeat_ms": 5000,
+    "attempt_timeout_ms": 10000,
+    "offered_load_tasks_per_s": 200,
+    "load_duration_s": 120,
+    "kill_fraction": 0.10,
+    "kill_at_s": 60,
+    "tier": "coder"
+  },
+  "metrics": [
+    "registration_s: seconds from last bee JVM start until both hosts report N live bees (status --wait-bees N)",
+    "submitted, replied, lost (no reply within 30 s after the end of the load), duplicates (more than one reply for a taskId)",
+    "e2e_ms p50/p95/p99 (replyMs - submitMs) over all tasks",
+    "overhead_ms p50/p95/p99 (e2e_ms - serviceMs) over tasks not affected by the kill (no attempt routed to a killed bee)",
+    "throughput_tps (replied tasks / load duration)",
+    "killed_bees (count of bees stopped by the in-process kill), killed_assigned_tasks (tasks whose first attempt was on a killed bee), killed_assigned_ok (of those, answered ok=true after reassignment)",
+    "peak RSS per process from /proc/<pid>/status VmHWM (2 hosts, 4 bee JVMs, Kafka broker, loadgen)",
+    "OutOfMemoryError count per log file",
+    "live bee count reported by each host at 60 s after the last bee JVM start"
+  ],
+  "acceptance_at_1000": {
+    "A1": "all 1000 bees counted live by both hosts within 60 s of the last bee JVM start",
+    "A2": "at 200 tasks/s for 120 s: 0 lost tasks (every submitted task gets exactly one reply), 0 duplicate replies, p95 control-plane overhead (e2e minus bee service time) <= 250 ms and p99 <= 1000 ms over tasks not affected by the kill",
+    "A3": "after killing 10% of bees at t=60 s: >= 99% of tasks assigned to killed bees are answered OK after reassignment",
+    "A4": "no OOM; every JVM within its -Xmx; Kafka heap 512 MB"
+  },
+  "notes": "Simulated bees on ONE VM: this measures the control plane, not GPUs, WAN or real model latency. Thresholds are fixed now; any harness change after a run goes in an amendment file written before re-running; thresholds never change. This prereg file is never edited after registration. Stage 1 of the pipeline runs smoke (N=40, 30 s) only; N=100, 300 and 1000 are run by the next stage."
+}

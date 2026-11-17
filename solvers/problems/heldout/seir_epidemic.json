@@ -1,0 +1,148 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "seir_epidemic",
+ "description": "SEIR epidemic in fractions (beta=0.9, sigma=0.4, gamma=0.3) as mass action S+I->E+I, E->I, I->R; S+E+I+R=1.",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "seir_epidemic",
+  "problem": {
+   "kind": "mass_action",
+   "species": [
+    "S",
+    "E",
+    "I",
+    "R"
+   ],
+   "reactions": [
+    {
+     "reactants": {
+      "S": 1,
+      "I": 1
+     },
+     "products": {
+      "E": 1,
+      "I": 1
+     },
+     "k": 0.9
+    },
+    {
+     "reactants": {
+      "E": 1
+     },
+     "products": {
+      "I": 1
+     },
+     "k": 0.4
+    },
+    {
+     "reactants": {
+      "I": 1
+     },
+     "products": {
+      "R": 1
+     },
+     "k": 0.3
+    }
+   ]
+  },
+  "y0": [
+   0.98,
+   0.01,
+   0.01,
+   0.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   5.0,
+   10.0,
+   20.0,
+   40.0,
+   80.0,
+   120.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   5.0,
+   10.0,
+   20.0,
+   40.0,
+   80.0,
+   120.0
+  ],
+  "y": [
+   [
+    0.9064869641612399,
+    0.038428968524523266,
+    0.0290920933209347,
+    0.025991973993302116
+   ],
+   [
+    0.717234039034603,
+    0.0970979705258929,
+    0.08161786708872264,
+    0.1040501233507814
+   ],
+   [
+    0.19781293105897907,
+    0.104920579950509,
+    0.1638562289240531,
+    0.5334102600664588
+   ],
+   [
+    0.060426307203025616,
+    0.0023317513051419486,
+    0.008532604215456723,
+    0.9287093372763757
+   ],
+   [
+    0.058078860516587616,
+    8.598959660000776e-07,
+    3.3394056815075903e-06,
+    0.9419169401817649
+   ],
+   [
+    0.058077974804672416,
+    3.2519718923393477e-10,
+    1.2629389256164262e-09,
+    0.9419220236071915
+   ]
+  ],
+  "max_abs_error_bound": 3.69e-14,
+  "method": "taylor (mpmath.odefun)",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.2.1",
+   "scipy": "1.8.0",
+   "numpy": "1.21.5"
+  },
+  "cross_check": {
+   "method": "scipy DOP853 rtol=1e-13",
+   "max_abs_diff": 3.69e-14,
+   "max_diff_over_spec_tolerance": 8.21e-05,
+   "min_spec_tolerance_over_bound": 2710.0
+  }
+ },
+ "invariants": [
+  {
+   "name": "population",
+   "kind": "linear",
+   "weights": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "value": 1.0,
+   "tol": 1e-07
+  }
+ ],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

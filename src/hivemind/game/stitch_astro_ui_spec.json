@@ -1,0 +1,79 @@
+{
+  "stitch_project_id": "hivemind-exoplanet-hunter-3d-v1",
+  "title": "HiveMind: Chasseur d'Exoplanètes // Astro-Bee MoE 3D Observatory (Stitch + Unity Steam Edition)",
+  "design_paradigm": "P4_ATMOSPHERIC_MINIMALISM_AND_HIGH_CRAFT_DARK_UI",
+  "steam_app_id": 3133700,
+  "steam_depot_id": 3133702,
+  "default_language": "fr",
+  "supported_languages": ["fr", "en"],
+  "color_tokens": {
+    "bg_deep_cosmos": "#040711",
+    "bg_observatory_panel": "rgba(11, 17, 34, 0.86)",
+    "surface_glass_card": "rgba(18, 26, 48, 0.78)",
+    "surface_elevated": "#18223f",
+    "border_cyan_glow": "#00f0ff",
+    "border_honey_gold": "#fbbf24",
+    "accent_kepler_cyan": "#38bdf8",
+    "accent_nasa_emerald": "#34d399",
+    "accent_sdss_amber": "#fbbf24",
+    "accent_jwst_violet": "#a78bfa",
+    "accent_habitable_green": "#10b981",
+    "accent_alert_rose": "#fb7185",
+    "text_primary": "#f8fafc",
+    "text_secondary": "#94a3b8",
+    "text_muted": "#64748b"
+  },
+  "typography": {
+    "font_display": "'Space Grotesk', 'Segoe UI', system-ui, sans-serif",
+    "font_sans": "'Inter', 'Space Grotesk', system-ui, sans-serif",
+    "font_mono": "'JetBrains Mono', 'Consolas', monospace",
+    "tabular_nums": true
+  },
+  "layout_architecture": {
+    "canvas_allocation_pct": 80,
+    "hud_overlay_glass_blur_px": 16,
+    "screens": [
+      {
+        "screen_id": "cockpit_3d_observatory",
+        "title_fr": "01 // 🔭 COCKPIT 3D & COURBE DE LUMIÈRE (KEPLER / TESS)",
+        "title_en": "01 // 🔭 3D COCKPIT & TRANSIT LIGHT CURVE (KEPLER / TESS)",
+        "components": [
+          "Unity3D_WebGL_Orbital_Viewport",
+          "Interactive_BLS_Period_Folder",
+          "RealTime_Photometric_LightCurve_Canvas",
+          "Target_Star_Selector_Sidebar"
+        ]
+      },
+      {
+        "screen_id": "bee_moe_neural_router",
+        "title_fr": "02 // 🐝 ESSAIM BEE MOE & INFÉRENCE GPU RTX 2070",
+        "title_en": "02 // 🐝 BEE MOE SWARM & RTX 2070 GPU INFERENCE",
+        "components": [
+          "Honeycomb_4Expert_Router_Visualizer",
+          "Live_CUDA_Telemetry_Bar",
+          "Expert_Verdict_Cards"
+        ]
+      },
+      {
+        "screen_id": "jwst_biosignature_lab",
+        "title_fr": "03 // 🌈 SPECTROSCOPIE JWST & ZONE HABITABLE (ESI)",
+        "title_en": "03 // 🌈 JWST SPECTROSCOPY & HABITABLE ZONE (ESI)",
+        "components": [
+          "NIRSpec_Transmission_Spectrum_Chart",
+          "Molecular_Abundance_Gauges_H2O_CO2_CH4",
+          "Circumstellar_Habitable_Zone_Map"
+        ]
+      },
+      {
+        "screen_id": "galactic_discovery_passport",
+        "title_fr": "04 // 🏆 PASSEPORT GALACTIQUE & SUCCÈS STEAM",
+        "title_en": "04 // 🏆 GALACTIC PASSPORT & STEAM ACHIEVEMENTS",
+        "components": [
+          "Discovered_Exoplanets_Catalog_Table",
+          "Steamworks_Achievements_Grid",
+          "Son_Player_Feedback_Drawer"
+        ]
+      }
+    ]
+  }
+}

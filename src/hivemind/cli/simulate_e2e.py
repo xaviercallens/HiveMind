@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """End-to-End Local RTX 2070 Pipeline Runner for Project HiveMind.
 
 Executes all phases of the Technical Specification on the local GPU:
@@ -24,7 +25,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from hivemind.boinc.coordinator_api import BOINCCoordinatorService
-from hivemind.boinc.workunit import verify_and_load_parquet_shard
+from hivemind.boinc.workunit import BOINCWorkunit, verify_and_load_parquet_shard
 from hivemind.client.daemon import ZeroIntrusionDaemon
 from hivemind.client.steamworks import SteamworksSDKBridge
 from hivemind.client.worker_node import HiveMindWorkerNode
@@ -48,6 +49,35 @@ from hivemind.swarm.inference_ring import RegionalDHTSwarmRing, SwarmPeerNode
 console = Console()
 
 
+def estimate_workunit_tflops(
+    workunit: BOINCWorkunit,
+    total_params: int = 0,
+    micro_batch_size: int = 2,
+) -> float:
+    """Estimate training TFLOPs executed for a BOINC workunit from its step and token counts (IP-178)."""
+    if workunit is None or not hasattr(workunit, "inner_steps_H") or not hasattr(workunit, "seq_len"):
+        raise ValueError("workunit must provide inner_steps_H and seq_len")
+    if (
+        isinstance(workunit.inner_steps_H, bool)
+        or not isinstance(workunit.inner_steps_H, int)
+        or isinstance(workunit.seq_len, bool)
+        or not isinstance(workunit.seq_len, int)
+    ):
+        raise ValueError("workunit inner_steps_H and seq_len must be positive integers")
+    if isinstance(total_params, bool) or not isinstance(total_params, int) or total_params < 0:
+        raise ValueError("total_params must be a non-negative integer")
+    if isinstance(micro_batch_size, bool) or not isinstance(micro_batch_size, int) or micro_batch_size < 1:
+        raise ValueError("micro_batch_size must be a positive integer")
+    steps = int(workunit.inner_steps_H)
+    seq_len = int(workunit.seq_len)
+    if steps < 1 or seq_len < 1:
+        raise ValueError("workunit inner_steps_H and seq_len must be positive integers")
+    batch_tokens = int(micro_batch_size) * seq_len
+    effective_params = max(int(total_params), 100_000_000)
+    flops = 6.0 * float(effective_params) * float(steps) * float(batch_tokens)
+    return round(flops / 1e12, 6)
+
+
 def run_end_to_end_simulation(
     profile_name: str = "rtx2070_moe_e2e",
     use_hf_hub: bool = False,
@@ -55,6 +85,14 @@ def run_end_to_end_simulation(
     spot_check_interval_s: int = 10,
 ) -> dict[str, Any]:
     """Run the complete Project HiveMind pipeline on the local RTX GPU and save telemetry."""
+    if not isinstance(profile_name, str) or not profile_name.strip():
+        raise ValueError("profile_name must be a non-empty string")
+    if not isinstance(use_hf_hub, bool):
+        raise ValueError("use_hf_hub must be a boolean")
+    if isinstance(inner_steps_H, bool) or not isinstance(inner_steps_H, int) or inner_steps_H < 1:
+        raise ValueError("inner_steps_H must be a positive integer")
+    if isinstance(spot_check_interval_s, bool) or not isinstance(spot_check_interval_s, int) or spot_check_interval_s < 1:
+        raise ValueError("spot_check_interval_s must be a positive integer")
     t_pipeline_start = time.perf_counter()
     cfg = HiveMindConfig.from_yaml()
     profile = cfg.profiles.get(profile_name) or next(iter(cfg.profiles.values()))
@@ -172,11 +210,16 @@ def run_end_to_end_simulation(
             weight_decay=0.01,
             micro_batch_size=2,
         )
-        steamworks.record_validated_workunit(
+        tflops_wu = estimate_workunit_tflops(
+            workunit=wu,
+            total_params=bundle.total_params,
+            micro_batch_size=2,
+        )
+        steam_entry = steamworks.record_validated_workunit(
             steam_id64=steam_id,
             persona_name=worker.persona_name,
             wu_id=wu.wu_id,
-            tflops_contributed=2.5,
+            tflops_contributed=tflops_wu,
             credits_minted=10.0,
         )
 
@@ -213,6 +256,7 @@ def run_end_to_end_simulation(
             "multikrum_accepted": outer_res.filter_report.accepted_workers,
             "multikrum_rejected": outer_res.filter_report.rejected_workers,
             "outer_delta_norm": outer_res.aggregated_delta_norm,
+            "verified_tflops": steam_entry.verified_tflops,
         }
 
     # Also test Spot-Check Validator rejecting a tampered worker submission

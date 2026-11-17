@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 r"""Phase S-3: Federated Learning & Byzantine-Resilient DiLoCo Hardening (`hivemind.security.federated_learning_hardening`).
 
 Secures the decentralized DiLoCo Federated Learning pipeline (`diloco_inner.py`, `diloco_outer.py`,

@@ -1,0 +1,17 @@
+{
+  "schema": "hivemind.cla_signatures.v1",
+  "cla_document": "CLA.md",
+  "required_phrase": "I have read the CLA Document and I hereby sign the CLA",
+  "signed_contributors": [
+    {
+      "github_login": "xaviercallens",
+      "role": "owner",
+      "signed_at": "2026-10-27T00:00:00Z",
+      "cla_version": "1.0"
+    }
+  ],
+  "exempt_bots": [
+    "dependabot[bot]",
+    "github-actions[bot]"
+  ]
+}

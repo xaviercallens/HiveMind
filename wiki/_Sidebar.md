@@ -1,6 +1,7 @@
 ### 🧠⚡ HiveMind Wiki
 
 - 🏠 **[Home](Home)**
+- 🏆 **[0. Live Results, Lessons Learned & Roadmap](Live-Results-Lessons-Learned-and-Roadmap)**
 - 🏛️ **[1. Architecture & 5-Layer Stack](Architecture-and-5-Layer-Stack)**
 - 🎮 **[2. Consumer GPU Setup & Steam Tool](Consumer-GPU-Node-Setup-and-Steam-Tool)**
 - 🧬 **[3. 128-MoE 3-Tier, Prefetch & SVD](Sparse-MoE-Upcycling-and-SVD-Rank-Projection)**
@@ -17,6 +18,7 @@
 - 🔌 **[14. Connect your IDE to the OpenRouter](Connect-Your-IDE-to-the-HiveMind-OpenRouter)**
 - 🤝 **[15. Human and Agent Workflow (current rules)](Human-and-Agent-Workflow)**
 - 🧬 **[16. Season 18 — Energy-Bees](Season-18-Energy-Bees)**
+- 🐝 **[17. Community MoE Training & Custom Bees](Community-MoE-Training-and-Custom-Bee-Guide)**
 
 ---
 **Community Discussions & Links**

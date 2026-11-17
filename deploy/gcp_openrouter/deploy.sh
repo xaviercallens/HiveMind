@@ -9,16 +9,16 @@
 #   REGION (default us-central1), SECRET_NAME (default hivemind-router-secret),
 #   SERVICE_ACCOUNT (default hivemind-openrouter@$GCP_PROJECT.iam.gserviceaccount.com),
 #   LEDGER_BUCKET (default hivemind-openrouter-ledger-<project number>)
-#   HIVEMIND_GOOGLE_CLIENT_ID  OAuth web client id that enables "Sign in with Google" at /signup (set it on EVERY deploy:
-#                              --set-env-vars replaces the service's variables). HIVEMIND_OPEN_REGISTRATION=0 closes
+#   HIVEMIND_GOOGLE_CLIENT_ID  OAuth web client id that enables "Sign in with Google" at /signup (passed via
+#                              --update-env-vars so extra variables are preserved). HIVEMIND_OPEN_REGISTRATION=0 closes
 #                              handle-only registration once Google sign-in works.
 #
 # Pre-provisioned (one time): the service account, the Secret Manager secret (accessor role for the account) and the
 # private versioned GCS bucket (objectAdmin for the account).
 #
 # Durability: the SQLite ledger is replicated to gs://$LEDGER_BUCKET/router by Litestream and restored on every cold
-# start. Exactly ONE instance may run (a second would fork the ledger), and CPU stays allocated so replication
-# continues between requests. During a revision rollout two instances can overlap for seconds; do not deploy under load.
+# start. Scale to zero (--min-instances 0) for cost control (owner decision 2026-11-04, AGENTS.md); while an instance lives its CPU stays allocated (--no-cpu-throttling)
+# so Litestream keeps replicating between requests. These flags match the live service.
 set -euo pipefail
 
 : "${GCP_PROJECT:?set GCP_PROJECT to the Google Cloud project id}"
@@ -36,13 +36,26 @@ repo="$(cd "$here/../.." && pwd)"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 cp -r "$repo/src" "$stage/src"
+cp -r "$repo/scripts" "$stage/scripts"
+mkdir -p "$stage/artifacts/mvp" "$stage/artifacts/experiments" "$stage/docs"
+cp -f "$repo/artifacts/mvp/"*.json "$stage/artifacts/mvp/" 2>/dev/null || true
+cp -f "$repo/artifacts/experiments/GRANITE_ADAPTER_"*.json "$stage/artifacts/experiments/" 2>/dev/null || true
+cp -f "$repo/docs/MVP_SCORECARD.md" "$repo/docs/MVP_OWNER_DECISIONS.md" "$stage/docs/" 2>/dev/null || true
 find "$stage/src" -name __pycache__ -type d -prune -exec rm -rf {} +
 cp "$here/Dockerfile" "$here/server.py" "$here/entrypoint.sh" "$here/requirements.txt" "$stage/"
 chmod +x "$stage/entrypoint.sh"
 
-ENV_VARS="HIVEMIND_ROUTER_DB=/data/router.db,HIVEMIND_ROUTER_REPLICA_URL=gcs://${LEDGER_BUCKET}/router,HIVEMIND_ROUTER_ADMIN_KEY_HASH=${HIVEMIND_ROUTER_ADMIN_KEY_HASH}"
+STARTER_GRANT_HMT="${HIVEMIND_STARTER_GRANT_HMT:-0}"
+STARTER_GRANTS_PER_IP_24H="${HIVEMIND_STARTER_GRANTS_PER_IP_24H:-5}"
+REGISTRATION_BONUS_HMT="${HIVEMIND_REGISTRATION_BONUS_HMT:-0}"
+ALLOW_BONUSES="${HIVEMIND_ALLOW_BONUSES:-0}"
+PARTNER_TESTING_GRANTS="${HIVEMIND_PARTNER_TESTING_GRANTS:-0}"
+ENV_VARS="HIVEMIND_ROUTER_DB=/data/router.db,HIVEMIND_ROUTER_REPLICA_URL=gcs://${LEDGER_BUCKET}/router,HIVEMIND_ROUTER_ADMIN_KEY_HASH=${HIVEMIND_ROUTER_ADMIN_KEY_HASH},HIVEMIND_STARTER_GRANT_HMT=${STARTER_GRANT_HMT},HIVEMIND_STARTER_GRANTS_PER_IP_24H=${STARTER_GRANTS_PER_IP_24H},HIVEMIND_REGISTRATION_BONUS_HMT=${REGISTRATION_BONUS_HMT},HIVEMIND_ALLOW_BONUSES=${ALLOW_BONUSES},HIVEMIND_PARTNER_TESTING_GRANTS=${PARTNER_TESTING_GRANTS}"
 [ -n "${HIVEMIND_GOOGLE_CLIENT_ID:-}" ] && ENV_VARS="${ENV_VARS},HIVEMIND_GOOGLE_CLIENT_ID=${HIVEMIND_GOOGLE_CLIENT_ID}"
 [ -n "${HIVEMIND_OPEN_REGISTRATION:-}" ] && ENV_VARS="${ENV_VARS},HIVEMIND_OPEN_REGISTRATION=${HIVEMIND_OPEN_REGISTRATION}"
+
+CPU="${CPU:-1}"
+MEMORY="${MEMORY:-1Gi}"
 
 cd "$stage"
 gcloud run deploy hivemind-openrouter \
@@ -54,8 +67,10 @@ gcloud run deploy hivemind-openrouter \
   --min-instances 0 \
   --max-instances 1 \
   --no-cpu-throttling \
-  --concurrency 40 \
-  --memory 512Mi \
+  --cpu-boost \
+  --cpu "$CPU" \
+  --concurrency 80 \
+  --memory "$MEMORY" \
   --timeout 600 \
-  --set-env-vars "${ENV_VARS}" \
+  --update-env-vars "${ENV_VARS}" \
   --set-secrets "HIVEMIND_ROUTER_SECRET=${SECRET_NAME}:latest"

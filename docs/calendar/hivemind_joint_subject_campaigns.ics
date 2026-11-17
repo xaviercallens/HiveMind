@@ -1,0 +1,68 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Project HiveMind//Subject-by-Subject Joint Campaigns S19-S20//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:HiveMind Joint Subject-by-Subject Improvement Campaigns
+X-WR-TIMEZONE:UTC
+BEGIN:VEVENT
+UID:subj-01-python-rust-coder@hivemind.openrouter
+DTSTAMP:20261027T160000Z
+DTSTART:20261028T180000Z
+DTEND:20261030T220000Z
+SUMMARY:[HiveMind SUBJ-01-PYTHON-RUST-CODER] Subject 1: Python & Rust Systems Coding Mastery
+DESCRIPTION:Lead Bee: hivemind/coder | Co-Bees: hivemind/moe-coder, hivemind/coder-plus\nObjective: Co-train and benchmark Qwen 3.5 coding adapters across Python FastAPI/PyTorch and Rust Cargo/SIMD workflows with zero-stub AST verification.\nGate: Pass >= 95% unit-test synthesis on held-out Python/Rust tasks with p95 latency < 650 ms.\nCommunity Poll: 0 registered participants (0.0 GB VRAM pledged) | Nocturnal BOINC/QLoRA Weight: 28.0%\nAMCP/Kafka Topic: hivemind.amcp.campaigns.v1
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app/playground#campaigns
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:subj-02-rusty-sundials-fluid-ode@hivemind.openrouter
+DTSTAMP:20261027T160000Z
+DTSTART:20261031T160000Z
+DTEND:20261102T220000Z
+SUMMARY:[HiveMind SUBJ-02-RUSTY-SUNDIALS-FLUID-ODE] Subject 2: Stiff ODE/PDE & Navier-Stokes Fluid Rescue (Sunday Launch Anchor)
+DESCRIPTION:Lead Bee: hivemind/bee-rusty-sundials | Co-Bees: hivemind/coder, hivemind/moe-general\nObjective: Rescue unstable explicit Euler/RK4 fluid & chemical kinetics codes using Rusty-SUNDIALS CVODE BDF and certified Wave-1 numeric residual verification.\nGate: 100% certified residual pass (r_inf <= 1e-6) and CFL/divergence stability on Robertson & Burgers.\nCommunity Poll: 0 registered participants (0.0 GB VRAM pledged) | Nocturnal BOINC/QLoRA Weight: 24.0%\nAMCP/Kafka Topic: hivemind.amcp.campaigns.v1
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app/playground#campaigns
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:subj-03-astro-symplectic-stars@hivemind.openrouter
+DTSTAMP:20261027T160000Z
+DTSTART:20261103T180000Z
+DTEND:20261105T220000Z
+SUMMARY:[HiveMind SUBJ-03-ASTRO-SYMPLECTIC-STARS] Subject 3: Exoplanet Transit Timing (TTV) & Symplectic N-Body Astrophysics
+DESCRIPTION:Lead Bee: hivemind/bee-stars | Co-Bees: hivemind/bee-rusty-sundials, hivemind/coder\nObjective: Improve orbital resonance TTV inversion and Yoshida 4th-order / Velocity-Verlet symplectic integrators with strict Hamiltonian conservation.\nGate: Relative Hamiltonian energy drift |dH/H0| < 1e-6 across 10,000 orbital steps.\nCommunity Poll: 0 registered participants (0.0 GB VRAM pledged) | Nocturnal BOINC/QLoRA Weight: 18.0%\nAMCP/Kafka Topic: hivemind.amcp.campaigns.v1
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app/playground#campaigns
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:subj-04-quantum-bec-gross-pitaevskii@hivemind.openrouter
+DTSTAMP:20261027T160000Z
+DTSTART:20261106T180000Z
+DTEND:20261108T220000Z
+SUMMARY:[HiveMind SUBJ-04-QUANTUM-BEC-GROSS-PITAEVSKII] Subject 4: Quantum Fluids & Bose-Einstein Condensate Solitons
+DESCRIPTION:Lead Bee: hivemind/bee-rusty-sundials | Co-Bees: hivemind/bee-stars, hivemind/coder\nObjective: Co-solve 1D/2D Gross-Pitaevskii superfluid vortex and dark-soliton dynamics using unitary Crank-Nicolson and Split-Step Fourier integrators.\nGate: Wavefunction L2 norm conservation |dN/N0| < 1e-8 and chemical potential convergence.\nCommunity Poll: 0 registered participants (0.0 GB VRAM pledged) | Nocturnal BOINC/QLoRA Weight: 12.0%\nAMCP/Kafka Topic: hivemind.amcp.campaigns.v1
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app/playground#campaigns
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:subj-05-genetics-wright-fisher@hivemind.openrouter
+DTSTAMP:20261027T160000Z
+DTSTART:20261109T180000Z
+DTEND:20261111T220000Z
+SUMMARY:[HiveMind SUBJ-05-GENETICS-WRIGHT-FISHER] Subject 5: Population Genetics & Fisher-KPP Reaction-Diffusion
+DESCRIPTION:Lead Bee: hivemind/bee-rusty-sundials | Co-Bees: hivemind/moe-general, hivemind/coder\nObjective: Model multi-allele Wright-Fisher selection-mutation-drift and spatial Fisher-KPP wave propagation while preserving probability simplex invariants.\nGate: Exact simplex conservation |sum(p_i) - 1| < 1e-12 and non-negativity p_i >= 0.\nCommunity Poll: 0 registered participants (0.0 GB VRAM pledged) | Nocturnal BOINC/QLoRA Weight: 10.0%\nAMCP/Kafka Topic: hivemind.amcp.campaigns.v1
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app/playground#campaigns
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:subj-06-lean4-formal-proofs@hivemind.openrouter
+DTSTAMP:20261027T160000Z
+DTSTART:20261112T180000Z
+DTEND:20261115T220000Z
+SUMMARY:[HiveMind SUBJ-06-LEAN4-FORMAL-PROOFS] Subject 6: Formal Lean 4 Proofs & Certified Numeric Invariants
+DESCRIPTION:Lead Bee: hivemind/moe-coder | Co-Bees: hivemind/coder, hivemind/bee-rusty-sundials\nObjective: Eliminate sorry obligations and synthesize machine-checked Lean 4 theorems for physical conservation laws and decentralized market-clearing bounds.\nGate: 100% lake build pass with zero sorry tokens on target theorem batch.\nCommunity Poll: 0 registered participants (0.0 GB VRAM pledged) | Nocturnal BOINC/QLoRA Weight: 8.0%\nAMCP/Kafka Topic: hivemind.amcp.campaigns.v1
+LOCATION:https://hivemind-openrouter-1003063861791.us-central1.run.app/playground#campaigns
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

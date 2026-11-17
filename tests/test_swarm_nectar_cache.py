@@ -1,0 +1,203 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
+"""Unit Tests for Swarm Nectar Cache (P2P Knowledge & Food Source Sharing over Kafka)."""
+
+import time
+import pytest
+
+from hivemind.swarm.swarm_nectar_cache import (
+    MICRO_ROYALTY_HMT,
+    TOPIC_FOOD_SOURCES,
+    InMemoryClusterNectarHub,
+    MultiNodeNectarSyncBackend,
+    SwarmNectarCache,
+    canonical_query_hash,
+)
+
+
+def test_canonical_query_hashing_consistency():
+    """Verify hash determinism across whitespace and case variations."""
+    h1 = canonical_query_hash("web_search", "Lithium Battery Solid-State")
+    h2 = canonical_query_hash("WEB_SEARCH", "lithium battery solid-state")
+    assert h1 == h2
+
+    # Different query yields different hash
+    h3 = canonical_query_hash("web_search", "Sodium Ion Battery")
+    assert h1 != h3
+
+
+def test_nectar_cache_put_get_hit_and_royalties():
+    """Verify storing, retrieving, hit counting, and micro-royalty attribution in HMT."""
+    cache = SwarmNectarCache(default_ttl_s=3600.0)
+
+    entry = cache.put(
+        tool_name="web_search",
+        query="solid-state battery cathode stability",
+        content={"snippets": ["Li6PS5Cl electrolyte shows 450 Wh/kg"]},
+        discovered_by_bee="hivemind/qwen35-4b",
+        nectar_richness=0.95,
+    )
+
+    assert entry.nectar_id.startswith("nectar-")
+    assert entry.discovered_by_bee == "hivemind/qwen35-4b"
+    assert entry.access_count == 0
+    assert entry.hmt_royalties_earned == 0.0
+
+    # Peer bee 1 accesses the nectar
+    hit1 = cache.get("web_search", "solid-state battery cathode stability", requesting_bee="hivemind/phi4-mini")
+    assert hit1 is not None
+    assert hit1.access_count == 1
+    assert hit1.hmt_royalties_earned == MICRO_ROYALTY_HMT
+
+    # Peer bee 2 accesses the nectar
+    hit2 = cache.get("web_search", "solid-state battery cathode stability", requesting_bee="hivemind/gemma4-e4b")
+    assert hit2 is not None
+    assert hit2.access_count == 2
+    assert hit2.hmt_royalties_earned == round(2 * MICRO_ROYALTY_HMT, 6)
+
+    # Cache miss
+    miss = cache.get("web_search", "unseen query", requesting_bee="hivemind/qwen35-4b")
+    assert miss is None
+
+    stats = cache.stats()
+    assert stats["active_entries"] == 1
+    assert stats["total_queries"] == 3
+    assert stats["cache_hits"] == 2
+    assert stats["hit_rate_pct"] == 66.67
+    assert stats["tokens_saved_estimate"] == 900
+    assert stats["total_hmt_royalties_distributed"] == round(2 * MICRO_ROYALTY_HMT, 4)
+
+
+def test_nectar_cache_ttl_expiration():
+    """Verify expired nectar entries are cleaned up and return None."""
+    cache = SwarmNectarCache(default_ttl_s=0.05)  # 50ms TTL
+
+    cache.put(
+        tool_name="scipy_solver",
+        query="stiff_ode_convergence",
+        content={"drift": 1e-6},
+        discovered_by_bee="hivemind/bee-rusty-sundials",
+        ttl_s=0.05,
+    )
+
+    # Immediate access works
+    assert cache.get("scipy_solver", "stiff_ode_convergence") is not None
+
+    # Wait for expiration
+    time.sleep(0.08)
+    assert cache.get("scipy_solver", "stiff_ode_convergence") is None
+    assert cache.stats()["active_entries"] == 0
+
+
+def test_kafka_food_source_event_builder():
+    """Verify CloudEvent structure matches AMCP v1.5 requirements."""
+    cache = SwarmNectarCache()
+    entry = cache.put(
+        tool_name="json_extractor",
+        query="battery_spec_v1",
+        content={"capacity": "450Wh/kg"},
+        discovered_by_bee="hivemind/qwen35-4b",
+    )
+
+    ev = cache.build_kafka_food_source_event(entry)
+    assert ev["topic"] == TOPIC_FOOD_SOURCES
+    assert ev["event_type"] == "io.hivemind.mesh.food_source_updated"
+    assert ev["nectar_id"] == entry.nectar_id
+    assert ev["discovered_by_bee"] == "hivemind/qwen35-4b"
+
+
+def test_nectar_cache_cross_process_file_persistence_and_sla(tmp_path):
+    """Verify HM-S23 FileNectarPersistence across two SwarmNectarCache instances in < 50 ms."""
+    store_file = tmp_path / "nectar_shared.json"
+    cache_writer = SwarmNectarCache(persistence_path=store_file)
+    cache_writer.put(
+        tool_name="web_search",
+        query={"domain": "chembl", "target": "CHEMBL5291840"},
+        content={"smiles": "CC1=C...", "pChEMBL": 8.74},
+        discovered_by_bee="hivemind/bee-chem-01",
+        nectar_richness=0.96,
+    )
+
+    cache_reader = SwarmNectarCache(persistence_path=store_file)
+    t0 = time.perf_counter()
+    hit = cache_reader.get(
+        "web_search",
+        {"domain": "chembl", "target": "CHEMBL5291840"},
+        requesting_bee="hivemind/bee-chem-02",
+    )
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    assert hit is not None
+    assert elapsed_ms < 50.0
+    assert hit.content["pChEMBL"] == 8.74
+    assert hit.access_count == 1
+    assert hit.hmt_royalties_earned == MICRO_ROYALTY_HMT
+    assert cache_reader.reload_from_disk() == 1
+
+
+def test_multi_node_nectar_sync_backend_under_50ms_and_royalties():
+    """Verify #319 Task 2 MultiNodeNectarSyncBackend shares nectar across independent nodes in < 50 ms."""
+    shared_hub = InMemoryClusterNectarHub()
+    node_a_cache = SwarmNectarCache(sync_backend=MultiNodeNectarSyncBackend(shared_hub))
+    node_b_cache = SwarmNectarCache(sync_backend=MultiNodeNectarSyncBackend(shared_hub))
+
+    node_a_cache.put(
+        tool_name="web_search",
+        query="arXiv:2604.21428 LayerStoRm Two-Zone PCIe",
+        content={"arxiv_id": "2604.21428", "vram_ceiling_gb": 8.0},
+        discovered_by_bee="hivemind/bee-scout-eu-01",
+        nectar_richness=0.95,
+    )
+
+    hit_b = node_b_cache.get(
+        "web_search",
+        "arxiv:2604.21428 layerstorm two-zone pcie",
+        requesting_bee="hivemind/bee-employed-us-02",
+    )
+    assert hit_b is not None
+    assert hit_b.content["arxiv_id"] == "2604.21428"
+    assert hit_b.access_count == 1
+    assert hit_b.hmt_royalties_earned == MICRO_ROYALTY_HMT
+    stats_b = node_b_cache.stats()
+    assert stats_b["sync_backend_enabled"] is True
+    assert stats_b["last_lookup_latency_ms"] < 50.0
+    assert stats_b["tokens_saved_basis"] == "modeled_450_tokens_per_hit"
+
+
+def test_ip234_nectar_cache_rejects_nan_richness_and_blocks_self_hit_royalties():
+    """IP-234: NaN/inf nectar_richness raises ValueError; discoverer self-hits accrue zero royalties."""
+    cache = SwarmNectarCache(default_ttl_s=3600.0)
+    with pytest.raises(ValueError, match="nectar_richness"):
+        cache.put(
+            tool_name="web_search",
+            query="nan richness probe",
+            content={"ok": True},
+            discovered_by_bee="hivemind/bee-alpha",
+            nectar_richness=float("nan"),
+        )
+    with pytest.raises(ValueError, match="nectar_richness"):
+        cache.put(
+            tool_name="web_search",
+            query="inf richness probe",
+            content={"ok": True},
+            discovered_by_bee="hivemind/bee-alpha",
+            nectar_richness=float("inf"),
+        )
+
+    entry = cache.put(
+        tool_name="web_search",
+        query="self hit royalty probe",
+        content={"result": "cached"},
+        discovered_by_bee="hivemind/bee-alpha",
+        nectar_richness=0.85,
+    )
+    # Self-hit increments access_count but does not credit royalties
+    self_hit = cache.get("web_search", "self hit royalty probe", requesting_bee="hivemind/bee-alpha")
+    assert self_hit is not None
+    assert self_hit.access_count == 1
+    assert self_hit.hmt_royalties_earned == 0.0
+
+    # Peer hit credits royalty
+    peer_hit = cache.get("web_search", "self hit royalty probe", requesting_bee="hivemind/bee-beta")
+    assert peer_hit is not None
+    assert peer_hit.access_count == 2
+    assert peer_hit.hmt_royalties_earned == MICRO_ROYALTY_HMT
+    assert cache.stats()["tokens_saved_basis"] == "modeled_450_tokens_per_hit"

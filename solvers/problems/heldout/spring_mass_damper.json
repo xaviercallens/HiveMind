@@ -1,0 +1,98 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "spring_mass_damper",
+ "description": "Spring-mass-damper with constant force, y=[x, v], m=2, c=0.6, k=8, F=1 (x''=(F-c x'-k x)/m); exact.",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "spring_mass_damper",
+  "problem": {
+   "kind": "linear",
+   "A": [
+    [
+     0.0,
+     1.0
+    ],
+    [
+     -4.0,
+     -0.3
+    ]
+   ],
+   "b": [
+    0.0,
+    0.5
+   ]
+  },
+  "y0": [
+   0.5,
+   0.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   1.0,
+   2.0,
+   5.0,
+   10.0,
+   20.0,
+   40.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   1.0,
+   2.0,
+   5.0,
+   10.0,
+   20.0,
+   40.0
+  ],
+  "y": [
+   [
+    0.014467955235159227,
+    -0.5901456727606104
+   ],
+   [
+    -0.07460172226565756,
+    0.4175477585854966
+   ],
+   [
+    -0.033216043896914675,
+    0.1848059178153533
+   ],
+   [
+    0.16898402595065773,
+    -0.14911208097733056
+   ],
+   [
+    0.11533597697461503,
+    -0.030532048870727257
+   ],
+   [
+    0.12462757823726414,
+    0.0017601074592429608
+   ]
+  ],
+  "max_abs_error_bound": 4.44e-16,
+  "method": "exact_expm",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.2.1",
+   "scipy": "1.8.0",
+   "numpy": "1.21.5"
+  },
+  "cross_check": {
+   "method": "scipy.linalg.expm",
+   "max_abs_diff": 4.44e-16,
+   "max_diff_over_spec_tolerance": 3.68e-07,
+   "min_spec_tolerance_over_bound": 265000.0
+  }
+ },
+ "invariants": [],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

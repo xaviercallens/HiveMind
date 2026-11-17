@@ -1,0 +1,111 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "projectile_drag",
+ "description": "Projectile with quadratic drag k=0.02 (k|v| about 1.2 initially, strongly damped), launched at (50, 30); no ground-hit event.",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "projectile_drag",
+  "problem": {
+   "kind": "named",
+   "family": "projectile_drag",
+   "params": {
+    "g": 9.81,
+    "k": 0.02
+   }
+  },
+  "y0": [
+   0.0,
+   0.0,
+   50.0,
+   30.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   0.5,
+   1.0,
+   2.0,
+   4.0,
+   6.0,
+   8.0,
+   12.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   0.5,
+   1.0,
+   2.0,
+   4.0,
+   6.0,
+   8.0,
+   12.0
+  ],
+  "y": [
+   [
+    19.753168130729453,
+    10.789535511033204,
+    31.87081202846582,
+    15.098915730739657
+   ],
+   [
+    33.43819668810998,
+    16.15814266453551,
+    23.745264588571775,
+    6.963377886759424
+   ],
+   [
+    52.81045882899008,
+    17.51232025609727,
+    16.036170069733988,
+    -3.521058019417166
+   ],
+   [
+    76.48858908715509,
+    -3.662842137220832,
+    8.312622272941287,
+    -16.094172457851187
+   ],
+   [
+    88.08148780797752,
+    -41.41913868920336,
+    3.762459195559939,
+    -20.704507855355512
+   ],
+   [
+    93.13669199043856,
+    -84.24510223387036,
+    1.5875669885787305,
+    -21.844717679257933
+   ],
+   [
+    96.12198708452297,
+    -172.47319594687042,
+    0.27154639730861296,
+    -22.13548076764764
+   ]
+  ],
+  "max_abs_error_bound": 1.99e-12,
+  "method": "taylor (mpmath.odefun)",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.2.1",
+   "scipy": "1.8.0",
+   "numpy": "1.21.5"
+  },
+  "cross_check": {
+   "method": "scipy DOP853 rtol=1e-13",
+   "max_abs_diff": 1.99e-12,
+   "max_diff_over_spec_tolerance": 1.15e-05,
+   "min_spec_tolerance_over_bound": 1420.0
+  }
+ },
+ "invariants": [],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

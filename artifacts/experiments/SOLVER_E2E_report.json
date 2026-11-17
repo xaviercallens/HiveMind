@@ -1,0 +1,1205 @@
+{
+ "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+ "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+ "machine": {
+  "cpu_model": "Intel(R) Xeon(R) CPU @ 2.20GHz",
+  "loadavg_after": [
+   7.33203125,
+   7.77734375,
+   9.7392578125
+  ],
+  "loadavg_before": [
+   7.1865234375,
+   7.75634765625,
+   9.74365234375
+  ],
+  "logical_cpus": 8
+ },
+ "receipt_sha256": "32e17669bdb4299f4bcfea0352855be2099c8513dde8f97bde8827154e5cfdf0",
+ "rows": [
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 4 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.285524651492537
+     },
+     {
+      "bound": null,
+      "detail": "no invariants defined",
+      "name": "invariants",
+      "status": "skip",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.27655086974306975
+     }
+    ],
+    "id": "brusselator",
+    "input_sha256": "65b1d3d6a8db9318fc804a43a9f1300d82a38c00e4c0f2ec0e5fa3312336ccc2",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "852960c9e348391d05e4c7ca7021da9c039a7cf19ad36181924d10bf8ae18b9e",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": null,
+    "status": "skip",
+    "worst_ratio": null
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "brusselator",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.285524651492537
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.27655086974306975
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 177
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 4 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.010358084361068314
+     },
+     {
+      "bound": null,
+      "detail": "no invariants defined",
+      "name": "invariants",
+      "status": "skip",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.010200545749481857
+     }
+    ],
+    "id": "brusselator_adams",
+    "input_sha256": "d29ae30ad882cc7bcd7ae4f6611bdd75baaebe301a45883fab446f1150de8f9d",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "7c462558b1da54da47da7af7021c6fc016e5c8d3643f396be3738f4b595c0651",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": null,
+    "status": "skip",
+    "worst_ratio": null
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "brusselator_adams",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.010358084361068314
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.010200545749481857
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 178
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 6 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.06320322651425507
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst drift/tol over 1 invariant(s) (worst: mass_sum)",
+      "name": "invariants",
+      "status": "pass",
+      "value": 2.546851618490109e-06
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.06161413399687732
+     }
+    ],
+    "id": "decay_chain",
+    "input_sha256": "ffd22456b9493abe9fc41e3799754a600fd44ea1f08cb17918c6108ca617ff72",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "ee31e569ce3284ebd618da68760cf26c31bfc1002dfb5a5da672588ad4d84907",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 2.546851618490109e-06
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "decay_chain",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.06320322651425507
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.06161413399687732
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 257
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 5 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.03153977962078264
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst drift/tol over 1 invariant(s) (worst: A_plus_2D)",
+      "name": "invariants",
+      "status": "pass",
+      "value": 1.554312234475219e-08
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.03068753454460452
+     }
+    ],
+    "id": "dimerisation",
+    "input_sha256": "4c5b81909dcb4133db6a1011de415a6dc08f8684759b32c04a80804572f2f464",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "93b1226c301fa96d1e4ef884e6d21625773c4dd989192a757f37aceb5e57021b",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 1.554312234475219e-08
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "dimerisation",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.03153977962078264
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.03068753454460452
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 168
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 5 reference times, factor 100.0 exceeds 1",
+      "name": "reference",
+      "status": "fail",
+      "value": 1.322553180809844
+     },
+     {
+      "bound": null,
+      "detail": "no invariants defined",
+      "name": "invariants",
+      "status": "skip",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100 exceeds 1",
+      "name": "tightening",
+      "status": "fail",
+      "value": 1.286753369078362
+     }
+    ],
+    "id": "harmonic_damped",
+    "input_sha256": "cdc93f4532b1630a86692f295c4182c5b2a85f54a89695e0389bd8d072e7d5a5",
+    "reasons": [
+     "reference: worst error/(factor*(rtol*|y_ref|+atol)) over 5 reference times, factor 100.0 exceeds 1",
+     "tightening: worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100 exceeds 1"
+    ],
+    "result_sha256": "1b34928ab493127f699bf1b20fc55b99e7f02abcec64f6916c3169b74f258a51",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "FAILED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": null,
+    "status": "skip",
+    "worst_ratio": null
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "harmonic_damped",
+   "reasons": [
+    "reference: worst error/(factor*(rtol*|y_ref|+atol)) over 5 reference times, factor 100.0 exceeds 1",
+    "tightening: worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100 exceeds 1"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "fail",
+    "worst_ratio": 1.322553180809844
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "fail",
+    "worst_ratio": 1.286753369078362
+   },
+   "verdict": "FAILED",
+   "wall_ms": 169
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 5 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.802887952770375
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst drift/tol over 1 invariant(s) (worst: energy)",
+      "name": "invariants",
+      "status": "pass",
+      "value": 0.1433809119955707
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.7831617570346242
+     }
+    ],
+    "id": "harmonic_undamped",
+    "input_sha256": "35870c8c65de127fcdcd7a897b4952ba5c570c38ef7663aecea682d3eb027bf4",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "c81659746c036b9ea00f6678af158db897191db3f692b264601379bb71e8cef8",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.1433809119955707
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "harmonic_undamped",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.802887952770375
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.7831617570346242
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 174
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 5 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.7258803738474392
+     },
+     {
+      "bound": null,
+      "detail": "no invariants defined",
+      "name": "invariants",
+      "status": "skip",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.7076618776463385
+     }
+    ],
+    "id": "linear_2x2",
+    "input_sha256": "a22a541aa1d07fc8c1da6c5a4067505824ae1f1c2962c4efd9dce1f72e65733a",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "33176683721e20286803b38b82addcf1d724bb31f72ea9b9035f7efe4af0c632",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": null,
+    "status": "skip",
+    "worst_ratio": null
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "linear_2x2",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.7258803738474392
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.7076618776463385
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 166
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 5 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.1622474340661809
+     },
+     {
+      "bound": null,
+      "detail": "no invariants defined",
+      "name": "invariants",
+      "status": "skip",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.15870344402801717
+     }
+    ],
+    "id": "linear_5x5",
+    "input_sha256": "c2b4341e80c447a6f99f58a245969d5523102dbc597b66f9fe2b915be9611c6e",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "4cb4acf20bf2a81bb378d3c2fccabc5954631b42acf70a8b300d877fbec0f8ff",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": null,
+    "status": "skip",
+    "worst_ratio": null
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "linear_5x5",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.1622474340661809
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.15870344402801717
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 169
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 4 reference times, factor 100.0 exceeds 1",
+      "name": "reference",
+      "status": "fail",
+      "value": 1.646131616213961
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst drift/tol over 1 invariant(s) (worst: first_integral)",
+      "name": "invariants",
+      "status": "pass",
+      "value": 0.060231809551058994
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100 exceeds 1",
+      "name": "tightening",
+      "status": "fail",
+      "value": 1.6037275215107996
+     }
+    ],
+    "id": "lotka_volterra",
+    "input_sha256": "6591637ef19c14739a7b3776fe262510918497a878402e542a47e7b60c01d603",
+    "reasons": [
+     "reference: worst error/(factor*(rtol*|y_ref|+atol)) over 4 reference times, factor 100.0 exceeds 1",
+     "tightening: worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100 exceeds 1"
+    ],
+    "result_sha256": "204b96110ff4ed1c99d6f0296869e31dace2c370fa4e406ffd120f51c5d3ae1d",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "FAILED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.060231809551058994
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "lotka_volterra",
+   "reasons": [
+    "reference: worst error/(factor*(rtol*|y_ref|+atol)) over 4 reference times, factor 100.0 exceeds 1",
+    "tightening: worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100 exceeds 1"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "fail",
+    "worst_ratio": 1.646131616213961
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "fail",
+    "worst_ratio": 1.6037275215107996
+   },
+   "verdict": "FAILED",
+   "wall_ms": 199
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 5 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.07564927259468181
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst drift/tol over 2 invariant(s) (worst: substrate_total)",
+      "name": "invariants",
+      "status": "pass",
+      "value": 1.7763568394002505e-08
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.07379007247797427
+     }
+    ],
+    "id": "michaelis_menten",
+    "input_sha256": "dab66d35b05fa9f5870b67b949f9348356c3217c056c4f7fdb664a82865633de",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "f3cadb7d0336089b4dbc65c53040ece427f28c25942a7c6ac2f866e423b46a5c",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 1.7763568394002505e-08
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "michaelis_menten",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.07564927259468181
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.07379007247797427
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 186
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 6 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.03262560821749978
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst drift/tol over 1 invariant(s) (worst: mass_sum)",
+      "name": "invariants",
+      "status": "pass",
+      "value": 4.773959005888173e-08
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.03184577518083587
+     }
+    ],
+    "id": "reversible_network",
+    "input_sha256": "02dda0ae814702f2b9759d95368a8a3d62d09fbd39cf947f6980d0e379fa940e",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "9f54d7367f237891a9d524312f7e59a023cfd29ab34077eb1cbd7fee83ec6fab",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 4.773959005888173e-08
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "reversible_network",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.03262560821749978
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.03184577518083587
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 173
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 6 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.12734784051080164
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst drift/tol over 1 invariant(s) (worst: mass_sum)",
+      "name": "invariants",
+      "status": "pass",
+      "value": 3.0100366643637244e-05
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.12404805448465124
+     }
+    ],
+    "id": "robertson",
+    "input_sha256": "32e6d663979b0bdd02851d357f16ec98e13a9587c27bf54451dc1c7b10982d2d",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "894ef623b61bda52e6320a513c79e042a926468f6ecd1c1a5611e0fe7111b885",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 3.0100366643637244e-05
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "robertson",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.12734784051080164
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.12404805448465124
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 195
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 5 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.031198913872483365
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst drift/tol over 1 invariant(s) (worst: mass_sum)",
+      "name": "invariants",
+      "status": "pass",
+      "value": 1.0362081563168129e-08
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.030319328201146686
+     }
+    ],
+    "id": "stiff_chain",
+    "input_sha256": "40dca6206a67ce0d3bbf8505ec748d526a9a1fb2f3132b881a2cba5081215680",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "26497c62d000051c38ddf1ebef61ba41386bee8f367240b70b7d7ea3b4152f05",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 1.0362081563168129e-08
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "stiff_chain",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.031198913872483365
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.030319328201146686
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 169
+  },
+  {
+   "atol": 1e-10,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 4 reference times, factor 100.0 exceeds 1",
+      "name": "reference",
+      "status": "fail",
+      "value": 4.810282536050955
+     },
+     {
+      "bound": null,
+      "detail": "no invariants defined",
+      "name": "invariants",
+      "status": "skip",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100 exceeds 1",
+      "name": "tightening",
+      "status": "fail",
+      "value": 4.648194115914631
+     }
+    ],
+    "id": "van_der_pol_mu1",
+    "input_sha256": "af302983433fd9097e5439625f2f6fcece0d13575e0ff2c799b61e3381eb734a",
+    "reasons": [
+     "reference: worst error/(factor*(rtol*|y_ref|+atol)) over 4 reference times, factor 100.0 exceeds 1",
+     "tightening: worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100 exceeds 1"
+    ],
+    "result_sha256": "d377ad8cae5c8bc5b26c50944b303e403a704a3a1ed5f474ded26d42f530ca3e",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "FAILED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": null,
+    "status": "skip",
+    "worst_ratio": null
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "van_der_pol_mu1",
+   "reasons": [
+    "reference: worst error/(factor*(rtol*|y_ref|+atol)) over 4 reference times, factor 100.0 exceeds 1",
+    "tightening: worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100 exceeds 1"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "fail",
+    "worst_ratio": 4.810282536050955
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "fail",
+    "worst_ratio": 4.648194115914631
+   },
+   "verdict": "FAILED",
+   "wall_ms": 163
+  },
+  {
+   "atol": 1e-08,
+   "certificate": {
+    "binary_sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+    "caveat": "VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.",
+    "checks": [
+     {
+      "bound": null,
+      "detail": "schema, id, status, finiteness, lengths and t == t_out ok",
+      "name": "shape",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": null,
+      "detail": "input_sha256 equals sha256 of the exact spec bytes",
+      "name": "hashes",
+      "status": "pass",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst error/(factor*(rtol*|y_ref|+atol)) over 4 reference times, factor 100.0",
+      "name": "reference",
+      "status": "pass",
+      "value": 0.022506381494455757
+     },
+     {
+      "bound": null,
+      "detail": "no invariants defined",
+      "name": "invariants",
+      "status": "skip",
+      "value": null
+     },
+     {
+      "bound": 1.0,
+      "detail": "worst |y_loose-y_tight|/(100*(rtol*|y_tight|+atol)) at rtol/100, atol/100",
+      "name": "tightening",
+      "status": "pass",
+      "value": 0.0209832004836102
+     }
+    ],
+    "id": "van_der_pol_mu100",
+    "input_sha256": "b73717dc25b69319d6493e147884b6efc4666f70cea7c18254816baf455e4310",
+    "reasons": [
+     "shape, hashes, reference, invariants, tightening passed"
+    ],
+    "result_sha256": "bcee9b298ee7de260c2cd304e92fbec8fcf2d2f2f638292a062181cd8c8c7cb6",
+    "schema": "hivemind-solver-cert/1",
+    "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76",
+    "verdict": "VERIFIED",
+    "verifier_version": "1"
+   },
+   "invariants": {
+    "bound": null,
+    "status": "skip",
+    "worst_ratio": null
+   },
+   "notes": [],
+   "policy_factor": 100.0,
+   "problem": "van_der_pol_mu100",
+   "reasons": [
+    "shape, hashes, reference, invariants, tightening passed"
+   ],
+   "reference": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.022506381494455757
+   },
+   "rtol": 1e-08,
+   "tightening": {
+    "bound": 1.0,
+    "status": "pass",
+    "worst_ratio": 0.0209832004836102
+   },
+   "verdict": "VERIFIED",
+   "wall_ms": 227
+  }
+ ],
+ "sandbox": "namespace",
+ "schema": "hivemind-solver-e2e/1",
+ "tolerance_policy_note": "Verdicts are measured under the problem library's tolerance_policy as shipped (policy v1); no threshold was adjusted.",
+ "verdict_counts": {
+  "FAILED": 3,
+  "VERIFIED": 12
+ },
+ "verifier_version": "1"
+}

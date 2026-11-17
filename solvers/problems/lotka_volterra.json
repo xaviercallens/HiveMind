@@ -1,0 +1,92 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "lotka_volterra",
+ "description": "Lotka-Volterra predator-prey; H = delta x - gamma ln x + beta y - alpha ln y is conserved.",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "lotka_volterra",
+  "problem": {
+   "kind": "named",
+   "family": "lotka_volterra",
+   "params": {
+    "alpha": 1.5,
+    "beta": 1.0,
+    "delta": 1.0,
+    "gamma": 3.0
+   }
+  },
+  "y0": [
+   1.0,
+   1.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   1.0,
+   5.0,
+   10.0,
+   20.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   1.0,
+   5.0,
+   10.0,
+   20.0
+  ],
+  "y": [
+   [
+    2.772850901841112,
+    0.25871087814256394
+   ],
+   [
+    6.098494675971743,
+    0.6281379021874609
+   ],
+   [
+    1.0263447675750894,
+    0.9096910781360417
+   ],
+   [
+    1.0576864068396261,
+    0.8286757441749495
+   ]
+  ],
+  "max_abs_error_bound": 1.88e-13,
+  "method": "taylor (mpmath.odefun)",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.3.0",
+   "scipy": "1.13.1",
+   "numpy": "2.2.6"
+  },
+  "cross_check": {
+   "method": "scipy DOP853 rtol=1e-13",
+   "max_abs_diff": 1.88e-13,
+   "max_diff_over_spec_tolerance": 1.8e-05,
+   "min_spec_tolerance_over_bound": 14300.0
+  }
+ },
+ "invariants": [
+  {
+   "name": "first_integral",
+   "kind": "lv_first_integral",
+   "params": {
+    "alpha": 1.5,
+    "beta": 1.0,
+    "delta": 1.0,
+    "gamma": 3.0
+   },
+   "value": 2.0,
+   "tol": 2e-05
+  }
+ ],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

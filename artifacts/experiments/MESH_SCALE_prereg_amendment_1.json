@@ -1,0 +1,32 @@
+{
+  "experiment_id": "MESH-SCALE-1",
+  "amendment": 1,
+  "registered_utc": "2026-10-27T15:01:43Z",
+  "amends": "artifacts/experiments/MESH_SCALE_prereg.json",
+  "written_before": "any run with N >= 100 (the smoke run N=40 / 30 s was made before this amendment and is labelled non-prereg)",
+  "thresholds_changed": false,
+  "clarifications_and_mechanics": {
+    "kill_timing": "Bee JVMs arm their kill when a LoadStart event (topic root.control.load, published by the loadgen just before its first submission) arrives, and kill at startMs + kill_at_s. kill_at_s = duration_s / 2, which is 60 for the 120 s prereg load. Kill timing is therefore relative to load start, not JVM start.",
+    "kill_selection": "Per bee JVM, round(kill_fraction * bees in that JVM) bees, chosen with a seeded shuffle (seed 20261027 + JVM index). Killed bees stop heartbeats, stop answering offers, and never send LEAVING. A killed bee's queued and help-waiting work is logged as DROP; in-flight work is dropped when its backend returns.",
+    "registration": "status --wait-bees N --hosts 2 waits until both hosts count at least N live bees. The timeout is 240 s so that the run continues past 60 s. The registration time is recorded, and A1 is judged by analyze.py at 60 s.",
+    "a1_measurement": "For each host, the latest HostAnnounce received at or before (last bee JVM launch + 60 s) must show liveBees >= N. The recorder (record subcommand) writes every announce with its receive time.",
+    "a3_set_definition": "The A3 set is the tasks assigned to killed bees whose work was lost to the kill: tasks with a DROP line from a killed bee, plus tasks with an ASSIGN to a killed bee at or after that bee's KILL time. A3 PASS requires at least 99 percent of this set to have ok=true replies. The prereg's first-attempt variant (ASSIGN with attempt 1 to a killed bee at any time) is reported in the report alongside, for transparency, but does not decide A3.",
+    "overhead_population": "Overhead (e2eMs minus serviceMs) is computed over tasks with ok=true replies whose serviceMs is known and that have no ASSIGN to a killed bee at any time (any attempt). This is the prereg's 'tasks not affected by the kill'.",
+    "serviceMs_source": "serviceMs is the TaskDone.serviceMs of the winning attempt, joined by taskId, beeId and attempt. Tasks whose serviceMs is unknown are counted in serviceMsMissing and are not in the overhead population.",
+    "lost_and_duplicates": "lost = no reply within 30 s after the last submission, including submit failures. duplicates = more than one TaskReply for a taskId.",
+    "throughput": "throughput_tps = replied tasks / load duration (120 s for the prereg).",
+    "offered_load_check": "A run counts as prereg conditions only if the achieved submission rate is at least 98 percent of 200 tasks/s. A run that does not meet this is not a prereg run, and its A1 to A4 verdicts are NOT_RUN.",
+    "a4_measurement": "A4 checks: no OutOfMemoryError in any JVM log (grep over all logs), no process exited before the harness stopped it, and Kafka's -Xmx read from its command line equal to 512 MB. Heap use within -Xmx is not measured directly; RSS is reported for information.",
+    "rss": "Peak RSS is VmHWM from /proc/<pid>/status, read for the bee, host and recorder JVMs before anything is stopped. The loadgen's value is the last sample taken before it exited. Kafka's VmHWM is its whole lifetime, not this run only."
+  },
+  "diagnostics_added_not_verdicts": {
+    "kafka_publish_error_lines": "count of 'Error publishing to topic' lines in each JVM log",
+    "retries_not_touching_killed_bees": "tasks with attempts > 1 that never had an ASSIGN to a killed bee",
+    "overhead_after_first_10s_of_load": "overhead p95 and p99 over tasks submitted at least 10 s after load start. Reported for diagnosis only; the verdict uses the full population as the prereg says."
+  },
+  "smoke_observation_recorded_before_this_amendment": "Smoke run N=40 / 30 s (non-prereg, kill at 15 s): overhead p95 3746 ms and p99 4994 ms over all tasks, but p95 148 ms and p99 204 ms for tasks submitted at least 10 s after load start. The high tail sits in the first ~10 s, with 13 reassignments that touch no killed bee. Host logs show Kafka publish errors (NOT_LEADER_OR_FOLLOWER, OUT_OF_ORDER_SEQUENCE_NUMBER) in the same window. These are mesh control-plane findings, not harness bugs. Any change to exclude a warm-up window or to change Host's handling of publish failures is a separate decision and needs its own amendment before the N=1000 run.",
+  "not_changed": [
+    "rates, durations, bee and host counts, Xmx values, latencies, heartbeat, attempt timeout, tier, kill fraction",
+    "all thresholds A1 to A4"
+  ]
+}

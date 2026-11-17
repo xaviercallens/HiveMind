@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Hugging Face Community Sharing Hub, Portable Adapter Bundles & Swarm Mining Guilds (`v1.5.0`).
 
 Provides end-to-end community sharing, Hugging Face Hub export/import, and guild
@@ -24,6 +25,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -59,6 +61,34 @@ class SharedCommunityExpertEntry:
     relative_loss_reduction_pct: float
     tensor_sha256: str
 
+    def __post_init__(self) -> None:
+        for s_field in (
+            "domain_name",
+            "dataset_id",
+            "author_gamer_tag",
+            "author_contributor_handle",
+            "expert_cid",
+            "tensor_sha256",
+        ):
+            sval = getattr(self, s_field)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        for i_field in ("source_rank_r", "canonical_rank_r", "lora_alpha"):
+            ival = getattr(self, i_field)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{i_field} must be a positive integer")
+        if (
+            isinstance(self.spectral_energy_retained, bool)
+            or not isinstance(self.spectral_energy_retained, (int, float))
+            or not math.isfinite(float(self.spectral_energy_retained))
+            or not (0.0 <= float(self.spectral_energy_retained) <= 1.0 + 1e-6)
+        ):
+            raise ValueError("spectral_energy_retained must be a finite number in [0.0, 1.0]")
+        for f_field in ("baseline_loss", "trained_loss", "relative_loss_reduction_pct"):
+            fval = getattr(self, f_field)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)):
+                raise ValueError(f"{f_field} must be a finite number")
+
 
 @dataclass
 class CommunityAdapterBundle:
@@ -77,6 +107,33 @@ class CommunityAdapterBundle:
     bundle_sha256: str
     ties_merged_included: bool = True
 
+    def __post_init__(self) -> None:
+        for s_field in ("bundle_id", "bundle_title", "hf_repo_id", "base_model_id", "guild_id", "bundle_sha256"):
+            sval = getattr(self, s_field)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if isinstance(self.canonical_rank_r, bool) or not isinstance(self.canonical_rank_r, int) or self.canonical_rank_r < 1:
+            raise ValueError("canonical_rank_r must be a positive integer")
+        if (
+            isinstance(self.created_at_epoch, bool)
+            or not isinstance(self.created_at_epoch, (int, float))
+            or not math.isfinite(float(self.created_at_epoch))
+            or float(self.created_at_epoch) < 0.0
+        ):
+            raise ValueError("created_at_epoch must be a finite non-negative number")
+        for list_field in ("authors", "contributors"):
+            lval = getattr(self, list_field)
+            if not isinstance(lval, list) or not lval or any(not isinstance(x, str) or not x.strip() for x in lval):
+                raise ValueError(f"{list_field} must be a non-empty list of non-empty strings")
+        if (
+            not isinstance(self.entries, list)
+            or not self.entries
+            or any(not isinstance(e, SharedCommunityExpertEntry) for e in self.entries)
+        ):
+            raise ValueError("entries must be a non-empty list of SharedCommunityExpertEntry")
+        if not isinstance(self.ties_merged_included, bool):
+            raise ValueError("ties_merged_included must be a boolean")
+
 
 @dataclass
 class SwarmMiningGuild:
@@ -94,6 +151,34 @@ class SwarmMiningGuild:
     guild_total_hive: float = 0.0
     bundles_published: int = 0
     peer_imports_served: int = 0
+
+    def __post_init__(self) -> None:
+        for s_field in ("guild_id", "guild_name", "guild_motto", "region_hub"):
+            sval = getattr(self, s_field)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        for list_field in ("member_miners", "member_contributors", "shared_domains"):
+            lval = getattr(self, list_field)
+            if not isinstance(lval, list) or not lval or any(not isinstance(x, str) or not x.strip() for x in lval):
+                raise ValueError(f"{list_field} must be a non-empty list of non-empty strings")
+        if (
+            isinstance(self.synergy_multiplier, bool)
+            or not isinstance(self.synergy_multiplier, (int, float))
+            or not math.isfinite(float(self.synergy_multiplier))
+            or float(self.synergy_multiplier) < 1.0
+        ):
+            raise ValueError("synergy_multiplier must be a finite number >= 1.0")
+        for nonneg_int in ("guild_total_pts", "bundles_published", "peer_imports_served"):
+            ival = getattr(self, nonneg_int)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 0:
+                raise ValueError(f"{nonneg_int} must be a non-negative integer")
+        if (
+            isinstance(self.guild_total_hive, bool)
+            or not isinstance(self.guild_total_hive, (int, float))
+            or not math.isfinite(float(self.guild_total_hive))
+            or float(self.guild_total_hive) < 0.0
+        ):
+            raise ValueError("guild_total_hive must be a finite non-negative number")
 
 
 DEFAULT_SWARM_GUILDS: List[SwarmMiningGuild] = [
@@ -159,6 +244,8 @@ DEFAULT_SWARM_GUILDS: List[SwarmMiningGuild] = [
 
 def _compute_state_dict_sha256(lora_state_dict: Dict[str, torch.Tensor]) -> str:
     """Compute a deterministic SHA-256 digest over all LoRA tensors in sorted key order."""
+    if not lora_state_dict:
+        raise ValueError("lora_state_dict must be non-empty")
     hasher = hashlib.sha256()
     for key in sorted(lora_state_dict.keys()):
         tensor = lora_state_dict[key]
@@ -179,6 +266,10 @@ class HFCommunityModelCardExporter:
         base_model_id: str = "Qwen/Qwen2.5-0.5B",
         mock_hub_root: Optional[Path] = None,
     ) -> None:
+        if not isinstance(hf_org_or_user, str) or not hf_org_or_user.strip():
+            raise ValueError("hf_org_or_user must be a non-empty string")
+        if not isinstance(base_model_id, str) or not base_model_id.strip():
+            raise ValueError("base_model_id must be a non-empty string")
         self.hf_org_or_user = hf_org_or_user
         self.base_model_id = base_model_id
         self.mock_hub_root = Path(
@@ -191,6 +282,8 @@ class HFCommunityModelCardExporter:
 
     def generate_model_card_markdown(self, bundle: CommunityAdapterBundle) -> str:
         """Render a Hugging Face Hub `README.md` with YAML frontmatter and evaluation metrics."""
+        if not isinstance(bundle, CommunityAdapterBundle):
+            raise TypeError("bundle must be a CommunityAdapterBundle")
         domains_yaml = "\n".join(f"- {e.domain_name.lower().replace('_', '-')}" for e in bundle.entries)
         datasets_yaml = "\n".join(
             f"- {e.dataset_id}" for e in bundle.entries if "/" in e.dataset_id
@@ -281,6 +374,10 @@ print(import_report["status"], import_report["royalties_settled_hive"])
         output_dir: Path,
     ) -> Dict[str, Any]:
         """Write a complete Hugging Face Hub / P2P shareable bundle directory to disk."""
+        if not isinstance(bundle, CommunityAdapterBundle):
+            raise TypeError("bundle must be a CommunityAdapterBundle")
+        if not isinstance(expert_states, dict) or not expert_states:
+            raise ValueError("expert_states must be a non-empty dict")
         output_dir.mkdir(parents=True, exist_ok=True)
         readme_path = output_dir / "README.md"
         readme_md = self.generate_model_card_markdown(bundle)
@@ -339,28 +436,41 @@ print(import_report["status"], import_report["royalties_settled_hive"])
         """Season 5 (`HM-S5-01`): Push an exported bundle directory to the Hugging Face Hub
         (or to the deterministic offline `mock_hub_root` mirror when offline / no token).
         """
+        if not isinstance(offline_fallback, bool):
+            raise ValueError("offline_fallback must be a boolean")
         bundle_path = Path(bundle_dir)
         manifest_path = bundle_path / "hivemind_swarm_manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         target_repo_id = repo_id or manifest["hf_repo_id"]
         hf_token = token or os.environ.get("HF_TOKEN")
 
+        # The record says what happened: "pushed" only when the Hub accepted the upload; a failed upload is
+        # UPLOAD_FAILED with the error, never "pushed" with a silent fallback to the local mirror (IP-165).
         mode = "mock_hf_hub_offline"
+        status = "mirrored_locally_not_pushed"
+        pushed_to_hub = False
+        hub_commit: Optional[str] = None
+        upload_error: Optional[str] = None
         if hf_token and not offline_fallback:
             try:
                 from huggingface_hub import HfApi  # type: ignore
 
                 api = HfApi(token=hf_token)
                 api.create_repo(repo_id=target_repo_id, repo_type="model", exist_ok=True)
-                api.upload_folder(
+                commit_info = api.upload_folder(
                     folder_path=str(bundle_path),
                     repo_id=target_repo_id,
                     repo_type="model",
                     commit_message=f"Publish HiveMind bundle {manifest['bundle_id']}",
                 )
                 mode = "huggingface_hub_live"
-            except Exception:
-                mode = "mock_hf_hub_offline"
+                status = "pushed"
+                pushed_to_hub = True
+                hub_commit = str(getattr(commit_info, "commit_url", None) or getattr(commit_info, "oid", None) or commit_info or "")[:200]
+            except Exception as exc:
+                mode = "huggingface_hub_upload_failed"
+                status = "UPLOAD_FAILED"
+                upload_error = f"{type(exc).__name__}: {exc}"[:200]
 
         repo_slug = target_repo_id.replace("/", "__")
         mirror_dir = self.mock_hub_root / repo_slug
@@ -372,7 +482,11 @@ print(import_report["status"], import_report["royalties_settled_hive"])
                 copied_files.append(fpath.name)
 
         record = {
-            "status": "pushed",
+            "status": status,
+            "pushed_to_hub": pushed_to_hub,
+            "hub_commit": hub_commit,
+            "upload_error": upload_error,
+            "local_mirror_only": not pushed_to_hub,
             "mode": mode,
             "repo_id": target_repo_id,
             "bundle_id": manifest["bundle_id"],
@@ -391,6 +505,8 @@ print(import_report["status"], import_report["royalties_settled_hive"])
         token: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Season 5 (`HM-S5-01`): Pull a community adapter bundle from `repo_id` into `target_dir`."""
+        if not isinstance(repo_id, str) or not repo_id.strip():
+            raise ValueError("repo_id must be a non-empty string")
         target_path = Path(target_dir)
         target_path.mkdir(parents=True, exist_ok=True)
         repo_slug = repo_id.replace("/", "__")
@@ -437,6 +553,19 @@ class CommunityAdapterBundleManager:
         royalty_hive_per_import: float = 15.0,
         royalty_pts_per_import: int = 250,
     ) -> None:
+        if (
+            isinstance(royalty_hive_per_import, bool)
+            or not isinstance(royalty_hive_per_import, (int, float))
+            or not math.isfinite(float(royalty_hive_per_import))
+            or royalty_hive_per_import < 0.0
+        ):
+            raise ValueError("royalty_hive_per_import must be a finite non-negative number")
+        if (
+            isinstance(royalty_pts_per_import, bool)
+            or not isinstance(royalty_pts_per_import, int)
+            or royalty_pts_per_import < 0
+        ):
+            raise ValueError("royalty_pts_per_import must be a non-negative integer")
         self.store = store or ContentAddressedSwarmStore(
             store_dir or (Path.cwd() / "artifacts" / "community_cas_store")
         )
@@ -447,6 +576,7 @@ class CommunityAdapterBundleManager:
         self.royalty_pts_per_import = int(royalty_pts_per_import)
         self.exporter = HFCommunityModelCardExporter()
         self.published_bundles: Dict[str, CommunityAdapterBundle] = {}
+        self._settled_bundle_imports: set[tuple[str, str]] = set()
         self.import_history: List[Dict[str, Any]] = []
         self.miner_royalty_pts: Dict[str, int] = {}
 
@@ -471,6 +601,18 @@ class CommunityAdapterBundleManager:
             "trained_loss": float,
         }`.
         """
+        for name, val in (
+            ("bundle_id", bundle_id),
+            ("bundle_title", bundle_title),
+            ("guild_id", guild_id),
+            ("base_model_id", base_model_id),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if not domain_adapters:
+            raise ValueError("domain_adapters must be non-empty")
+        if isinstance(canonical_rank_r, bool) or not isinstance(canonical_rank_r, int) or canonical_rank_r <= 0:
+            raise ValueError("canonical_rank_r must be a positive integer")
         entries: List[SharedCommunityExpertEntry] = []
         normalized_states: Dict[str, Dict[str, torch.Tensor]] = {}
         authors: List[str] = []
@@ -567,6 +709,8 @@ class CommunityAdapterBundleManager:
         moe_model: Optional[UpcycledSparseMoEModel] = None,
     ) -> Dict[str, Any]:
         """Import a shared community bundle, verify SHA-256 integrity, hot-plug into `moe_model`, and settle `$HIVE` royalties."""
+        if not isinstance(importer_agent_id, str) or not importer_agent_id.strip():
+            raise ValueError("importer_agent_id must be a non-empty string")
         manifest_path = bundle_dir / "hivemind_swarm_manifest.json"
         weights_path = bundle_dir / "community_experts_canonical_r16.pt"
         if not weights_path.exists():
@@ -585,6 +729,8 @@ class CommunityAdapterBundleManager:
 
         for entry in manifest["entries"]:
             dom = entry["domain_name"]
+            if dom not in loaded_states:
+                raise ValueError(f"Missing tensor state for community expert '{dom}'")
             state = loaded_states[dom]
             actual_sha = _compute_state_dict_sha256(state)
             if actual_sha != entry["tensor_sha256"]:
@@ -594,6 +740,20 @@ class CommunityAdapterBundleManager:
                 )
             verified_entries.append(dom)
 
+        recomputed_bundle_sha = hashlib.sha256(
+            "|".join(
+                f"{e['domain_name']}:{e['tensor_sha256']}" for e in manifest["entries"]
+            ).encode("utf-8")
+        ).hexdigest()
+        if recomputed_bundle_sha != manifest["bundle_sha256"]:
+            raise ValueError("Bundle manifest SHA-256 integrity check failed.")
+
+        import_key = (recomputed_bundle_sha, str(importer_agent_id))
+        already_imported = import_key in self._settled_bundle_imports
+
+        for entry in manifest["entries"]:
+            dom = entry["domain_name"]
+            state = loaded_states[dom]
             if moe_model is not None and dom not in moe_model.expert_domains:
                 moe_model.hotplug_domain_expert(
                     domain_name=dom,
@@ -603,6 +763,10 @@ class CommunityAdapterBundleManager:
                 )
 
             author_tag = entry["author_gamer_tag"]
+            author_handle = entry.get("author_contributor_handle", "")
+            if already_imported or str(importer_agent_id) in (str(author_tag), str(author_handle)):
+                continue
+
             self.ledger.credit_reward(
                 node_id=author_tag,
                 amount_hive=self.royalty_hive_per_import,
@@ -615,19 +779,13 @@ class CommunityAdapterBundleManager:
                 {
                     "domain_name": dom,
                     "author_gamer_tag": author_tag,
-                    "author_contributor_handle": entry["author_contributor_handle"],
+                    "author_contributor_handle": author_handle,
                     "royalty_hive": self.royalty_hive_per_import,
                     "royalty_pts": self.royalty_pts_per_import,
                 }
             )
 
-        recomputed_bundle_sha = hashlib.sha256(
-            "|".join(
-                f"{e['domain_name']}:{e['tensor_sha256']}" for e in manifest["entries"]
-            ).encode("utf-8")
-        ).hexdigest()
-        if recomputed_bundle_sha != manifest["bundle_sha256"]:
-            raise ValueError("Bundle manifest SHA-256 integrity check failed.")
+        self._settled_bundle_imports.add(import_key)
 
         final_experts = moe_model.num_experts if moe_model is not None else len(verified_entries)
         receipt = {
@@ -661,6 +819,10 @@ class CommunityAdapterBundleManager:
         """Season 5 (`HM-S5-01`): Split an exported bundle into 64 KB Merkle-verified chunks
         and replicate assigned chunks across `peer_stores`.
         """
+        if not isinstance(source_node_id, str) or not source_node_id.strip():
+            raise ValueError("source_node_id must be a non-empty string")
+        if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size <= 0:
+            raise ValueError("chunk_size must be a positive integer")
         peers = list(peer_stores or [])
         seeder_ids = [source_node_id] + [p.node_id for p in peers if p.node_id != source_node_id]
         manifest = self.store.seed_bundle_chunks(
@@ -732,6 +894,19 @@ class SwarmMiningGuildEngine:
         peer_imports_count: int = 1,
     ) -> Dict[str, Any]:
         """Credit a Guild with synergy-multiplied PTS and `$HIVE` for publishing and serving shared bundles."""
+        if not isinstance(guild_id, str) or not guild_id.strip():
+            raise ValueError("guild_id must be a non-empty string")
+        if isinstance(base_pts_earned, bool) or not isinstance(base_pts_earned, int) or base_pts_earned < 0:
+            raise ValueError("base_pts_earned must be a non-negative integer")
+        if (
+            isinstance(base_hive_earned, bool)
+            or not isinstance(base_hive_earned, (int, float))
+            or not math.isfinite(float(base_hive_earned))
+            or base_hive_earned < 0.0
+        ):
+            raise ValueError("base_hive_earned must be a finite non-negative number")
+        if isinstance(peer_imports_count, bool) or not isinstance(peer_imports_count, int) or peer_imports_count < 0:
+            raise ValueError("peer_imports_count must be a non-negative integer")
         if guild_id not in self.guilds:
             raise KeyError(f"Unknown Swarm Mining Guild: {guild_id}")
         guild = self.guilds[guild_id]

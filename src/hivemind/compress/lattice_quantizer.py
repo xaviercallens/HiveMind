@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Lattice and sign quantisers for DiLoCo outer deltas (experiment E10).
 
 The nearest-point decoders for ℤⁿ, Dₙ and E₈ = D₈ ∪ (D₈ + ½) follow Conway & Sloane, "Fast quantizing and
@@ -42,14 +43,30 @@ NSM_REFERENCE: Dict[str, float] = {
 _SQRT3 = math.sqrt(3.0)
 
 
+def _as_finite_float_array(x: object, name: str = "x") -> np.ndarray:
+    if isinstance(x, (bool, str, bytes)):
+        raise ValueError(f"{name} must be a non-empty finite array")
+    try:
+        arr = np.asarray(x)
+    except Exception as exc:
+        raise ValueError(f"{name} must be a non-empty finite array") from exc
+    if arr.size == 0 or arr.dtype.kind not in ("i", "u", "f"):
+        raise ValueError(f"{name} must be a non-empty finite array")
+    arr_f = arr.astype(float)
+    if not bool(np.all(np.isfinite(arr_f))):
+        raise ValueError(f"{name} must be a non-empty finite array")
+    return arr_f
+
+
 def nearest_zn(x: np.ndarray) -> np.ndarray:
     """Nearest point of ℤⁿ (round half to even)."""
-    return np.rint(np.asarray(x, dtype=float))
+    arr = _as_finite_float_array(x, "x")
+    return np.rint(arr)
 
 
 def nearest_a2(x: np.ndarray) -> np.ndarray:
     """Nearest point of the 2D hexagonal lattice A₂ = (ℤ × √3·ℤ) ∪ ((ℤ + ½) × √3·(ℤ + ½)); rows of ``x`` must have 2 columns."""
-    x = np.atleast_2d(np.asarray(x, dtype=float))
+    x = np.atleast_2d(_as_finite_float_array(x, "x"))
     if x.shape[1] != 2:
         raise ValueError("A2 lives in dimension 2")
     c0 = np.column_stack([np.rint(x[:, 0]), _SQRT3 * np.rint(x[:, 1] / _SQRT3)])
@@ -64,7 +81,7 @@ def nearest_a2(x: np.ndarray) -> np.ndarray:
 
 def nearest_dn(x: np.ndarray) -> np.ndarray:
     """Nearest point of Dₙ (integer vectors with even coordinate sum); rows of ``x``."""
-    x = np.atleast_2d(np.asarray(x, dtype=float))
+    x = np.atleast_2d(_as_finite_float_array(x, "x"))
     f = np.rint(x)
     odd = np.mod(f.sum(axis=-1), 2.0) != 0
     if not odd.any():
@@ -86,7 +103,7 @@ def _closer(a: np.ndarray, b: np.ndarray, x: np.ndarray) -> np.ndarray:
 
 def nearest_e8(x: np.ndarray) -> np.ndarray:
     """Nearest point of E₈ = D₈ ∪ (D₈ + ½); rows of ``x`` must have 8 columns."""
-    x = np.atleast_2d(np.asarray(x, dtype=float))
+    x = np.atleast_2d(_as_finite_float_array(x, "x"))
     if x.shape[1] != 8:
         raise ValueError("E8 lives in dimension 8")
     return _closer(nearest_dn(x), nearest_dn(x - 0.5) + 0.5, x)
@@ -98,7 +115,9 @@ LATTICE_DIM = {"Z": 8, "A2": 2, "E8": 8}
 
 def is_lattice_point(kind: str, c: np.ndarray, tol: float = 1e-9) -> np.ndarray:
     """Membership test (per row): ℤⁿ integer; A₂ rectangular cosets; E₈ integer or half-integer with even sum."""
-    c = np.atleast_2d(np.asarray(c, dtype=float))
+    if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) <= 0.0:
+        raise ValueError("tol must be a strictly positive finite float")
+    c = np.atleast_2d(_as_finite_float_array(c, "c"))
     if kind == "Z":
         return np.all(np.abs(c - np.rint(c)) < tol, axis=1)
     if kind == "A2":
@@ -112,6 +131,8 @@ def is_lattice_point(kind: str, c: np.ndarray, tol: float = 1e-9) -> np.ndarray:
         )
         return coset0 | coset1
     if kind == "E8":
+        if c.shape[1] != 8:
+            raise ValueError("E8 lives in dimension 8")
         integral = np.all(np.abs(c - np.rint(c)) < tol, axis=1)
         half = np.all(np.abs(c - 0.5 - np.rint(c - 0.5)) < tol, axis=1)
         even_sum = np.abs(np.mod(np.rint(c.sum(axis=1)), 2.0)) < tol
@@ -121,13 +142,29 @@ def is_lattice_point(kind: str, c: np.ndarray, tol: float = 1e-9) -> np.ndarray:
 
 def _entropy_bits(cols: List[np.ndarray]) -> float:
     """Plug-in joint entropy (bits) of integer columns."""
-    keys = np.stack([np.asarray(c).astype(np.int64) for c in cols], axis=1)
+    if not isinstance(cols, (list, tuple)) or len(cols) == 0:
+        raise ValueError("cols must be a non-empty sequence of arrays")
+    arrays = []
+    for c in cols:
+        if isinstance(c, (bool, str, bytes)):
+            raise ValueError("cols arrays must be non-empty")
+        arr = np.asarray(c)
+        if arr.size == 0 or arr.dtype.kind not in ("i", "u", "f"):
+            raise ValueError("cols arrays must be non-empty")
+        if not bool(np.all(np.isfinite(arr.astype(float)))):
+            raise ValueError("cols arrays must be non-empty")
+        arrays.append(arr.astype(np.int64))
+    if any(a.shape != arrays[0].shape for a in arrays):
+        raise ValueError("cols arrays must have identical shapes")
+    keys = np.stack(arrays, axis=1)
     _, counts = np.unique(keys, axis=0, return_counts=True)
     p = counts / counts.sum()
     return float(-(p * np.log2(p)).sum())
 
 
 def _cond_entropy_bits(x: np.ndarray, *cond: np.ndarray) -> float:
+    if np.asarray(x).size == 0:
+        raise ValueError("x must be a non-empty array")
     if not cond:
         return _entropy_bits([x])
     return _entropy_bits([x, *cond]) - _entropy_bits(list(cond))
@@ -135,11 +172,13 @@ def _cond_entropy_bits(x: np.ndarray, *cond: np.ndarray) -> float:
 
 def factorised_rate_bits_per_dim(kind: str, codewords: np.ndarray) -> float:
     """Achievable bits per dimension of unscaled codewords (rows): ℤⁿ Σ H(xᵢ); A₂ H(coset)+H(z₀|coset)+H(z₁|coset); E₈ H(coset)+Σ H(zᵢ|coset)+H(z₈|coset,parity)."""
-    c = np.atleast_2d(np.asarray(codewords, dtype=float))
+    c = np.atleast_2d(_as_finite_float_array(codewords, "codewords"))
     n = c.shape[1]
     if kind == "Z":
         return sum(_entropy_bits([np.rint(c[:, i])]) for i in range(n)) / n
     if kind == "A2":
+        if n != 2:
+            raise ValueError("A2 lives in dimension 2")
         coset = (np.abs(c[:, 0] - np.rint(c[:, 0])) > 1e-9).astype(np.int64)
         z0 = np.rint(c[:, 0] - 0.5 * coset).astype(np.int64)
         z1 = np.rint(c[:, 1] / _SQRT3 - 0.5 * coset).astype(np.int64)
@@ -150,6 +189,8 @@ def factorised_rate_bits_per_dim(kind: str, codewords: np.ndarray) -> float:
         )
         return bits / 2.0
     if kind == "E8":
+        if n != 8:
+            raise ValueError("E8 lives in dimension 8")
         coset = (np.abs(c[:, 0] - np.rint(c[:, 0])) > 1e-9).astype(np.int64)  # 1 = half-integer coset
         z = np.rint(c - 0.5 * coset[:, None]).astype(np.int64)
         bits = _entropy_bits([coset])
@@ -168,6 +209,43 @@ class QuantizedDelta:
     relative_mse: float
     residual: torch.Tensor  # v - Q(v) (carried when error feedback is on)
 
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.dequantized, torch.Tensor)
+            or self.dequantized.numel() == 0
+            or self.dequantized.dtype == torch.bool
+            or not bool(torch.isfinite(self.dequantized).all())
+        ):
+            raise ValueError("dequantized must be a non-empty torch.Tensor")
+        if (
+            not isinstance(self.residual, torch.Tensor)
+            or self.residual.shape != self.dequantized.shape
+            or self.residual.dtype == torch.bool
+            or not bool(torch.isfinite(self.residual).all())
+        ):
+            raise ValueError("residual must be a torch.Tensor matching dequantized.shape")
+        if (
+            isinstance(self.rate_bits_per_dim, bool)
+            or not isinstance(self.rate_bits_per_dim, (int, float))
+            or not math.isfinite(float(self.rate_bits_per_dim))
+            or float(self.rate_bits_per_dim) < 0.0
+        ):
+            raise ValueError("rate_bits_per_dim must be a finite number >= 0.0")
+        if (
+            isinstance(self.relative_mse, bool)
+            or not isinstance(self.relative_mse, (int, float))
+            or not math.isfinite(float(self.relative_mse))
+            or float(self.relative_mse) < 0.0
+        ):
+            raise ValueError("relative_mse must be a finite number >= 0.0")
+
+
+def _require_finite_delta(v: torch.Tensor) -> None:
+    """Refuse a NaN/inf delta: ``vn > 0`` is False for NaN, which reported ``relative_mse 0.0`` and, with error feedback,
+    stored a NaN residual that poisoned every later call."""
+    if not bool(torch.isfinite(v).all()):
+        raise ValueError("delta contains NaN or inf; refusing to quantise it")
+
 
 class LatticeDeltaQuantizer:
     """Quantise a flat delta blockwise on ``scale · L`` (L ∈ {ℤ⁸, A₂, E₈}); optional EF21 error feedback."""
@@ -175,15 +253,30 @@ class LatticeDeltaQuantizer:
     def __init__(self, kind: str, scale: float, block: Optional[int] = None, error_feedback: bool = False) -> None:
         if kind not in DECODERS:
             raise KeyError(kind)
-        if scale <= 0.0 or not math.isfinite(scale):
+        if isinstance(scale, bool) or not isinstance(scale, (int, float)) or scale <= 0.0 or not math.isfinite(float(scale)):
             raise ValueError("scale must be positive and finite")
+        if block is not None and (isinstance(block, bool) or not isinstance(block, int)):
+            raise ValueError("block must be an integer or None")
+        if not isinstance(error_feedback, bool):
+            raise ValueError("error_feedback must be a boolean")
         eff_block = int(block) if block is not None else LATTICE_DIM[kind]
+        if eff_block < 1:
+            raise ValueError("block must be >= 1")
+        if kind in ("A2", "E8") and eff_block != LATTICE_DIM[kind]:
+            raise ValueError(f"{kind} requires block == {LATTICE_DIM[kind]}")
         self.kind, self.scale, self.block, self.error_feedback = kind, float(scale), eff_block, bool(error_feedback)
         self._carry: Optional[torch.Tensor] = None
 
     def quantize(self, vec: torch.Tensor) -> QuantizedDelta:
+        if not isinstance(vec, torch.Tensor) or vec.dtype == torch.bool:
+            raise ValueError("vec must be a torch.Tensor")
         v = vec.detach().to(torch.float32).reshape(-1)
+        if v.numel() == 0:
+            raise ValueError("delta must be non-empty")
+        _require_finite_delta(v)
         if self.error_feedback and self._carry is not None:
+            if self._carry.numel() != v.numel():
+                raise ValueError("delta length must match error-feedback carry length")
             v = v + self._carry
         n = v.numel()
         pad = (-n) % self.block
@@ -203,12 +296,21 @@ class SignDeltaQuantizer:
     """1-bit sign compressor: Q(v) = mean|v| · sign(v) (signSGD scale rule); optional error feedback."""
 
     def __init__(self, error_feedback: bool = False) -> None:
+        if not isinstance(error_feedback, bool):
+            raise ValueError("error_feedback must be a boolean")
         self.error_feedback = bool(error_feedback)
         self._carry: Optional[torch.Tensor] = None
 
     def quantize(self, vec: torch.Tensor) -> QuantizedDelta:
+        if not isinstance(vec, torch.Tensor) or vec.dtype == torch.bool:
+            raise ValueError("vec must be a torch.Tensor")
         v = vec.detach().to(torch.float32).reshape(-1)
+        if v.numel() == 0:
+            raise ValueError("delta must be non-empty")
+        _require_finite_delta(v)
         if self.error_feedback and self._carry is not None:
+            if self._carry.numel() != v.numel():
+                raise ValueError("delta length must match error-feedback carry length")
             v = v + self._carry
         deq = v.abs().mean() * torch.sign(v)
         residual = v - deq
@@ -221,8 +323,25 @@ class SignDeltaQuantizer:
 
 def calibrate_scale_for_rate(kind: str, sample: torch.Tensor, target_bits_per_dim: float, block: Optional[int] = None, tol: float = 0.02, iters: int = 60) -> Tuple[float, float]:
     """Bisection on log-scale so that the measured factorised rate of ``sample`` hits ``target`` (rate falls as scale grows)."""
+    if kind not in DECODERS:
+        raise KeyError(kind)
+    if isinstance(target_bits_per_dim, bool) or not isinstance(target_bits_per_dim, (int, float)) or not math.isfinite(float(target_bits_per_dim)):
+        raise ValueError("target_bits_per_dim must be a finite float")
+    if block is not None and (isinstance(block, bool) or not isinstance(block, int)):
+        raise ValueError("block must be an integer or None")
+    if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) < 0.0:
+        raise ValueError("tol must be non-negative and finite")
+    if isinstance(iters, bool) or not isinstance(iters, int) or int(iters) < 0:
+        raise ValueError("iters must be >= 0")
     eff_block = int(block) if block is not None else LATTICE_DIM.get(kind, 8)
+    if eff_block < 1 or (kind in ("A2", "E8") and eff_block != LATTICE_DIM[kind]):
+        raise ValueError(f"invalid block {eff_block} for lattice {kind}")
+    if not isinstance(sample, torch.Tensor) or sample.dtype == torch.bool:
+        raise ValueError("sample must be a torch.Tensor")
     v = sample.detach().to(torch.float32).reshape(-1)
+    if v.numel() == 0:
+        raise ValueError("sample must be non-empty")
+    _require_finite_delta(v)
     n = v.numel()
     pad = (-n) % eff_block
     x = (torch.cat([v, torch.zeros(pad)]) if pad else v).numpy().astype(float).reshape(-1, eff_block)
@@ -250,6 +369,10 @@ def calibrate_scale_for_rate(kind: str, sample: torch.Tensor, target_bits_per_di
 
 def _lattice_points_in_ball(kind: str, radius: float) -> np.ndarray:
     """All points of ℤ⁸ / A₂ / E₈ with norm ≤ radius (exhaustive; for the brute-force check)."""
+    if kind not in DECODERS:
+        raise KeyError(kind)
+    if isinstance(radius, bool) or not isinstance(radius, (int, float)) or not math.isfinite(float(radius)) or float(radius) <= 0.0:
+        raise ValueError("radius must be a strictly positive finite float")
     r = int(math.ceil(radius))
     grid = np.arange(-r, r + 1, dtype=float)
     if kind == "A2":
@@ -274,6 +397,14 @@ def brute_force_decoder_check(kind: str, n_queries: int, seed: int, radius: floa
 
     Queries are uniform in the cube [-1/2, 1/2]^d; the covering radius of all supported lattices is
     <= sqrt 2, so every nearest point has norm <= 2 sqrt 2 < 3 and the ball of radius 3 contains the answer."""
+    if kind not in DECODERS:
+        raise KeyError(kind)
+    if isinstance(n_queries, bool) or not isinstance(n_queries, int) or n_queries < 1:
+        raise ValueError("n_queries must be an integer >= 1")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+    if isinstance(radius, bool) or not isinstance(radius, (int, float)) or not math.isfinite(float(radius)) or float(radius) <= 0.0:
+        raise ValueError("radius must be a strictly positive finite float")
     rng = np.random.default_rng(seed)
     dim = LATTICE_DIM.get(kind, 8)
     q = rng.uniform(-0.5, 0.5, size=(n_queries, dim))

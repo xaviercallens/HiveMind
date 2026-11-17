@@ -1,0 +1,22 @@
+{
+  "experiment_id": "MESH-SCALE-1",
+  "amendment": 2,
+  "registered_utc": "2026-10-27T15:05:05Z",
+  "amends": "artifacts/experiments/MESH_SCALE_prereg.json and MESH_SCALE_prereg_amendment_1.json",
+  "written_before": "the smoke re-run that tests this change (40 bees, 30 s, non-prereg) and any run with N >= 100",
+  "thresholds_changed": false,
+  "population_changed": false,
+  "mesh_code_changed": false,
+  "change": {
+    "setup": "run_scale.sh creates the fresh topic root's topics explicitly, before any JVM starts: the 32 inbox shards, task.submit, task.done, bee.heartbeat, bee.lifecycle, bee.mesh.help, bee.mesh.offer, host.announce, control.load, and user.reply.lg1 for the loadgen. Each is created with kafka-topics.sh --create --if-not-exists, 3 partitions, replication factor 1 (the broker's default partition count, so only the creation time changes). The kafka-topics JVM runs with an explicit -Xmx256m.",
+    "reason": "Smoke run N=40 (non-prereg, see MESH_SCALE_prereg_amendment_1.json) decomposed the 0-10 s latency tail by leg. Both legs were slow in the first 10 s: the submit-plus-reply leg (e2eMs minus hostE2eMs) had p50 1293 ms in 0-5 s, and the host-to-bee-to-host leg (hostE2eMs minus serviceMs) had p50 2528 ms in the same window. Both legs return to about 30-50 ms after 10 s. The working hypothesis is that topics the measured load itself brings into existence (the inbox shards on first assignment, task.done on first TaskDone, the loadgen's reply and control topics) take seconds to get a leader and to be picked up by subscribers. The 13 reassignments that touch no killed bee fall in the same window. This is a hypothesis; the smoke re-run tests it. If the tail persists after pre-creation, that is reported as a finding, and the prereg is not changed to hide it.",
+    "what_is_not_changed": [
+      "every threshold A1 to A4",
+      "the task population: every submitted task is still counted, and none is excluded",
+      "rates, durations, bee and host counts, Xmx values, latencies, heartbeat, attempt timeout, tier, kill fraction and kill timing",
+      "Host, Registry, BeeAgent routing and retry behaviour, and the publish error handling of the mesh"
+    ],
+    "acceptance_of_the_change": "The smoke re-run must still show kill lines (4 bees, one per JVM), and every task must be counted. The decomposition is repeated and reported with the new run. The change is accepted only as setup; the verdict on the tail is not pre-judged by this amendment."
+  },
+  "not_a_fix_for": "The Host publish-failure behaviour (the host ignores the future returned by bus.publish, so a failed assignment is recovered only by the attempt timeout). That is a mesh issue and is out of scope for this harness amendment."
+}

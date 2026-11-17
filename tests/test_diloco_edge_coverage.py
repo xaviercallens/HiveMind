@@ -67,11 +67,21 @@ def test_isoc_merge_skips_missing_fragments_and_retains_unupdated_parameters():
     torch.testing.assert_close(base["weight"], torch.tensor([1., 2.]))
 
 
-def test_incomplete_reputation_list_falls_back_to_equal_worker_weights():
-    result, _ = d.ReputationWeightedIsoCTSMerger(scaling_lambda=1, trim_density=1).merge_worker_deltas(
-        {"weight": torch.zeros(2)}, [{"weight": torch.ones(2)}, {"weight": torch.full((2,), 3.)}], [99.],
-    )
-    torch.testing.assert_close(result["weight"], torch.full((2,), 2.))
+def test_incomplete_reputation_list_raises_value_error():
+    """IP-235: reputation-weight length mismatch raises ValueError instead of silently falling back to uniform."""
+    merger = d.ReputationWeightedIsoCTSMerger(scaling_lambda=1, trim_density=1)
+    with pytest.raises(ValueError, match="worker_reputation_weights"):
+        merger.merge_worker_deltas(
+            {"weight": torch.zeros(2)},
+            [{"weight": torch.ones(2)}, {"weight": torch.full((2,), 3.)}, {"weight": torch.full((2,), 5.)}],
+            [1.0, 2.0],
+        )
+    with pytest.raises(ValueError, match="finite"):
+        merger.merge_worker_deltas(
+            {"weight": torch.zeros(2)},
+            [{"weight": torch.ones(2)}, {"weight": torch.full((2,), 3.)}],
+            [1.0, float("nan")],
+        )
 
 
 @pytest.mark.parametrize("steps,lr", [(0, 0.001), (1, 0)])

@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HiveMind OpenRouter: an OpenAI-compatible gateway whose pricing is a certified two-sided Nash equilibrium."""
 
 from hivemind.router.accounts import RouterStore

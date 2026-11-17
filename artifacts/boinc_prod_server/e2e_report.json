@@ -1,0 +1,289 @@
+{
+  "PASS": true,
+  "PASS_original": false,
+  "after_stop_processes": [],
+  "app_versions": "id\tappid\tversion_num\tplan_class\tplatformid\n2\t1\t100\tcuda_hivemind\t4\n1\t2\t100\tcuda_hivemind\t4\n",
+  "assimilated": [
+    {
+      "adapter": "adapter_hmp_good_001.pt",
+      "adapter_sha256": "c315d2e63586010efc9f274ce6ebe0bb80ea4645a88b4e0eb2155627c0d10857",
+      "app": "hivemind_qlora_moe",
+      "t": 1792925967.18001,
+      "wu_id": "hmp_good_001"
+    },
+    {
+      "app": "hivemind_moe_infer",
+      "completions": [
+        {
+          "prompt": "The Mixture of Experts model",
+          "text": ", the team is divided into three groups: the first group is responsible for the design of the game's interface, the",
+          "token_ids": [
+            30,
+            322,
+            6498,
+            438,
+            32235,
+            1991,
+            8019,
+            8351,
+            44,
+            322,
+            1932,
+            2350,
+            438,
+            18392,
+            436,
+            322,
+            6735,
+            432,
+            322,
+            4181,
+            1182,
+            2568,
+            30,
+            322
+          ]
+        },
+        {
+          "prompt": "Volunteer computing with BOINC means",
+          "text": " that you can help out with a project that is not only fun, but also useful. You can help with the development",
+          "token_ids": [
+            688,
+            844,
+            883,
+            3049,
+            963,
+            623,
+            312,
+            2074,
+            688,
+            438,
+            646,
+            1755,
+            3333,
+            30,
+            1273,
+            2329,
+            6364,
+            32,
+            2448,
+            883,
+            3049,
+            623,
+            322,
+            8226
+          ]
+        }
+      ],
+      "t": 1792926129.376793,
+      "wu_id": "hmp_infer_001"
+    }
+  ],
+  "bin_stop_rc": 0,
+  "client_log_lines": [
+    "25-Oct-2026 10:55:30 [---] CUDA: NVIDIA GPU 0: Tesla T4 (driver version 580.99, CUDA version 13.0, compute capability 7.5, 4096MB, 3970MB available, 8141 GFLOPS peak)",
+    "25-Oct-2026 10:55:44 [HiveMind local BOINC server] Starting task hmp_good_001_0",
+    "25-Oct-2026 10:55:44 [HiveMind local BOINC server] [cpu_sched] Starting task hmp_good_001_0 using hivemind_qlora_moe version 100 (cuda_hivemind) in slot 0",
+    "25-Oct-2026 10:58:07 [HiveMind local BOINC server] Computation for task hmp_good_001_0 finished",
+    "25-Oct-2026 10:58:11 [HiveMind local BOINC server] Finished upload of hmp_good_001_0_r546187683_0",
+    "25-Oct-2026 10:58:13 [HiveMind local BOINC server] Finished upload of hmp_good_001_0_r546187683_1",
+    "25-Oct-2026 10:58:19 [HiveMind local BOINC server] Starting task hmp_lazy_001_0",
+    "25-Oct-2026 10:58:19 [HiveMind local BOINC server] [cpu_sched] Starting task hmp_lazy_001_0 using hivemind_qlora_moe version 100 (cuda_hivemind) in slot 0",
+    "25-Oct-2026 10:58:25 [HiveMind local BOINC server] Reporting 1 completed tasks",
+    "25-Oct-2026 10:58:27 [HiveMind local BOINC server] Reporting 1 completed tasks",
+    "25-Oct-2026 10:58:46 [HiveMind local BOINC server] Computation for task hmp_lazy_001_0 finished",
+    "25-Oct-2026 10:58:50 [HiveMind local BOINC server] Finished upload of hmp_lazy_001_0_r1337627767_0",
+    "25-Oct-2026 10:58:52 [HiveMind local BOINC server] Finished upload of hmp_lazy_001_0_r1337627767_1",
+    "25-Oct-2026 10:59:03 [HiveMind local BOINC server] Reporting 1 completed tasks",
+    "25-Oct-2026 10:59:05 [HiveMind local BOINC server] Reporting 1 completed tasks",
+    "25-Oct-2026 11:00:05 [HiveMind local BOINC server] Starting task hmp_lazy_001_1",
+    "25-Oct-2026 11:00:05 [HiveMind local BOINC server] [cpu_sched] Starting task hmp_lazy_001_1 using hivemind_qlora_moe version 100 (cuda_hivemind) in slot 0",
+    "25-Oct-2026 11:00:26 [HiveMind local BOINC server] Computation for task hmp_lazy_001_1 finished",
+    "25-Oct-2026 11:00:30 [HiveMind local BOINC server] Finished upload of hmp_lazy_001_1_r1698659709_0",
+    "25-Oct-2026 11:00:32 [HiveMind local BOINC server] Finished upload of hmp_lazy_001_1_r1698659709_1",
+    "25-Oct-2026 11:00:36 [HiveMind local BOINC server] Starting task hmp_infer_001_0",
+    "25-Oct-2026 11:00:36 [HiveMind local BOINC server] [cpu_sched] Starting task hmp_infer_001_0 using hivemind_moe_infer version 100 (cuda_hivemind) in slot 0",
+    "25-Oct-2026 11:00:40 [HiveMind local BOINC server] Reporting 1 completed tasks",
+    "25-Oct-2026 11:00:42 [HiveMind local BOINC server] Reporting 1 completed tasks",
+    "25-Oct-2026 11:01:07 [HiveMind local BOINC server] Computation for task hmp_infer_001_0 finished",
+    "25-Oct-2026 11:01:11 [HiveMind local BOINC server] Finished upload of hmp_infer_001_0_r1396523133_0",
+    "25-Oct-2026 11:01:23 [HiveMind local BOINC server] Reporting 1 completed tasks",
+    "25-Oct-2026 11:01:25 [HiveMind local BOINC server] Reporting 1 completed tasks",
+    "25-Oct-2026 11:01:31 [HiveMind local BOINC server] Starting task hmp_lazy_001_2",
+    "25-Oct-2026 11:01:31 [HiveMind local BOINC server] [cpu_sched] Starting task hmp_lazy_001_2 using hivemind_qlora_moe version 100 (cuda_hivemind) in slot 0"
+  ],
+  "client_messages": "ss OK - project servers may be temporarily down.\n227: 25-Oct-2026 11:01:27 (low) [HiveMind local BOINC server] Scheduler request completed: got 1 new tasks\n228: 25-Oct-2026 11:01:27 (low) [HiveMind local BOINC server] Project requested delay of 7 seconds\n229: 25-Oct-2026 11:01:27 (low) [HiveMind local BOINC server] [task] result state=NEW for hmp_lazy_001_2 from handle_scheduler_reply\n230: 25-Oct-2026 11:01:28 (low) [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADING for hmp_lazy_001_2 from CS::update_results\n231: 25-Oct-2026 11:01:29 (low) [HiveMind local BOINC server] Started download of hmp_lazy_001_in_json\n232: 25-Oct-2026 11:01:31 (low) [HiveMind local BOINC server] Finished download of hmp_lazy_001_in_json\n233: 25-Oct-2026 11:01:31 (low) [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADED for hmp_lazy_001_2 from CS::update_results\n234: 25-Oct-2026 11:01:31 (low) [HiveMind local BOINC server] [coproc] Assigning NVIDIA instance 0 to hmp_lazy_001_2\n235: 25-Oct-2026 11:01:31 (low) [HiveMind local BOINC server] [task] ACTIVE_TASK::start(): forked process: pid 801200\n236: 25-Oct-2026 11:01:31 (low) [HiveMind local BOINC server] [task] task_state=EXECUTING for hmp_lazy_001_2 from start\n237: 25-Oct-2026 11:01:31 (low) [HiveMind local BOINC server] Starting task hmp_lazy_001_2\n238: 25-Oct-2026 11:01:31 (low) [HiveMind local BOINC server] [cpu_sched] Starting task hmp_lazy_001_2 using hivemind_qlora_moe version 100 (cuda_hivemind) in slot 0\n239: 25-Oct-2026 11:01:57 (low) [HiveMind local BOINC server] [task] Process for hmp_lazy_001_2 exited, status 256, task state 1\n240: 25-Oct-2026 11:01:57 (low) [HiveMind local BOINC server] [task] process exited with status 1\n241: 25-Oct-2026 11:01:57 (low) [HiveMind local BOINC server] [task] task_state=EXITED for hmp_lazy_001_2 from handle_exited_app\n242: 25-Oct-2026 11:01:57 (low) [HiveMind local BOINC server] [task] result state=COMPUTE_ERROR for hmp_lazy_001_2 from CS::report_result_error\n243: 25-Oct-2026 11:01:57 (low) [HiveMind local BOINC server] Computation for task hmp_lazy_001_2 finished\n244: 25-Oct-2026 11:01:57 (low) [HiveMind local BOINC server] Output file hmp_lazy_001_2_r99012710_0 for task hmp_lazy_001_2 absent\n245: 25-Oct-2026 11:01:57 (low) [HiveMind local BOINC server] Output file hmp_lazy_001_2_r99012710_1 for task hmp_lazy_001_2 absent\n246: 25-Oct-2026 11:01:57 (low) [HiveMind local BOINC server] [task] result state=COMPUTE_ERROR for hmp_lazy_001_2 from CS::app_finished\n",
+  "client_rpc_up": true,
+  "criteria": {
+    "C1": true,
+    "C2": true,
+    "C3": true,
+    "C4": true,
+    "C5": true,
+    "C6": true,
+    "C7": true,
+    "C8": true
+  },
+  "criteria_original": {
+    "C1": true,
+    "C2": true,
+    "C3": false,
+    "C4": true,
+    "C5": true,
+    "C6": true,
+    "C7": true,
+    "C8": true
+  },
+  "listeners": [
+    "LISTEN 0      4096       127.0.0.1:45529      0.0.0.0:*          ",
+    "LISTEN 0      4096       127.0.0.1:46227      0.0.0.0:*          ",
+    "LISTEN 0      512        127.0.0.1:8294       0.0.0.0:*          ",
+    "LISTEN 0      2048       127.0.0.1:8788       0.0.0.0:*          ",
+    "LISTEN 0      2048       127.0.0.1:8789       0.0.0.0:*          ",
+    "LISTEN 0      2048       127.0.0.1:8787       0.0.0.0:*          ",
+    "LISTEN 0      4096       127.0.0.1:43651      0.0.0.0:*          ",
+    "LISTEN 0      512        127.0.0.1:44529      0.0.0.0:*          ",
+    "LISTEN 0      511          0.0.0.0:443        0.0.0.0:*          ",
+    "LISTEN 0      511          0.0.0.0:80         0.0.0.0:*          ",
+    "LISTEN 0      128          0.0.0.0:22         0.0.0.0:*          ",
+    "LISTEN 0      4096       127.0.0.1:11434      0.0.0.0:*          ",
+    "LISTEN 0      511        127.0.0.1:6379       0.0.0.0:*          ",
+    "LISTEN 0      511        127.0.0.1:8081       0.0.0.0:*          ",
+    "LISTEN 0      5          127.0.0.1:8099       0.0.0.0:*          ",
+    "LISTEN 0      4096   127.0.0.53%lo:53         0.0.0.0:*          ",
+    "LISTEN 0      4096       127.0.0.1:34485      0.0.0.0:*          ",
+    "LISTEN 0      511             [::]:80            [::]:*          ",
+    "LISTEN 0      128             [::]:22            [::]:*          ",
+    "LISTEN 0      511            [::1]:6379          [::]:*          "
+  ],
+  "master_url": "http://127.0.0.1:8081/hmproj/",
+  "non_loopback_listeners": [],
+  "rescore": {
+    "C3": true,
+    "note": "C3 was scored false by the original matcher (emulator file naming); the real server uses hmp_good_001_0_r<random>_<n>. Rescored on the stored full client log; no new run."
+  },
+  "results": {
+    "hmp_good_001_0": {
+      "app_version_id": "2",
+      "client_state": "5",
+      "exit_status": "0",
+      "granted_credit": "267.681230332963",
+      "name": "hmp_good_001_0",
+      "outcome": "1",
+      "server_state": "5",
+      "validate_state": "1"
+    },
+    "hmp_infer_001_0": {
+      "app_version_id": "1",
+      "client_state": "5",
+      "exit_status": "0",
+      "granted_credit": "55.16194086212963",
+      "name": "hmp_infer_001_0",
+      "outcome": "1",
+      "server_state": "5",
+      "validate_state": "1"
+    },
+    "hmp_lazy_001_0": {
+      "app_version_id": "2",
+      "client_state": "5",
+      "exit_status": "0",
+      "granted_credit": "0",
+      "name": "hmp_lazy_001_0",
+      "outcome": "6",
+      "server_state": "5",
+      "validate_state": "2"
+    },
+    "hmp_lazy_001_1": {
+      "app_version_id": "2",
+      "client_state": "5",
+      "exit_status": "0",
+      "granted_credit": "0",
+      "name": "hmp_lazy_001_1",
+      "outcome": "6",
+      "server_state": "5",
+      "validate_state": "2"
+    },
+    "hmp_lazy_001_2": {
+      "app_version_id": "2",
+      "client_state": "0",
+      "exit_status": "0",
+      "granted_credit": "0",
+      "name": "hmp_lazy_001_2",
+      "outcome": "0",
+      "server_state": "4",
+      "validate_state": "0"
+    }
+  },
+  "stage_infer_validated": true,
+  "stage_train_s": 254,
+  "stage_train_validated": true,
+  "verdicts": {
+    "verdict_hmp_good_001_1792925944.json": {
+      "cross_class_max_ulp": null,
+      "detail": {
+        "eval_loss_after": 2.166604995727539,
+        "eval_loss_before": 2.2796466946601868,
+        "max_abs_divergence": 0.0,
+        "of_segments": 4,
+        "overhead_pct": 25.0,
+        "replayed_segment": 2,
+        "tolerance_eps": 0.0001
+      },
+      "grant": {
+        "capped_by": "verified",
+        "cobblestones": 56.888888888888886,
+        "node_id": "result-1",
+        "reason": "verified",
+        "workunit_id": "hmp_good_001"
+      },
+      "host": "result-1",
+      "reason": "verified segment 2/4: max_diff=0.00e+00",
+      "same_class_exact": true,
+      "valid": true,
+      "wu_id": "hmp_good_001"
+    },
+    "verdict_hmp_infer_001_1792926114.json": {
+      "cross_class_max_ulp": null,
+      "detail": {
+        "n_prompts": 2
+      },
+      "grant": {
+        "capped_by": "verified",
+        "cobblestones": 0.08888888888888889,
+        "node_id": "result-4",
+        "reason": "verified",
+        "workunit_id": "hmp_infer_001"
+      },
+      "host": "result-4",
+      "reason": "verified: identical greedy token ids",
+      "same_class_exact": true,
+      "valid": true,
+      "wu_id": "hmp_infer_001"
+    },
+    "verdict_hmp_lazy_001_1792925978.json": {
+      "cross_class_max_ulp": null,
+      "detail": {
+        "eval_loss_after": 2.2796466946601868,
+        "eval_loss_before": 2.2796466946601868,
+        "max_abs_divergence": 0.001997909042984247,
+        "of_segments": 4,
+        "overhead_pct": 25.0,
+        "replayed_segment": 0,
+        "tolerance_eps": 0.0001
+      },
+      "grant": {
+        "capped_by": "rejected",
+        "cobblestones": 0.0,
+        "node_id": "result-2",
+        "reason": "spot-check failed or delta not admitted by Multi-Krum",
+        "workunit_id": "hmp_lazy_001"
+      },
+      "host": "result-2",
+      "reason": "REJECTED segment 0: divergence 1.998e-03 exceeds eps=1e-04",
+      "same_class_exact": null,
+      "valid": false,
+      "wu_id": "hmp_lazy_001"
+    }
+  },
+  "wu_assimilate_states": "name\tassimilate_state\tcanonical_resultid\nhmp_good_001\t2\t1\nhmp_lazy_001\t0\t0\nhmp_infer_001\t2\t4\n"
+}

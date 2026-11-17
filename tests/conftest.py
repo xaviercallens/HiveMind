@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
+
+# What the environment looked like before any test module was collected; the guard test in
+# test_collection_has_no_env_side_effects.py checks that collecting the suite changed nothing (IP-179).
+CUDA_VISIBLE_DEVICES_AT_CONFTEST_IMPORT = os.environ.get("CUDA_VISIBLE_DEVICES")
 
 from hivemind.security import gpu_execution_circuit_breaker as _breaker
 

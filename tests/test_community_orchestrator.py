@@ -160,3 +160,50 @@ def test_season9_task_coordination_and_hourly_quality_audit() -> None:
     assert audit["lean4_sorry_count"] == 0
     assert audit["open_season9_tasks_count"] == 9
     assert audit["all_quality_gates_healthy"] is True
+
+
+def test_receipt_reply_never_claims_verification() -> None:
+    """Only the presence of a 64-hex string can be checked here; the reply must say so and never say 'verified'."""
+    base = {
+        "id": "D_9",
+        "number": 99,
+        "title": "Season 7 Master Hub",
+        "body": f"Welcome! {ORCHESTRATOR_SEED_MARKER}",
+        "author": {"login": "xaviercallens"},
+    }
+    with_hash = compose_discussion_reply(
+        {**base, "comments": {"nodes": [{"id": "DC_9", "author": {"login": "someone"},
+                                          "body": '{"receipt_sha256": "' + "a" * 64 + '"}'}]}}
+    )
+    assert with_hash["reply_category"] == "gpu_benchmark_receipt_validation"
+    assert "format check only" in with_hash["reply_markdown"]
+    assert "not verified" in with_hash["reply_markdown"]
+    assert "format verified" not in with_hash["reply_markdown"]
+    without_hash = compose_discussion_reply(
+        {**base, "number": 100, "comments": {"nodes": [{"id": "DC_10", "author": {"login": "someone"},
+                                                        "body": "here is my receipt_sha256 but I lost the hash"}]}}
+    )
+    assert without_hash["reply_category"] == "gpu_benchmark_receipt_validation"
+    assert "none found" in without_hash["reply_markdown"]
+    assert "verified-format" not in without_hash["reply_markdown"]
+    assert "nothing was verified" in without_hash["reply_markdown"]
+
+
+def test_general_reply_states_only_counts_taken_at_reply_time() -> None:
+    from hivemind.cli.community_orchestrator import REPO_ROOT, declared_lean_theorem_count
+
+    disc = {
+        "id": "D_20",
+        "number": 120,
+        "title": "Question about joining",
+        "body": "How do I start?",
+        "author": {"login": "newcomer"},
+        "comments": {"nodes": [{"id": "DC_20", "author": {"login": "newcomer"}, "body": "How do I start?"}]},
+    }
+    reply = compose_discussion_reply(disc)["reply_markdown"]
+    count = declared_lean_theorem_count(REPO_ROOT)
+    assert count is not None and count > 0
+    assert f"`{count}` `theorem` declarations" in reply
+    for stale in ("63/63", "`116`", "10/10", "4/4"):
+        assert stale not in reply
+    assert declared_lean_theorem_count(REPO_ROOT / "does-not-exist") is None

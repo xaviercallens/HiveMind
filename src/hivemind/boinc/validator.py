@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Deterministic Micro-Checkpoint Spot-Check Validator.
 
 Instead of classic BOINC quorum=2 (which wastes 50% of global compute), HiveMind validators
@@ -13,14 +14,28 @@ import math
 import random
 from dataclasses import dataclass
 from typing import Any, Sequence
-import torch
-import torch.nn as nn
 
-from hivemind.boinc.workunit import BOINCWorkunit
-from hivemind.core.diloco_inner import InnerLoopResult, replay_inner_segment
-from hivemind.core.quantization import compute_state_dict_sha256
+try:
+    import torch
+    import torch.nn as nn
+    from hivemind.boinc.workunit import BOINCWorkunit
+    from hivemind.core.diloco_inner import InnerLoopResult, replay_inner_segment
+    from hivemind.core.quantization import compute_state_dict_sha256
+except ImportError:  # pragma: no cover - lightweight router container without torch
+    torch = None  # type: ignore[assignment]
+    nn = None  # type: ignore[assignment]
+    BOINCWorkunit = Any  # type: ignore[assignment,misc]
+    InnerLoopResult = Any  # type: ignore[assignment,misc]
+    replay_inner_segment = None  # type: ignore[assignment]
+    compute_state_dict_sha256 = None  # type: ignore[assignment]
 
 VALID_EXECUTION_DTYPES = ("fp32", "bf16", "fp16", "fixed_point_q16")
+NON_FINITE_TENSOR = "NON_FINITE_TENSOR"
+
+
+def _has_non_finite(state: dict[str, torch.Tensor]) -> bool:
+    """Return True when any element of any tensor in `state` is NaN or +/-inf (IP-238)."""
+    return any(not bool(torch.isfinite(t.detach().to(device="cpu")).all()) for t in state.values())
 
 
 @dataclass(frozen=True)
@@ -43,10 +58,16 @@ class ExecutionClassProfile:
     deterministic_flags: bool = True
 
     def __post_init__(self) -> None:
+        if not isinstance(self.accelerator_class, str) or not self.accelerator_class.strip():
+            raise ValueError("accelerator_class must be a non-empty string")
+        if not isinstance(self.torch_build, str) or not self.torch_build.strip():
+            raise ValueError("torch_build must be a non-empty string")
         if self.dtype not in VALID_EXECUTION_DTYPES:
             raise ValueError(f"dtype must be one of {VALID_EXECUTION_DTYPES}, got {self.dtype!r}")
-        if self.thread_count < 1:
+        if isinstance(self.thread_count, bool) or not isinstance(self.thread_count, int) or self.thread_count < 1:
             raise ValueError("thread_count must be >= 1")
+        if not isinstance(self.deterministic_flags, bool):
+            raise ValueError("deterministic_flags must be a bool")
 
     def class_key(self) -> str:
         return (
@@ -55,9 +76,13 @@ class ExecutionClassProfile:
         )
 
     def exact_match(self, other: ExecutionClassProfile) -> bool:
+        if not isinstance(other, ExecutionClassProfile):
+            raise TypeError("other must be an ExecutionClassProfile")
         return self.class_key() == other.class_key()
 
     def same_dtype_class(self, other: ExecutionClassProfile) -> bool:
+        if not isinstance(other, ExecutionClassProfile):
+            raise TypeError("other must be an ExecutionClassProfile")
         return self.dtype == other.dtype
 
 
@@ -77,18 +102,48 @@ class TwoStatisticSpotCheckResult:
     passed: bool
     reason: str
 
+    def __post_init__(self) -> None:
+        if isinstance(self.linf_divergence, bool) or not isinstance(self.linf_divergence, (int, float)) or float(self.linf_divergence) < 0.0:
+            raise ValueError("linf_divergence must be a non-negative number")
+        if isinstance(self.num_tensors_above_eps, bool) or not isinstance(self.num_tensors_above_eps, int) or self.num_tensors_above_eps < 0:
+            raise ValueError("num_tensors_above_eps must be a non-negative integer")
+        if (
+            isinstance(self.total_tensors, bool)
+            or not isinstance(self.total_tensors, int)
+            or self.total_tensors < 1
+            or self.num_tensors_above_eps > self.total_tensors
+        ):
+            raise ValueError("total_tensors must be an integer >= 1 and >= num_tensors_above_eps")
+        for frac_field in ("tensor_fraction_above_eps", "max_tensor_fraction_above_eps"):
+            val = getattr(self, frac_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+                raise ValueError(f"{frac_field} must be a finite number in [0.0, 1.0]")
+        for eps_field in ("base_eps", "effective_eps"):
+            val = getattr(self, eps_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{eps_field} must be a positive finite number")
+        for b_field in ("exact_class_matched", "dtype_matched", "passed"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+
 
 def quantize_fixed_point_q16_state(
     state_dict: dict[str, torch.Tensor],
     frac_bits: int = 16,
 ) -> dict[str, torch.Tensor]:
     """Convert FP32 LoRA tensors into signed 64-bit fixed-point `Q(frac_bits)` integers (`HM-S10-08`)."""
-    if frac_bits < 1 or frac_bits > 30:
+    if isinstance(frac_bits, bool) or not isinstance(frac_bits, int) or frac_bits < 1 or frac_bits > 30:
         raise ValueError("frac_bits must be in [1, 30]")
+    if not isinstance(state_dict, dict):
+        raise TypeError("state_dict must be a dict of tensors")
     scale = float(1 << frac_bits)
     out: dict[str, torch.Tensor] = {}
     for k in sorted(state_dict.keys()):
         t = state_dict[k].detach().to(dtype=torch.float64, device="cpu")
+        if not bool(torch.isfinite(t).all()):
+            raise ValueError(f"{NON_FINITE_TENSOR}: parameter {k!r} contains NaN or inf")
         out[k] = torch.round(t * scale).to(torch.int64)
     return out
 
@@ -100,8 +155,19 @@ def verify_fixed_point_q16_digest(
     max_ulp_drift: int = 1,
 ) -> dict[str, Any]:
     """Compare two LoRA state dicts in fixed-point `Q(frac_bits)` integer space (`HM-S10-08`)."""
-    if max_ulp_drift < 0:
+    if isinstance(frac_bits, bool) or not isinstance(frac_bits, int) or frac_bits < 1 or frac_bits > 30:
+        raise ValueError("frac_bits must be in [1, 30]")
+    if isinstance(max_ulp_drift, bool) or not isinstance(max_ulp_drift, int) or max_ulp_drift < 0:
         raise ValueError("max_ulp_drift must be >= 0")
+    if _has_non_finite(state_a) or _has_non_finite(state_b):
+        return {
+            "passed": False,
+            "exact_digest_match": False,
+            "max_ulp_diff": float("inf"),
+            "reason": NON_FINITE_TENSOR,
+            "digest_a": "",
+            "digest_b": "",
+        }
     qa = quantize_fixed_point_q16_state(state_a, frac_bits=frac_bits)
     qb = quantize_fixed_point_q16_state(state_b, frac_bits=frac_bits)
     if set(qa.keys()) != set(qb.keys()):
@@ -154,12 +220,51 @@ class SpotCheckVerdict:
     steam_account_flagged: bool
     reason: str
 
+    def __post_init__(self) -> None:
+        for s_field in ("wu_id", "worker_id", "steam_id64", "reason"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if (
+            isinstance(self.segment_start_step, bool)
+            or not isinstance(self.segment_start_step, int)
+            or self.segment_start_step < 0
+            or isinstance(self.segment_end_step, bool)
+            or not isinstance(self.segment_end_step, int)
+            or self.segment_end_step < self.segment_start_step
+        ):
+            raise ValueError("segment_start_step and segment_end_step must satisfy 0 <= start <= end")
+        if (
+            isinstance(self.verification_overhead_pct, bool)
+            or not isinstance(self.verification_overhead_pct, (int, float))
+            or not math.isfinite(float(self.verification_overhead_pct))
+            or float(self.verification_overhead_pct) < 0.0
+        ):
+            raise ValueError("verification_overhead_pct must be a finite non-negative number")
+        if (
+            isinstance(self.tolerance_eps, bool)
+            or not isinstance(self.tolerance_eps, (int, float))
+            or not math.isfinite(float(self.tolerance_eps))
+            or float(self.tolerance_eps) <= 0.0
+        ):
+            raise ValueError("tolerance_eps must be a positive finite number")
+        for b_field in ("hash_matched", "passed", "steam_account_flagged"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+
 
 class DeterministicSpotCheckValidator:
     """Trusted BOINC Validator pool verifier for deterministic micro-checkpoint segments."""
 
     def __init__(self, tolerance_eps: float = 1e-4) -> None:
-        self.tolerance_eps = tolerance_eps
+        if (
+            isinstance(tolerance_eps, bool)
+            or not isinstance(tolerance_eps, (int, float))
+            or not math.isfinite(float(tolerance_eps))
+            or float(tolerance_eps) <= 0.0
+        ):
+            raise ValueError("tolerance_eps must be a positive finite number")
+        self.tolerance_eps = float(tolerance_eps)
         self.flagged_steam_accounts: dict[str, list[str]] = {}
 
     def verify_submission(
@@ -175,8 +280,16 @@ class DeterministicSpotCheckValidator:
         validator_rng_seed: int | None = None,
         worker_fingerprint: object | None = None,
         validator_fingerprint: object | None = None,
+        expected_init_state: dict[str, torch.Tensor] | None = None,
     ) -> SpotCheckVerdict:
         """Select one micro-checkpoint segment and verify worker determinism within eps = 1e-4."""
+        if hasattr(workunit, "shard_sha256") and (
+            not str(getattr(workunit, "shard_sha256", "")).strip()
+            or not str(getattr(workunit, "shard_hmac_signature", "")).strip()
+        ):
+            raise ValueError(
+                f"workunit {getattr(workunit, 'wu_id', '')!r} requires non-empty shard_sha256 and shard_hmac_signature (IP-218)"
+            )
         # HM-S10-08: eps is only meaningful within one accelerator class; do not replay or flag across classes
         if (
             worker_fingerprint is not None
@@ -215,69 +328,165 @@ class DeterministicSpotCheckValidator:
                 reason="Submission contained zero micro-checkpoints.",
             )
 
-        # Select the first 50-step segment [0, s_1] for stateless deterministic verification
-        # (or a randomly selected segment when optimizer state is checkpointed)
+        if 0 not in submission.micro_checkpoints:
+            self._flag_account(steam_id64, f"Missing step-0 micro-checkpoint in WU {workunit.wu_id}")
+            return SpotCheckVerdict(
+                wu_id=workunit.wu_id,
+                worker_id=submission.worker_id,
+                steam_id64=steam_id64,
+                segment_start_step=0,
+                segment_end_step=0,
+                verification_overhead_pct=0.0,
+                max_abs_divergence=float("inf"),
+                tolerance_eps=self.tolerance_eps,
+                hash_matched=False,
+                passed=False,
+                steam_account_flagged=True,
+                reason="Submission missing required step-0 micro-checkpoint.",
+            )
+
+        # Select a micro-checkpoint segment [selected_start, selected_end] via validator RNG (IP-76)
         rng = random.Random(validator_rng_seed if validator_rng_seed is not None else workunit.rng_seed)
-        selected_end = ckpt_steps[0] if len(ckpt_steps) == 1 else rng.choice(ckpt_steps[:1])
-        selected_start = 0
+        seg_idx = 0 if len(ckpt_steps) == 1 else rng.randrange(len(ckpt_steps))
+        selected_end = ckpt_steps[seg_idx]
+        selected_start = 0 if seg_idx == 0 else ckpt_steps[seg_idx - 1]
 
         overhead_pct = round(100.0 * (selected_end - selected_start) / max(1, workunit.inner_steps_H), 2)
 
-        expected_State = replay_inner_segment(
-            model=validator_model,
-            start_lora_state=submission.micro_checkpoints[0].state_snapshot,
-            token_sequences=token_sequences,
-            start_step=selected_start,
-            end_step=selected_end,
-            lr=lr,
-            weight_decay=weight_decay,
-            rng_seed=workunit.rng_seed,
-            micro_batch_size=micro_batch_size,
-            use_muon_lora_preconditioner=getattr(
-                submission, "use_muon_lora_preconditioner", False
-            ),
-            muon_ns_steps=getattr(submission, "muon_ns_steps", 5),
-        )
-
-        worker_record = submission.micro_checkpoints[selected_end]
-        worker_state = worker_record.state_snapshot
-
+        step0_record = submission.micro_checkpoints[0]
+        step0_sha = compute_state_dict_sha256(step0_record.state_snapshot)
+        theta_init_sha = compute_state_dict_sha256(submission.theta_init)
         max_diff = 0.0
-        for name, exp_tensor in expected_State.items():
-            if name not in worker_state:
-                max_diff = float("inf")
-                break
-            diff = float(
-                (exp_tensor.to(torch.float32).cpu() - worker_state[name].to(torch.float32).cpu())
-                .abs()
-                .max()
-                .item()
-            )
-            if diff > max_diff:
-                max_diff = diff
 
-        # Also inspect final delta consistency if worker tampered with theta_final after step s_1
+        # Verify step-0 micro-checkpoint matches theta_init (and coordinator expected_init_state if supplied)
+        if set(step0_record.state_snapshot.keys()) != set(submission.theta_init.keys()):
+            max_diff = float("inf")
+        else:
+            for name, init_t in submission.theta_init.items():
+                s0_diff = float(
+                    (init_t.to(torch.float32).cpu() - step0_record.state_snapshot[name].to(torch.float32).cpu())
+                    .abs()
+                    .max()
+                    .item()
+                )
+                if not math.isfinite(s0_diff):
+                    max_diff = float("inf")
+                    break
+                if s0_diff > max_diff:
+                    max_diff = s0_diff
+        if expected_init_state is not None:
+            if set(expected_init_state.keys()) != set(step0_record.state_snapshot.keys()):
+                max_diff = float("inf")
+            else:
+                for name, coord_t in expected_init_state.items():
+                    c_diff = float(
+                        (coord_t.to(torch.float32).cpu() - step0_record.state_snapshot[name].to(torch.float32).cpu())
+                        .abs()
+                        .max()
+                        .item()
+                    )
+                    if not math.isfinite(c_diff):
+                        max_diff = float("inf")
+                        break
+                    if c_diff > max_diff:
+                        max_diff = c_diff
+
+        steps_to_verify = sorted({ckpt_steps[0], selected_end, ckpt_steps[-1]})
+        all_ckpt_hashes_ok = step0_sha == step0_record.lora_sha256 and step0_sha == theta_init_sha
+        expected_sha = ""
+        worker_record = submission.micro_checkpoints[selected_end]
+
+        for target_end in steps_to_verify:
+            expected_state = replay_inner_segment(
+                model=validator_model,
+                start_lora_state=step0_record.state_snapshot,
+                token_sequences=token_sequences,
+                start_step=0,
+                end_step=target_end,
+                lr=lr,
+                weight_decay=weight_decay,
+                rng_seed=workunit.rng_seed,
+                micro_batch_size=micro_batch_size,
+                initial_step_state=step0_record.state_snapshot,
+                use_muon_lora_preconditioner=getattr(
+                    submission, "use_muon_lora_preconditioner", False
+                ),
+                muon_ns_steps=getattr(submission, "muon_ns_steps", 5),
+                use_paged_8bit_adamw=getattr(submission, "use_paged_8bit_adamw", False),
+            )
+            rec_target = submission.micro_checkpoints[target_end]
+            w_state = rec_target.state_snapshot
+            for name, exp_tensor in expected_state.items():
+                if name not in w_state:
+                    max_diff = float("inf")
+                    break
+                diff = float(
+                    (exp_tensor.to(torch.float32).cpu() - w_state[name].to(torch.float32).cpu())
+                    .abs()
+                    .max()
+                    .item()
+                )
+                # A NaN or infinite tensor must fail, not slip through: NaN compares False against every threshold.
+                if not math.isfinite(diff):
+                    max_diff = float("inf")
+                    break
+                if diff > max_diff:
+                    max_diff = diff
+            target_sha = compute_state_dict_sha256(expected_state)
+            if target_end == selected_end:
+                expected_sha = target_sha
+            if target_sha != rec_target.lora_sha256:
+                all_ckpt_hashes_ok = False
+            expected_state.clear()
+            del expected_state
+
+        # Verify theta_final matches the terminal micro-checkpoint and raw_delta matches theta_init - theta_final
+        final_ckpt_state = submission.micro_checkpoints[ckpt_steps[-1]].state_snapshot
+        if set(submission.theta_final.keys()) != set(final_ckpt_state.keys()):
+            max_diff = float("inf")
+        else:
+            for name, fin_ckpt_t in final_ckpt_state.items():
+                fin_diff = float(
+                    (fin_ckpt_t.to(torch.float32).cpu() - submission.theta_final[name].to(torch.float32).cpu())
+                    .abs()
+                    .max()
+                    .item()
+                )
+                if not math.isfinite(fin_diff):
+                    max_diff = float("inf")
+                    break
+                if fin_diff > max_diff:
+                    max_diff = fin_diff
+
         for name, init_t in submission.theta_init.items():
             reconstructed_delta = init_t.to(torch.float32).cpu() - submission.theta_final[name].to(torch.float32).cpu()
             submitted_raw = submission.raw_delta[name].to(torch.float32).cpu()
             delta_mismatch = float((reconstructed_delta - submitted_raw).abs().max().item())
+            if not math.isfinite(delta_mismatch):
+                max_diff = float("inf")
+                break
             if delta_mismatch > max_diff:
                 max_diff = delta_mismatch
 
-        expected_sha = compute_state_dict_sha256(expected_State)
-        expected_State.clear()
-        del expected_State
-        hash_matched = expected_sha == worker_record.lora_sha256
-        passed = max_diff <= self.tolerance_eps
+        hash_matched = all_ckpt_hashes_ok
+        passed = (max_diff <= self.tolerance_eps) and hash_matched
 
         flagged = not passed
-        reason = (
-            f"Verified segment [{selected_start}, {selected_end}] ({overhead_pct}% overhead): "
-            f"max_diff={max_diff:.2e} <= eps={self.tolerance_eps:.1e}"
-            if passed
-            else f"REJECTED segment [{selected_start}, {selected_end}]: "
-            f"divergence {max_diff:.2e} exceeds tolerance eps={self.tolerance_eps:.1e}"
-        )
+        if passed:
+            reason = (
+                f"Verified segment [{selected_start}, {selected_end}] ({overhead_pct}% overhead): "
+                f"max_diff={max_diff:.2e} <= eps={self.tolerance_eps:.1e}"
+            )
+        elif not hash_matched and max_diff <= self.tolerance_eps:
+            reason = (
+                f"REJECTED segment [{selected_start}, {selected_end}]: "
+                f"checkpoint lora_sha256 mismatch (expected {expected_sha[:16]}, got {worker_record.lora_sha256[:16]})"
+            )
+        else:
+            reason = (
+                f"REJECTED segment [{selected_start}, {selected_end}]: "
+                f"divergence {max_diff:.2e} exceeds tolerance eps={self.tolerance_eps:.1e}"
+            )
         if flagged:
             self._flag_account(steam_id64, reason)
 
@@ -312,6 +521,13 @@ class DeterministicSpotCheckValidator:
           3. Same `dtype` across compatible CPU/GPU class.
         Cross-`dtype` assignment (`bf16` vs `fp32`) is strictly refused (`returns None`).
         """
+        if not isinstance(worker_class, ExecutionClassProfile):
+            raise TypeError("worker_class must be an ExecutionClassProfile")
+        if isinstance(validator_pool, (str, bytes)) or not isinstance(validator_pool, Sequence):
+            raise TypeError("validator_pool must be a Sequence of ExecutionClassProfile")
+        for cand in validator_pool:
+            if not isinstance(cand, ExecutionClassProfile):
+                raise TypeError("each validator_pool entry must be an ExecutionClassProfile")
         for cand in validator_pool:
             if worker_class.exact_match(cand):
                 return cand
@@ -344,10 +560,24 @@ class DeterministicSpotCheckValidator:
         """
         w_cls = worker_class or ExecutionClassProfile()
         v_cls = validator_class or w_cls
+        if base_eps is not None and (isinstance(base_eps, bool) or not isinstance(base_eps, (int, float))):
+            raise ValueError("base_eps must be finite and > 0")
         eps0 = float(base_eps if base_eps is not None else self.tolerance_eps)
         if eps0 <= 0.0 or not math.isfinite(eps0):
             raise ValueError("base_eps must be finite and > 0")
-        if not (0.0 <= max_tensor_fraction_above_eps <= 1.0):
+        if (
+            isinstance(cross_thread_eps, bool)
+            or not isinstance(cross_thread_eps, (int, float))
+            or not math.isfinite(float(cross_thread_eps))
+            or float(cross_thread_eps) <= 0.0
+        ):
+            raise ValueError("cross_thread_eps must be finite and > 0")
+        if (
+            isinstance(max_tensor_fraction_above_eps, bool)
+            or not isinstance(max_tensor_fraction_above_eps, (int, float))
+            or not math.isfinite(float(max_tensor_fraction_above_eps))
+            or not (0.0 <= float(max_tensor_fraction_above_eps) <= 1.0)
+        ):
             raise ValueError("max_tensor_fraction_above_eps must be in [0, 1]")
 
         dtype_ok = w_cls.same_dtype_class(v_cls)
@@ -366,6 +596,23 @@ class DeterministicSpotCheckValidator:
                 dtype_matched=dtype_ok,
                 passed=False,
                 reason="REJECTED: parameter key mismatch or empty state dict.",
+            )
+
+        if _has_non_finite(worker_state) or _has_non_finite(validator_state):
+            # Checked over every tensor before any max/threshold comparison: NaN compares False
+            # against every bound, so a NaN in a non-first key would otherwise pass (IP-238).
+            return TwoStatisticSpotCheckResult(
+                linf_divergence=float("inf"),
+                num_tensors_above_eps=len(validator_state),
+                total_tensors=len(validator_state),
+                tensor_fraction_above_eps=1.0,
+                base_eps=eps0,
+                effective_eps=eps0,
+                max_tensor_fraction_above_eps=max_tensor_fraction_above_eps,
+                exact_class_matched=exact_ok,
+                dtype_matched=dtype_ok,
+                passed=False,
+                reason=f"{NON_FINITE_TENSOR}: worker or validator state contains NaN or inf.",
             )
 
         per_tensor_linf: list[float] = []

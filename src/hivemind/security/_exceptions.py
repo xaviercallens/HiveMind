@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Security exceptions shared by the owner-order guardrail and the GPU runtime hardening.
 
 Kept free of torch so that the PR security scanner (and the lightweight CI that runs it) can import the

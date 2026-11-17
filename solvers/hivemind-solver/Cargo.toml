@@ -1,0 +1,35 @@
+[package]
+name = "hivemind-solver"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+license = "AGPL-3.0"
+description = "Solver Bee wave 1: deterministic JSON-in/JSON-out ODE initial-value solver CLI built on a pinned rusty-SUNDIALS CVODE (BDF/Adams)."
+
+[lib]
+name = "hivemind_solver"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hivemind-solver"
+path = "src/main.rs"
+
+[dependencies]
+# rusty-SUNDIALS (BSD-3-Clause, same owner as HiveMind) as a PINNED external git dependency.
+# The rev MUST equal hivemind_solver::SOLVER_REV (a unit test enforces this).
+cvode = { git = "https://github.com/xaviercallens/rusty-SUNDIALS", rev = "4e3e32de9ff188bace35c9e80e433b4e795a9d76" }
+nvector = { git = "https://github.com/xaviercallens/rusty-SUNDIALS", rev = "4e3e32de9ff188bace35c9e80e433b4e795a9d76" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[profile.release]
+opt-level = 3
+lto = false
+codegen-units = 1
+debug = false
+# No fast-math exists in stable rustc; no target-cpu flags are set anywhere.
+
+# Standalone: never become part of an enclosing workspace.
+[workspace]

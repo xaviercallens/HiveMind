@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Phase A & Phase C: Branch-Train-Mix (BTM) Domain Partitioning & Sparse MoE Upcycling.
 
 Implements:
@@ -51,6 +52,16 @@ class ExpertBranchState:
     outer_step: int
     lora_state: dict[str, torch.Tensor] = field(repr=False)
 
+    def __post_init__(self) -> None:
+        if isinstance(self.branch_id, bool) or not isinstance(self.branch_id, int) or self.branch_id < 0:
+            raise ValueError("branch_id must be a non-negative integer")
+        if not isinstance(self.domain_name, str) or not self.domain_name.strip():
+            raise ValueError("domain_name must be a non-empty string")
+        if isinstance(self.outer_step, bool) or not isinstance(self.outer_step, int) or self.outer_step < 0:
+            raise ValueError("outer_step must be a non-negative integer")
+        if not isinstance(self.lora_state, dict):
+            raise ValueError("lora_state must be a dict")
+
 
 @dataclass
 class MoEUpcycleReport:
@@ -68,13 +79,58 @@ class MoEUpcycleReport:
     expert_utilization_distribution: dict[str, float] = field(default_factory=dict)
     attention_merge_mode: str = "uniform"
 
+    def __post_init__(self) -> None:
+        for i_name in (
+            "num_experts",
+            "top_k",
+            "attention_layers_merged",
+            "ffn_expert_modules_created",
+            "total_moe_parameters",
+            "active_parameters_per_token",
+        ):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_name} must be a positive integer")
+        if self.top_k > self.num_experts:
+            raise ValueError("top_k cannot exceed num_experts")
+        if (
+            not isinstance(self.expert_domains, list)
+            or len(self.expert_domains) != self.num_experts
+            or any(not isinstance(d, str) or not d.strip() for d in self.expert_domains)
+        ):
+            raise ValueError("expert_domains must be a list of non-empty strings of length num_experts")
+        for f_name in ("router_initial_loss", "router_final_loss"):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        if not isinstance(self.expert_utilization_distribution, dict):
+            raise ValueError("expert_utilization_distribution must be a dict")
+        if not isinstance(self.attention_merge_mode, str) or not self.attention_merge_mode.strip():
+            raise ValueError("attention_merge_mode must be a non-empty string")
+
 
 def initialize_domain_branches(
     initial_lora_state: dict[str, torch.Tensor],
     expert_domains: list[str] | None = None,
 ) -> dict[str, ExpertBranchState]:
     """Phase A: Initialize E=8 independent expert branches from identical base checkpoint W_0."""
-    domains = expert_domains or DEFAULT_EXPERT_DOMAINS
+    if not isinstance(initial_lora_state, dict) or not initial_lora_state:
+        raise ValueError("initial_lora_state must be a non-empty dictionary of tensors")
+    if expert_domains is None:
+        domains = list(DEFAULT_EXPERT_DOMAINS)
+    else:
+        if isinstance(expert_domains, (str, bytes)) or not expert_domains:
+            raise ValueError("expert_domains must not be empty when provided")
+        if any(not isinstance(d, str) or not d.strip() for d in expert_domains):
+            raise ValueError("expert_domains must contain non-empty string domain names")
+        if len(set(expert_domains)) != len(expert_domains):
+            raise ValueError("expert_domains must not contain duplicate domain names")
+        domains = list(expert_domains)
+    for k, v in initial_lora_state.items():
+        if not isinstance(v, torch.Tensor):
+            raise ValueError(f"initial_lora_state[{k!r}] must be a torch.Tensor")
+        if not torch.isfinite(v).all():
+            raise ValueError(f"initial_lora_state[{k!r}] contains non-finite values")
     branches: dict[str, ExpertBranchState] = {}
     for idx, domain in enumerate(domains):
         branches[domain] = ExpertBranchState(
@@ -103,6 +159,12 @@ def _extract_ab_pair(
     subpath: str,
 ) -> tuple[torch.Tensor, torch.Tensor] | None:
     """Locate (lora_A, lora_B) tensors for a specific decoder layer and projection."""
+    if not isinstance(lora_state, dict):
+        raise ValueError("lora_state must be a dict")
+    if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0:
+        raise ValueError("layer_idx must be a non-negative integer")
+    if not isinstance(subpath, str) or not subpath.strip():
+        raise ValueError("subpath must be a non-empty string")
     prefix = f"layers.{layer_idx}.{subpath}."
     a_tensor: torch.Tensor | None = None
     b_tensor: torch.Tensor | None = None
@@ -150,6 +212,33 @@ class SVDLoARankProjectionReport:
     source_lora_alpha: float
     target_lora_alpha: float
 
+    def __post_init__(self) -> None:
+        if isinstance(self.target_rank_r, bool) or not isinstance(self.target_rank_r, int) or self.target_rank_r < 1:
+            raise ValueError("target_rank_r must be a positive integer")
+        for i_nonneg in (
+            "source_rank_r",
+            "num_projected_pairs",
+            "num_padded_pairs",
+            "num_identity_pairs",
+            "source_params",
+            "target_params",
+        ):
+            val = getattr(self, i_nonneg)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_nonneg} must be a non-negative integer")
+        for f_name in (
+            "mean_spectral_energy_retained",
+            "min_spectral_energy_retained",
+            "max_relative_delta_error",
+            "source_lora_alpha",
+            "target_lora_alpha",
+        ):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        if float(self.source_lora_alpha) < 0.0 or float(self.target_lora_alpha) < 0.0:
+            raise ValueError("source_lora_alpha and target_lora_alpha must be non-negative")
+
     @property
     def compression_ratio(self) -> float:
         """Parameter compression factor achieved by the rank projection."""
@@ -163,6 +252,13 @@ def _orient_lora_pair(
     lora_b: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor, bool]:
     """Return a LoRA (A, B) pair in the canonical PEFT layout `A=[r, in]`, `B=[out, r]`."""
+    if (
+        not isinstance(lora_a, torch.Tensor)
+        or not isinstance(lora_b, torch.Tensor)
+        or lora_a.dtype == torch.bool
+        or lora_b.dtype == torch.bool
+    ):
+        raise ValueError("LoRA factors must be numeric 2-D tensors")
     if lora_a.dim() != 2 or lora_b.dim() != 2:
         raise ValueError(
             "LoRA factors must be 2-D tensors, got "
@@ -180,9 +276,11 @@ def _orient_lora_pair(
 
 def pair_lora_ab_keys(lora_state_dict: dict[str, torch.Tensor]) -> list[tuple[str, str]]:
     """Pair every `lora_A` key of a LoRA state dict with its matching `lora_B` key."""
+    if not isinstance(lora_state_dict, dict):
+        raise ValueError("lora_state_dict must be a dict")
     pairs: list[tuple[str, str]] = []
     for key in lora_state_dict:
-        if "lora_A" not in key:
+        if not isinstance(key, str) or "lora_A" not in key:
             continue
         b_key = key.replace("lora_A", "lora_B")
         if b_key in lora_state_dict:
@@ -197,6 +295,8 @@ def detect_lora_rank(lora_state_dict: dict[str, torch.Tensor]) -> int | None:
     factor pair is nonetheless projected independently by
     `project_lora_state_dict_to_rank`.
     """
+    if not isinstance(lora_state_dict, dict):
+        raise ValueError("lora_state_dict must be a dict")
     ranks: set[int] = set()
     for a_key, b_key in pair_lora_ab_keys(lora_state_dict):
         a_t = lora_state_dict[a_key]
@@ -240,8 +340,28 @@ def svd_project_lora_pair(
         `spectral_energy_retained = sum(s[:k]^2) / sum(s^2)` is the fraction of the
         Frobenius spectral energy of `D` captured by the truncated expansion.
     """
-    if target_rank_r < 1:
-        raise ValueError(f"target_rank_r must be >= 1, got {target_rank_r}.")
+    if isinstance(target_rank_r, bool) or not isinstance(target_rank_r, int) or target_rank_r < 1:
+        raise ValueError(f"target_rank_r must be an integer >= 1, got {target_rank_r}.")
+    if isinstance(scale_b, bool) or not isinstance(scale_b, (int, float)) or not math.isfinite(float(scale_b)) or float(scale_b) <= 0.0:
+        raise ValueError(f"scale_b must be a finite number > 0, got {scale_b}.")
+    if (
+        not isinstance(lora_a, torch.Tensor)
+        or not isinstance(lora_b, torch.Tensor)
+        or lora_a.dtype == torch.bool
+        or lora_b.dtype == torch.bool
+        or lora_a.dim() != 2
+        or lora_b.dim() != 2
+        or lora_a.numel() == 0
+        or lora_b.numel() == 0
+    ):
+        raise ValueError("lora_a and lora_b must be non-empty 2-D tensors.")
+    if lora_a.shape[0] != lora_b.shape[1]:
+        raise ValueError(
+            f"Incompatible LoRA factor shapes {tuple(lora_a.shape)} and {tuple(lora_b.shape)}: "
+            "expected lora_a.shape[0] == lora_b.shape[1]."
+        )
+    if not torch.isfinite(lora_a).all() or not torch.isfinite(lora_b).all():
+        raise ValueError("lora_a and lora_b must contain only finite values.")
 
     a_t = lora_a.detach().to(torch.float32)
     b_t = lora_b.detach().to(torch.float32)
@@ -306,8 +426,20 @@ def project_lora_state_dict_to_rank(
     Returns:
         `(projected_state_dict, report)`.
     """
-    if target_rank_r < 1:
-        raise ValueError(f"target_rank_r must be >= 1, got {target_rank_r}.")
+    if isinstance(target_rank_r, bool) or not isinstance(target_rank_r, int) or target_rank_r < 1:
+        raise ValueError(f"target_rank_r must be an integer >= 1, got {target_rank_r}.")
+    if source_rank_r is not None and (
+        isinstance(source_rank_r, bool) or not isinstance(source_rank_r, int) or source_rank_r < 1
+    ):
+        raise ValueError(f"source_rank_r must be an integer >= 1 when provided, got {source_rank_r}.")
+    for alpha_name, alpha_val in (("source_lora_alpha", source_lora_alpha), ("target_lora_alpha", target_lora_alpha)):
+        if alpha_val is not None and (
+            isinstance(alpha_val, bool)
+            or not isinstance(alpha_val, (int, float))
+            or not math.isfinite(float(alpha_val))
+            or float(alpha_val) <= 0.0
+        ):
+            raise ValueError(f"{alpha_name} must be a finite number > 0 when provided, got {alpha_val}.")
 
     pairs = pair_lora_ab_keys(lora_state_dict)
     detected_rank = detect_lora_rank(lora_state_dict)
@@ -415,6 +547,18 @@ class UpcycledSwiGLUExpert(nn.Module):
         dtype: torch.dtype = torch.float32,
     ) -> None:
         super().__init__()
+        if (
+            isinstance(hidden_size, bool)
+            or not isinstance(hidden_size, int)
+            or hidden_size < 1
+            or isinstance(intermediate_size, bool)
+            or not isinstance(intermediate_size, int)
+            or intermediate_size < 1
+        ):
+            raise ValueError("hidden_size and intermediate_size must be positive integers")
+        for w_name, w_t in (("gate_weight", gate_weight), ("up_weight", up_weight), ("down_weight", down_weight)):
+            if not isinstance(w_t, torch.Tensor) or w_t.dtype == torch.bool or w_t.dim() != 2 or w_t.numel() == 0:
+                raise ValueError(f"{w_name} must be a non-empty 2-D numeric torch.Tensor")
         dev = gate_weight.device
         self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False, dtype=dtype, device=dev)
         self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False, dtype=dtype, device=dev)
@@ -425,6 +569,8 @@ class UpcycledSwiGLUExpert(nn.Module):
             self.down_proj.weight.copy_(down_weight.to(device=dev, dtype=dtype))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if not isinstance(x, torch.Tensor) or x.dtype == torch.bool or x.numel() == 0:
+            raise ValueError("x must be a non-empty numeric torch.Tensor")
         return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
 
 
@@ -475,6 +621,18 @@ class TopKMoERouter(nn.Module):
     def __init__(self, hidden_size: int, num_experts: int = 8, top_k: int = 2, dtype: torch.dtype = torch.float32) -> None:
         super().__init__()
         _ = dtype
+        if (
+            isinstance(hidden_size, bool)
+            or not isinstance(hidden_size, int)
+            or hidden_size < 1
+            or isinstance(num_experts, bool)
+            or not isinstance(num_experts, int)
+            or num_experts < 1
+            or isinstance(top_k, bool)
+            or not isinstance(top_k, int)
+            or top_k < 1
+        ):
+            raise ValueError("hidden_size, num_experts, and top_k must be integers >= 1")
         self.num_experts = num_experts
         self.top_k = min(top_k, num_experts)
         # Keep tiny router matrix W_g in FP32 so AdamW (eps=1e-8) never underflows in FP16
@@ -491,6 +649,18 @@ class TopKMoERouter(nn.Module):
             selected_experts: [N, top_k] integer indices in [0, E-1]
             aux_loss: scalar load-balancing loss
         """
+        if (
+            not isinstance(hidden_states, torch.Tensor)
+            or hidden_states.dtype == torch.bool
+            or hidden_states.dim() != 2
+            or hidden_states.numel() == 0
+            or hidden_states.shape[-1] != self.wg.in_features
+        ):
+            raise ValueError(
+                f"hidden_states must be a non-empty 2-D numeric tensor with last dim {self.wg.in_features}"
+            )
+        if not bool(torch.isfinite(hidden_states).all().item()):
+            raise ValueError("hidden_states must contain only finite values")
         logits = self.wg(hidden_states.to(torch.float32))  # [N, E]
         probs_all = F.softmax(logits, dim=-1, dtype=torch.float32)
 
@@ -531,10 +701,17 @@ def _normalize_local_expert_indices(
     """Validate and canonicalize a FoMoE local-expert subset (`HM-S8-06`)."""
     if local_expert_indices is None:
         return None
+    if isinstance(local_expert_indices, (str, bytes)):
+        raise ValueError("local_expert_indices must be a sequence of integers")
+    raw_items: list[int] = []
     try:
-        normalized = sorted({int(idx) for idx in local_expert_indices})
-    except (TypeError, ValueError) as exc:
+        for idx in local_expert_indices:
+            if isinstance(idx, bool) or not isinstance(idx, int):
+                raise ValueError("local_expert_indices must be a sequence of integers")
+            raw_items.append(idx)
+    except TypeError as exc:
         raise ValueError("local_expert_indices must be a sequence of integers") from exc
+    normalized = sorted(set(raw_items))
     if not normalized:
         raise ValueError("local_expert_indices must contain at least one expert index")
     if normalized[0] < 0 or normalized[-1] >= num_experts:
@@ -597,6 +774,14 @@ class SparseMoEMLPBlock(nn.Module):
         peri_ln: bool = False,
     ) -> None:
         super().__init__()
+        if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 1:
+            raise ValueError("hidden_size must be a positive integer")
+        if not experts:
+            raise ValueError("experts must be non-empty")
+        if isinstance(expert_domains, (str, bytes)) or len(expert_domains) != len(experts):
+            raise ValueError("expert_domains length must match experts")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be a positive integer")
         if routing_mode not in ("softmax", "sigma_moe"):
             raise ValueError(f"routing_mode must be 'softmax' or 'sigma_moe', got {routing_mode!r}")
         self.hidden_size = hidden_size
@@ -630,6 +815,8 @@ class SparseMoEMLPBlock(nn.Module):
 
     def set_peri_ln(self, enabled: bool) -> None:
         """Enable or disable Peri-LayerNorm around the MoE block (`HM-S9-02`)."""
+        if not isinstance(enabled, bool):
+            raise ValueError("enabled must be a bool")
         self.peri_ln = bool(enabled)
 
     def set_local_expert_subset(self, local_expert_indices: Sequence[int] | None) -> None:
@@ -645,6 +832,12 @@ class SparseMoEMLPBlock(nn.Module):
 
     def hotplug_expert(self, domain_name: str, expert_module: nn.Module) -> None:
         """Hot-plug a newly converged domain expert E_{N+1} into this MoE layer."""
+        if not isinstance(domain_name, str) or not domain_name.strip():
+            raise ValueError("domain_name must be a non-empty string")
+        if domain_name in self.expert_domains:
+            raise ValueError(f"domain_name {domain_name!r} is already registered in expert_domains")
+        if not isinstance(expert_module, nn.Module):
+            raise ValueError("expert_module must be an nn.Module")
         self.experts.append(expert_module)
         self.expert_domains.append(domain_name)
         self.num_experts = len(self.experts)
@@ -756,6 +949,24 @@ class UpcycledSparseMoEModel(nn.Module):
         router_aux_loss_coef: float = 0.01,
     ) -> None:
         super().__init__()
+        if not isinstance(upcycled_backbone, nn.Module):
+            raise ValueError("upcycled_backbone must be an nn.Module")
+        if (
+            not isinstance(expert_domains, Sequence)
+            or isinstance(expert_domains, (str, bytes))
+            or len(expert_domains) == 0
+            or not all(isinstance(d, str) and d.strip() for d in expert_domains)
+        ):
+            raise ValueError("expert_domains must be a non-empty sequence of non-empty strings")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be a positive integer")
+        if (
+            isinstance(router_aux_loss_coef, bool)
+            or not isinstance(router_aux_loss_coef, (int, float))
+            or not math.isfinite(float(router_aux_loss_coef))
+            or float(router_aux_loss_coef) < 0.0
+        ):
+            raise ValueError("router_aux_loss_coef must be a finite non-negative number")
         self.backbone = upcycled_backbone
         self.expert_domains = list(expert_domains)
         self.num_experts = len(expert_domains)
@@ -794,6 +1005,8 @@ class UpcycledSparseMoEModel(nn.Module):
 
     def set_peri_ln(self, enabled: bool) -> None:
         """Enable or disable Peri-LayerNorm across all MoE blocks (`HM-S9-02`)."""
+        if not isinstance(enabled, bool):
+            raise ValueError("enabled must be a bool")
         for blk in self.get_moe_blocks():
             blk.set_peri_ln(enabled)
 
@@ -883,6 +1096,14 @@ class UpcycledSparseMoEModel(nn.Module):
         Returns:
             The new total number of experts `E+1`.
         """
+        if not isinstance(domain_name, str) or not domain_name.strip():
+            raise ValueError("domain_name must be a non-empty string")
+        if not isinstance(lora_state_dict, dict) or not lora_state_dict:
+            raise ValueError("lora_state_dict must be a non-empty dictionary")
+        if isinstance(lora_rank_r, bool) or not isinstance(lora_rank_r, int) or lora_rank_r < 1:
+            raise ValueError("lora_rank_r must be a positive integer")
+        if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or float(lora_alpha) <= 0.0:
+            raise ValueError("lora_alpha must be a finite positive number")
         scaling = float(lora_alpha) / float(lora_rank_r)
         device = next(self.backbone.parameters()).device
         dtype = next(self.backbone.parameters()).dtype
@@ -974,6 +1195,12 @@ def orthogonal_input_injection(
     Prevents collinear variance explosion across `T` recurrent passes while preserving
     exact orthogonality `<u_perp, h_t> = 0` when `||h_t||_2 > 0`.
     """
+    if recurrent_state.shape != prelude_state.shape or recurrent_state.dim() < 1 or recurrent_state.numel() == 0:
+        raise ValueError("recurrent_state and prelude_state must be non-empty tensors with identical shapes")
+    if isinstance(eps, bool) or not isinstance(eps, (int, float)) or not math.isfinite(float(eps)) or float(eps) <= 0.0:
+        raise ValueError("eps must be a finite positive number")
+    if not torch.isfinite(recurrent_state).all() or not torch.isfinite(prelude_state).all():
+        raise ValueError("recurrent_state and prelude_state must contain only finite values")
     h = recurrent_state.to(torch.float32)
     u = prelude_state.to(torch.float32)
     h_norm_sq = torch.sum(h * h, dim=-1, keepdim=True)
@@ -1004,10 +1231,33 @@ class LearnedDepthPrior(nn.Module):
         target_budget_steps: float | None = None,
     ) -> None:
         super().__init__()
-        if hidden_size < 1 or loop_steps < 1:
+        if (
+            isinstance(hidden_size, bool)
+            or not isinstance(hidden_size, int)
+            or hidden_size < 1
+            or isinstance(loop_steps, bool)
+            or not isinstance(loop_steps, int)
+            or loop_steps < 1
+        ):
             raise ValueError("hidden_size >= 1 and loop_steps >= 1 required")
-        if entropy_coef < 0.0 or budget_coef < 0.0:
+        if (
+            isinstance(entropy_coef, bool)
+            or not isinstance(entropy_coef, (int, float))
+            or not math.isfinite(float(entropy_coef))
+            or float(entropy_coef) < 0.0
+            or isinstance(budget_coef, bool)
+            or not isinstance(budget_coef, (int, float))
+            or not math.isfinite(float(budget_coef))
+            or float(budget_coef) < 0.0
+        ):
             raise ValueError("entropy_coef and budget_coef must be >= 0")
+        if target_budget_steps is not None and (
+            isinstance(target_budget_steps, bool)
+            or not isinstance(target_budget_steps, (int, float))
+            or not math.isfinite(float(target_budget_steps))
+            or float(target_budget_steps) <= 0.0
+        ):
+            raise ValueError("target_budget_steps must be a finite positive number when provided")
         self.hidden_size = int(hidden_size)
         self.loop_steps = int(loop_steps)
         self.entropy_coef = float(entropy_coef)
@@ -1023,12 +1273,25 @@ class LearnedDepthPrior(nn.Module):
 
     def depth_probabilities(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Return categorical depth probabilities `q(t | x)` of shape `[..., T]`."""
+        if (
+            not isinstance(hidden_states, torch.Tensor)
+            or hidden_states.dtype == torch.bool
+            or hidden_states.numel() == 0
+            or hidden_states.shape[-1] != self.hidden_size
+        ):
+            raise ValueError(f"hidden_states must be a non-empty numeric tensor with last dim {self.hidden_size}")
+        if not bool(torch.isfinite(hidden_states).all().item()):
+            raise ValueError("hidden_states must contain only finite values")
         logits = self.gate(hidden_states.to(torch.float32))
         return F.softmax(logits, dim=-1)
 
     @staticmethod
     def expected_depth(probs: torch.Tensor) -> torch.Tensor:
         """Compute expected recurrent depth `E_q[t] = sum_{t=1}^T t * q_t` in `[1, T]`."""
+        if not isinstance(probs, torch.Tensor) or probs.dtype == torch.bool or probs.numel() == 0:
+            raise ValueError("probs must be a non-empty numeric torch.Tensor")
+        if not bool(torch.isfinite(probs).all().item()):
+            raise ValueError("probs must contain only finite values")
         t_steps = probs.shape[-1]
         step_grid = torch.arange(1, t_steps + 1, dtype=probs.dtype, device=probs.device)
         return torch.sum(probs * step_grid, dim=-1)
@@ -1036,6 +1299,12 @@ class LearnedDepthPrior(nn.Module):
     @staticmethod
     def shannon_entropy(probs: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
         """Compute per-token Shannon entropy `H(q) = -sum_t q_t ln(q_t)` in `[0, ln(T)]`."""
+        if not isinstance(probs, torch.Tensor) or probs.dtype == torch.bool or probs.numel() == 0:
+            raise ValueError("probs must be a non-empty numeric torch.Tensor")
+        if not bool(torch.isfinite(probs).all().item()):
+            raise ValueError("probs must contain only finite values")
+        if isinstance(eps, bool) or not isinstance(eps, (int, float)) or not math.isfinite(float(eps)) or float(eps) <= 0.0:
+            raise ValueError("eps must be a finite positive number")
         p_clamped = probs.clamp_min(eps)
         return -torch.sum(probs * torch.log(p_clamped), dim=-1)
 
@@ -1045,6 +1314,13 @@ class LearnedDepthPrior(nn.Module):
         target_budget_steps: float | None = None,
     ) -> tuple[torch.Tensor, dict[str, float]]:
         """Evaluate `(loss, telemetry)` for the learned depth prior."""
+        if target_budget_steps is not None and (
+            isinstance(target_budget_steps, bool)
+            or not isinstance(target_budget_steps, (int, float))
+            or not math.isfinite(float(target_budget_steps))
+            or float(target_budget_steps) <= 0.0
+        ):
+            raise ValueError("target_budget_steps must be a finite positive number when provided")
         probs = self.depth_probabilities(hidden_states)
         exp_depth = self.expected_depth(probs)
         ent = self.shannon_entropy(probs)
@@ -1105,6 +1381,10 @@ class LoopStepLoRAAdapter(nn.Module):
 
     def __init__(self, hidden_size: int, rank: int, dtype: torch.dtype, device: torch.device) -> None:
         super().__init__()
+        if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 1:
+            raise ValueError("hidden_size must be a positive integer")
+        if isinstance(rank, bool) or not isinstance(rank, int) or rank < 1:
+            raise ValueError("rank must be a positive integer")
         self.down = nn.Linear(hidden_size, rank, bias=False, dtype=dtype, device=device)
         self.up = nn.Linear(rank, hidden_size, bias=False, dtype=dtype, device=device)
         nn.init.normal_(self.down.weight, std=1.0 / hidden_size)
@@ -1140,6 +1420,43 @@ class LoopedBackboneReport:
     last_mean_effective_steps: float | None = None
     last_early_exit_fraction: float | None = None
     last_fixed_point_residual: float | None = None
+
+    def __post_init__(self) -> None:
+        for i_pos in ("source_depth", "num_core_layers", "loop_steps", "effective_depth"):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+        for i_nonneg in (
+            "num_prelude_layers",
+            "num_coda_layers",
+            "per_step_lora_rank",
+            "source_weight_bytes",
+            "core_weight_bytes",
+            "loop_adapter_bytes",
+            "looped_weight_bytes",
+            "unrolled_weight_bytes",
+        ):
+            val = getattr(self, i_nonneg)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_nonneg} must be a non-negative integer")
+        if (
+            isinstance(self.depth_multiplier, bool)
+            or not isinstance(self.depth_multiplier, (int, float))
+            or not math.isfinite(float(self.depth_multiplier))
+            or float(self.depth_multiplier) <= 0.0
+        ):
+            raise ValueError("depth_multiplier must be a finite positive number")
+        if not isinstance(self.input_injection, str) or not self.input_injection.strip():
+            raise ValueError("input_injection must be a non-empty string")
+        for f_opt in ("last_mean_effective_steps", "last_early_exit_fraction", "last_fixed_point_residual"):
+            val = getattr(self, f_opt)
+            if val is not None and (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{f_opt} must be None or a finite non-negative number")
 
     @property
     def extra_weight_bytes(self) -> int:
@@ -1507,6 +1824,8 @@ def measure_moe_vram_footprint_gb(
         Dictionary with the weight/buffer breakdown (MiB & GiB) and, when running
         on CUDA, the live and peak allocated VRAM.
     """
+    if not isinstance(moe_model, nn.Module) or not hasattr(moe_model, "num_experts"):
+        raise TypeError("moe_model must be an UpcycledSparseMoEModel / nn.Module with num_experts")
     param_bytes = sum(p.numel() * p.element_size() for p in moe_model.parameters())
     buffer_bytes = sum(b.numel() * b.element_size() for b in moe_model.buffers())
     total_bytes = param_bytes + buffer_bytes
@@ -1560,8 +1879,12 @@ def hotplug_rank_adaptive_experts(
         Telemetry dictionary with the expert counts, per-expert projection reports
         and the VRAM footprint measured before and after the hot-plug.
     """
-    if target_rank_r < 1:
+    if isinstance(target_rank_r, bool) or not isinstance(target_rank_r, int) or target_rank_r < 1:
         raise ValueError(f"target_rank_r must be >= 1, got {target_rank_r}.")
+    if isinstance(vram_budget_gb, bool) or not isinstance(vram_budget_gb, (int, float)) or not math.isfinite(float(vram_budget_gb)) or float(vram_budget_gb) <= 0.0:
+        raise ValueError("vram_budget_gb must be a finite positive number")
+    if lora_alpha is not None and (isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or float(lora_alpha) <= 0.0):
+        raise ValueError("lora_alpha must be a finite positive number when provided")
 
     dst_alpha = float(lora_alpha) if lora_alpha is not None else 2.0 * float(target_rank_r)
     footprint_before = measure_moe_vram_footprint_gb(moe_model)
@@ -1904,6 +2227,12 @@ def train_moe_router_gating(
     lr: float = 3e-3,
 ) -> tuple[float, float, dict[str, float]]:
     """Train only the lightweight Top-2 gating network W_g while freezing upcycled experts."""
+    if not isinstance(domain_token_batches, dict) or not domain_token_batches:
+        raise ValueError("domain_token_batches must be a non-empty dict")
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not math.isfinite(float(lr)) or float(lr) <= 0.0:
+        raise ValueError("lr must be a positive finite float")
     device = next(moe_model.parameters()).device
     moe_model.train()
     moe_model.reset_routing_telemetry()

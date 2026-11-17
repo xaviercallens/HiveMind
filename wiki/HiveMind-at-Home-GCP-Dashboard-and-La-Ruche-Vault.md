@@ -17,7 +17,7 @@
   - **Direct Public HTTPS GCS Manifest URL:** [`https://storage.googleapis.com/socrateai-hivemind-la-ruche-vault/community_moe_release/ruche_manifest.json`](https://storage.googleapis.com/socrateai-hivemind-la-ruche-vault/community_moe_release/ruche_manifest.json)
   - **SocrateAI DataLake Mirror URI:** `gs://socrateai-datalake-gen-lang-client-0625573011/hivemind_la_ruche_vault`
 - **Scale-to-Zero Cost Optimization (`OPTIMAL_SCALE_TO_ZERO_AND_SPOT_ONLY`):**
-  - `--min-instances=0 --max-instances=2 --cpu=1 --memory=512Mi --cpu-throttling`
+  - `--min-instances=0 --max-instances=1 --cpu=1 --memory=512Mi --cpu-throttling`
   - **Idle Monthly Cost:** **`$0.00 USD / month`** (scales to `0` containers when idle; CPU is throttled outside active HTTP requests and covered by the GCP Cloud Run Always-Free Tier of 2M requests / 180,000 vCPU-s / 360,000 GiB-s per month).
   - **Container Footprint:** Ultra-lean `python:3.12-slim` + `numpy` + `safetensors` (`safe_open`) + `fastapi` (`1.4 MB` source & `.safetensors` context, `< 90 MiB` resident RAM, `< 1s` cold start).
   - **Fleet-Wide GCP Cost Audit:** All 30 Cloud Run services in `gen-lang-client-0625573011` enforce `minScale=0`, non-active workstation VMs (`xavuntu-desktop-1791007070`, `instance-20260624-120009`) are `TERMINATED` (`$0` compute), and active GPU compute uses `SPOT` preemption (`socreateai-agora-hermes-node1`).

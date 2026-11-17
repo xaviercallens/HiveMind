@@ -1,0 +1,113 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "projectile_no_drag",
+ "description": "Drag-free projectile (k=0): exact parabola; no ground-hit event (t_out continues below y=0).",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "projectile_no_drag",
+  "problem": {
+   "kind": "named",
+   "family": "projectile_drag",
+   "params": {
+    "g": 9.81
+   }
+  },
+  "y0": [
+   0.0,
+   0.0,
+   30.0,
+   40.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   0.5,
+   1.0,
+   2.0,
+   4.0,
+   6.0,
+   8.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   0.5,
+   1.0,
+   2.0,
+   4.0,
+   6.0,
+   8.0
+  ],
+  "y": [
+   [
+    15.0,
+    18.77375,
+    30.0,
+    35.095
+   ],
+   [
+    30.0,
+    35.095,
+    30.0,
+    30.189999999999998
+   ],
+   [
+    60.0,
+    60.379999999999995,
+    30.0,
+    20.38
+   ],
+   [
+    120.0,
+    81.52,
+    30.0,
+    0.759999999999998
+   ],
+   [
+    180.0,
+    63.41999999999999,
+    30.0,
+    -18.860000000000003
+   ],
+   [
+    240.0,
+    6.079999999999984,
+    30.0,
+    -38.480000000000004
+   ]
+  ],
+  "max_abs_error_bound": 2.7e-13,
+  "method": "exact parabola (mpmath)",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.2.1",
+   "scipy": "1.8.0",
+   "numpy": "1.21.5"
+  },
+  "cross_check": {
+   "method": "scipy DOP853 rtol=1e-13",
+   "max_abs_diff": 2.7e-13,
+   "max_diff_over_spec_tolerance": 4.43e-06,
+   "min_spec_tolerance_over_bound": 28500.0
+  }
+ },
+ "invariants": [
+  {
+   "name": "energy",
+   "kind": "energy",
+   "model": "projectile",
+   "params": {
+    "g": 9.81
+   },
+   "value": 1250.0,
+   "tol": 0.0125
+  }
+ ],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

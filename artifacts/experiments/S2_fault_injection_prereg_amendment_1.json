@@ -1,0 +1,12 @@
+{
+  "experiment_id": "S2-solver-verifier-fault-injection",
+  "amends": "artifacts/experiments/S2_fault_injection_prereg.json",
+  "amendment": 1,
+  "written_utc": "2026-10-27T12:40:00Z",
+  "written_before_registered_run": true,
+  "kind": "harness fix (solver under test), not a threshold change and not a verifier change",
+  "trigger": "A reduced smoke run (clean-n 6, n-per-fault 3, output to /tmp, not the registered run) with the in-script RK4 using 2.0 substeps per unit of (dt*norm*rtol^-1/4) showed F3_loosened_tolerance undetected in 3 of 3 cases in both modes (verdict VERIFIED/AUDITED), while F1, F2, F4, F5 were detected 3 of 3 in both modes. Cause: with that constant the in-script solver is so over-accurate that a run at rtol 1e-3 still lies within the verifier's accepted band (factor 100 times 1e-8 relative) of the exact reference. The injected 'loosened' result was therefore not actually less accurate than what the spec claims, i.e. the injection was ineffective, not the verifier blind.",
+  "fix": "the substep constant in rk4_solve in scripts/run_experiment_S2_fault_injection.py changes from 2.0 to 1.0, so that the solver's error is of the order of the requested rtol (about 0.1 to 0.3 times rtol), which is what 'a solver run at rtol 1e-3' means. Nothing else changes.",
+  "unchanged": ["A1, A2, A3", "all tolerances and factors in tolerances_fixed_now", "N per fault", "fault definitions", "seed", "controls", "verifier code"],
+  "re_run_policy": "the registered run is executed after this file is committed. If F3 is still missed, that is reported as a result, and any verifier fix gets amendment 2 before another run."
+}

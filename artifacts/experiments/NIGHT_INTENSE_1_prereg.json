@@ -1,0 +1,103 @@
+{
+ "experiment_id": "NIGHT-INTENSE-1",
+ "registered_utc": "2026-10-27T21:16:02Z",
+ "registered_before_run": true,
+ "status": "REGISTERED, NOT RUN. No arm has been run. Running any arm needs the owner's explicit go (decision 1 in docs/NIGHT_INTENSE_PLAN.md) and a probe runner that does not exist yet.",
+ "title": "Does a larger base or a higher LoRA rank reduce held-out loss per night-hour compared with the current Granite-1B base, inside the same quiet night window, without degrading morning serving latency?",
+ "requested_by": "HiveMind owner (2026-10-27): prepare to conduct intense new MoE QLoRA and larger-model training during the nights on the single Tesla T4 that also serves users",
+ "question": "Does a larger base or higher LoRA rank reduce held-out loss per night-hour compared with the current Granite-1B base within the same quiet night window, without degrading morning serving latency?",
+ "plan_document": "docs/NIGHT_INTENSE_PLAN.md",
+ "finding_that_shapes_the_design": {
+  "what": "The owner's governor policy (idle 1800 s at night, 7200 s by day, 4300 MiB free) is fixed and is not touched by this experiment. The earlier 5-second 'intense' experiment was rejected by the owner (113 yields for 3.93 h of training, node telemetry aggregate). This design asks for no shorter idle rule: it uses the hours that are already quiet.",
+  "evidence": "Node telemetry aggregate, small sample (2 to 3 days): about 0 real chat completions per hour from 23:00 to 07:00 Paris; under the 1800 s rule the node trained 5.86 h in the early hours of 2026-10-27 with 2 resumes and 1 yield. The earlier Granite-1B run plateaued after about 30 rounds (deploy/t4_node/live/README.md).",
+  "consequence": "The lever left is not more rounds on the same base; it is a larger base, a higher rank, or longer sequences, each of which needs more VRAM than the 4300 MiB policy leaves. That VRAM exists only when the 7B coder is unloaded (about 10.5 GB free)."
+ },
+ "design": {
+  "unit_of_comparison": "one wall-clock training block per arm, equal length, on a separate quiet night (one candidate per night, never two). All arms train on the same ordered text rows of the six night domains (general, french, edu_web, news, biomed, math; src/hivemind/boinc/real_client/moe_work.py), cycling in that order, from the same data seed, with the AdamW-restart-per-segment semantics of replay_inner_segment.",
+  "block_length_h": 3.0,
+  "window_paris": "23:00-06:30, everything inside it. Fixed sequence per night: 23:00-23:30 baseline TTFT (coder warm); 23:30 explicit or expired unload of the coder (N1 arms only); 23:30-00:00 at least 30 minutes with no request of any kind (the 1800 s quiet rule is kept, not shortened); 00:00 training starts; 3.0 h block ends 03:00; held-out evaluation; then 20 TTFT requests over the first 30 minutes after the training process has left the GPU, finishing by about 04:00; hard stop 06:30, which leaves slack for one overrun",
+  "seeds": "one training seed per arm. The paired test below measures sequence sampling, not seed-to-seed variance. A win is therefore labelled indicative until a second seed repeats it.",
+  "arms": {
+   "A0_control": {
+    "base": "ibm-granite/granite-3.1-1b-a400m-base",
+    "recipe": "rank 8, alpha 16, q/k/v/o, seq 128, micro-batch 2, no checkpointing, AdamW (the production workunit shape)",
+    "tier": "N0 (4300 MiB free policy); measured process peak 3716 MiB (deploy/t4_node/live/README.md)"
+   },
+   "A1_higher_rank_same_base": {
+    "base": "ibm-granite/granite-3.1-1b-a400m-base",
+    "recipe": "rank 32, alpha 64, q/k/v/o, seq 256, micro-batch 2, no checkpointing, AdamW",
+    "tier": "N0. Estimator process peak 3592 MiB (scripts/qlora_vram_estimate.py, calibration error up to 17.6 %, biased low for the Granite MoE): marginal against 4300 MiB once a 20 % margin is added. Not tested."
+   },
+   "A2_larger_moe": {
+    "base": "ibm-granite/granite-3.1-3b-a800m-base",
+    "recipe": "rank 16, alpha 32, q/k/v/o, seq 256, micro-batch 2, gradient checkpointing on, AdamW",
+    "tier": "N1 (7B coder unloaded; about 10.5 GB free). Estimator process peak 6714 MiB. Weights alone about 6.0 GiB because the fused experts stay 16-bit (docs/T4_NIGHT_MODEL_DECISION.md)"
+   },
+   "A3_larger_dense": {
+    "base": "Qwen/Qwen3-4B-Instruct-2507",
+    "recipe": "rank 16, alpha 32, q/k/v/o/gate/up/down, seq 256, micro-batch 1, gradient checkpointing on, AdamW",
+    "tier": "N1 by design (headroom for the unknown). A dense model quantises fully; micro-batch 2 without checkpointing ran out of memory at 3.97 GiB under the 3950 MiB cap (docs/T4_NIGHT_MODEL_DECISION.md). Estimator process peak at micro-batch 1 with checkpointing: 3922 MiB, so N0 is conceivable but marginal. Not tested."
+   }
+  },
+  "order": ["A0_control", "A1_higher_rank_same_base", "A2_larger_moe", "A3_larger_dense"],
+  "order_note": "A0 first so that the control and the later arms share the same harness. Each arm is a separate owner go. An arm whose measured VRAM probe exceeds its tier budget is recorded as DOES_NOT_FIT and not trained.",
+  "excluded": "Qwen3.5-4B, Phi-4-mini, Phi-tiny-MoE and OLMoE-1B-7B are not arms: Qwen3.5 has a hybrid attention layout the estimator only approximates; Phi-4-mini overlaps A3; Phi-tiny-MoE (about 6.2 GiB of weights) and OLMoE (about 12.5 GiB) are heavier than A2 without a stronger reason. They can be added by a registered amendment."
+ },
+ "data": {
+  "training_domains": ["general", "french", "edu_web", "news", "biomed", "math"],
+  "training_source": "the local Hugging Face cache datasets listed in src/hivemind/boinc/real_client/moe_work.py (no downloads)",
+  "held_out": "the fixed held-out slices of the same six domains (never trained on), cut as the first 512 UTF-8 bytes (at a character boundary) of each of 64 held-out rows per domain, 384 spans in all. Whether every domain has 64 usable held-out rows is Not verified; if a domain has fewer, the number per domain is reduced equally for all domains and recorded before any arm runs.",
+  "never_training_data": "MBPP and HumanEval (the repository's evaluation benchmarks) and any item that appears in a held-out slice",
+  "licence_note": "Dataset licences for the six night domains are not recorded in the files read for this plan; they must be checked before any adapter or number is published (Not verified)."
+ },
+ "metrics": {
+  "bpb": "bits per byte on a held-out span: sum of negative log-likelihood (nats) of all tokens after the first, divided by ln 2 times the UTF-8 bytes of the text after the first token. Used instead of per-token loss because the tokenizers differ (docs/T4_NIGHT_MODEL_DECISION.md). Eval sets are rebuilt per tokenizer from the same text.",
+  "M1_primary_gain_per_hour": "G = (bpb_at_adapter_init - bpb_at_block_end) / training_hours, per span, per domain and pooled over the 384 spans. bpb_at_adapter_init is the same model with the freshly initialised (zero-effect) adapter, so each arm is measured against its own untrained base.",
+  "M2_absolute_end_bpb": "end-of-block bpb per domain and pooled. Descriptive only: a larger base is better before any training, so this is not evidence of better training.",
+  "M3_throughput": "tokens per second, bytes of training text per hour, steps per hour",
+  "M4_resources": "process peak VRAM sampled every 5 s from nvidia-smi, maximum GPU temperature, maximum power draw, host RSS peak, free disk before and after",
+  "M5_interruptions": "number of aborts (any request seen on the nginx in-flight or other-GPU-busy signals, thermal stop, preemption notice)",
+  "M6_serving_ttft": "time to first token of the coder tier through the router path, streaming, temperature 0, max_tokens 1, prompt 'Reply with OK.', measured with the persistent probe account (the live_user_monitor approach). Baseline: 20 requests, 90 s apart, from 23:00 to 23:30 with the coder resident (inside the window; the probe requests themselves count as traffic and reset any quiet clock). After: 20 requests, 90 s apart, over the first 30 minutes AFTER training has stopped and its process has left the GPU. The first request after the stop is recorded separately as the cold (or warm) first request; the other 19 are the warm series. The documented warm baseline of the coder (short) is 0.63 to 0.81 s (deploy/t4_node/node/README.md); a cold reload was measured at 52 to 120 s (deploy/t4_bee_expert/start.sh comment, issue #193)."
+ },
+ "hypotheses": {
+  "H1": "Arm A_k (k in 1,2,3) has a higher pooled gain per hour G than A0: exact paired sign test on per-span differences d_i = G_arm,i - G_A0,i (ties dropped), two-sided p < 0.0167 (Bonferroni over three comparisons), AND pooled G_arm >= 1.25 x pooled G_A0, AND no domain with G_arm < 0.",
+  "H2": "Serving is not degraded: R3 below holds for the arm.",
+  "H3_descriptive": "Absolute end bpb and tokens per second are reported for every arm; no significance claim."
+ },
+ "acceptance_rules_fixed_now": {
+  "R1_validity": "the block ran at least 2.5 h of training, starting no earlier than 00:00 (30 minutes of silence after the 23:00-23:30 baseline) and ending before 06:30 with the tier's VRAM budget respected (N0 4300 MiB, N1 10000 MiB, N2 14000 MiB, process peak by nvidia-smi), maximum GPU temperature below 83 C, no unreviewed change to the governor, and the held-out sets unchanged (sha256 recorded before the first arm). Otherwise the arm is INVALID and may be re-run once.",
+  "R2_efficacy": "H1 holds. The paired test is the exact paired sign test implemented as hivemind.swarm.verified_update_gate.exact_paired_p (b = spans where A0 gained more, c = spans where the arm gained more). The gate itself takes pass/fail outcomes, so applying it to per-span differences is an ADAPTATION of its approach, stated here. As a non-regression check the gate proper is also applied, the way it is meant to be used (two maps on identical items): baseline = A0's per-span map ('pass' where A0's end bpb is not worse than A0's own init bpb), candidate = the arm's per-span map (same definition on the arm's own init), UpdatePolicy(alpha=0.05, min_n=30, tolerated_net_loss=0, require_improvement=False); it must return ACCEPT. (Correction before any run: an earlier draft used an all-pass baseline, which makes decide() reject on a single worse span.)",
+  "R3_serving": "after the block: warm-series median TTFT <= 1.25 x the pre-block baseline median AND <= 1.0 s; no 5xx among the 20 requests; the first request after the stop (cold or warm) answers within 120 s. A cold first request is expected for N1 arms (the coder was unloaded) and is reported, not penalised below 120 s.",
+  "verdicts": {
+   "WIN": "R1 and R2 and R3",
+   "NO_GAIN": "R1 and R3 hold, R2 does not",
+   "SERVING_DAMAGE": "R3 fails (the arm is not usable on this node whatever its loss)",
+   "DOES_NOT_FIT": "the pre-training VRAM probe exceeded the tier budget",
+   "INVALID": "R1 fails"
+  },
+  "multiplicity": "three arm-versus-control comparisons, alpha 0.05 / 3 = 0.0167, fixed now. With 384 spans and few ties, a concordance of about 56 % (216 of 384) is the smallest that reaches that level.",
+  "what_a_win_means": "A WIN means more held-out bits-per-byte gain per night-hour on these six domains at this recipe and seed. It does not mean better answers: held-out loss is not downstream quality, and no downstream test is part of this experiment."
+ },
+ "controls": {
+  "control_arm": "A0 is the current production recipe on the current base, run in the same harness, window and data order.",
+  "negative_control": "none for the loss metric (it has no label to shuffle). The pre-block versus post-block TTFT comparison has its own control: the baseline series measured the same evening.",
+  "determinism": "Not tested for the new harness. The held-out evaluation uses fixed spans and greedy scoring (no sampling).",
+  "leakage": "held-out rows are excluded from the training row ranges by construction in moe_work.py (eval slices are separate files or the last 200 rows); the harness must assert no shared row id before each arm."
+ },
+ "probe_protocol": {
+  "summary": "One candidate at a time; only inside 23:00-06:30 Paris; only when the OWNER has set the HOLD file and says go. The exact commands are in docs/NIGHT_INTENSE_PLAN.md section 6 and are NOT run by this PR.",
+  "prerequisites_not_built": [
+   "a probe runner that trains one arm for a fixed wall-clock budget, stops within about 1 s on any nginx in-flight request or other-process GPU activity (reusing the governor's stub_status and GPU-busy checks), and writes the held-out bpb before and after",
+   "per-tokenizer held-out sets for the Qwen3 base",
+   "a rank, sequence-length and checkpointing option in the memory probe (scripts/t4_model_probe.py has --cap-mib, --micro-batch, --seq-len, --segments; rank is fixed at 8 and checkpointing is not an option)"
+  ]
+ },
+ "not_claimed": [
+  "that any larger base will fit or train on this node (Not tested; every VRAM figure for a new arm is an estimate with a stated error)",
+  "that a lower held-out loss means better answers",
+  "that adapters are portable across bases (they are not: an adapter is specific to its base)",
+  "anything about replay validation of the new bases on other hardware (Not tested; E12 cross-device tolerance is a known risk)",
+  "that a night of training leaves the coder warm the next morning (that is what M6 measures)"
+ ],
+ "non_monetary": "HMT remain points with no cash value."
+}

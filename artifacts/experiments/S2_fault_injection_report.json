@@ -1,0 +1,178 @@
+{
+  "acceptance": {
+    "A1_all_injected_failed_or_unverified": "FAIL",
+    "A2_no_clean_failed": "PASS",
+    "A3_caveat_on_every_certificate": "PASS",
+    "certificates_checked_for_caveat": 421
+  },
+  "clean": {
+    "n": 60,
+    "verdicts_by_mode": {
+      "ADHOC": {
+        "AUDITED": 60
+      },
+      "LIBRARY": {
+        "VERIFIED": 60
+      }
+    }
+  },
+  "controls": {
+    "negative_hashes_detail": "input_sha256 '5d3d6c00691764b6cb7496b97da54996addc4ea07030ebd7c3268578aa338a55' != sha256 of the spec bytes 7e40013247c26c24aa2e62de1950999db55a382896f6801977f5aed5f70ae8e1",
+    "negative_hashes_flagged": true,
+    "negative_verdict": "FAILED",
+    "positive_library_verified": true
+  },
+  "experiment_id": "S2-solver-verifier-fault-injection",
+  "faults": {
+    "F1_wrong_matrix_entry": {
+      "N": 30,
+      "ineffective_redraws": 0,
+      "modes": {
+        "ADHOC": {
+          "detected": 30,
+          "failed_by_check": {
+            "tightening": 30
+          },
+          "missed_case_ids": [],
+          "verdicts": {
+            "FAILED": 30
+          }
+        },
+        "LIBRARY": {
+          "detected": 30,
+          "failed_by_check": {
+            "invariants": 20,
+            "reference": 30,
+            "tightening": 30
+          },
+          "missed_case_ids": [],
+          "verdicts": {
+            "FAILED": 30
+          }
+        }
+      }
+    },
+    "F2_perturbed_trajectory": {
+      "N": 30,
+      "ineffective_redraws": 0,
+      "modes": {
+        "ADHOC": {
+          "detected": 30,
+          "failed_by_check": {
+            "tightening": 30
+          },
+          "missed_case_ids": [],
+          "verdicts": {
+            "FAILED": 30
+          }
+        },
+        "LIBRARY": {
+          "detected": 30,
+          "failed_by_check": {
+            "invariants": 20,
+            "reference": 30,
+            "tightening": 30
+          },
+          "missed_case_ids": [],
+          "verdicts": {
+            "FAILED": 30
+          }
+        }
+      }
+    },
+    "F3_loosened_tolerance": {
+      "N": 30,
+      "ineffective_redraws": 0,
+      "modes": {
+        "ADHOC": {
+          "detected": 29,
+          "failed_by_check": {
+            "tightening": 29
+          },
+          "missed_case_ids": [
+            "s2-affine-1005"
+          ],
+          "verdicts": {
+            "AUDITED": 1,
+            "FAILED": 29
+          }
+        },
+        "LIBRARY": {
+          "detected": 29,
+          "failed_by_check": {
+            "invariants": 3,
+            "reference": 29,
+            "tightening": 29
+          },
+          "missed_case_ids": [
+            "s2-affine-1005"
+          ],
+          "verdicts": {
+            "FAILED": 29,
+            "VERIFIED": 1
+          }
+        }
+      }
+    },
+    "F4_nan_injected": {
+      "N": 30,
+      "ineffective_redraws": 0,
+      "modes": {
+        "ADHOC": {
+          "detected": 30,
+          "failed_by_check": {
+            "hashes": 30,
+            "shape": 30
+          },
+          "missed_case_ids": [],
+          "verdicts": {
+            "FAILED": 30
+          }
+        },
+        "LIBRARY": {
+          "detected": 30,
+          "failed_by_check": {
+            "hashes": 30,
+            "shape": 30
+          },
+          "missed_case_ids": [],
+          "verdicts": {
+            "FAILED": 30
+          }
+        }
+      }
+    },
+    "F5_truncated_output": {
+      "N": 30,
+      "ineffective_redraws": 0,
+      "modes": {
+        "ADHOC": {
+          "detected": 30,
+          "failed_by_check": {
+            "shape": 30
+          },
+          "missed_case_ids": [],
+          "verdicts": {
+            "FAILED": 30
+          }
+        },
+        "LIBRARY": {
+          "detected": 30,
+          "failed_by_check": {
+            "shape": 30
+          },
+          "missed_case_ids": [],
+          "verdicts": {
+            "FAILED": 30
+          }
+        }
+      }
+    }
+  },
+  "mode": "self_contained",
+  "prereg": "artifacts/experiments/S2_fault_injection_prereg.json",
+  "receipt_sha256": "9d9a334e1986c6a20b088657504ed8c30373191a29428ed0ce715a87fe13e3f5",
+  "run_valid": true,
+  "seed": 20261027,
+  "verifier_version": "1"
+}

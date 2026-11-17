@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#0c141f;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-background": "#dbe3f3", "secondary-container": "#34ff8d", "primary-fixed": "#7df4ff", "on-primary": "#00363a", "outline": "#849495", "tertiary": "#fff4e8", "background": "#0c141f", "surface": "#0c141f", "on-secondary": "#003919", "on-primary-container": "#006970", "primary": "#dbfcff", "surface-variant": "#2e3542", "tertiary-container": "#ffd386", "surface-container": "#18202c", "on-secondary-fixed-variant": "#005228", "on-error-container": "#ffdad6", "inverse-surface": "#dbe3f3", "error": "#ffb4ab", "primary-fixed-dim": "#00dbe9", "primary-container": "#00f0ff", "surface-bright": "#323a46", "secondary-fixed": "#60ff99", "surface-container-highest": "#2e3542", "on-tertiary-fixed": "#271900", "on-surface-variant": "#b9cacb", "surface-container-high": "#232a37", "secondary": "#f5fff3", "surface-container-lowest": "#070e1a", "on-primary-fixed": "#002022", "on-primary-fixed-variant": "#004f54", "surface-dim": "#0c141f", "on-error": "#690005", "tertiary-fixed": "#ffdea8", "on-tertiary-fixed-variant": "#5e4200", "on-surface": "#dbe3f3", "on-secondary-container": "#007239", "error-container": "#93000a", "on-tertiary-container": "#7d5800", "on-tertiary": "#412d00", "inverse-on-surface": "#29313d", "surface-container-low": "#141c28", "surface-tint": "#00dbe9", "outline-variant": "#3b494b", "inverse-primary": "#006970", "on-secondary-fixed": "#00210c", "secondary-fixed-dim": "#00e479", "tertiary-fixed-dim": "#ffba20" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-md": "0.5rem", "space-sm": "0.25rem", "gutter": "0.5rem", "space-lg": "1rem", "margin-mobile": "0.5rem", "space-xl": "1.5rem", "margin": "1rem", "space-xs": "0.125rem", "gutter-mobile": "0.25rem" }, "fontFamily": { "headline-lg": ["Space Grotesk"], "headline-lg-mobile": ["Space Grotesk"], "label-lg": ["JetBrains Mono"], "body-md": ["JetBrains Mono"], "headline-xl-mobile": ["Space Grotesk"], "headline-sm": ["Space Grotesk"], "label-sm": ["JetBrains Mono"], "body-lg": ["JetBrains Mono"], "headline-md": ["Space Grotesk"], "headline-xl": ["Space Grotesk"], "label-md": ["JetBrains Mono"], "body-sm": ["JetBrains Mono"] }, "fontSize": { "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "0.08em", "fontWeight": "600" }], "headline-lg-mobile": ["22px", { "lineHeight": "28px", "letterSpacing": "0.06em", "fontWeight": "600" }], "label-lg": ["12px", { "lineHeight": "16px", "letterSpacing": "0.15em", "fontWeight": "700" }], "body-md": ["13px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400" }], "headline-xl-mobile": ["28px", { "lineHeight": "34px", "letterSpacing": "0.1em", "fontWeight": "700" }], "headline-sm": ["16px", { "lineHeight": "22px", "letterSpacing": "0.04em", "fontWeight": "500" }], "label-sm": ["9px", { "lineHeight": "12px", "letterSpacing": "0.1em", "fontWeight": "500" }], "body-lg": ["15px", { "lineHeight": "22px", "letterSpacing": "0.02em", "fontWeight": "400" }], "headline-md": ["20px", { "lineHeight": "26px", "letterSpacing": "0.05em", "fontWeight": "600" }], "headline-xl": ["40px", { "lineHeight": "48px", "letterSpacing": "0.12em", "fontWeight": "700" }], "label-md": ["10px", { "lineHeight": "14px", "letterSpacing": "0.12em", "fontWeight": "600" }], "body-sm": ["11px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.4)] pt-safe"><div class="h-28 px-margin-mobile flex flex-col justify-between py-space-xs"><div class="flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><div class="w-7 h-7 bg-primary-container/20 flex items-center justify-center text-primary-container"><span class="material-symbols-outlined text-[18px]">rocket_launch</span></div><div class="flex flex-col min-w-0"><div class="flex items-center gap-space-xs"><span class="font-label-md text-label-md text-primary font-bold truncate">HIVEMIND</span><span class="font-label-sm text-label-sm text-primary-fixed-dim">NCC-31337</span></div><span class="font-label-sm text-label-sm text-on-surface-variant truncate">v4.6 // Tactical Hud</span></div></div><div class="flex items-center gap-space-xs"><div class="bg-surface-container-high px-space-xs py-0.5 flex items-center gap-space-xs"><span class="w-1.5 h-1.5 rounded-full bg-secondary-container animate-pulse"></span><span class="font-label-sm text-label-sm text-secondary-fixed">55.10|238.92</span></div><div class="flex items-center bg-surface-container-low px-space-xs py-0.5"><button class="font-label-sm text-label-sm text-primary-container px-0.5">EN</button><span class="font-label-sm text-label-sm text-outline">/</span><button class="font-label-sm text-label-sm text-on-surface-variant px-0.5">FR</button><span class="font-label-sm text-label-sm text-outline">/</span><button class="font-label-sm text-label-sm text-on-surface-variant px-0.5">ZH</button></div><button aria-label="Voice HUD Status" class="min-h-[44px] min-w-[44px] flex items-center justify-center bg-surface-container-high text-primary-container"><span class="font-label-sm text-label-sm font-bold">VOIX</span></button><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1VncIjkS3k_yS6pvWMKgJhQRARxt-oaBJoEGzfJXw8hgtT1Iny6S2eITsP3rdpb15yrU68LyrmEisht0DPZQJyrP4p9rfXz7hvuhMQL_qcvKBZaHGAufvQDF4Y1BjEJijpwNAfP9nAUXSCQ9gGnY-mcOQ1joChsyfsC7Nrc0jk-brOjfroI07jgbH8lsdgkswBUQ3Z50RAEa3YMc3CnTnxsEPXDUkyqr_feLT59dklI"/></div></div><div class="flex items-center justify-between gap-space-xs overflow-x-auto no-scrollbar py-space-xs" role="tablist"><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-primary-container/20 text-primary-container font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-primary-fixed-dim mr-1">1.</span>GALAXIE</button><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-surface-container-low text-on-surface-variant font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-outline mr-1">2.</span>ORBIT BEE</button><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-surface-container-low text-on-surface-variant font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-outline mr-1">3.</span>OOLITE LAND</button><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-surface-container-low text-on-surface-variant font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-outline mr-1">4.</span>JWST/LOIS</button></div></div></header><main class="flex flex-col relative w-full pt-28 pb-20 bg-surface flex-1"><div class="flex flex-col w-full px-margin-mobile pb-space-lg gap-space-md">
+<!-- STAGE ACTIVE INDICATOR STRIP -->
+<div class="bg-surface-container-high px-space-md py-space-sm flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-2.5 h-2.5 bg-tertiary-container animate-pulse"></div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm text-tertiary-container uppercase tracking-widest">[STAGE 02: ACTIVE]</span>
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-bold">ORBIT BEE // BEE-MOE</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">LAGRANGE RING INGRESS • TRAJECTORY LOCK</span>
+</div>
+</div>
+<div class="flex items-center gap-space-xs shrink-0">
+<span class="font-label-sm text-label-sm px-space-xs py-0.5 bg-surface-container text-secondary-fixed">STABLE</span>
+<span class="font-label-sm text-label-sm px-space-xs py-0.5 bg-primary-container text-on-primary-container font-bold">T-04:18:22</span>
+</div>
+</div>
+<!-- CENTRAL ORBIT BEE SIMULATION VIEWPORT -->
+<div class="relative bg-surface-container-lowest p-space-md flex flex-col gap-space-sm shadow-md overflow-hidden">
+<!-- Reticle corner brackets via subtle styling -->
+<div class="flex justify-between items-start">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-primary font-bold">VIEWPORT // ASTROMETRIC-02</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">STAR: GLIESE 504B (RED DWARF) / RING: BEE-MOE</span>
+</div>
+<div class="flex items-center gap-space-xs bg-surface-container-high px-space-sm py-0.5">
+<span class="material-symbols-outlined text-[14px] text-primary-fixed-dim">radar</span>
+<span class="font-label-sm text-label-sm text-primary-fixed-dim">RADAR LOCK 99.8%</span>
+</div>
+</div>
+<!-- Interactive Canvas Visualizer -->
+<div class="relative w-full h-56 bg-surface-container-low flex items-center justify-center overflow-hidden">
+<!-- Grid Overlay SVG -->
+<svg class="absolute inset-0 w-full h-full opacity-30 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="24" id="hud-grid" patternunits="userSpaceOnUse" width="24">
+<path d="M 24 0 L 0 0 0 24" fill="none" opacity="0.4" stroke="#7df4ff" stroke-width="0.5"></path>
+</pattern>
+</defs>
+<rect fill="url(#hud-grid)" height="100%" width="100%"></rect>
+</svg>
+<!-- Solar & Lagrange Ring Diagram SVG -->
+<svg class="w-full h-full relative z-10" fill="none" viewbox="0 0 340 220" xmlns="http://www.w3.org/2000/svg">
+<!-- Host Star Glow & Body -->
+<circle cx="170" cy="110" fill="#ffd386" fill-opacity="0.85" r="14"></circle>
+<circle cx="170" cy="110" r="22" stroke="#ffba20" stroke-dasharray="2 2" stroke-opacity="0.6" stroke-width="1"></circle>
+<text fill="#271900" font-family="JetBrains Mono" font-size="6" font-weight="700" text-anchor="middle" x="170" y="113">SOL</text>
+<!-- BEE-MOE Lagrange Ring Trajectory -->
+<ellipse cx="170" cy="110" rx="120" ry="70" stroke="#00dbe9" stroke-dasharray="4 3" stroke-opacity="0.75" stroke-width="1.2"></ellipse>
+<ellipse cx="170" cy="110" rx="90" ry="52" stroke="#3b494b" stroke-dasharray="2 4" stroke-width="0.8"></ellipse>
+<!-- Lagrange Points -->
+<!-- L1 (Interior) -->
+<circle cx="130" cy="110" fill="#0c141f" r="3" stroke="#00f0ff" stroke-width="1"></circle>
+<text fill="#00dbe9" font-family="JetBrains Mono" font-size="7" text-anchor="middle" x="130" y="103">L1</text>
+<!-- L2 (Exterior Behind Planet) -->
+<circle cx="280" cy="110" fill="#0c141f" r="3" stroke="#00f0ff" stroke-width="1"></circle>
+<text fill="#00dbe9" font-family="JetBrains Mono" font-size="7" text-anchor="start" x="288" y="113">L2</text>
+<!-- L3 (Counter Solar) -->
+<circle cx="50" cy="110" fill="#0c141f" r="3" stroke="#849495" stroke-width="1"></circle>
+<text fill="#b9cacb" font-family="JetBrains Mono" font-size="7" text-anchor="end" x="42" y="113">L3</text>
+<!-- L4 (Leading 60 deg) -->
+<circle cx="215" cy="52" fill="#34ff8d" r="3" stroke="#003919" stroke-width="1"></circle>
+<text fill="#60ff99" font-family="JetBrains Mono" font-size="7" text-anchor="middle" x="215" y="44">L4 (STATION)</text>
+<!-- L5 (Trailing 60 deg) -->
+<circle cx="215" cy="168" fill="#0c141f" r="3" stroke="#849495" stroke-width="1"></circle>
+<text fill="#b9cacb" font-family="JetBrains Mono" font-size="7" text-anchor="middle" x="215" y="180">L5</text>
+<!-- Host Planet Marker along Orbit -->
+<circle cx="250" cy="110" fill="#141c28" r="7" stroke="#34ff8d" stroke-width="1.5"></circle>
+<circle cx="250" cy="110" fill="#34ff8d" r="2"></circle>
+<text fill="#34ff8d" font-family="JetBrains Mono" font-size="7" font-weight="700" text-anchor="middle" x="250" y="125">K2-18 b</text>
+<!-- USS HIVEMIND Vector & Insertion Target on Ring -->
+<path d="M 215 52 L 235 68" stroke="#ffd386" stroke-dasharray="1 2" stroke-width="1"></path>
+<polygon fill="#ffd386" points="215,52 211,46 220,49"></polygon>
+<text fill="#ffd386" font-family="JetBrains Mono" font-size="6.5" font-weight="600" x="180" y="68">HIVEMIND [VEL: +28.4km/s]</text>
+<!-- Synodic Arc Lock Projection -->
+<path d="M 215 52 A 120 70 0 0 1 250 110" fill="none" opacity="0.9" stroke="#ffd386" stroke-dasharray="3 3" stroke-width="1.8"></path>
+</svg>
+<!-- Dynamic Watermark Telemetry Overlay -->
+<div class="absolute bottom-2 left-2 flex flex-col pointer-events-none">
+<span class="font-label-sm text-label-sm text-primary-fixed">ALT: 42,160 KM</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">INCLINATION: 0.04°</span>
+</div>
+<div class="absolute bottom-2 right-2 text-right pointer-events-none">
+<span class="font-label-sm text-label-sm text-secondary-fixed">SYNODIC LOCK: ENGAGED</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">ORBIT PERIOD: 32.94 D</span>
+</div>
+</div>
+<!-- Alert / Event Broadcast Feed Strip -->
+<div class="bg-surface-container-high px-space-sm py-space-xs flex items-center justify-between">
+<div class="flex items-center gap-space-xs truncate">
+<span class="w-1.5 h-1.5 bg-primary-container shrink-0"></span>
+<span class="font-label-sm text-label-sm text-on-surface truncate">BEE-MOE Orbital Ring Synchronized // Solar wind flux nominal // Gravitational Δ-V verified</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary shrink-0 pl-space-xs font-bold">[NOMINAL]</span>
+</div>
+</div>
+<!-- REAL-TIME ORBITAL MANEUVERS & PROPULSION -->
+<div class="grid grid-cols-1 gap-space-md">
+<!-- Propulsion Cluster Panel -->
+<div class="bg-surface-container p-space-md flex flex-col gap-space-sm shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-primary-container">maps_ar</span>
+<span class="font-label-md text-label-md text-primary font-bold">ION PROPULSION TELEMETRY</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary-fixed bg-surface-container-low px-space-xs py-0.5">THRUST 94.2%</span>
+</div>
+<!-- Segmented Bar Gauges -->
+<div class="flex flex-col gap-space-xs">
+<!-- Thruster Alpha -->
+<div class="flex flex-col gap-0.5">
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="text-on-surface-variant">VECTOR ALPHA • FORWARD AXIAL</span>
+<span class="text-primary-fixed-dim">94.2% // 1,840 mN</span>
+</div>
+<div class="w-full h-2.5 bg-surface-container-lowest flex gap-0.5 p-0.5">
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-surface-container-highest"></div>
+</div>
+</div>
+<!-- Thruster Beta -->
+<div class="flex flex-col gap-0.5">
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="text-on-surface-variant">VECTOR BETA • INCLINATION BIAS</span>
+<span class="text-primary-fixed-dim">94.2% // 1,840 mN</span>
+</div>
+<div class="w-full h-2.5 bg-surface-container-lowest flex gap-0.5 p-0.5">
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-surface-container-highest"></div>
+</div>
+</div>
+<!-- Thruster Gamma -->
+<div class="flex flex-col gap-0.5">
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="text-on-surface-variant">VECTOR GAMMA • SYNODIC SYNC</span>
+<span class="text-primary-fixed-dim">94.2% // 1,840 mN</span>
+</div>
+<div class="w-full h-2.5 bg-surface-container-lowest flex gap-0.5 p-0.5">
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-primary-container"></div>
+<div class="h-full flex-1 bg-surface-container-highest"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Orbital Eccentricity Stabilization Decay Curve -->
+<div class="bg-surface-container p-space-md flex flex-col gap-space-sm shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-tertiary-container">show_chart</span>
+<span class="font-label-md text-label-md text-primary font-bold">ORBITAL ECCENTRICITY DECAY (e)</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary-fixed bg-surface-container-low px-space-xs py-0.5">CIRCULARIZATION STABLE</span>
+</div>
+<!-- Graph Visualization -->
+<div class="relative w-full h-28 bg-surface-container-low p-space-xs flex flex-col justify-between">
+<!-- SVG Decay Graph -->
+<svg class="w-full h-full" fill="none" viewbox="0 0 320 80" xmlns="http://www.w3.org/2000/svg">
+<!-- Guide lines -->
+<line stroke="#2e3542" stroke-dasharray="3 3" stroke-width="1" x1="0" x2="320" y1="20" y2="20"></line>
+<line stroke="#2e3542" stroke-dasharray="3 3" stroke-width="1" x1="0" x2="320" y1="50" y2="50"></line>
+<line stroke="#2e3542" stroke-width="1" x1="0" x2="320" y1="70" y2="70"></line>
+<!-- Target Circular Threshold -->
+<line stroke="#34ff8d" stroke-dasharray="2 2" stroke-width="0.8" x1="0" x2="320" y1="68" y2="68"></line>
+<text fill="#34ff8d" font-family="JetBrains Mono" font-size="6" text-anchor="end" x="316" y="65">e_crit = 0.012</text>
+<!-- Decay Curve (0.09 -> 0.012) -->
+<path d="M 0 16 C 50 16, 90 38, 140 48 C 190 58, 240 68, 320 68" fill="none" stroke="#00f0ff" stroke-width="2"></path>
+<!-- Shaded Area Under Curve -->
+<path d="M 0 16 C 50 16, 90 38, 140 48 C 190 58, 240 68, 320 68 L 320 80 L 0 80 Z" fill="#00f0ff" fill-opacity="0.08"></path>
+<!-- Active Ping Point -->
+<circle cx="316" cy="68" fill="#34ff8d" r="3"></circle>
+<circle cx="316" cy="68" opacity="0.6" r="6" stroke="#34ff8d" stroke-width="0.8"></circle>
+</svg>
+<div class="flex justify-between font-label-sm text-label-sm pt-space-xs text-on-surface-variant">
+<span>APOAPSIS (e = 0.090)</span>
+<span>Δ-V STABILIZED</span>
+<span class="text-secondary-fixed">FINAL (e = 0.012)</span>
+</div>
+</div>
+</div>
+</div>
+<!-- ACTIVE EXOPLANET TARGET DOSSIER (K2-18 b) -->
+<div class="bg-surface-container p-space-md flex flex-col gap-space-sm shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[18px] text-primary">public</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">TARGET DOSSIER // K2-18 b</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-primary-container bg-primary-container px-space-xs py-0.5 font-bold">SUB-NEPTUNE / HYCEAN</span>
+</div>
+<!-- Planet Spec Grid -->
+<div class="grid grid-cols-3 gap-space-xs bg-surface-container-low p-space-sm">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">MASS</span>
+<span class="font-label-md text-label-md text-on-surface font-bold">8.63 M⊕</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">RADIUS</span>
+<span class="font-label-md text-label-md text-on-surface font-bold">2.61 R⊕</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">EQUIL. TEMP</span>
+<span class="font-label-md text-label-md text-tertiary-container font-bold">255 K (-18°C)</span>
+</div>
+</div>
+<!-- Visual Exoplanet Rendering -->
+<div class="relative w-full h-36 bg-surface-container-lowest overflow-hidden flex items-center justify-center">
+<img class="w-full h-full object-cover opacity-85" data-alt="Photorealistic astronomical render of exoplanet K2-18 b in deep space, showing a deep oceanic turquoise atmosphere enveloped in delicate high-altitude cloud bands with specular reflection from a faint red dwarf star Gliese 504B, tactical HUD cyan grid lines projected across planetary limb." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBhHz3OrT0OeeU29KzPqF_MSRtw-Vg8uiakkADUz1s5smrV9B9ecm6b6SKC5htKdpWdRptF04mz_aDQuVEy7oJ48t2m3MwX3yfDKz_D3gwNI2BW77vDWxdc5r_5TduWU9GRR2NTqfTlr1-KLqsgO_P0GuateQN9vtaM3-8TbArigGU1Z4DqkQnqeqX60jFWCgg6BuqJlvSi8RfHTtKVrLRvr_9ZHEirvqCSk5d0Bqh0"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest via-transparent to-transparent"></div>
+<div class="absolute top-2 left-2 bg-surface-container/80 px-space-xs py-0.5">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim">HYCEAN WORLD CLASSIFICATION</span>
+</div>
+</div>
+<!-- Atmospheric Transmission Spectroscopy Readout -->
+<div class="flex flex-col gap-space-xs bg-surface-container-low p-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-primary font-bold">TRANSMISSION SPECTROSCOPY // NIRISS+NIRSpec</span>
+<span class="font-label-sm text-label-sm text-secondary-fixed">JWST CALIBRATED</span>
+</div>
+<!-- Spectrum Chemical Signatures -->
+<div class="flex flex-col gap-space-xs">
+<!-- H2O Reading -->
+<div class="flex items-center justify-between font-label-sm text-label-sm">
+<span class="text-on-surface">WATER VAPOR (H₂O) • 1.4 μm BAND</span>
+<span class="text-primary-container font-bold">CONFIRMED (98.4%)</span>
+</div>
+<div class="w-full h-1.5 bg-surface-container-high">
+<div class="h-full bg-primary-container w-[98%]"></div>
+</div>
+<!-- DMS Reading -->
+<div class="flex items-center justify-between font-label-sm text-label-sm pt-space-xs">
+<span class="text-on-surface">DIMETHYL SULFIDE (DMS, (CH₃)₂S) BIO-MARKER</span>
+<span class="text-tertiary-container font-bold">PROBABILITY 72%</span>
+</div>
+<div class="w-full h-1.5 bg-surface-container-high">
+<div class="h-full bg-tertiary-container w-[72%]"></div>
+</div>
+<!-- Methane & CO2 -->
+<div class="flex items-center justify-between font-label-sm text-label-sm pt-space-xs">
+<span class="text-on-surface-variant">CARBON DIOXIDE (CO₂) &amp; METHANE (CH₄)</span>
+<span class="text-on-surface-variant">HIGH RATIO DETECTED</span>
+</div>
+<div class="w-full h-1.5 bg-surface-container-high">
+<div class="h-full bg-surface-variant w-[84%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- ASTROBIOLOGICAL DOCK & FLEET RENDEZVOUS STATUS -->
+<div class="bg-surface-container p-space-md flex flex-col gap-space-sm shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[18px] text-secondary-fixed">hub</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">ORBITAL DOCK // FLEET RENDEZVOUS</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary-fixed bg-surface-container-low px-space-xs py-0.5">LCARS PROTOCOL v4.6</span>
+</div>
+<!-- LCARS Data Table -->
+<div class="flex flex-col gap-0.5 bg-surface-container-lowest p-space-xs">
+<!-- Row 1: Drone Hive Alpha -->
+<div class="flex items-center justify-between bg-surface-container-low px-space-sm py-space-xs text-body-sm font-body-sm">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 bg-secondary-fixed shrink-0"></span>
+<span class="text-on-surface font-bold">BEE-POD CARRIER 01</span>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="text-on-surface-variant">SYNODIC +0.02°</span>
+<span class="text-secondary-fixed font-bold">DOCKED</span>
+</div>
+</div>
+<!-- Row 2: Atmospheric Probe LOIS -->
+<div class="flex items-center justify-between bg-surface-container-low px-space-sm py-space-xs text-body-sm font-body-sm">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 bg-primary-container shrink-0"></span>
+<span class="text-on-surface font-bold">PROBE LOIS-EXO-4</span>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="text-on-surface-variant">Δ-V: 1.12 km/s</span>
+<span class="text-primary-fixed-dim font-bold">APPROACHING</span>
+</div>
+</div>
+<!-- Row 3: Cryo Biological Harvester -->
+<div class="flex items-center justify-between bg-surface-container-low px-space-sm py-space-xs text-body-sm font-body-sm">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 bg-tertiary-container shrink-0"></span>
+<span class="text-on-surface font-bold">HARVESTER BIO-CENTRAL</span>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="text-on-surface-variant">L4 REST VECTOR</span>
+<span class="text-tertiary-container font-bold">STANDBY</span>
+</div>
+</div>
+<!-- Row 4: JWST Relay Array -->
+<div class="flex items-center justify-between bg-surface-container-low px-space-sm py-space-xs text-body-sm font-body-sm">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 bg-secondary-container shrink-0"></span>
+<span class="text-on-surface font-bold">JWST UPLINK BEACON</span>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="text-on-surface-variant">PING: 42.8 ms</span>
+<span class="text-secondary-fixed font-bold">ONLINE</span>
+</div>
+</div>
+</div>
+<!-- Quick Action Tactical Console Switches -->
+<div class="grid grid-cols-2 gap-space-sm pt-space-xs">
+<button class="min-h-[44px] bg-primary-container px-space-md py-space-xs flex items-center justify-center gap-space-xs text-on-primary-container font-label-md text-label-md font-bold uppercase transition-transform active:scale-95" id="lockSyncBtn">
+<span class="material-symbols-outlined text-[16px]">chevron_forward</span>
+<span>CONFIRM RING SYNC</span>
+</button>
+<button class="min-h-[44px] bg-surface-container-high px-space-md py-space-xs flex items-center justify-center gap-space-xs text-tertiary-container font-label-md text-label-md font-bold uppercase transition-transform active:scale-95" id="bioScanBtn">
+<span class="material-symbols-outlined text-[16px]">biotech</span>
+<span>SAMPLE ATMOSPHERE</span>
+</button>
+</div>
+</div>
+</div>
+<script>
+  // Tactical micro-interaction handlers
+  const lockSyncBtn = document.getElementById('lockSyncBtn');
+  if (lockSyncBtn) {
+    lockSyncBtn.addEventListener('click', () => {
+      lockSyncBtn.classList.toggle('bg-secondary-fixed');
+      lockSyncBtn.classList.toggle('text-on-secondary-fixed');
+      const label = lockSyncBtn.querySelector('span:last-child');
+      if (label) {
+        label.innerText = label.innerText === 'CONFIRM RING SYNC' ? 'LOCK CONFIRMED [L4]' : 'CONFIRM RING SYNC';
+      }
+    });
+  }
+
+  const bioScanBtn = document.getElementById('bioScanBtn');
+  if (bioScanBtn) {
+    bioScanBtn.addEventListener('click', () => {
+      bioScanBtn.classList.toggle('bg-tertiary-container');
+      bioScanBtn.classList.toggle('text-on-tertiary-container');
+      const label = bioScanBtn.querySelector('span:last-child');
+      if (label) {
+        label.innerText = label.innerText === 'SAMPLE ATMOSPHERE' ? 'SPECTRA RECORDED' : 'SAMPLE ATMOSPHERE';
+      }
+    });
+  }
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.5)]" data-active-classes="text-primary-container bg-primary-container/15"><div class="flex justify-around items-center h-20 px-gutter-mobile"><a aria-current="page" class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm transition-colors text-primary-container bg-primary-container/15" data-path="tactical-hud" href="#"><span class="material-symbols-outlined text-[20px]">radar</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Tactical</span></a><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="systems-status" href="#"><span class="material-symbols-outlined text-[20px]">memory</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Systems</span></a><div class="flex flex-col items-center justify-center"><button aria-label="Alert Condition Status" class="w-11 h-11 bg-surface-container-high flex flex-col items-center justify-center text-secondary-fixed"><span class="material-symbols-outlined text-[20px]">shield</span><span class="font-label-sm text-[8px] leading-tight">DEFCON</span></button></div><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="comms-audio" href="#"><span class="material-symbols-outlined text-[20px]">record_voice_over</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Comms</span></a><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="astrometrics" href="#"><span class="material-symbols-outlined text-[20px]">explore</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Astro</span></a></div></nav></body></html>

@@ -1,0 +1,99 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "pendulum_small_angle",
+ "description": "Undamped pendulum, theta0=0.05 rad (small angle), g/l=9.81, short horizon; the reference is the exact nonlinear solution (not the linearised cos).",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "pendulum_small_angle",
+  "problem": {
+   "kind": "named",
+   "family": "pendulum",
+   "params": {
+    "g_over_l": 9.81
+   }
+  },
+  "y0": [
+   0.05,
+   0.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   0.1,
+   0.5,
+   1.0,
+   2.0,
+   5.0,
+   10.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   0.1,
+   0.5,
+   1.0,
+   2.0,
+   5.0,
+   10.0
+  ],
+  "y": [
+   [
+    0.04756847276231395,
+    -0.04823281783272852
+   ],
+   [
+    0.0002497640691487364,
+    -0.15658633108435804
+   ],
+   [
+    -0.04999750523623697,
+    -0.0015640596742697668
+   ],
+   [
+    0.04999002119369425,
+    0.0031279634002213848
+   ],
+   [
+    -0.049937643342381856,
+    -0.007817179729055301
+   ],
+   [
+    0.0497507287744883,
+    0.015614877490239305
+   ]
+  ],
+  "max_abs_error_bound": 1.88e-17,
+  "method": "exact (Jacobi elliptic cd, mpmath)",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.2.1",
+   "scipy": "1.8.0",
+   "numpy": "1.21.5"
+  },
+  "cross_check": {
+   "method": "taylor (mpmath.odefun)",
+   "max_abs_diff": 0.0,
+   "max_diff_over_spec_tolerance": 0.0,
+   "min_spec_tolerance_over_bound": 5450000.0
+  }
+ },
+ "invariants": [
+  {
+   "name": "energy",
+   "kind": "energy",
+   "model": "pendulum",
+   "params": {
+    "g_over_l": 9.81
+   },
+   "value": 0.012259945525381124,
+   "tol": 1e-05
+  }
+ ],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

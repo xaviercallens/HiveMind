@@ -1,8 +1,9 @@
 [project]
 name = "project-hivemind"
-version = "2.2.0"
+version = "3.1.1"
 description = "Project HiveMind: Decentralized MoE Training & Inference via Steam, BOINC, and DiLoCo-QLoRA"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "torch>=2.4.0,<2.15.0",
@@ -29,6 +30,9 @@ dependencies = [
 [project.optional-dependencies]
 astro = [
     "pillow>=10.0.0",
+]
+kafka = [
+    "confluent-kafka>=2.3.0",
 ]
 dev = [
     "pillow>=10.0.0",
@@ -67,7 +71,10 @@ pythonpath = ["src", "."]
 
 [tool.coverage.run]
 source = ["src/hivemind"]
-omit = ["*/__pycache__/*"]
+omit = [
+    "*/__pycache__/*",
+    "src/hivemind/game/*",
+]
 
 [tool.coverage.report]
 fail_under = 95

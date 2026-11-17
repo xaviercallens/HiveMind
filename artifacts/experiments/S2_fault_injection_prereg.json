@@ -1,0 +1,45 @@
+{
+  "experiment_id": "S2-solver-verifier-fault-injection",
+  "registered_utc": "2026-10-27T12:00:00Z",
+  "registered_before_run": true,
+  "title": "Does the Solver Bee certificate verifier catch wrong answers? Five injected fault types against a clean set (proposal W1-7)",
+  "origin": "docs/BEE_MOE_NUMERIC_SOLVERS_PROPOSAL.md (PR #260) deliverable W1-7; contract hivemind-solver-cert/1 (verifier src/hivemind/solverbee/verifier.py, PR-B of Solver Bee wave 1).",
+  "question": "When a solver result is wrong in one of five specific ways, does verify() return FAILED or UNVERIFIED (never VERIFIED or AUDITED), while clean results are never FAILED, and does every certificate carry the caveat?",
+  "mode": {
+    "self_contained_default": "cases are generated in-script from a seed; the solver under test is a fixed-step RK4 written in the runner (substeps scale with rtol^(-1/4)); references are closed-form (harmonic oscillator, two-step decay chain, affine decay), independent of the solver. Every case is presented to the verifier in two ways: LIBRARY (problem with reference given, rerun given) and ADHOC (no problem, rerun given).",
+    "real_cli_optional": "with --binary and --problems the same harness runs the real hivemind-solver CLI on the problem library; that mode is not part of this registration's thresholds beyond the identical rules A1-A3 and is reported separately if run."
+  },
+  "seed": 20261027,
+  "clean_set": {
+    "definition": "60 specs generated from the seed (20 per family: harmonic with omega in [0.5,3] and horizon T in [2,6]; decay chain with k1 in [0.5,2], k2 in [2.5,5]; affine decay x'=-k x+b with two independent species), 8 strictly increasing output times, rtol 1e-8, atol 1e-10. Each is solved by the correct solver with the correct spec.",
+    "expected_verdicts": "LIBRARY mode VERIFIED, ADHOC mode AUDITED (descriptive; only the absence of FAILED is an acceptance rule)."
+  },
+  "fault_types": {
+    "F1_wrong_matrix_entry": "the solver is given a copy of the spec in which one randomly chosen entry A[i][j] is increased by 0.01; the result carries the input_sha256 of the TRUE spec bytes (a solver that used a wrong A)",
+    "F2_perturbed_trajectory": "one randomly chosen entry y[k][j] with |y|>=1e-2 of a correct result is multiplied by 1+1e-3",
+    "F3_loosened_tolerance": "the solver is run with rtol 1e-3 (atol unchanged) on a spec that claims rtol 1e-8; the result carries the hash of the true spec",
+    "F4_nan_injected": "one randomly chosen entry of y in a correct result is replaced by NaN",
+    "F5_truncated_output": "the last time point (in both t and y) of a correct result is removed"
+  },
+  "per_fault_N": "30 injected cases per fault type (150 injected cases in total, each presented in 2 modes = 300 verifications), cases drawn deterministically from the seed with the family chosen round-robin. An injection counts only if the faulty result is not identical to the clean one; an ineffective injection is re-drawn and the number of re-draws is reported.",
+  "verdict_vocabulary": "VERIFIED, AUDITED, FAILED, UNVERIFIED as in the contract. Detected = FAILED or UNVERIFIED.",
+  "acceptance_rules": {
+    "A1": "100% of the injected faults (every fault type, both modes) get verdict FAILED or UNVERIFIED, never VERIFIED or AUDITED. Reported per fault type and per mode.",
+    "A2": "0 of the 60 clean results (both modes) get verdict FAILED.",
+    "A3": "every certificate produced by the experiment (clean, injected, controls) carries the exact mandatory caveat string."
+  },
+  "controls": {
+    "positive": "a known-good clean result presented in LIBRARY mode must get VERIFIED; otherwise the run is invalid",
+    "negative": "a result computed for a DIFFERENT spec B (same id, same shape, different y0) that carries the sha256 of B's own bytes, presented with the bytes of spec A, must be flagged by the hashes check (status fail) and get FAILED; otherwise the run is invalid"
+  },
+  "run_is_valid_iff": "positive and negative controls pass",
+  "tolerances_fixed_now": {
+    "reference_check": "elementwise |y-y_ref| <= max_rel_err_factor*(rtol*|y_ref|+atol) with max_rel_err_factor 100.0 from the problem's tolerance_policy",
+    "tightening_check": "rerun with rtol/100 and atol/100; elementwise |y_loose-y_tight| <= 100*(rtol*|y_tight|+atol) using the LOOSE rtol/atol",
+    "invariant_tol": "harmonic energy 1e-6, chain mass sum 1e-9, absolute"
+  },
+  "threshold_policy": "Thresholds above never change after a run. A false negative is a result and is reported. If the verifier has a weakness, the VERIFIER is fixed (not the thresholds) and the fix is recorded in S2_fault_injection_prereg_amendment_1.json BEFORE the re-run; any harness fix likewise goes in an amendment file written before re-running.",
+  "output": "artifacts/experiments/S2_fault_injection_report.json with per-fault detection counts per mode, controls, A1-A3 as measured (PASS/FAIL) and a receipt sha256.",
+  "scope": "pure-Python verifier and in-script solver on linear systems; says nothing about the real Rust solver, about nonlinear/stiff problems, or about faults outside the five listed. Detection of these five injections does not imply correctness of VERIFIED results (see the verifier caveat).",
+  "non_monetary": "no PTS or $HIVE reward is attached"
+}

@@ -1,0 +1,57 @@
+{
+  "experiment_id": "S3-science-bee-formulation",
+  "registered_utc": "2026-10-27T18:00:00Z",
+  "registered_before_any_model_run": true,
+  "title": "Can a small local language model turn a plain-language question (English or French) into a data-only solver spec that, once solved and verified, reproduces the known answer? Model arms versus a keyword/template baseline.",
+  "origin": "Solver Bee stage 2, task P5 (Science Bee). Code: src/hivemind/solverbee/science_bee.py and families.py at git commit c403a24c94d568241563086ffae3775d2d5cd71d.",
+  "frozen_inputs": {
+    "questions_file": "artifacts/experiments/S3_questions.json",
+    "questions_sha256": "3ae367d59e7f253d487c1157a8311dd8f49e40ea7559f21f68c78bf26983f8e6",
+    "reference_generator": "artifacts/experiments/s3_reference.py",
+    "reference_generator_sha256": "5a3dabe74ec31e3ff75f2337c8a3169c8f8e878479b6179e911b415dd2d13bde",
+    "science_bee_py_sha256": "8e356fb1aa67cb6517b860ade8d6dd1656d4d7f833f00ff853acfa92469a30e9",
+    "families_py_sha256": "8d1c9674f726a4c7ff013bd9d0926f010d9237cd59d20b0575252b8859fd79c5",
+    "baseline_formulator": "science_bee.baseline_formulate (regular expressions over a tiny vocabulary); frozen with the file hash above. It was written before the questions and is not tuned afterwards.",
+    "question_set": "40 questions: 24 English, 16 French; tiers A (direct, 13), B (paraphrased, 15), C (implicit: unit conversion or derived parameter, 12); types pendulum, projectile with and without drag, Kepler, logistic, SIR, SEIR, series RLC, spring-mass-damper, decay chains, stiff reaction. Each has an expected spec and expected numeric answers at the requested times (closed form, exact matrix exponential or mpmath odefun at 30 digits, cross-checked against scipy DOP853 to 3e-11 relative)."
+  },
+  "arms": {
+    "baseline": "keyword/template formulator, no model, deterministic",
+    "model_cpu": "a local Ollama model, native /api/chat, options.num_gpu = 0, temperature 0, fixed seed 20261027, no streaming; model name and Ollama version recorded in the arm file. Run by the lead.",
+    "model_gpu": "the same model with num_gpu > 0. Only run by the lead in the owner's night window. Descriptive; does not enter A1-A4."
+  },
+  "procedure": {
+    "one_pass": "each question is asked exactly once per arm in file order, in a fresh conversation (no memory between questions); no repeated runs, no best-of-n, no prompt changes after the first model run.",
+    "formulation_loop": "the model gets the generated system prompt (grammar and families) and the question; the reply must contain exactly one JSON object; the strict validator rejects unknown fields, oversize specs, non-finite numbers and non-increasing t_out; on rejection the exact validator message is fed back; at most 3 retries (so at most 4 model calls per question); after the fourth failure, or when the model answers cannot_formulate, the result is 'could not formulate' and the question counts as not correct.",
+    "house_tolerances": "if the accepted spec omits rtol/atol the Science Bee adds rtol 1e-10 and atol 1e-12 before solving (documented, shown in the answer).",
+    "solve_and_verify": "sandboxed hivemind-solver binary then the verifier (rerun with 100x tighter tolerances). Library hits are only possible when the spec id and problem/y0/t0/t_out equal a library entry; the S-3 specs are ad hoc, so the best verdict expected is AUDITED. VERIFIED is therefore not expected to occur and A3 may hold vacuously; this is stated, not hidden."
+  },
+  "definitions": {
+    "agreement": "the solver result has status ok, the same number of time points as the expected answer with t equal within relative 1e-9, the same state dimension, and for every time and every state component |y - y_expected| <= 100 * (1e-8 * |y_expected| + 1e-10). The tolerance is FIXED here (library tolerance policy factor 100 with rtol 1e-8, atol 1e-10) and does not depend on any rtol or atol written in the model's spec. The full state vector is compared in the order stated in the questions file (state_order).",
+    "correct": "agreement AND final verdict VERIFIED or AUDITED. A question that ends 'could not formulate', or whose spec is rejected, or whose verdict is FAILED or UNVERIFIED, is not correct.",
+    "exact_spec_match": "science_bee.specs_match(final_spec, expected_spec): same problem with default parameters filled in (for mass_action: same species order and the same reactions as a multiset), y0, t0 (default 0) and t_out equal within relative 1e-6; id, tolerances, method and max_steps are ignored.",
+    "retries": "number of validator-driven retries used (0 to 3).",
+    "unsupported_family": "a question whose final spec uses a named family that the recorded solver binary does not list (its `families` output is stored in every arm file with the binary sha256) gets a solver error, verdict UNVERIFIED, and counts as NOT correct in the primary metric. The analysis also reports the same numbers restricted to questions whose expected family is supported by the recorded binary, as a descriptive secondary view. This rule is fixed now, before any model run, because the binary at registration time lists only the original six families (pendulum, projectile_drag, kepler and logistic questions will fail for every arm until a binary with those families is used). The lead is expected to use a binary that lists all ten families."
+  },
+  "metrics": {
+    "primary": "fraction of the 40 questions that are correct, per arm, overall and per tier A, B, C and per language",
+    "secondary": ["fraction with exact spec match", "mean and total number of retries", "'could not formulate' rate", "mean wall seconds per question (descriptive)", "restricted-to-supported-families view"]
+  },
+  "comparison": {
+    "test": "paired exact McNemar test (two-sided exact binomial on the discordant pairs, p = min(1, 2 * P(X <= min(b, c)), X ~ Binomial(b + c, 0.5)), p = 1 when b + c = 0) of the model arm against the baseline, overall and per tier; alpha = 0.05; no multiplicity correction (three tiers are reported side by side, none is hidden).",
+    "report": "b = baseline correct and model wrong (regressions), c = model correct and baseline wrong, both counted per tier"
+  },
+  "acceptance_rules": {
+    "A1": "model arm CPU >= baseline on tier A with no regression: correct_model(A) >= correct_baseline(A) AND the number of tier-A questions that the baseline gets correct and the model arm does not is 0.",
+    "A2": "tiers B and C are reported separately, whatever they are; there is no threshold.",
+    "A3": "zero wrong answers presented as VERIFIED: no question in any arm has final verdict VERIFIED while the numbers disagree with the expected answers beyond the fixed policy. Any occurrence is a hard failure and is reported prominently. Wrong answers presented as AUDITED (a formulation error that no check can detect) are counted and reported alongside as 'audited_but_wrong', descriptive, never hidden.",
+    "A4": "every answer text, including 'could not formulate' answers, contains the exact limits sentence: 'The numbers solve the equations that were set up; whether those equations describe your real situation is not checked.'"
+  },
+  "threshold_policy": "Thresholds and definitions above never change after a run. A failure is a result. Any harness fix after a run is written as S3_formulation_prereg_amendment_N.json BEFORE the re-run.",
+  "harness_validity_check": "an 'oracle' pass (the expected spec fed to the pipeline) is NOT an arm; it only shows that the pipeline plus the fixed agreement rule accept the right spec. Before registration the expected specs of the 22 questions that use the generic linear / mass_action kinds were run through the current binary: all 22 agreed (worst error 0.025 of the allowed error at the house tolerances). The 18 questions that use the four new named families could not be run on that binary.",
+  "outputs": {
+    "arm_files": "artifacts/experiments/S3_formulation_<arm>_<model>_<device>.json with per-question records (question id, raw model output truncated to 600 characters per attempt, retries, final spec hash, verdict, agreement flag, exact-match flag, wall seconds), tier summaries and a receipt sha256",
+    "analysis": "scripts/s3_analyze.py reads the arm files and prints A1-A4 and the McNemar tests"
+  },
+  "scope": "Measures formulation of 40 prepared questions by one model at temperature 0. It says nothing about questions outside the families, nothing about whether a real situation obeys the stated equations (never checked), and nothing about other models. The verifier caveat applies: VERIFIED or AUDITED never means 'correct for your situation'.",
+  "non_monetary": "no PTS or $HIVE reward is attached"
+}

@@ -1,0 +1,82 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "logistic_growth",
+ "description": "Logistic growth r=0.8, K=50, N0=2; closed form N=K/(1+(K/N0-1)exp(-rt)).",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "logistic_growth",
+  "problem": {
+   "kind": "named",
+   "family": "logistic",
+   "params": {
+    "r": 0.8,
+    "K": 50.0
+   }
+  },
+  "y0": [
+   2.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   1.0,
+   2.0,
+   5.0,
+   10.0,
+   20.0,
+   40.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   1.0,
+   2.0,
+   5.0,
+   10.0,
+   20.0,
+   40.0
+  ],
+  "y": [
+   [
+    4.243079169578828
+   ],
+   [
+    8.553564185943113
+   ],
+   [
+    34.732465083542436
+   ],
+   [
+    49.60065997422435
+   ],
+   [
+    49.999864958155065
+   ],
+   [
+    49.9999999999848
+   ]
+  ],
+  "max_abs_error_bound": 1.5e-12,
+  "method": "closed form (mpmath)",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.2.1",
+   "scipy": "1.8.0",
+   "numpy": "1.21.5"
+  },
+  "cross_check": {
+   "method": "scipy DOP853 rtol=1e-13",
+   "max_abs_diff": 1.5e-12,
+   "max_diff_over_spec_tolerance": 3.44e-06,
+   "min_spec_tolerance_over_bound": 28400.0
+  }
+ },
+ "invariants": [],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

@@ -11,8 +11,16 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-_PATH = Path(__file__).resolve().parents[1] / "scripts" / "hivemind_producer_shield.py"
-_spec = importlib.util.spec_from_file_location("hivemind_producer_shield", _PATH)
+_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "hivemind"
+    / "router"
+    / "hivemind_producer_shield.py"
+)
+_spec = importlib.util.spec_from_file_location(
+    "hivemind.router.hivemind_producer_shield", _PATH
+)
 assert _spec is not None and _spec.loader is not None
 shield: ModuleType = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(shield)
@@ -76,6 +84,24 @@ def test_oversized_bodies_bad_json_and_unlisted_models_are_refused() -> None:
     assert seen == [] and client.post("/v1/chat/completions", json=CHAT, headers=AUTH).status_code == 200
 
 
+def test_a_model_that_is_not_a_string_is_a_400_not_a_500_and_never_reaches_the_model_server() -> None:
+    client, seen = _app(allowed_models=["qwen2.5-coder:7b"])
+    for bad in ([], ["qwen2.5-coder:7b"], {"a": 1}, 7, None):
+        r = client.post("/v1/chat/completions", headers=AUTH, json={"model": bad, "messages": []})
+        assert r.status_code == 400, bad
+    assert not [s for s in seen if s.url.path == "/v1/chat/completions"]
+
+
+def test_token_limits_are_clamped_before_the_request_reaches_the_model_server() -> None:
+    client, seen = _app()
+    r = client.post("/v1/chat/completions", headers=AUTH, json={**CHAT, "max_tokens": 10**9, "max_completion_tokens": 10**9})
+    assert r.status_code == 200
+    forwarded = json.loads([s for s in seen if s.url.path == "/v1/chat/completions"][-1].content)
+    assert forwarded["max_tokens"] == shield.MAX_TOKENS_CAP and forwarded["max_completion_tokens"] == shield.MAX_TOKENS_CAP
+    assert client.post("/v1/chat/completions", headers=AUTH, json={**CHAT, "max_tokens": 64}).status_code == 200
+    assert json.loads([s for s in seen if s.url.path == "/v1/chat/completions"][-1].content)["max_tokens"] == 64
+
+
 def test_a_busy_producer_answers_429_at_once_and_recovers() -> None:
     import asyncio
 
@@ -128,3 +154,25 @@ def test_models_falls_back_to_the_native_tag_list_for_older_ollama_and_hides_eve
     assert "size" not in json.dumps(listed)  # only names leave the machine
     client2, _ = _app(lambda r: httpx.Response(500, json={}))
     assert client2.get("/v1/models", headers=AUTH).status_code == 502
+
+
+def test_routes_send_a_model_to_its_own_server_list_it_only_while_up_and_allow_it_implicitly() -> None:
+    hosts: list[str] = []
+    bee_up = {"v": True}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hosts.append(request.url.host)
+        if request.url.host == "bee.local" and not bee_up["v"]:
+            raise httpx.ConnectError("down")
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"object": "list", "data": [{"id": "coder"}]})
+        return _stream(200, json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode())
+
+    c, _ = _app(handler, allowed_models=["coder"], routes={"bee-stars": "http://bee.local:8294/"})
+    assert [m["id"] for m in c.get("/v1/models", headers=AUTH).json()["data"]] == ["coder", "bee-stars"]
+    assert c.post("/v1/chat/completions", headers=AUTH, json={**CHAT, "model": "bee-stars"}).status_code == 200  # allowed without --allow-model
+    assert c.post("/v1/chat/completions", headers=AUTH, json={**CHAT, "model": "coder"}).status_code == 200
+    assert hosts[-2:] == ["bee.local", "upstream.local"]  # each model reached ITS server
+    assert c.post("/v1/chat/completions", headers=AUTH, json={**CHAT, "model": "other"}).status_code == 403
+    bee_up["v"] = False
+    assert [m["id"] for m in c.get("/v1/models", headers=AUTH).json()["data"]] == ["coder"]  # a down server's model is not advertised

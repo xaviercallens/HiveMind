@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Phase S-2: Swarm GPU Training & Content-Addressed Data Store Runtime Hardening.
 
 Secures Project HiveMind against wrong, abusive, or Byzantine usage of the decentralized

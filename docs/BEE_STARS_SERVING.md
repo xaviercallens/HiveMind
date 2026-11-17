@@ -39,7 +39,10 @@ no key, and its sign-up created accounts in a ledger separate from the router. T
 - `/v1/*` is forwarded unchanged (streaming included) to the router;
 - `/signup` and `/login` redirect to the router's sign-up;
 - `/openrouter` lists the models with a live producer and the measured result above;
-- `/night-moe` is restored.
+- `/night-moe` is restored;
+- `/join` and `/rejoindre` serve the public bilingual (French/English) "how to join" page (`src/hivemind/router/join_page.py`, also served by the
+  router itself). The model table is read from the router's public catalog at request time; if the router is down the page still renders.
+  **Before building the image, copy `src/hivemind/router/join_page.py` into `deploy/ruche_router_overlay/`** (the Dockerfile `COPY`s it, like `night_moe_page.py`).
 
 The rest of the dashboard is the 00010 image unchanged.
 

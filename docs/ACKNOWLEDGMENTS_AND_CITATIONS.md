@@ -80,6 +80,7 @@ Entries are ordered by arXiv id. **Removed in this revision** (fabricated identi
 30. **Huang, Benhao, Shi, Chufan, Chen, Junlin, Wen, Shicheng, Liu, Zhengzhong, Xing, Eric, Ma, Xuezhe (2026).** *Towards Looped Models Done Right, Part I: Topology, Input Injection, Recurrent-State Design.* [`arXiv:2610.23036`](https://arxiv.org/abs/2610.23036) — Institute of Foundation Models / USC / CMU; code `ifm-ai/xllm-loop`. HiveMind use: Prelude / recurrent core / coda topology (`LoopedExpertBackbone`).
 31. **Kale, Satyen, Douillard, Arthur, Donchev, Yanislav (2025).** *Eager Updates for Overlapped Communication and Computation in DiLoCo.* [`arXiv:2502.12996`](https://arxiv.org/abs/2502.12996) — Google DeepMind / Google Research. HiveMind use: 1-outer-step eager overlap as the candidate deferred-learner rule for `HM-S9-01` / `HM-S9-13` (verified 2026-10-23).
 32. **Defazio, Aaron, Mishchenko, Konstantin, Raman, Parameswaran, Shi, Hao-Jun Michael, Xiao, Lin (2025).** *Smoothing DiLoCo with Primal Averaging for Faster Training of LLMs.* [`arXiv:2512.17131`](https://arxiv.org/abs/2512.17131) — Meta Superintelligence Labs. HiveMind use: Generalized Primal Averaging as the control for the outer-momentum-restart factor of E5 (`HM-S9-05`) (verified 2026-10-23).
+33. **Wang, Yichuan, Li, Zhifei, Liu, Shu, Wu, Yongji, Mao, Ziming, Zhao, Yilong, Yan, Xiao, Xu, Zhiying, Zhou, Yang, Stoica, Ion, Min, Sewon, Zaharia, Matei, Gonzalez, Joseph E. (2025; Proceedings of Machine Learning and Systems 8, MLSys 2026).** *LEANN: A Low-Storage Vector Index* (MLSys title: *A Low-Storage Overhead Vector Index*). [`arXiv:2506.08276`](https://arxiv.org/abs/2506.08276v2) — UC Berkeley / CUHK / AWS / UC Davis; code MIT-licensed (upstream repository to be confirmed, see `docs/S22_LIGHT_MEMORY.md`). HiveMind use: **proposed only** (Season 22 `HM-S22-01`..`07`), not integrated, not measured on our hardware. Abstract and body read 2026-10-28; the MLSys PDF and the MarktechPost write-up were not.
 
 ### Author's own publications used by the programme (DOIs read from the Zenodo API, 2026-10-23)
 
@@ -336,5 +337,13 @@ Software without an arXiv paper: [`pmerolla/fomoe`](https://github.com/pmerolla/
   journal={arXiv preprint arXiv:2512.17131},
   year={2025},
   note={Meta Superintelligence Labs}
+}
+@inproceedings{wang2026leann,
+  title={{LEANN}: A Low-Storage Overhead Vector Index},
+  author={Wang, Yichuan and Li, Zhifei and Liu, Shu and Wu, Yongji and Mao, Ziming and Zhao, Yilong and Yan, Xiao and Xu, Zhiying and Zhou, Yang and Stoica, Ion and Min, Sewon and Zaharia, Matei and Gonzalez, Joseph E.},
+  booktitle={Proceedings of Machine Learning and Systems (MLSys)},
+  volume={8},
+  year={2026},
+  note={arXiv:2506.08276 (arXiv title: LEANN: A Low-Storage Vector Index); UC Berkeley / CUHK / AWS / UC Davis}
 }
 ```

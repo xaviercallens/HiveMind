@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{20} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- AMCP logs one line per agent registration and activation: keep those quiet at 1000 bees. -->
+  <logger name="io.amcp" level="WARN"/>
+  <logger name="org.apache.kafka" level="WARN"/>
+  <logger name="org.hivemind" level="INFO"/>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+</configuration>

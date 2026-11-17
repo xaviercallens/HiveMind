@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Phase S-5: End-to-End Multi-Layer Attack Simulation & Guardrail Verification Suite.
 
 Executes a 25-vector synthetic red-team simulation across all 5 defense layers of Project HiveMind

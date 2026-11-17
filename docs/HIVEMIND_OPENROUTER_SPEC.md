@@ -90,6 +90,10 @@ Endpoints:
   SSRF guard: `https` required and every resolved IP must be global (`ipaddress.ip_address(x).is_global`), unless `allow_private_producers`.
 - `GET /v1/hivemind/market?model=` → equilibrium + certificate JSON (public, no auth).
 - `POST /v1/hivemind/admin/grant` with `X-Admin-Key` whose HMAC matches `admin_key_hash` → `store.grant`.
+- Test/probe accounts: `POST /v1/hivemind/register` accepts `"test": true` only with a valid `X-Admin-Key` (otherwise 403 `admin_forbidden`);
+  `POST /v1/hivemind/admin/test-flag` `{account_id|handle, test}` flags or unflags an existing account; `GET /v1/hivemind/admin/users?window_s=`
+  returns `real` and `test` counts (`total`, `created`, `active`). A flagged account can make requests but never bids in the market
+  (`funded_consumer_bids`, the requester's own bid in `bids_for`) and is not counted in `num_consumers`.
 - `GET /healthz`.
 Errors use OpenAI shape `{"error": {"message", "type", "code"}}`. Never log API keys or prompt text.
 Tests `tests/test_router_gateway.py` using `fastapi.testclient.TestClient` and `httpx.MockTransport` producers (external I/O):
@@ -98,6 +102,6 @@ register → grant → chat completion charged correctly and producer credited; 
 `/v1/models`; official `openai` Python client (installed, v3.x) against the TestClient via its `http_client` param if feasible.
 
 ## 4. Deploy + docs
-- `deploy/gcp_openrouter/{Dockerfile,server.py,requirements.txt,deploy.sh}`: env `HIVEMIND_ROUTER_SECRET` (Secret Manager), `HIVEMIND_ROUTER_DB` (default `/tmp/router.db`, documented as ephemeral on Cloud Run — production needs Cloud SQL/Firestore, task HM-S13-03), `HIVEMIND_ROUTER_ADMIN_KEY_HASH`. `deploy.sh` runs `gcloud run deploy hivemind-openrouter --source . --region us-central1 --min-instances 0 --max-instances 2` (do not run it; owner decides).
+- `deploy/gcp_openrouter/{Dockerfile,server.py,requirements.txt,deploy.sh}`: env `HIVEMIND_ROUTER_SECRET` (Secret Manager), `HIVEMIND_ROUTER_DB` (default `/tmp/router.db`, documented as ephemeral on Cloud Run — production needs Cloud SQL/Firestore, task HM-S13-03), `HIVEMIND_ROUTER_ADMIN_KEY_HASH`. `deploy.sh` runs `gcloud run deploy hivemind-openrouter --source . --region us-central1 --min-instances 0 --max-instances 1` (do not run it; owner decides).
 - `scripts/hivemind_producer_agent.py`: a producer daemon that heartbeats to the gateway, advertising a local OpenAI-compatible server (Ollama/vLLM/llama.cpp) — real code, CLI flags.
 - `docs/HIVEMIND_OPENROUTER.md`: architecture, the equilibrium and why it is win-win, HMT lifecycle, IDE setup (OpenCode `opencode.json` provider via `@ai-sdk/openai-compatible` with `baseURL`/`apiKey`; VS Code via the Continue extension `config.yaml` `provider: openai` + `apiBase`; Hermes and any other OpenAI-compatible client via base URL + key / `OPENAI_BASE_URL` + `OPENAI_API_KEY`) — mark each IDE snippet "verify against the tool's current docs".

@@ -1,0 +1,145 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "kepler_eccentric_long",
+ "description": "LONG-horizon eccentric Kepler orbit e=0.5 (perihelion start), 100 orbits (t=200 pi), max_steps 1e6.",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "kepler_eccentric_long",
+  "problem": {
+   "kind": "named",
+   "family": "kepler",
+   "params": {
+    "mu": 1.0
+   }
+  },
+  "y0": [
+   0.5,
+   0.0,
+   0.0,
+   1.7320508075688772
+  ],
+  "t0": 0.0,
+  "t_out": [
+   10.0,
+   50.0,
+   100.0,
+   250.0,
+   500.0,
+   628.3185307179587
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 1000000
+ },
+ "reference": {
+  "t": [
+   10.0,
+   50.0,
+   100.0,
+   250.0,
+   500.0,
+   628.3185307179587
+  ],
+  "y": [
+   [
+    -1.4261702515987913,
+    -0.32658306568172335,
+    0.25774689053871064,
+    -0.5482161987503887
+   ],
+   [
+    0.37311581753024864,
+    -0.4221985041231958,
+    0.8652403638242656,
+    1.3420021155501676
+   ],
+   [
+    0.09580413083713184,
+    -0.6955307888642007,
+    1.1438999273507844,
+    0.7349138739345151
+   ],
+   [
+    -0.7396849436285764,
+    -0.8407813900463806,
+    0.8669529404192976,
+    -0.1853593298267152
+   ],
+   [
+    -1.44719177961607,
+    -0.27770631874483115,
+    0.21760893741889437,
+    -0.5566601733058363
+   ],
+   [
+    0.5,
+    5.742754788713241e-13,
+    -1.326232409261441e-12,
+    1.7320508075688772
+   ]
+  ],
+  "max_abs_error_bound": 2.08e-16,
+  "method": "exact Kepler propagation (f,g functions, mpmath)",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.2.1",
+   "scipy": "1.8.0",
+   "numpy": "1.21.5"
+  },
+  "cross_check": {
+   "method": "taylor (mpmath.odefun, 20 digits)",
+   "max_abs_diff": 1.34e-20,
+   "max_diff_over_spec_tolerance": 1.34e-10,
+   "min_spec_tolerance_over_bound": 481000.0
+  }
+ },
+ "invariants": [
+  {
+   "name": "energy",
+   "kind": "energy",
+   "model": "kepler",
+   "params": {
+    "mu": 1.0
+   },
+   "value": -0.5000000000000002,
+   "tol": 1e-05
+  },
+  {
+   "name": "angular_momentum",
+   "kind": "quadratic_form",
+   "matrix": [
+    [
+     0,
+     0,
+     0,
+     0.5
+    ],
+    [
+     0,
+     0,
+     -0.5,
+     0
+    ],
+    [
+     0,
+     -0.5,
+     0,
+     0
+    ],
+    [
+     0.5,
+     0,
+     0,
+     0
+    ]
+   ],
+   "value": 0.8660254037844386,
+   "tol": 1e-05
+  }
+ ],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

@@ -13,11 +13,19 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-_AGENT_PATH: Path = Path(__file__).resolve().parents[1] / "scripts" / "hivemind_producer_agent.py"
+_AGENT_PATH: Path = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "hivemind"
+    / "router"
+    / "hivemind_producer_agent.py"
+)
 
 
 def _load_agent() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("hivemind_producer_agent", _AGENT_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "hivemind.router.hivemind_producer_agent", _AGENT_PATH
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -66,7 +74,7 @@ def test_once_sends_expected_heartbeat_and_prints_response(
             "--execution-class",
             "t4",
             "--skip-preflight",
-            "--once",
+            "--no-residency", "--once",
         ],
         transport=transport,
     )
@@ -112,7 +120,7 @@ def test_once_reports_gateway_rejection_with_exit_code_one(
             "--capacity-1k",
             "50",
             "--skip-preflight",
-            "--once",
+            "--no-residency", "--once",
         ],
         transport=transport,
     )
@@ -141,7 +149,7 @@ def test_missing_api_key_environment_exits_with_usage_error(
                 "0.4",
                 "--capacity-1k",
                 "50",
-                "--once",
+                "--no-residency", "--once",
             ]
         )
     assert excinfo.value.code == 2
@@ -218,10 +226,30 @@ def test_agent_refuses_a_non_https_gateway_before_sending_the_key(monkeypatch: p
     transport = httpx.MockTransport(lambda request: sent.append(request) or httpx.Response(200, json={}))
 
     with pytest.raises(SystemExit) as exit_info:
-        agent.main(["--gateway", gateway, "--endpoint", "https://gpu.example.com", "--model", "m=local", "--once"], transport=transport)
+        agent.main(["--gateway", gateway, "--endpoint", "https://gpu.example.com", "--model", "m=local", "--no-residency", "--once"], transport=transport)
 
     assert exit_info.value.code == 2
     assert sent == []
+
+
+@pytest.mark.parametrize("endpoint", ["http://gpu.example.com", "http://203.0.113.5:8787", "ftp://gpu.example.com", "gpu.example.com"])
+def test_agent_refuses_a_non_https_public_endpoint_before_sending_the_key(monkeypatch: pytest.MonkeyPatch, endpoint: str) -> None:
+    agent = _load_agent()
+    monkeypatch.setenv("HIVEMIND_API_KEY", "hm-test-key")
+    sent: list[httpx.Request] = []
+    transport = httpx.MockTransport(lambda request: sent.append(request) or httpx.Response(200, json={}))
+    with pytest.raises(SystemExit) as exit_info:
+        agent.main(["--gateway", GATEWAY, "--endpoint", endpoint, "--model", "m=local", "--no-residency", "--once"], transport=transport)
+    assert exit_info.value.code == 2
+    assert sent == []
+
+
+def test_agent_prints_the_proof_of_concept_notice(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    agent = _load_agent()
+    monkeypatch.setenv("HIVEMIND_API_KEY", "hm-test-key")
+    with pytest.raises(SystemExit):
+        agent.main(["--gateway", "http://gateway.example.com", "--endpoint", "https://gpu.example.com", "--model", "m=local", "--once"])
+    assert "Proof of concept" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------- presets, suggestions, preflight, endpoint token
@@ -280,7 +308,7 @@ def test_preset_fills_model_price_and_capacity_and_sends_the_endpoint_token_with
     monkeypatch.setenv(agent.ENDPOINT_TOKEN_ENV, "endpoint-token-" + "q" * 20)
     seen: list[httpx.Request] = []
 
-    code = agent.main(["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--preset", "coder", "--once"],
+    code = agent.main(["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--preset", "coder", "--no-residency", "--once"],
                       transport=_router(["qwen2.5-coder:7b"], seen))
 
     assert code == 0
@@ -301,23 +329,113 @@ def test_preflight_refuses_to_advertise_a_model_the_endpoint_does_not_serve(
     monkeypatch.delenv(agent.ENDPOINT_TOKEN_ENV, raising=False)
     seen: list[httpx.Request] = []
 
-    code = agent.main(["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--preset", "coder", "--once"],
+    code = agent.main(["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--preset", "coder", "--no-residency", "--once"],
                       transport=_router(["llama3:8b"], seen))
 
     assert code == 1
     assert "does not list ['qwen2.5-coder:7b']" in capsys.readouterr().err
     assert not [r for r in seen if r.url.path == agent.HEARTBEAT_PATH]  # no heartbeat for a model you cannot serve
     # --local-name maps the tier to the name the server really uses, and then it passes
-    code = agent.main(["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--preset", "coder", "--local-name", "llama3:8b", "--once"],
+    code = agent.main(["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--preset", "coder", "--local-name", "llama3:8b", "--no-residency", "--once"],
                       transport=_router(["llama3:8b"], []))
     assert code == 0
 
 
 def test_unknown_preset_and_missing_inputs_are_usage_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(agent.API_KEY_ENV, API_KEY)
-    for argv in (["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--preset", "nope", "--once"],
-                 ["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--once"],
-                 ["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--model", "m=l", "--once"]):
+    for argv in (["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--preset", "nope", "--no-residency", "--once"],
+                 ["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--no-residency", "--once"],
+                 ["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--model", "m=l", "--no-residency", "--once"]):
         with pytest.raises(SystemExit) as exit_info:
             agent.main(argv, transport=_router([], []))
         assert exit_info.value.code == 2
+
+
+# ---------------------------------------------------------------------------------------------- residency probe (HM-S16-06)
+LOCAL = "http://127.0.0.1:11434"
+
+
+def _ps_transport(status: int, body: object, seen: list[httpx.Request] | None = None) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if seen is not None:
+            seen.append(request)
+        return httpx.Response(status, json=body)
+
+    return httpx.MockTransport(handler)
+
+
+def test_probe_reads_loaded_models_and_vram_from_api_ps() -> None:
+    seen: list[httpx.Request] = []
+    body = {"models": [{"name": "qwen2.5-coder:7b", "size": 6_000_000_000, "size_vram": 5_452_595_200}, {"name": "bee:latest", "size_vram": 0}]}
+    resident = agent.probe_residency(LOCAL, transport=_ps_transport(200, body, seen))
+    assert resident == {"qwen2.5-coder:7b": 5200, "bee:latest": 0}
+    assert [(r.method, r.url.path) for r in seen] == [("GET", "/api/ps")]
+
+
+@pytest.mark.parametrize("status,body", [(500, {}), (200, {"models": "x"}), (200, [1])])
+def test_probe_failures_report_nothing(status: int, body: object) -> None:
+    assert agent.probe_residency(LOCAL, transport=_ps_transport(status, body)) is None
+
+
+def test_probe_connection_error_and_timeout_report_nothing() -> None:
+    def boom(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("no", request=request)
+
+    assert agent.probe_residency(LOCAL, transport=httpx.MockTransport(boom)) is None
+
+
+def test_apply_residency_marks_loaded_and_not_loaded_models() -> None:
+    payload = agent.build_heartbeat_payload(
+        endpoint=ENDPOINT, models=[{"id": "coder", "local_name": "qwen2.5-coder:7b"}, {"id": "lite", "local_name": "tiny"}],
+        cost_per_1k=0.4, capacity_1k=50.0, execution_class="t4",
+    )
+    agent.apply_residency(payload, {"qwen2.5-coder:7b": 5200}, cold_start_s=45.0, gpu_vram_mib=15360)
+    assert payload["gpu_vram_mib"] == 15360
+    assert payload["models"][0] == {"id": "coder", "local_name": "qwen2.5-coder:7b", "loaded": True, "vram_mib": 5200}
+    assert payload["models"][1] == {"id": "lite", "local_name": "tiny", "loaded": False, "cold_start_s": 45.0}
+
+
+def test_apply_residency_with_failed_probe_adds_no_model_fields() -> None:
+    payload = agent.build_heartbeat_payload(endpoint=ENDPOINT, models=[{"id": "m", "local_name": "m"}], cost_per_1k=0.4, capacity_1k=5.0, execution_class="t4")
+    agent.apply_residency(payload, None, cold_start_s=45.0, gpu_vram_mib=None)
+    assert payload["models"] == [{"id": "m", "local_name": "m"}] and "gpu_vram_mib" not in payload
+
+
+def test_once_heartbeat_includes_residency_from_the_local_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(agent.API_KEY_ENV, API_KEY)
+    seen: list[httpx.Request] = []
+    ps = _ps_transport(200, {"models": [{"name": "qwen2.5-coder:7b", "size_vram": 1024 * 1024 * 5200}]})
+    code = agent.main(
+        ["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--model", "coder=qwen2.5-coder:7b", "--cost-per-1k", "0.4", "--capacity-1k", "50",
+         "--skip-preflight", "--gpu-vram-mib", "15360", "--once"],
+        transport=_recording_transport(200, ACK, seen), residency_transport=ps,
+    )
+    assert code == 0 and len(seen) == 1
+    sent = json.loads(seen[0].content)
+    assert sent["gpu_vram_mib"] == 15360
+    assert sent["models"] == [{"id": "coder", "local_name": "qwen2.5-coder:7b", "loaded": True, "vram_mib": 5200}]
+
+
+def test_no_residency_flag_sends_the_old_payload_and_never_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(agent.API_KEY_ENV, API_KEY)
+    seen: list[httpx.Request] = []
+    probed: list[httpx.Request] = []
+    code = agent.main(
+        ["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--model", "m=l", "--cost-per-1k", "0.4", "--capacity-1k", "5", "--skip-preflight", "--no-residency", "--once"],
+        transport=_recording_transport(200, ACK, seen), residency_transport=_ps_transport(200, {"models": []}, probed),
+    )
+    assert code == 0 and not probed
+    assert json.loads(seen[0].content) == {
+        "endpoint_url": ENDPOINT, "models": [{"id": "m", "local_name": "l"}], "cost_per_1k": 0.4, "capacity_1k": 5.0, "execution_class": "gpu",
+    }
+
+
+def test_unreachable_local_server_still_sends_a_plain_heartbeat(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(agent.API_KEY_ENV, API_KEY)
+    seen: list[httpx.Request] = []
+    code = agent.main(
+        ["--gateway", GATEWAY, "--endpoint", ENDPOINT, "--model", "m=l", "--cost-per-1k", "0.4", "--capacity-1k", "5", "--skip-preflight", "--gpu-vram-mib", "8000", "--once"],
+        transport=_recording_transport(200, ACK, seen), residency_transport=_ps_transport(500, {}),
+    )
+    assert code == 0
+    assert json.loads(seen[0].content)["models"] == [{"id": "m", "local_name": "l"}]

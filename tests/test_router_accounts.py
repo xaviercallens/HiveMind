@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sqlite3
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from hivemind.router.accounts import (
     InsufficientBalance,
     RouterStore,
     TooManyHolds,
+    UnknownAccount,
 )
 
 SECRET = b"s" * 32
@@ -264,6 +267,51 @@ def test_hold_moves_funds_to_escrow_and_a_second_hold_cannot_double_spend() -> N
     assert store.verify_chain()
 
 
+def test_settle_refuses_a_hold_that_belongs_to_another_account_and_changes_nothing() -> None:
+    store = _store()
+    holder, producer = _setup(store)
+    other, _ = store.register("someone-else", "consumer")
+    store.grant(holder, 10.0, "seed")
+    store.grant(other, 10.0, "seed")
+    store.hold("r1", holder, 4.0)
+    before = (store.balance(holder), store.balance(other), store.balance(producer), store.balance("sys:escrow"))
+
+    with pytest.raises(ValueError):
+        store.settle("r1", other, producer, "m", 10, 10, 20, 1.0, _Fee())
+
+    assert (store.balance(holder), store.balance(other), store.balance(producer), store.balance("sys:escrow")) == before
+    assert store.active_hold_count(holder) == 1  # the hold is untouched and can still be settled by its owner
+    assert store.settle("r1", holder, producer, "m", 10, 10, 20, 1.0, _Fee()).charge > 0
+    assert store.verify_chain()
+
+
+def test_concurrent_holds_cannot_overspend_one_balance() -> None:
+    import threading
+
+    store = _store()
+    consumer, _ = _setup(store)
+    store.grant(consumer, 10.0, "seed")
+    results: list[str] = []
+
+    def attempt(n: int) -> None:
+        try:
+            store.hold(f"c{n}", consumer, 4.0)
+            results.append("ok")
+        except InsufficientBalance:
+            results.append("refused")
+
+    threads = [threading.Thread(target=attempt, args=(n,)) for n in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert results.count("ok") == 2 and results.count("refused") == 6  # 10 HMT pays for two holds of 4, never three
+    assert store.balance(consumer) == pytest.approx(2.0)
+    assert store.total_balances() == pytest.approx(store.total_minted(), abs=1e-9)
+    assert store.verify_chain()
+
+
 def test_settle_against_a_hold_is_capped_at_the_escrow_and_never_free() -> None:
     store = _store()
     consumer, producer = _setup(store)
@@ -361,6 +409,83 @@ def test_activity_window_rejects_a_non_finite_time() -> None:
         store.funded_consumer_bids(256, active_since=float("nan"))
     assert store.funded_consumer_bids(256, active_since=0.0) == {}
 
+
+def test_test_accounts_never_bid_and_unflagging_restores_the_bid() -> None:
+    store = _store()
+    real, _ = store.register("real-user", "consumer")
+    probe, _ = store.register("probe-user", "consumer", is_test=True)
+    for account in (real, probe):
+        store.grant(account, 100.0, "seed")
+        store.set_max_price(account, 100.0)
+
+    assert store.get_account(probe).is_test is True and store.get_account(real).is_test is False  # type: ignore[union-attr]
+    assert set(store.funded_consumer_bids(256)) == {real}
+    assert set(store.consumer_max_prices()) == {real}
+
+    store.set_test_flag(real, True)
+    assert store.funded_consumer_bids(256) == {}
+    store.set_test_flag(probe, False)
+    assert set(store.funded_consumer_bids(256)) == {probe}
+    assert store.funded_consumer_bids(256)[probe] == pytest.approx(100.0)
+
+
+def test_set_test_flag_rejects_unknown_and_system_accounts() -> None:
+    store = _store()
+    with pytest.raises(UnknownAccount):
+        store.set_test_flag("f" * 32, True)
+    with pytest.raises(UnknownAccount):
+        store.set_test_flag("sys:burn", True)
+    assert store.get_account("sys:burn").is_test is False  # type: ignore[union-attr]
+
+
+def test_a_database_made_before_the_test_flag_is_upgraded_in_place(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    legacy = sqlite3.connect(path)
+    legacy.execute(
+        "CREATE TABLE accounts(account_id TEXT PRIMARY KEY, handle TEXT NOT NULL UNIQUE, "
+        "role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','admin')), key_hash TEXT NOT NULL UNIQUE, "
+        "created_utc REAL NOT NULL, max_price_per_1k REAL NOT NULL)"
+    )
+    legacy.execute("INSERT INTO accounts VALUES ('old-account','old-user','consumer','hash-1',1.0,2.0)")
+    legacy.commit()
+    legacy.close()
+
+    store = RouterStore(path, SECRET)
+    migrated = store.get_account("old-account")
+    assert migrated is not None and migrated.is_test is False and migrated.handle == "old-user"
+    store.grant("old-account", 5.0, "seed")
+    assert set(store.funded_consumer_bids(256)) == {"old-account"}  # an existing account stays a real bidder
+    store.set_test_flag("old-account", True)
+    assert store.funded_consumer_bids(256) == {}
+    _, key = store.register("new-user", "consumer", is_test=True)
+    assert store.authenticate(key).is_test is True  # type: ignore[union-attr]
+    store.close()
+
+    reopened = RouterStore(path, SECRET)  # the upgrade is idempotent
+    assert reopened.get_account("old-account").is_test is True  # type: ignore[union-attr]
+    reopened.close()
+
+
+def test_user_counts_keep_real_and_test_accounts_apart() -> None:
+    store = _store()
+    store.register("producer-only", "producer")
+    real_a, _ = store.register("real-a", "consumer")
+    real_b, _ = store.register("real-b", "consumer")
+    probe, _ = store.register("probe", "consumer", is_test=True)
+    for account in (real_a, real_b, probe):
+        store.grant(account, 10.0, "seed")
+    store.hold("req-a", real_a, 1.0, now_utc=time.time() + 100.0)
+    store.hold("req-probe", probe, 1.0, now_utc=time.time() + 100.0)
+    store.hold("req-b-old", real_b, 1.0, now_utc=1.0)
+
+    everything = store.user_counts(0.0)
+    recent = store.user_counts(time.time() + 50.0)
+
+    assert everything == {"real": {"total": 3, "created": 3, "active": 2}, "test": {"total": 1, "created": 1, "active": 1}, "probe": {"total": 0, "created": 0, "active": 0}}
+    assert recent == {"real": {"total": 3, "created": 0, "active": 1}, "test": {"total": 1, "created": 0, "active": 1}, "probe": {"total": 0, "created": 0, "active": 0}}
+    with pytest.raises(ValueError):
+        store.user_counts(float("nan"))
+
 _hold_op = st.one_of(
     st.tuples(st.just("hold"), st.floats(0.0, 30.0)),
     st.tuples(st.just("settle"), st.integers(0, 40_000), st.floats(0.0, 5.0)),
@@ -393,3 +518,23 @@ def test_escrow_preserves_conservation_and_never_overdraws(ops: list[tuple[objec
     assert store.balance("sys:escrow") >= -1e-9
     assert store.active_hold_count(consumer) == len(open_ids)
     assert store.verify_chain()
+
+
+def test_hmt_in_circulation_excludes_burned_and_validator_pool_hmt() -> None:
+    """IP-175: total_hmt_in_circulation was total_balances(), so burned HMT was published as circulating."""
+    store = _store()
+    consumer = store.register("c_circ", "consumer")[0]
+    producer = store.register("p_circ", "producer")[0]
+    store.grant(consumer, 100.0, "seed")
+    assert store.public_accounts_summary()["total_hmt_in_circulation"] == pytest.approx(100.0)
+    store.settle("r_circ", consumer, producer, "m", 0, 1000, 1000, 40.0, _Fee(0.15, 0.05))  # 40 HMT: 6 to validators, 2 burned
+    summary = store.public_accounts_summary()
+    assert summary["total_hmt_in_circulation"] <= 95.0  # on the old code this read 100.0: burned HMT counted as circulating
+    sys_bal = store.system_account_balances()
+    assert sys_bal["sys:burn"] > 0.0 and sys_bal["sys:validators"] > 0.0
+    assert summary["total_hmt_in_circulation"] == pytest.approx(100.0 - sys_bal["sys:burn"] - sys_bal["sys:validators"], abs=0.01)
+    assert summary["total_hmt_in_circulation"] <= 95.0
+    assert summary["total_hmt_burned"] == pytest.approx(sys_bal["sys:burn"], abs=0.01)
+    assert summary["total_hmt_validator_pool"] == pytest.approx(sys_bal["sys:validators"], abs=0.01)
+    assert summary["total_hmt_minted"] == pytest.approx(100.0)
+    assert store.total_in_circulation() + sum(sys_bal.values()) == pytest.approx(store.total_balances(), abs=1e-9)

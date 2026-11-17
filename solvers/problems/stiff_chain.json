@@ -1,0 +1,122 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "stiff_chain",
+ "description": "Stiff diffusion chain n=6, k=200 (eigenvalues up to ~800), reflecting ends; sum conserved; exact.",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "stiff_chain",
+  "problem": {
+   "kind": "named",
+   "family": "stiff_chain",
+   "params": {
+    "n": 6,
+    "k": 200.0
+   }
+  },
+  "y0": [
+   6.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   0.001,
+   0.01,
+   0.1,
+   1.0,
+   10.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   0.001,
+   0.01,
+   0.1,
+   1.0,
+   10.0
+  ],
+  "y": [
+   [
+    5.004992369132176,
+    0.902095640257415,
+    0.08693269543987156,
+    0.005686681420209303,
+    0.00028108755453222766,
+    1.1526195795636743e-05
+   ],
+   [
+    2.3145271407195076,
+    1.7783164748811315,
+    1.0727791472856691,
+    0.5236937551811592,
+    0.2167260207655358,
+    0.09395746116699688
+   ],
+   [
+    1.0087809315299163,
+    1.0064280857543786,
+    1.0023528395920769,
+    0.9976471542244622,
+    0.9935719142456215,
+    0.9912190746535445
+   ],
+   [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  ],
+  "max_abs_error_bound": 4.08e-13,
+  "method": "exact_expm",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.3.0",
+   "scipy": "1.13.1",
+   "numpy": "2.2.6"
+  },
+  "cross_check": {
+   "method": "scipy.linalg.expm",
+   "max_abs_diff": 4.08e-13,
+   "max_diff_over_spec_tolerance": 4.04e-05,
+   "min_spec_tolerance_over_bound": 245.0
+  }
+ },
+ "invariants": [
+  {
+   "name": "mass_sum",
+   "kind": "linear",
+   "weights": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "value": 6.0,
+   "tol": 6e-07
+  }
+ ],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

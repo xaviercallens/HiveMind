@@ -1,0 +1,83 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "pendulum_damped",
+ "description": "Damped pendulum, g/l=4, damping 0.3, theta0=1.5, omega0=0.5, decays to rest.",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "pendulum_damped",
+  "problem": {
+   "kind": "named",
+   "family": "pendulum",
+   "params": {
+    "g_over_l": 4.0,
+    "damping": 0.3
+   }
+  },
+  "y0": [
+   1.5,
+   0.5
+  ],
+  "t0": 0.0,
+  "t_out": [
+   1.0,
+   5.0,
+   10.0,
+   20.0,
+   40.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   1.0,
+   5.0,
+   10.0,
+   20.0,
+   40.0
+  ],
+  "y": [
+   [
+    0.2251930813695565,
+    -2.4515754133988503
+   ],
+   [
+    -0.609453128334049,
+    -0.5829501647335738
+   ],
+   [
+    0.32588151055119674,
+    0.04111021844194767
+   ],
+   [
+    0.044844504099196304,
+    -0.12214634135927877
+   ],
+   [
+    -0.0036417758395664076,
+    0.00022773331565832753
+   ]
+  ],
+  "max_abs_error_bound": 2.29e-13,
+  "method": "taylor (mpmath.odefun)",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.2.1",
+   "scipy": "1.8.0",
+   "numpy": "1.21.5"
+  },
+  "cross_check": {
+   "method": "scipy DOP853 rtol=1e-13",
+   "max_abs_diff": 2.29e-13,
+   "max_diff_over_spec_tolerance": 0.000107,
+   "min_spec_tolerance_over_bound": 447.0
+  }
+ },
+ "invariants": [],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

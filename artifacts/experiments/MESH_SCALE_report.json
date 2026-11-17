@@ -1,0 +1,486 @@
+{
+  "acceptance_at_1000": {
+    "A1": {
+      "per_run": {
+        "20261027T155536Z-N1000": {
+          "measured": {
+            "hosts_seen": 2,
+            "live_bees_per_host_at_60s": {
+              "h1": 1000,
+              "h2": 1000
+            }
+          },
+          "verdict": "PASS"
+        }
+      },
+      "verdict": "PASS"
+    },
+    "A2": {
+      "per_run": {
+        "20261027T155536Z-N1000": {
+          "measured": {
+            "duplicates": 0,
+            "lost": 0,
+            "overhead_p95_ms": 107,
+            "overhead_p99_ms": 836,
+            "replied": 24000,
+            "submitted": 24000
+          },
+          "verdict": "PASS"
+        }
+      },
+      "verdict": "PASS"
+    },
+    "A3": {
+      "per_run": {
+        "20261027T155536Z-N1000": {
+          "measured": {
+            "answered_ok": 152,
+            "fraction_ok": 1.0,
+            "killed_assigned_tasks": 152
+          },
+          "verdict": "PASS"
+        }
+      },
+      "verdict": "PASS"
+    },
+    "A4": {
+      "per_run": {
+        "20261027T155536Z-N1000": {
+          "measured": {
+            "clauses": {
+              "kafka_heap_512mb": true,
+              "no_early_exit": true,
+              "no_oom": true
+            },
+            "early_exits": [],
+            "kafka_xmx_mb": 512,
+            "note": "heap use within -Xmx is not measured directly; RSS is reported",
+            "oom_total": 0
+          },
+          "verdict": "PASS"
+        }
+      },
+      "verdict": "PASS"
+    }
+  },
+  "experiment_id": "MESH-SCALE-1",
+  "overall": "PASS",
+  "prereg_path": "artifacts/experiments/MESH_SCALE_prereg.json",
+  "prereg_sha256": "9899d295ac3f28306b287611765e94f5921f1c05c26fe4b7bf50d955caa2aca7",
+  "receipt": {
+    "method": "sha256 of canonical JSON (sort_keys, separators , and :, ascii) of this object without the receipt field",
+    "sha256": "a94bce96f39c687f18bfd152c8ce21590d494d887ae8519dce2e8f671f33fac9"
+  },
+  "runs": [
+    {
+      "acceptance_at_1000": {
+        "A1": {
+          "measured": "acceptance is defined for N=1000 only",
+          "verdict": "NOT_RUN"
+        },
+        "A2": {
+          "measured": "acceptance is defined for N=1000 only",
+          "verdict": "NOT_RUN"
+        },
+        "A3": {
+          "measured": "acceptance is defined for N=1000 only",
+          "verdict": "NOT_RUN"
+        },
+        "A4": {
+          "measured": "acceptance is defined for N=1000 only",
+          "verdict": "NOT_RUN"
+        }
+      },
+      "diagnostics_not_verdict_inputs": {
+        "kafka_publish_error_lines": 0,
+        "kafka_publish_error_lines_per_log": {},
+        "overhead_p95_after_first_10s_of_load": 68,
+        "overhead_p99_after_first_10s_of_load": 118,
+        "overhead_samples_after_first_10s_of_load": 20688,
+        "retries_not_touching_killed_bees": 0
+      },
+      "early_exits": [],
+      "kafka": {
+        "pid": "190940",
+        "vmhwm_mb_lifetime": 517.4,
+        "xmx_mb": 512
+      },
+      "kill": {
+        "a3_answered_ok": 100,
+        "a3_set_size": 100,
+        "expected_kill_ms": 1793116150120,
+        "first_attempt_on_killed_answered_ok": 1556,
+        "first_attempt_on_killed_size": 1556,
+        "kill_lag_ms": 1,
+        "kill_ms_first": 1793116150121,
+        "killed_bees": 12,
+        "tasks_touching_killed_bees_any_attempt": 1556
+      },
+      "label": "prereg-level-100",
+      "latency_ms": {
+        "e2e_p50": 73,
+        "e2e_p95": 178,
+        "e2e_p99": 753,
+        "overhead_p50": 16,
+        "overhead_p95": 112,
+        "overhead_p99": 550,
+        "overhead_samples": 22444
+      },
+      "load": {
+        "achieved_submit_rate_tps": 200.00794857421994,
+        "duplicates": 0,
+        "duration_s": 120,
+        "lost": 0,
+        "not_ok": 0,
+        "ok": 24000,
+        "rate_target_tps": 200,
+        "replied": 24000,
+        "service_ms_missing": 0,
+        "submit_failures": 0,
+        "submitted": 24000,
+        "submitted_summary": 24000,
+        "throughput_tps": 200.0
+      },
+      "n_bees": 100,
+      "oom": {
+        "per_file": {
+          "bees-1.events.log": 0,
+          "bees-1.log": 0,
+          "bees-2.events.log": 0,
+          "bees-2.log": 0,
+          "bees-3.events.log": 0,
+          "bees-3.log": 0,
+          "bees-4.events.log": 0,
+          "bees-4.log": 0,
+          "host-1.log": 0,
+          "host-2.log": 0,
+          "loadgen.log": 0,
+          "record.log": 0,
+          "status.log": 0
+        },
+        "total": 0
+      },
+      "peak_rss_mb": {
+        "bees-1": 417.4,
+        "bees-2": 408.1,
+        "bees-3": 223.6,
+        "bees-4": 262.7,
+        "host-1": 394.2,
+        "host-2": 384.4,
+        "loadgen": 374.7,
+        "record": 169.2
+      },
+      "prereg_condition_checks": {
+        "attempt_timeout_ms": true,
+        "bee_jvms": true,
+        "bee_xmx_mb": true,
+        "duration_s": true,
+        "heartbeat_ms": true,
+        "host_xmx_mb": true,
+        "hosts": true,
+        "kafka_xmx_mb": true,
+        "kill_at_s": true,
+        "kill_fraction": true,
+        "load_duration_measured_s": true,
+        "max_concurrent_per_bee": true,
+        "offered_rate_met": true,
+        "rate_tps": true,
+        "sim_jitter_ms": true,
+        "sim_latency_ms": true,
+        "tier": true
+      },
+      "prereg_conditions": true,
+      "registration": {
+        "recorder_all_hosts_at_n_s": 6.347,
+        "status_end_minus_last_launch_s": 8.961,
+        "status_exit_code": 0
+      },
+      "run_dir": "/mnt/disks/disk-socrateai-local-1/amcp/scale-runs/20261027T154512Z-N100",
+      "run_id": "20261027T154512Z-N100"
+    },
+    {
+      "acceptance_at_1000": {
+        "A1": {
+          "measured": "acceptance is defined for N=1000 only",
+          "verdict": "NOT_RUN"
+        },
+        "A2": {
+          "measured": "acceptance is defined for N=1000 only",
+          "verdict": "NOT_RUN"
+        },
+        "A3": {
+          "measured": "acceptance is defined for N=1000 only",
+          "verdict": "NOT_RUN"
+        },
+        "A4": {
+          "measured": "acceptance is defined for N=1000 only",
+          "verdict": "NOT_RUN"
+        }
+      },
+      "diagnostics_not_verdict_inputs": {
+        "kafka_publish_error_lines": 0,
+        "kafka_publish_error_lines_per_log": {},
+        "overhead_p95_after_first_10s_of_load": 88,
+        "overhead_p99_after_first_10s_of_load": 129,
+        "overhead_samples_after_first_10s_of_load": 20859,
+        "retries_not_touching_killed_bees": 0
+      },
+      "early_exits": [],
+      "kafka": {
+        "pid": "190940",
+        "vmhwm_mb_lifetime": 520.2,
+        "xmx_mb": 512
+      },
+      "kill": {
+        "a3_answered_ok": 101,
+        "a3_set_size": 101,
+        "expected_kill_ms": 1793116461652,
+        "first_attempt_on_killed_answered_ok": 1352,
+        "first_attempt_on_killed_size": 1352,
+        "kill_lag_ms": 2,
+        "kill_ms_first": 1793116461654,
+        "killed_bees": 32,
+        "tasks_touching_killed_bees_any_attempt": 1352
+      },
+      "label": "prereg-level-300",
+      "latency_ms": {
+        "e2e_p50": 75,
+        "e2e_p95": 212,
+        "e2e_p99": 1276,
+        "overhead_p50": 18,
+        "overhead_p95": 144,
+        "overhead_p99": 1123,
+        "overhead_samples": 22648
+      },
+      "load": {
+        "achieved_submit_rate_tps": 200.0080738509222,
+        "duplicates": 0,
+        "duration_s": 120,
+        "lost": 0,
+        "not_ok": 0,
+        "ok": 24000,
+        "rate_target_tps": 200,
+        "replied": 24000,
+        "service_ms_missing": 0,
+        "submit_failures": 0,
+        "submitted": 24000,
+        "submitted_summary": 24000,
+        "throughput_tps": 200.0
+      },
+      "n_bees": 300,
+      "oom": {
+        "per_file": {
+          "bees-1.events.log": 0,
+          "bees-1.log": 0,
+          "bees-2.events.log": 0,
+          "bees-2.log": 0,
+          "bees-3.events.log": 0,
+          "bees-3.log": 0,
+          "bees-4.events.log": 0,
+          "bees-4.log": 0,
+          "host-1.log": 0,
+          "host-2.log": 0,
+          "loadgen.log": 0,
+          "record.log": 0,
+          "status.log": 0
+        },
+        "total": 0
+      },
+      "peak_rss_mb": {
+        "bees-1": 423.1,
+        "bees-2": 456.4,
+        "bees-3": 441.3,
+        "bees-4": 460.3,
+        "host-1": 382.2,
+        "host-2": 404.1,
+        "loadgen": 383.9,
+        "record": 154.9
+      },
+      "prereg_condition_checks": {
+        "attempt_timeout_ms": true,
+        "bee_jvms": true,
+        "bee_xmx_mb": true,
+        "duration_s": true,
+        "heartbeat_ms": true,
+        "host_xmx_mb": true,
+        "hosts": true,
+        "kafka_xmx_mb": true,
+        "kill_at_s": true,
+        "kill_fraction": true,
+        "load_duration_measured_s": true,
+        "max_concurrent_per_bee": true,
+        "offered_rate_met": true,
+        "rate_tps": true,
+        "sim_jitter_ms": true,
+        "sim_latency_ms": true,
+        "tier": true
+      },
+      "prereg_conditions": true,
+      "registration": {
+        "recorder_all_hosts_at_n_s": 8.475,
+        "status_end_minus_last_launch_s": 9.133,
+        "status_exit_code": 0
+      },
+      "run_dir": "/mnt/disks/disk-socrateai-local-1/amcp/scale-runs/20261027T155026Z-N300",
+      "run_id": "20261027T155026Z-N300"
+    },
+    {
+      "a3_first_attempt_variant": {
+        "fraction_ok": 1.0,
+        "size": 1326
+      },
+      "acceptance_at_1000": {
+        "A1": {
+          "measured": {
+            "hosts_seen": 2,
+            "live_bees_per_host_at_60s": {
+              "h1": 1000,
+              "h2": 1000
+            }
+          },
+          "verdict": "PASS"
+        },
+        "A2": {
+          "measured": {
+            "duplicates": 0,
+            "lost": 0,
+            "overhead_p95_ms": 107,
+            "overhead_p99_ms": 836,
+            "replied": 24000,
+            "submitted": 24000
+          },
+          "verdict": "PASS"
+        },
+        "A3": {
+          "measured": {
+            "answered_ok": 152,
+            "fraction_ok": 1.0,
+            "killed_assigned_tasks": 152
+          },
+          "verdict": "PASS"
+        },
+        "A4": {
+          "measured": {
+            "clauses": {
+              "kafka_heap_512mb": true,
+              "no_early_exit": true,
+              "no_oom": true
+            },
+            "early_exits": [],
+            "kafka_xmx_mb": 512,
+            "note": "heap use within -Xmx is not measured directly; RSS is reported",
+            "oom_total": 0
+          },
+          "verdict": "PASS"
+        }
+      },
+      "diagnostics_not_verdict_inputs": {
+        "kafka_publish_error_lines": 0,
+        "kafka_publish_error_lines_per_log": {},
+        "overhead_p95_after_first_10s_of_load": 64,
+        "overhead_p99_after_first_10s_of_load": 109,
+        "overhead_samples_after_first_10s_of_load": 20888,
+        "retries_not_touching_killed_bees": 0
+      },
+      "early_exits": [],
+      "kafka": {
+        "pid": "190940",
+        "vmhwm_mb_lifetime": 533.7,
+        "xmx_mb": 512
+      },
+      "kill": {
+        "a3_answered_ok": 152,
+        "a3_set_size": 152,
+        "expected_kill_ms": 1793116748322,
+        "first_attempt_on_killed_answered_ok": 1326,
+        "first_attempt_on_killed_size": 1326,
+        "kill_lag_ms": 6,
+        "kill_ms_first": 1793116748328,
+        "killed_bees": 100,
+        "tasks_touching_killed_bees_any_attempt": 1326
+      },
+      "label": "prereg-1000",
+      "latency_ms": {
+        "e2e_p50": 72,
+        "e2e_p95": 175,
+        "e2e_p99": 1254,
+        "overhead_p50": 16,
+        "overhead_p95": 107,
+        "overhead_p99": 836,
+        "overhead_samples": 22674
+      },
+      "load": {
+        "achieved_submit_rate_tps": 200.0080533159331,
+        "duplicates": 0,
+        "duration_s": 120,
+        "lost": 0,
+        "not_ok": 0,
+        "ok": 24000,
+        "rate_target_tps": 200,
+        "replied": 24000,
+        "service_ms_missing": 0,
+        "submit_failures": 0,
+        "submitted": 24000,
+        "submitted_summary": 24000,
+        "throughput_tps": 200.0
+      },
+      "n_bees": 1000,
+      "oom": {
+        "per_file": {
+          "bees-1.events.log": 0,
+          "bees-1.log": 0,
+          "bees-2.events.log": 0,
+          "bees-2.log": 0,
+          "bees-3.events.log": 0,
+          "bees-3.log": 0,
+          "bees-4.events.log": 0,
+          "bees-4.log": 0,
+          "host-1.log": 0,
+          "host-2.log": 0,
+          "loadgen.log": 0,
+          "record.log": 0,
+          "status.log": 0
+        },
+        "total": 0
+      },
+      "peak_rss_mb": {
+        "bees-1": 479.6,
+        "bees-2": 451.3,
+        "bees-3": 472.9,
+        "bees-4": 488.3,
+        "host-1": 383.8,
+        "host-2": 373.1,
+        "loadgen": 391.4,
+        "record": 156.0
+      },
+      "prereg_condition_checks": {
+        "attempt_timeout_ms": true,
+        "bee_jvms": true,
+        "bee_xmx_mb": true,
+        "duration_s": true,
+        "heartbeat_ms": true,
+        "host_xmx_mb": true,
+        "hosts": true,
+        "kafka_xmx_mb": true,
+        "kill_at_s": true,
+        "kill_fraction": true,
+        "load_duration_measured_s": true,
+        "max_concurrent_per_bee": true,
+        "offered_rate_met": true,
+        "rate_tps": true,
+        "sim_jitter_ms": true,
+        "sim_latency_ms": true,
+        "tier": true
+      },
+      "prereg_conditions": true,
+      "registration": {
+        "recorder_all_hosts_at_n_s": 8.076,
+        "status_end_minus_last_launch_s": 8.659,
+        "status_exit_code": 0
+      },
+      "run_dir": "/mnt/disks/disk-socrateai-local-1/amcp/scale-runs/20261027T155536Z-N1000",
+      "run_id": "20261027T155536Z-N1000"
+    }
+  ]
+}

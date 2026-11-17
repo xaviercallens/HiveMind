@@ -1,0 +1,175 @@
+{
+  "report_id": "HIVEMIND-LIVE-WAN-SWARM-PRODUCTION-V390",
+  "version": "3.9.0",
+  "vram_wall_refutation": {
+    "boinc_qlora_6domain_vram_mib": 3409,
+    "boinc_qlora_6domain_vram_gb": 3.41,
+    "bee_stars_live_vram_mib": 4838,
+    "bee_stars_live_vram_gb": 4.84,
+    "t4_total_resident_mib": 4841,
+    "rtx2070_coder_vram_mib": 5462,
+    "wddm_ceiling_mib": 6656,
+    "wddm_ceiling_gb": 6.5,
+    "oom_failures_count": 0
+  },
+  "heterogeneous_swarm_and_cobblestones": {
+    "registered_nodes": 47,
+    "hardware_classes": [
+      "NVIDIA Turing (GeForce RTX 2070 8GB SM 7.5, Tesla T4 16GB SM 7.5)",
+      "NVIDIA Ampere (GeForce RTX 3060 12GB, RTX 3090 24GB SM 8.6)",
+      "NVIDIA Ada Lovelace / Blackwell (GeForce RTX 4070 12GB, RTX 5060 8GB SM 8.9+)",
+      "AMD Radeon ROCm (RDNA3 / HIP Consumer Nodes)",
+      "Apple Silicon Metal (M1/M2/M3 Unified Memory MPS)",
+      "x86_64 CPU Fallbacks (Deterministic ZK-OPoI & AST Audit Nodes)"
+    ],
+    "verified_cobblestones": 5632.11,
+    "boinc_reference_pflops_s": 2.433,
+    "swarm_attested_pflops_hours": 2.433,
+    "leaderboard_idle_gpu_hours": 1548.0,
+    "leaderboard_workunits_total": 700,
+    "leaderboard_attested_tflops_hours": 4375.0,
+    "nocturnal_attested_tflops_hours": 150.0,
+    "cumulative_swarm_tflops_hours": 4525.0,
+    "cumulative_swarm_pflops_hours": 4.525,
+    "instantaneous_peak_tflops_fp16": 518.4,
+    "prorated_fair_share_yield_pts_per_hr_range": [
+      111.5,
+      115.0
+    ]
+  },
+  "byzantine_and_volunteer_tax_audit": {
+    "assimilated_boinc_workunits": 100,
+    "chained_qlora_rounds": 98,
+    "nocturnal_producer_workunits": 24,
+    "nocturnal_base_models_count": 6,
+    "total_verified_workunits": 124,
+    "chain_head_workunit": "hmq_00092",
+    "chain_head_sha256_prefix": "e91e0ec3",
+    "six_domain_nll_before": 2.2705,
+    "six_domain_nll_after": 2.138,
+    "six_domain_nll_rel_change_pct": -5.8,
+    "domain_rel_changes_pct": {
+      "math": -15.1,
+      "biomed": -11.7,
+      "general": -8.8
+    },
+    "bee_stars_acc_before": 0.489,
+    "bee_stars_acc_after": 0.893,
+    "bee_stars_acc_gain_pct": 40.4,
+    "bee_stars_vs_shuffled_wins": 193,
+    "bee_stars_vs_shuffled_losses": 7,
+    "same_class_max_replay_divergence": 0.0,
+    "unmatched_cross_class_reject_rate_pct": 100.0,
+    "execution_class_matched_false_rejection_count": 0,
+    "execution_class_matched_false_rejection_rate_pct": 0.0,
+    "adversarial_faults_injected": 6,
+    "adversarial_faults_rejected": 6,
+    "adversarial_catch_rate_pct": 100.0,
+    "ratchet_accepted_rounds": 20,
+    "ratchet_accepted_pct": 20.4,
+    "ratchet_held_rounds": 78,
+    "ratchet_held_pct": 79.6,
+    "pouw_credit_loss_on_ratchet_hold_pct": 0.0
+  },
+  "custom_turing_kernels_and_latency": {
+    "gpu_architecture": "NVIDIA GeForce RTX 2070 (8GB GDDR6, Turing SM 7.5)",
+    "kernel_name": "fused_int4_fp8_moe_route_and_project",
+    "effective_gflops": 51.24,
+    "int4_vram_compression_ratio": 3.88,
+    "fp8_wire_compression_ratio": 1.97,
+    "cosine_similarity_hm_s3_02": 0.9963,
+    "cosine_similarity_stage7_16expert": 0.992722,
+    "sqnr_db": 31.79,
+    "fused_kernel_latency_ms": 12.542,
+    "openrouter_inference": {
+      "total_billed_completions": 1427,
+      "human_prosumer_completions": 141,
+      "automated_agent_and_probe_completions": 1286,
+      "total_billed_tokens": 240162,
+      "total_hmt_settled": 363.781,
+      "models_served": {
+        "hivemind/coder": {
+          "completions": 850,
+          "share_pct": 59.6,
+          "human_prosumer_completions": 72,
+          "human_share_pct": 51.1,
+          "billed_tokens": 169692,
+          "hmt_spent": 265.1737
+        },
+        "hivemind/bee-stars": {
+          "completions": 551,
+          "share_pct": 38.6,
+          "human_prosumer_completions": 49,
+          "human_share_pct": 34.8,
+          "billed_tokens": 69545,
+          "hmt_spent": 97.5942
+        },
+        "hivemind/coder-lite": {
+          "completions": 18,
+          "share_pct": 1.3,
+          "human_prosumer_completions": 12,
+          "human_share_pct": 8.5,
+          "billed_tokens": 509,
+          "hmt_spent": 0.5971
+        },
+        "hivemind/moe-coder": {
+          "completions": 3,
+          "share_pct": 0.2,
+          "human_prosumer_completions": 3,
+          "human_share_pct": 2.1,
+          "billed_tokens": 150,
+          "hmt_spent": 0.15
+        },
+        "hivemind/moe-general": {
+          "completions": 3,
+          "share_pct": 0.2,
+          "human_prosumer_completions": 3,
+          "human_share_pct": 2.1,
+          "billed_tokens": 164,
+          "hmt_spent": 0.164
+        },
+        "hivemind/coder-plus": {
+          "completions": 2,
+          "share_pct": 0.1,
+          "human_prosumer_completions": 2,
+          "human_share_pct": 1.4,
+          "billed_tokens": 102,
+          "hmt_spent": 0.102
+        }
+      }
+    },
+    "live_traffic": {
+      "registered_nodes_total": 47,
+      "role_breakdown": {
+        "prosumer": 14,
+        "producer": 8,
+        "consumer": 22,
+        "admin": 3
+      },
+      "endpoints": {
+        "router": {
+          "requests": 1004,
+          "chat_p50_ms": 166.6,
+          "chat_p95_ms": 586.1,
+          "errors_5xx": 0
+        },
+        "tribute": {
+          "requests": 124,
+          "chat_p50_ms": 180.3,
+          "chat_p95_ms": 579.9,
+          "errors_5xx": 0
+        },
+        "ruche": {
+          "requests": 197,
+          "chat_p50_ms": 243.4,
+          "chat_p95_ms": 5010.8,
+          "errors_5xx": 0
+        }
+      },
+      "total_requests_sampled": 1325,
+      "mean_endpoint_p50_ms": 196.8,
+      "total_5xx_errors": 0
+    }
+  },
+  "receipt_sha256": "cb27fed2fdb6a6678ef9631ad9be1a6b2f0ba7bf5b06d40d0dc4e972a1fbd17d"
+}

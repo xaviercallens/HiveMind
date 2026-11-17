@@ -312,3 +312,36 @@ def test_worker_records_measured_ef21_telemetry_per_branch(tiny_qwen_bundle, tmp
     engine = StrategyOptimizerTelemetryEngine(seed=2026)
     served = engine.ingest_worker_ef21(worker)["ef21_live_telemetry"]["workers"]
     assert {(w["worker_id"], w["branch_name"]) for w in served} == {("w-ef-tele", "Code"), ("w-ef-tele", "STEM")}
+
+
+def test_validator_rejects_nan_in_worker_checkpoint_and_in_raw_delta(tiny_qwen_bundle, tmp_path: Path) -> None:
+    """NaN compares False against any tolerance, so an unguarded max-diff check would pass a poisoned state."""
+    bundle, init_lora, base_sha = tiny_qwen_bundle
+    worker = _worker(bundle, "w-nan")
+    wu = _workunit(tmp_path, base_sha, "Code", outer_step=1, seed=404)
+    res = worker.execute_workunit(wu, _clone(init_lora), topk_ratio=TOPK)
+    tokens = verify_and_load_parquet_shard(
+        wu.data_shard_parquet, wu.shard_sha256, wu.shard_hmac_signature, rng_seed=wu.rng_seed
+    )
+    validator = DeterministicSpotCheckValidator(tolerance_eps=1e-4)
+    honest = validator.verify_submission(
+        validator_model=bundle.model, workunit=wu, submission=res, token_sequences=tokens, steam_id64=worker.steam_id64
+    )
+    assert honest.passed, honest.reason  # positive control: the untouched submission verifies
+
+    checked_step = sorted(s for s in res.micro_checkpoints if s > 0)[0]
+    name = next(iter(res.micro_checkpoints[checked_step].state_snapshot))
+    res.micro_checkpoints[checked_step].state_snapshot[name].view(-1)[0] = float("nan")
+    poisoned_state = validator.verify_submission(
+        validator_model=bundle.model, workunit=wu, submission=res, token_sequences=tokens, steam_id64="7656119900000001"
+    )
+    assert poisoned_state.passed is False
+    assert poisoned_state.max_abs_divergence == float("inf")
+
+    res2 = worker.execute_workunit(wu, _clone(init_lora), topk_ratio=TOPK)
+    dname = next(iter(res2.raw_delta))
+    res2.raw_delta[dname].view(-1)[0] = float("nan")
+    poisoned_delta = validator.verify_submission(
+        validator_model=bundle.model, workunit=wu, submission=res2, token_sequences=tokens, steam_id64="7656119900000002"
+    )
+    assert poisoned_delta.passed is False

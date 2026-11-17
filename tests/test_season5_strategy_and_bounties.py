@@ -77,7 +77,8 @@ def test_hm_s5_01_hf_hub_sync_and_64kb_multi_peer_cas_chunk_seeding(tmp_path: Pa
     )
 
     push_res = manager.exporter.push_bundle_to_hf_hub(bundle_dir=bundle_dir)
-    assert push_res["status"] == "pushed"
+    # no token: the bundle is mirrored locally and the record says so (IP-165); "pushed" is reserved for the Hub
+    assert push_res["status"] == "mirrored_locally_not_pushed" and push_res["pushed_to_hub"] is False
     assert "README.md" in push_res["files_uploaded"]
 
     pulled_dir = tmp_path / "pulled_from_hub"

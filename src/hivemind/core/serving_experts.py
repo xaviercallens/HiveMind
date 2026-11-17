@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Serving-layer experts: verified generators that sit beside the Season 3 LoRA domain experts.
 
 A LoRA domain expert (``SEASON_3_DOMAIN_EXPERT_SPECS``) is a trained adapter that is hot-plugged into the sparse MoE. A
@@ -40,6 +41,12 @@ def route_with_serving_experts(
     A serving expert is therefore chosen only when its keywords outscore the other domains for this prompt. A prompt with
     no keyword hit returns ``([], {})`` (use the base model).
     """
+    if not isinstance(prompt, str):
+        raise ValueError("prompt must be a string")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError("top_k must be an integer >= 1")
+    if isinstance(min_weight, bool) or not isinstance(min_weight, (int, float)) or not (0.0 <= float(min_weight) <= 1.0):
+        raise ValueError("min_weight must be a number in [0.0, 1.0]")
     return keyword_route(prompt, (SEASON_3_DOMAIN_EXPERT_SPECS, SERVING_EXPERT_SPECS), top_k=top_k, min_weight=min_weight)
 
 
@@ -50,6 +57,36 @@ def load_gwaya_code_expert(large_url: str, large_model: str = "qwen2.5-coder:7b"
     The 7B tier alone is the default: GWAYA's T4 measurement (MBPP-sanitized, n=257) found a 3B-first cascade no better
     (83.3% against 82.9%). Raises ``ImportError`` with an install hint when a GWAYA release with the Code expert is absent.
     """
+    if (
+        not isinstance(large_url, str)
+        or not large_url.strip()
+        or any(ord(c) < 32 or ord(c) == 127 for c in large_url)
+        or not large_url.strip().startswith(("http://", "https://"))
+    ):
+        raise ValueError("large_url must be a non-empty http(s) URL string")
+    if (
+        not isinstance(large_model, str)
+        or not large_model.strip()
+        or any(ord(c) < 32 or ord(c) == 127 for c in large_model)
+    ):
+        raise ValueError("large_model must be a non-empty string")
+    if small_url is not None and (
+        not isinstance(small_url, str)
+        or not small_url.strip()
+        or any(ord(c) < 32 or ord(c) == 127 for c in small_url)
+        or not small_url.strip().startswith(("http://", "https://"))
+    ):
+        raise ValueError("small_url must be a non-empty http(s) URL string when provided")
+    if (
+        not isinstance(small_model, str)
+        or not small_model.strip()
+        or any(ord(c) < 32 or ord(c) == 127 for c in small_model)
+    ):
+        raise ValueError("small_model must be a non-empty string")
+    if not isinstance(small_first, bool):
+        raise ValueError("small_first must be a bool")
+    if isinstance(max_rounds, bool) or not isinstance(max_rounds, int) or max_rounds < 1:
+        raise ValueError("max_rounds must be an integer >= 1")
     try:
         from gwaya.hivemind_expert import GwayaCodeExpert
         from gwaya.llama_tier import LlamaServerClient

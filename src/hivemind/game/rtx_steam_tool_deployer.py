@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Intense RTX GPU Stress & Torture Test Suite + v1.0.0 Free Steam Tool Deployment Engine.
 
 Executes a 6-stage hardware and cryptographic stress test on the local NVIDIA RTX GPU
@@ -72,6 +73,16 @@ def run_intense_rtx_stress_suite(
     steam_concurrent_accounts: int = 50,
 ) -> Dict[str, Any]:
     """Execute the 6-Stage Intense RTX GPU & Steam Tool Torture Test Suite."""
+    for name, val in (
+        ("vram_cycles", vram_cycles),
+        ("udp_burst_packets", udp_burst_packets),
+        ("num_hotplug_experts", num_hotplug_experts),
+        ("steam_concurrent_accounts", steam_concurrent_accounts),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int) or val <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    if num_hotplug_experts < 2:
+        raise ValueError("num_hotplug_experts must be >= 2")
     t_start = time.perf_counter()
     hw = detect_local_hardware()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -775,6 +786,29 @@ def run_intense_rtx_stress_suite(
             metadata={"compression_ratio": comp_pkg.compression_ratio, "season": 3},
         )
         _, _, loaded_lora = cas_store.load_lora_expert_checkpoint(expert_cid)
+        expected_roundtrip = {
+            k: v.detach().cpu().to(torch.float16).to(torch.float32)
+            for k, v in dummy_lora_b.items()
+        }
+        cas_spotcheck = validator.evaluate_two_statistic_replay(
+            worker_state=loaded_lora if isinstance(loaded_lora, dict) else {},
+            validator_state=expected_roundtrip,
+        )
+        cas_roundtrip_verified = bool(
+            isinstance(loaded_lora, dict)
+            and set(loaded_lora.keys()) == set(expected_roundtrip.keys())
+            and all(
+                bool(torch.isfinite(loaded_lora[k]).all())
+                and torch.allclose(
+                    loaded_lora[k].detach().cpu().float(),
+                    expected_roundtrip[k],
+                    atol=1e-6,
+                    rtol=1e-5,
+                )
+                for k in expected_roundtrip
+            )
+            and cas_spotcheck.passed
+        )
 
         stage9_summary = {
             "season3_contracts_forged": [
@@ -787,14 +821,15 @@ def run_intense_rtx_stress_suite(
                 s3_sol_forge["domain_expert"],
                 s3_m9_forge["domain_expert"],
             ],
-            "season3_all_spotchecks_passed": (
-                s3_lean_forge["spot_check_passed"]
-                and s3_sol_forge["spot_check_passed"]
-                and s3_m9_forge["spot_check_passed"]
+            "season3_all_spotchecks_passed": bool(
+                s3_lean_forge.get("spot_check_passed")
+                and s3_sol_forge.get("spot_check_passed")
+                and s3_m9_forge.get("spot_check_passed")
+                and cas_spotcheck.passed
             ),
             "webgl_3d_georing_nodes": topo_3d["num_nodes"],
             "cas_expert_cid": expert_cid,
-            "cas_roundtrip_verified": "layers.0.lora_A" in loaded_lora,
+            "cas_roundtrip_verified": cas_roundtrip_verified,
             "lora_top5pct_fp8_compression_ratio": comp_pkg.compression_ratio,
         }
 
@@ -819,7 +854,8 @@ def run_intense_rtx_stress_suite(
                 and "rfc9001_0rtt_monotonic_nonce_anti_replay" in lean_audit["theorems"]
             ),
             "formal_spec_verified": (
-                lean_audit["theorem_count"] >= 27
+                bool(lean_audit.get("tier_a_machine_checked"))
+                and lean_audit["theorem_count"] >= 27
                 and lean_audit["sorry_count"] == 0
                 and lean_audit["user_axiom_count"] == 0
             ),
@@ -850,8 +886,13 @@ def run_intense_rtx_stress_suite(
     )
 
     cert_payload = f"RTX_CERT:{STEAM_APP_ID}:{hw.get('gpu_name')}:{all_stages_passed}:{vram_final['peak_allocated_mb']}"
+    import secrets as _secrets
+    _rtx_cert_key = (
+        os.environ.get("HIVEMIND_RTX_CERT_SECRET", "").encode("utf-8")
+        or _secrets.token_bytes(32)
+    )
     cert_hmac = hmac.new(
-        b"HiveMind-Steamworks-RTX-Deploy-Key", cert_payload.encode("utf-8"), hashlib.sha256
+        _rtx_cert_key, cert_payload.encode("utf-8"), hashlib.sha256
     ).hexdigest()[:32]
 
     report: Dict[str, Any] = {
@@ -943,6 +984,15 @@ def deploy_free_steam_rtx_tool_v1(
     output_root: Path | None = None,
 ) -> Dict[str, Any]:
     """Run (or attach) the RTX Stress Certification and deploy v1.0.0 of the Free Steam Tool."""
+    if output_root is not None and (isinstance(output_root, bool) or not isinstance(output_root, Path)):
+        raise ValueError("output_root must be a Path or None")
+    if stress_report is not None and (
+        not isinstance(stress_report, dict)
+        or not isinstance(stress_report.get("all_stages_passed"), bool)
+        or not isinstance(stress_report.get("certification_hmac"), str)
+        or not stress_report["certification_hmac"].strip()
+    ):
+        raise ValueError("stress_report must be a dict containing boolean all_stages_passed and non-empty certification_hmac")
     if stress_report is None:
         stress_report = run_intense_rtx_stress_suite()
 

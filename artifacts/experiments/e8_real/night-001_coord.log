@@ -1,0 +1,22 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[coordinator] run night-001 pin 6d50b7222508 base 7e3bf9e2252e learners ['l0', 'l1'] quorum 1 initial eval 4.1709
+[coordinator] round 0: complete ['l0', 'l1'] eval 2.7140 (17.4s)
+[coordinator] round 1: complete ['l0', 'l1'] eval 1.7245 (4.3s)
+[coordinator] round 2: complete ['l0', 'l1'] eval 1.5416 (4.0s)
+[coordinator] round 3: complete ['l0', 'l1'] eval 1.4935 (2.8s)
+[coordinator] round 4: complete ['l0', 'l1'] eval 1.4662 (3.0s)
+[coordinator] round 5: complete ['l0', 'l1'] eval 1.4693 (2.9s)
+[coordinator] round 6: complete ['l0', 'l1'] eval 1.4842 (3.6s)
+[coordinator] round 7: complete ['l0', 'l1'] eval 1.4687 (3.0s)
+[coordinator] round 8: complete ['l0', 'l1'] eval 1.4507 (2.9s)
+[coordinator] round 9: complete ['l0', 'l1'] eval 1.4373 (2.9s)
+[coordinator] round 10: complete ['l0', 'l1'] eval 1.4295 (2.8s)
+[coordinator] round 11: complete ['l0', 'l1'] eval 1.4211 (2.7s)
+[coordinator] round 12: complete ['l0', 'l1'] eval 1.4185 (3.1s)
+[coordinator] round 13: quorum not reached (accepted [], claims [], rejected []); retry 1
+[coordinator] round 13: quorum not reached (accepted [], claims [], rejected []); retry 2
+%6|1793495979.364|FAIL|fed-coordinator#consumer-2| [thrd:10.77.0.1:9092/1]: 10.77.0.1:9092/1: Disconnected: connection closed by peer: receive 0 after POLLIN (after 596349ms in state UP)
+[coordinator] round 13: quorum not reached (accepted [], claims [], rejected []); retry 3
+[coordinator] round 13: quorum not reached (accepted [], claims [], rejected []); retry 4
+[coordinator] done: 13 rounds, final eval 1.41847562789917

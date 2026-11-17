@@ -1,0 +1,99 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "pendulum_large_angle",
+ "description": "Undamped pendulum released from 2.8 rad (near the separatrix, period about 12), g/l=1, 80 time units (about 7 periods); exact elliptic reference.",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "pendulum_large_angle",
+  "problem": {
+   "kind": "named",
+   "family": "pendulum",
+   "params": {
+    "g_over_l": 1.0
+   }
+  },
+  "y0": [
+   2.8,
+   0.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   1.0,
+   5.0,
+   10.0,
+   20.0,
+   40.0,
+   80.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   1.0,
+   5.0,
+   10.0,
+   20.0,
+   40.0,
+   80.0
+  ],
+  "y": [
+   [
+    2.619122786798043,
+    -0.38892938805742916
+   ],
+   [
+    -2.4506591447607984,
+    -0.5857830224778401
+   ],
+   [
+    0.9066554958289756,
+    1.7655623190349568
+   ],
+   [
+    -2.636355303322486,
+    0.36650435936890874
+   ],
+   [
+    2.0085224348958644,
+    -1.0181760972296223
+   ],
+   [
+    -1.1881923565955976,
+    -1.6220726030870158
+   ]
+  ],
+  "max_abs_error_bound": 3.16e-16,
+  "method": "exact (Jacobi elliptic cd, mpmath)",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.2.1",
+   "scipy": "1.8.0",
+   "numpy": "1.21.5"
+  },
+  "cross_check": {
+   "method": "taylor (mpmath.odefun)",
+   "max_abs_diff": 0.0,
+   "max_diff_over_spec_tolerance": 0.0,
+   "min_spec_tolerance_over_bound": 11900000.0
+  }
+ },
+ "invariants": [
+  {
+   "name": "energy",
+   "kind": "energy",
+   "model": "pendulum",
+   "params": {
+    "g_over_l": 1.0
+   },
+   "value": 1.942222340668658,
+   "tol": 1.94222e-05
+  }
+ ],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

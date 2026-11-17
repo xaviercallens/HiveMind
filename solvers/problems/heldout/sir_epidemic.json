@@ -1,0 +1,129 @@
+{
+ "schema": "hivemind-solver-problem/1",
+ "id": "sir_epidemic",
+ "description": "SIR epidemic in fractions (beta=0.5, gamma=0.2, R0=2.5) as mass action S+I->2I, I->R; S+I+R=1.",
+ "spec": {
+  "schema": "hivemind-solver-spec/1",
+  "id": "sir_epidemic",
+  "problem": {
+   "kind": "mass_action",
+   "species": [
+    "S",
+    "I",
+    "R"
+   ],
+   "reactions": [
+    {
+     "reactants": {
+      "S": 1,
+      "I": 1
+     },
+     "products": {
+      "I": 2
+     },
+     "k": 0.5
+    },
+    {
+     "reactants": {
+      "I": 1
+     },
+     "products": {
+      "R": 1
+     },
+     "k": 0.2
+    }
+   ]
+  },
+  "y0": [
+   0.99,
+   0.01,
+   0.0
+  ],
+  "t0": 0.0,
+  "t_out": [
+   5.0,
+   10.0,
+   20.0,
+   40.0,
+   80.0,
+   160.0
+  ],
+  "rtol": 1e-08,
+  "atol": 1e-10,
+  "method": "bdf",
+  "max_steps": 100000
+ },
+ "reference": {
+  "t": [
+   5.0,
+   10.0,
+   20.0,
+   40.0,
+   80.0,
+   160.0
+  ],
+  "y": [
+   [
+    0.9361550293096417,
+    0.0414754303856407,
+    0.02236954030471762
+   ],
+   [
+    0.76436972964373,
+    0.1321689376767778,
+    0.10346133267949226
+   ],
+   [
+    0.26884618764143287,
+    0.20972760427161946,
+    0.5214262080869476
+   ],
+   [
+    0.11254514345803092,
+    0.01771464582556174,
+    0.8697402107164073
+   ],
+   [
+    0.10591238635537917,
+    5.0519800849453365e-05,
+    0.8940370938437714
+   ],
+   [
+    0.10589419447722062,
+    3.9295910189551284e-10,
+    0.8941058051298203
+   ]
+  ],
+  "max_abs_error_bound": 3.15e-14,
+  "method": "taylor (mpmath.odefun)",
+  "tool": "solvers/tools/make_references.py",
+  "tool_versions": {
+   "python": "3.10.12",
+   "mpmath": "1.2.1",
+   "scipy": "1.8.0",
+   "numpy": "1.21.5"
+  },
+  "cross_check": {
+   "method": "scipy DOP853 rtol=1e-13",
+   "max_abs_diff": 3.15e-14,
+   "max_diff_over_spec_tolerance": 7e-05,
+   "min_spec_tolerance_over_bound": 3170.0
+  }
+ },
+ "invariants": [
+  {
+   "name": "population",
+   "kind": "linear",
+   "weights": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "value": 1.0,
+   "tol": 1e-07
+  }
+ ],
+ "tolerance_policy": {
+  "max_rel_err_factor": 100.0
+ }
+}

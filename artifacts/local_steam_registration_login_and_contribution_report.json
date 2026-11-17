@@ -1,0 +1,67 @@
+{
+  "schema": "hivemind.steam_free_game.portal_registration_login_and_contribution/1",
+  "desktop_steam_fat_client_exe": {
+    "path": "d:\\xdev\\HiveMind\\steam_dist\\HiveMind_Astrophysics_Exoplanet_Hunter\\HiveMind_Exoplanet_Hunter.exe",
+    "pid": 20496,
+    "running_on_local_machine": true
+  },
+  "portal_free_steam_game_registry": {
+    "object": "hivemind.steam_free_game",
+    "app_id": 3133700,
+    "depot_id": 3133702,
+    "title": "USS Hivemind NCC-31337 v5.1 — Astrophysics Exoplanet Hunter & Idle-GPU BOINC Edition",
+    "pricing_model": "FreeOnDemand (100% Free-to-Play on Steam • Non-Monetary HMT Compute Reciprocity)",
+    "boinc_idle_gpu_preemption_ms": 100,
+    "portal_registration_status": "REGISTERED_AND_LIVE",
+    "endpoints": {
+      "register_login": "/v1/hivemind/steam/register-login",
+      "contribute_boinc": "/v1/hivemind/steam/contribute-boinc",
+      "status": "/v1/hivemind/steam/status"
+    }
+  },
+  "simulated_registration_and_login": {
+    "initial_registration_status": "AUTHENTICATED [EXISTING ACCOUNT LOGIN] • Commander: Cmdr_RTX2070_Steam • SteamID64: 76561198031337001 • AppID: 3133700 (Free Steam Edition) • Account: 11ba14545646d15b73d01e610414bf51 • Balance: 3150.00 HMT • Ticket: STEAM-3133700-A6A173DB7578AC16",
+    "returning_login_status": "AUTHENTICATED [EXISTING ACCOUNT LOGIN] • Commander: Cmdr_RTX2070_Steam • SteamID64: 76561198031337001 • AppID: 3133700 (Free Steam Edition) • Account: 11ba14545646d15b73d01e610414bf51 • Balance: 3150.00 HMT • Ticket: STEAM-3133700-A6A173DB7578AC16",
+    "playground_account_inspector": "Account: 11ba14545646d15b73d01e610414bf51 | Role: prosumer | Balance: 3400.0000 HMT"
+  },
+  "boinc_rtx2070_contribution": {
+    "portal_contribution_status": "BOINC CONTRIBUTION VERIFIED • Target: K2-18 b • Depth: 2789 ppm • Kernel: 0.28 ms (nvidia_cuda_driver_ptx_sm50) • Awarded: +250 HMT & +45 Cobblestones • New Balance: 3400.00 HMT • SHA256: ff30a05683549a1e...",
+    "cockpit_auth_badge": "🟢 STEAM FREE GAME (AppID 3133700) • Cmdr_RTX2070_Steam • AUTH (STEAM-3133700-A6A173DB7578AC16) • +250 HMT & +45 BOINC",
+    "cockpit_score_hmt": "3,900",
+    "latest_community_feed_entry": {
+      "timestamp": "2026-10-28T18:39:54",
+      "gamer_handle": "cmdr_rtx2070_steam",
+      "scientist_handle": "@GCP_BOINC_Validator",
+      "target": "LHS 1140 b",
+      "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
+      "summary": "GPU idle for 8.5s on NVIDIA GeForce RTX 2070 -> Crunched BLS transit folding on LHS 1140 b (Depth=2914 ppm, SNR=135.2σ in 0.295 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-5420e44429ad44a0",
+      "gcp_receipt_sha256": "f51823fac7c4e738731f218ae0e6c1ac1b5667976808e96e3a4920b38e1b01c8"
+    },
+    "gcp_cloud_run_federated_lease": {
+      "workunit_id": "WU-S10-PHYSICS_SIM-0059",
+      "lease_id": "LEASE-f2aa1fc87942a844",
+      "lease_version_tag": 59,
+      "ttl_seconds": 600,
+      "contributor_handle": "Cmdr_RTX2070_Steam",
+      "hardware_device": "NVIDIA GeForce RTX 2070 (Steam AppID 3133700 Free Edition)",
+      "execution_class": "fp16_amp_cuda",
+      "domain_name": "physics_sim",
+      "target_cell_id": "ALVEOLE-03-PHYSICS-SIM",
+      "shard_id": "SHARD-S10-PHYSICS_SIM",
+      "shard_cas_cid": "cid://sha256/c96f2a99ff73cfd756cfe08e3d8ec494",
+      "canonical_rank_r": 4,
+      "inner_steps_H": 8,
+      "wire_codec": "e8_2bit",
+      "base_cell_download_endpoint": "/api/la-ruche/download/cell/physics_sim",
+      "sample_training_texts": [
+        "[physics_sim] DiLoCo inner-loop QLoRA training sample for Honeycomb Cell ALVEOLE-03-PHYSICS-SIM."
+      ],
+      "assigned_at_epoch": 1793209196.1238904,
+      "charter": "0.00 EUR / 0.00 USD Non-Monetary Compute Reciprocity"
+    }
+  },
+  "screenshots": {
+    "portal_free_steam_card": "C:\\Users\\Utilisateur\\.gemini\\antigravity\\brain\\a94c4d75-7c83-4b16-ad01-3012204f57ac\\live_portal_free_steam_game_registered_and_logged_in.png",
+    "cockpit_authenticated": "C:\\Users\\Utilisateur\\.gemini\\antigravity\\brain\\a94c4d75-7c83-4b16-ad01-3012204f57ac\\live_cockpit_steam_authenticated_and_contributing.png"
+  }
+}

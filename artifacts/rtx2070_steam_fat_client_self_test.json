@@ -1,0 +1,10 @@
+{
+  "schema": "hivemind.steam_fat_client.rtx_self_test/1",
+  "app_id": 3133700,
+  "depot_id": 3133702,
+  "resolution": "1540x940",
+  "languages_tested": ["fr", "en", "es", "de", "zh"],
+  "targets_loaded": 10,
+  "stages": [{ "stage_index": 0, "stage_name": "1.GALAXIE", "render_ms": 69.28, "effective_fps": 14.4, "boinc_idle_seconds": 0.2 }, { "stage_index": 1, "stage_name": "2.ORBIT_BEE", "render_ms": 67.81, "effective_fps": 14.7, "boinc_idle_seconds": 0.2 }, { "stage_index": 2, "stage_name": "3.OOLITE_LAND", "render_ms": 85.03, "effective_fps": 11.8, "boinc_idle_seconds": 0.2 }, { "stage_index": 3, "stage_name": "4.JWST_LOIS", "render_ms": 53.57, "effective_fps": 18.7, "boinc_idle_seconds": 0.2 }, { "stage_index": 4, "stage_name": "5.BOINC_GCP", "render_ms": 71.93, "effective_fps": 13.9, "boinc_idle_seconds": 6.5 }],
+  "status": "PASS"
+}

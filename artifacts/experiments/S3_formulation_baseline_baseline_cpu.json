@@ -1,0 +1,1138 @@
+{
+ "schema": "hivemind-s3-arm/1",
+ "experiment_id": "S3-science-bee-formulation",
+ "arm": "baseline",
+ "model": "baseline",
+ "device": "cpu",
+ "num_gpu": null,
+ "is_dry_run_with_scripted_fake_backend": false,
+ "ollama_version": null,
+ "unsandboxed_allowed": false,
+ "binary": {
+  "path_basename": "hivemind-solver",
+  "sha256": "478013c4498cd09d398f9e7a513e946d186f002dafdb1f0ece9eb933ed21180f",
+  "families": [
+   "brusselator",
+   "harmonic",
+   "lotka_volterra",
+   "robertson",
+   "stiff_chain",
+   "van_der_pol"
+  ],
+  "version": {
+   "crate_version": "0.1.0",
+   "solver_rev": "4e3e32de9ff188bace35c9e80e433b4e795a9d76"
+  }
+ },
+ "questions_sha256": "3ae367d59e7f253d487c1157a8311dd8f49e40ea7559f21f68c78bf26983f8e6",
+ "prereg_sha256": "65540dc6a2e4ac8c1bf7cea5281533bd1e0888dda1cd4f80cfb1041ed210a33a",
+ "science_bee_py_sha256": "8e356fb1aa67cb6517b860ade8d6dd1656d4d7f833f00ff853acfa92469a30e9",
+ "environment": {
+  "python": "3.10.12",
+  "cpu": "Intel(R) Xeon(R) CPU @ 2.20GHz",
+  "cpus": 8
+ },
+ "n_questions_run": 40,
+ "reduced_set": false,
+ "total_wall_seconds": 1.66,
+ "summary": {
+  "overall": {
+   "n": 40,
+   "correct": 4,
+   "exact_match": 13,
+   "could_not_formulate": 26,
+   "retries_total": 0,
+   "verified_but_wrong": 0,
+   "audited_but_wrong": 0,
+   "wall_seconds_mean": 0.041,
+   "correct_among_supported_families": 4,
+   "n_supported_families": 22
+  },
+  "by_tier": {
+   "A": {
+    "n": 13,
+    "correct": 4,
+    "exact_match": 12,
+    "could_not_formulate": 1,
+    "retries_total": 0,
+    "verified_but_wrong": 0,
+    "audited_but_wrong": 0,
+    "wall_seconds_mean": 0.111,
+    "correct_among_supported_families": 4,
+    "n_supported_families": 6
+   },
+   "B": {
+    "n": 15,
+    "correct": 0,
+    "exact_match": 1,
+    "could_not_formulate": 14,
+    "retries_total": 0,
+    "verified_but_wrong": 0,
+    "audited_but_wrong": 0,
+    "wall_seconds_mean": 0.008,
+    "correct_among_supported_families": 0,
+    "n_supported_families": 9
+   },
+   "C": {
+    "n": 12,
+    "correct": 0,
+    "exact_match": 0,
+    "could_not_formulate": 11,
+    "retries_total": 0,
+    "verified_but_wrong": 0,
+    "audited_but_wrong": 0,
+    "wall_seconds_mean": 0.007,
+    "correct_among_supported_families": 0,
+    "n_supported_families": 7
+   }
+  },
+  "by_lang": {
+   "en": {
+    "n": 24,
+    "correct": 1,
+    "exact_match": 7,
+    "could_not_formulate": 17,
+    "retries_total": 0,
+    "verified_but_wrong": 0,
+    "audited_but_wrong": 0,
+    "wall_seconds_mean": 0.031,
+    "correct_among_supported_families": 1,
+    "n_supported_families": 13
+   },
+   "fr": {
+    "n": 16,
+    "correct": 3,
+    "exact_match": 6,
+    "could_not_formulate": 9,
+    "retries_total": 0,
+    "verified_but_wrong": 0,
+    "audited_but_wrong": 0,
+    "wall_seconds_mean": 0.057,
+    "correct_among_supported_families": 3,
+    "n_supported_families": 9
+   }
+  },
+  "verdict_counts": {
+   "AUDITED": 4,
+   "COULD_NOT_FORMULATE": 26,
+   "FAILED": 1,
+   "UNVERIFIED": 9
+  },
+  "all_answers_contain_limits_sentence": true
+ },
+ "records": [
+  {
+   "id": "q01",
+   "tier": "A",
+   "lang": "en",
+   "type": "pendulum",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"named\", \"family\": \"pendulum\", \"params\": {\"g_over_l\": 9.81, \"damping\": 0.1}}, \"y0\": [0.5, 0.0], \"t0\": 0.0, \"t_out\": [1.0, 2.0, 5.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "f8088ea0485b3d95ab6612e99f54843210f0573cc74ddedb72e30b4f17b34a4a",
+   "exact_match": true,
+   "verdict": "UNVERIFIED",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": false,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.131
+  },
+  {
+   "id": "q02",
+   "tier": "A",
+   "lang": "fr",
+   "type": "pendulum",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"named\", \"family\": \"pendulum\", \"params\": {\"g_over_l\": 9.81, \"damping\": 0.2}}, \"y0\": [0.3, 0.0], \"t0\": 0.0, \"t_out\": [1.0, 2.0, 4.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "bdf58b42bfab10fa01526409f9fbab84352ba908665c9c597d2dd30aea58e957",
+   "exact_match": true,
+   "verdict": "UNVERIFIED",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": false,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.077
+  },
+  {
+   "id": "q03",
+   "tier": "A",
+   "lang": "en",
+   "type": "projectile",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"named\", \"family\": \"projectile_drag\", \"params\": {\"g\": 9.81, \"k\": 0.0}}, \"y0\": [0.0, 0.0, 10.0, 15.0], \"t0\": 0.0, \"t_out\": [0.5, 1.0, 2.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "921b0c6ea6cf23091b984ceb10fbc0ea64a918d149be0ff6d83c4f2c0b040be5",
+   "exact_match": true,
+   "verdict": "UNVERIFIED",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": false,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.083
+  },
+  {
+   "id": "q04",
+   "tier": "A",
+   "lang": "en",
+   "type": "projectile",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"named\", \"family\": \"projectile_drag\", \"params\": {\"g\": 9.81, \"k\": 0.02}}, \"y0\": [0.0, 0.0, 20.0, 20.0], \"t0\": 0.0, \"t_out\": [1.0, 2.0, 3.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "d254eff1272deb92921d66c9c36fa436171cd0e2d095ea4ffdd7d9b5db101344",
+   "exact_match": true,
+   "verdict": "UNVERIFIED",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": false,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.078
+  },
+  {
+   "id": "q05",
+   "tier": "A",
+   "lang": "en",
+   "type": "kepler",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"named\", \"family\": \"kepler\", \"params\": {\"mu\": 1.0}}, \"y0\": [1.0, 0.0, 0.0, 1.2], \"t0\": 0.0, \"t_out\": [1.0, 3.0, 6.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "05ca05407909d78707b8f57b007b58318d8f0ac49ed1dda6144dcdf6b9242f1f",
+   "exact_match": true,
+   "verdict": "UNVERIFIED",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": false,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.08
+  },
+  {
+   "id": "q06",
+   "tier": "A",
+   "lang": "en",
+   "type": "logistic",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"named\", \"family\": \"logistic\", \"params\": {\"r\": 0.5, \"K\": 100.0}}, \"y0\": [10.0], \"t0\": 0.0, \"t_out\": [2.0, 5.0, 10.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "4f6190b129cb2569d9e3239ca56a862b44b27621c7862b2077e55edf06a49338",
+   "exact_match": true,
+   "verdict": "UNVERIFIED",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": false,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.093
+  },
+  {
+   "id": "q07",
+   "tier": "A",
+   "lang": "fr",
+   "type": "logistic",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"named\", \"family\": \"logistic\", \"params\": {\"r\": 0.8, \"K\": 50.0}}, \"y0\": [5.0], \"t0\": 0.0, \"t_out\": [1.0, 4.0, 8.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "24372c7f4ec0792eb39f1034b30d11596b4fe8fa004e6fb9b8f8b391fbbad352",
+   "exact_match": true,
+   "verdict": "UNVERIFIED",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": false,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.078
+  },
+  {
+   "id": "q08",
+   "tier": "A",
+   "lang": "en",
+   "type": "sir",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  },
+  {
+   "id": "q09",
+   "tier": "A",
+   "lang": "fr",
+   "type": "seir",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"mass_action\", \"species\": [\"S\", \"E\", \"I\", \"R\"], \"reactions\": [{\"reactants\": {\"S\": 1, \"I\": 1}, \"products\": {\"E\": 1, \"I\": 1}, \"k\": 0.6}, {\"reactants\": {\"E\": 1}, \"products\": {\"I\": 1}, \"k\": 0.3}, {\"reactants\": {\"I\": 1}, \"products\": {\"R\": 1}, \"k\": 0.1}]}, \"y0\": [0.98, 0.01, 0.01, 1.734723475976807e-17], \"t0\": 0.0, \"t_out\": [10.0, 20.0, 40.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "16b45b191fc32f086d84f2f588c8f927fff64bba2ccd25d8c648434cebe3ab8b",
+   "exact_match": true,
+   "verdict": "AUDITED",
+   "agreement": true,
+   "correct": true,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.184
+  },
+  {
+   "id": "q10",
+   "tier": "A",
+   "lang": "en",
+   "type": "rlc",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"linear\", \"A\": [[0.0, 1.0], [-200.0, -20.0]], \"b\": [0.0, 10.0]}, \"y0\": [0.0, 0.0], \"t0\": 0.0, \"t_out\": [0.1, 0.5, 1.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "fe70d017916cfdef90d9ee7013fb2b475192e326afc1db70c08e2ec160016da0",
+   "exact_match": true,
+   "verdict": "AUDITED",
+   "agreement": true,
+   "correct": true,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.165
+  },
+  {
+   "id": "q11",
+   "tier": "A",
+   "lang": "fr",
+   "type": "msd",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"linear\", \"A\": [[0.0, 1.0], [-4.0, -0.2]], \"b\": [0.0, 0.0]}, \"y0\": [1.0, 0.0], \"t0\": 0.0, \"t_out\": [1.0, 2.0, 4.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "7a23ebcff89aa334e313722ca27e8efdd86799f58f79f5979582764fdec43cd4",
+   "exact_match": true,
+   "verdict": "FAILED",
+   "agreement": true,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.159
+  },
+  {
+   "id": "q12",
+   "tier": "A",
+   "lang": "fr",
+   "type": "chain",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"mass_action\", \"species\": [\"A\", \"B\", \"C\"], \"reactions\": [{\"reactants\": {\"A\": 1}, \"products\": {\"B\": 1}, \"k\": 1.0}, {\"reactants\": {\"B\": 1}, \"products\": {\"C\": 1}, \"k\": 0.5}]}, \"y0\": [1.0, 0.0, 0.0], \"t0\": 0.0, \"t_out\": [1.0, 2.0, 5.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "fb60352a8a722c7638db445e5711c026801c0ba542c2229412685f8f9a08d5aa",
+   "exact_match": true,
+   "verdict": "AUDITED",
+   "agreement": true,
+   "correct": true,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.162
+  },
+  {
+   "id": "q13",
+   "tier": "A",
+   "lang": "fr",
+   "type": "stiff",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"mass_action\", \"species\": [\"A\", \"B\", \"C\"], \"reactions\": [{\"reactants\": {\"A\": 1}, \"products\": {\"B\": 1}, \"k\": 1000.0}, {\"reactants\": {\"B\": 1}, \"products\": {\"C\": 1}, \"k\": 1.0}]}, \"y0\": [1.0, 0.0, 0.0], \"t0\": 0.0, \"t_out\": [0.001, 0.01, 1.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "f96981bb0345a6176402da40fb0974614ab89c98e63e59e96ccfdae267684e41",
+   "exact_match": true,
+   "verdict": "AUDITED",
+   "agreement": true,
+   "correct": true,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.153
+  },
+  {
+   "id": "q14",
+   "tier": "B",
+   "lang": "en",
+   "type": "pendulum",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"named\", \"family\": \"pendulum\", \"params\": {\"g_over_l\": 20.0, \"damping\": 0.0}}, \"y0\": [0.8, 0.0], \"t0\": 0.0, \"t_out\": [1.0, 3.0, 6.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "916b5460b11966c09e1efbde7e4dd4b238e70d39b8be13ab1b092f1b1b54f08e",
+   "exact_match": true,
+   "verdict": "UNVERIFIED",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": false,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.087
+  },
+  {
+   "id": "q15",
+   "tier": "B",
+   "lang": "fr",
+   "type": "projectile",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.006
+  },
+  {
+   "id": "q16",
+   "tier": "B",
+   "lang": "en",
+   "type": "projectile",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.001
+  },
+  {
+   "id": "q17",
+   "tier": "B",
+   "lang": "en",
+   "type": "kepler",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  },
+  {
+   "id": "q18",
+   "tier": "B",
+   "lang": "fr",
+   "type": "kepler",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  },
+  {
+   "id": "q19",
+   "tier": "B",
+   "lang": "fr",
+   "type": "logistic",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.006
+  },
+  {
+   "id": "q20",
+   "tier": "B",
+   "lang": "en",
+   "type": "sir",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.002
+  },
+  {
+   "id": "q21",
+   "tier": "B",
+   "lang": "fr",
+   "type": "sir",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  },
+  {
+   "id": "q22",
+   "tier": "B",
+   "lang": "en",
+   "type": "seir",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.001
+  },
+  {
+   "id": "q23",
+   "tier": "B",
+   "lang": "fr",
+   "type": "rlc",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.005
+  },
+  {
+   "id": "q24",
+   "tier": "B",
+   "lang": "en",
+   "type": "rlc",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  },
+  {
+   "id": "q25",
+   "tier": "B",
+   "lang": "en",
+   "type": "msd",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.007
+  },
+  {
+   "id": "q26",
+   "tier": "B",
+   "lang": "fr",
+   "type": "chain",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  },
+  {
+   "id": "q27",
+   "tier": "B",
+   "lang": "en",
+   "type": "chain",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.004
+  },
+  {
+   "id": "q28",
+   "tier": "B",
+   "lang": "en",
+   "type": "stiff",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  },
+  {
+   "id": "q29",
+   "tier": "C",
+   "lang": "fr",
+   "type": "pendulum",
+   "formulated": true,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"schema\": \"hivemind-solver-spec/1\", \"id\": \"science-bee\", \"problem\": {\"kind\": \"named\", \"family\": \"pendulum\", \"params\": {\"g_over_l\": 9.81, \"damping\": 0.0}}, \"y0\": [0.4, 0.0], \"t0\": 0.0, \"t_out\": [1.0, 2.0, 4.0]}"
+   ],
+   "validation_errors": [],
+   "final_spec_sha256": "6145b0dc1b91863a5cdb948ada3159b84e842731c317e2323636e3a0e0c08551",
+   "exact_match": false,
+   "verdict": "UNVERIFIED",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": false,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.082
+  },
+  {
+   "id": "q30",
+   "tier": "C",
+   "lang": "en",
+   "type": "projectile",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.001
+  },
+  {
+   "id": "q31",
+   "tier": "C",
+   "lang": "fr",
+   "type": "projectile",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.001
+  },
+  {
+   "id": "q32",
+   "tier": "C",
+   "lang": "en",
+   "type": "kepler",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  },
+  {
+   "id": "q33",
+   "tier": "C",
+   "lang": "en",
+   "type": "logistic",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": false,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.001
+  },
+  {
+   "id": "q34",
+   "tier": "C",
+   "lang": "fr",
+   "type": "sir",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  },
+  {
+   "id": "q35",
+   "tier": "C",
+   "lang": "en",
+   "type": "seir",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  },
+  {
+   "id": "q36",
+   "tier": "C",
+   "lang": "en",
+   "type": "rlc",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.001
+  },
+  {
+   "id": "q37",
+   "tier": "C",
+   "lang": "fr",
+   "type": "msd",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.001
+  },
+  {
+   "id": "q38",
+   "tier": "C",
+   "lang": "en",
+   "type": "msd",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.001
+  },
+  {
+   "id": "q39",
+   "tier": "C",
+   "lang": "en",
+   "type": "chain",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  },
+  {
+   "id": "q40",
+   "tier": "C",
+   "lang": "en",
+   "type": "stiff",
+   "formulated": false,
+   "attempts": 1,
+   "retries": 0,
+   "raw_outputs": [
+    "{\"cannot_formulate\": \"no template matched\"}"
+   ],
+   "validation_errors": [
+    "model declined: no template matched"
+   ],
+   "final_spec_sha256": null,
+   "exact_match": false,
+   "verdict": "COULD_NOT_FORMULATE",
+   "agreement": false,
+   "correct": false,
+   "verified_but_wrong": false,
+   "audited_but_wrong": false,
+   "expected_family_supported_by_binary": true,
+   "final_family_supported_by_binary": true,
+   "answer_contains_limits_sentence": true,
+   "wall_seconds": 0.0
+  }
+ ],
+ "receipt_sha256": "5b1d1d24c7a15329e5c7c4122e829f67e0c2070427c579d90ef5ee4a0dc9bfa9"
+}

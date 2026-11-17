@@ -1,0 +1,17 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+[learner 0@t4-socreateai-agora-hermes-node1] round 0 compute 1.028s accepted=True http_rtt_last=6.8ms
+[learner 0@t4-socreateai-agora-hermes-node1] round 1 compute 1.347s accepted=True http_rtt_last=3.1ms
+[learner 0@t4-socreateai-agora-hermes-node1] round 2 compute 1.237s accepted=True http_rtt_last=3.2ms
+[learner 0@t4-socreateai-agora-hermes-node1] round 3 compute 0.847s accepted=True http_rtt_last=3.1ms
+[learner 0@t4-socreateai-agora-hermes-node1] round 4 compute 0.861s accepted=True http_rtt_last=3.0ms
+[learner 0@t4-socreateai-agora-hermes-node1] round 5 compute 1.112s accepted=True http_rtt_last=3.0ms
+[learner 0@t4-socreateai-agora-hermes-node1] round 6 compute 0.918s accepted=True http_rtt_last=2.9ms
+[learner 0@t4-socreateai-agora-hermes-node1] round 7 compute 0.999s accepted=True http_rtt_last=3.0ms
+[learner 0@t4-socreateai-agora-hermes-node1] round 8 compute 0.897s accepted=True http_rtt_last=3.4ms
+[learner 0@t4-socreateai-agora-hermes-node1] round 9 compute 3.703s accepted=True http_rtt_last=3.1ms
+[learner 0@t4-socreateai-agora-hermes-node1] round 10 compute 0.900s accepted=True http_rtt_last=3.2ms
+[learner 0@t4-socreateai-agora-hermes-node1] round 11 compute 0.952s accepted=True http_rtt_last=3.0ms
+{"learner_id": 0, "host": "t4-socreateai-agora-hermes-node1", "http_rtt_ms": {"p50": 3.1538210168946534, "p95": 6.095475715119388, "n": 30}}

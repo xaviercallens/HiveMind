@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Project HiveMind — Repository, Pull Request, Runtime Swarm, Federated Learning, GPU Hardware & Red-Team Guardrail Security Package.
 
 Provides:

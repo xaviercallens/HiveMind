@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """QueenBee: split work into verifiable sub-tasks, route them to federated experts, learn from verified outcomes.
 
 Public name: QueenBee. Algorithm name used in the Lean specification (`HiveMindSpec.ALIX_QueenBee`) and in record

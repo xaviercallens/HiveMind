@@ -1,0 +1,324 @@
+{
+  "schema": "hivemind.rtx_boinc_steam_collaborator_benchmark/1",
+  "gpu_hardware": {
+    "gpu_model": "NVIDIA GeForce RTX 2070",
+    "utilization_pct": 36.0,
+    "temp_c": 26.0,
+    "total_mib": 8192.0,
+    "used_mib": 798.0,
+    "power_w": 9.52,
+    "driver_version": "610.88"
+  },
+  "steam_fat_client_self_test": {
+    "schema": "hivemind.steam_fat_client.rtx_self_test/1",
+    "app_id": 3133700,
+    "depot_id": 3133702,
+    "resolution": "1540x940",
+    "languages_tested": [
+      "fr",
+      "en",
+      "es",
+      "de",
+      "zh"
+    ],
+    "targets_loaded": 10,
+    "stages": [
+      {
+        "stage_index": 0,
+        "stage_name": "1.GALAXIE",
+        "render_ms": 69.28,
+        "effective_fps": 14.4,
+        "boinc_idle_seconds": 0.2
+      },
+      {
+        "stage_index": 1,
+        "stage_name": "2.ORBIT_BEE",
+        "render_ms": 67.81,
+        "effective_fps": 14.7,
+        "boinc_idle_seconds": 0.2
+      },
+      {
+        "stage_index": 2,
+        "stage_name": "3.OOLITE_LAND",
+        "render_ms": 85.03,
+        "effective_fps": 11.8,
+        "boinc_idle_seconds": 0.2
+      },
+      {
+        "stage_index": 3,
+        "stage_name": "4.JWST_LOIS",
+        "render_ms": 53.57,
+        "effective_fps": 18.7,
+        "boinc_idle_seconds": 0.2
+      },
+      {
+        "stage_index": 4,
+        "stage_name": "5.BOINC_GCP",
+        "render_ms": 71.93,
+        "effective_fps": 13.9,
+        "boinc_idle_seconds": 6.5
+      }
+    ],
+    "status": "PASS"
+  },
+  "active_gameplay_preemption_test": {
+    "handle": "Cmdr_Gamer_Active_60FPS",
+    "coordinator_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
+    "domain": "physics_sim",
+    "target_planet": "K2-18 b",
+    "idle_seconds": 0.15,
+    "idle_threshold_seconds": 4.0,
+    "gpu": {
+      "gpu_model": "NVIDIA GeForce RTX 2070",
+      "utilization_pct": 36.0,
+      "temp_c": 26.0,
+      "total_mib": 8192.0,
+      "used_mib": 798.0,
+      "power_w": 9.52,
+      "driver_version": "610.88"
+    },
+    "boinc_active": false,
+    "boinc_driver": "cuda_ptx_bls_gpu_paused",
+    "cuda_fold": {
+      "backend": "paused_for_active_gameplay",
+      "cuda_device": "NVIDIA GeForce RTX 2070",
+      "cuda_total_vram_mib": 8192,
+      "n_points_folded": 0,
+      "vram_allocated_bytes": 0,
+      "kernel_exec_ms": 0.0,
+      "recovered_transit_depth_ppm": 0.0,
+      "orbital_period_days": 32.93962,
+      "result_sha256": "a122b67af31df49b52c69ca11c9017e7b8d2f4cb4459c4a0395dd3865c5d40a0"
+    },
+    "sha256": "a122b67af31df49b52c69ca11c9017e7b8d2f4cb4459c4a0395dd3865c5d40a0",
+    "sync": {
+      "local_hub": {
+        "ok": true,
+        "handle": "@Commander_Puck_FR",
+        "gpu_name": "NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi)",
+        "idle_seconds": 12.4,
+        "project_id": "hivemind_tess_at_home",
+        "target_name": "K2-18 b",
+        "bls_depth_ppm": 2939.2,
+        "bls_snr_sigma": 123.94,
+        "cobblestones_earned": 45.0,
+        "hmt_points_earned": 250,
+        "gcp_cloud_synced": true,
+        "gcp_lease_id": "LEASE-77f410f6a9d4d92f",
+        "receipt_sha256": "fd82946c9eb5610d5bbf723c134f38311bad46c264376e060a3a7aa5136fdf8c",
+        "receipt": {
+          "receipt_id": "BOINC-BLS-FD82946C",
+          "result_sha256": "fd82946c9eb5610d5bbf723c134f38311bad46c264376e060a3a7aa5136fdf8c",
+          "target_planet": "K2-18 b",
+          "bls_transit_metrics": {
+            "best_period_days": 3.2888,
+            "transit_depth_ppm": 2939.2,
+            "snr": 123.94
+          },
+          "gcp_cloud_run_lease_id": "LEASE-77f410f6a9d4d92f",
+          "gcp_federated_sync": "ONLINE (200 OK)",
+          "cobblestones_earned": 45.0,
+          "game_points_earned": 250
+        },
+        "charter": "0.00 EUR / 0.00 USD (Non-Monetary Reciprocal Compute Points & Citizen Science)"
+      },
+      "gcp_cloud_run": {
+        "workunit_id": "WU-S10-PHYSICS_SIM-0026",
+        "lease_id": "LEASE-1ee33382d366f96e",
+        "lease_version_tag": 26,
+        "ttl_seconds": 600,
+        "contributor_handle": "Cmdr_Gamer_Active_60FPS",
+        "hardware_device": "NVIDIA GeForce RTX 2070",
+        "execution_class": "fp16_amp_cuda",
+        "domain_name": "physics_sim",
+        "target_cell_id": "ALVEOLE-03-PHYSICS-SIM",
+        "shard_id": "SHARD-S10-PHYSICS_SIM",
+        "shard_cas_cid": "cid://sha256/c96f2a99ff73cfd756cfe08e3d8ec494",
+        "canonical_rank_r": 4,
+        "inner_steps_H": 8,
+        "wire_codec": "e8_2bit",
+        "base_cell_download_endpoint": "/api/la-ruche/download/cell/physics_sim",
+        "sample_training_texts": [
+          "[physics_sim] DiLoCo inner-loop QLoRA training sample for Honeycomb Cell ALVEOLE-03-PHYSICS-SIM."
+        ],
+        "assigned_at_epoch": 1793207300.2782762,
+        "charter": "0.00 EUR / 0.00 USD Non-Monetary Compute Reciprocity"
+      }
+    }
+  },
+  "idle_gpu_auto_resume_test": {
+    "handle": "Cmdr_Gamer_Idle_BOINC",
+    "coordinator_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
+    "domain": "physics_sim",
+    "target_planet": "LHS 1140 b",
+    "idle_seconds": 8.5,
+    "idle_threshold_seconds": 4.0,
+    "gpu": {
+      "gpu_model": "NVIDIA GeForce RTX 2070",
+      "utilization_pct": 36.0,
+      "temp_c": 26.0,
+      "total_mib": 8192.0,
+      "used_mib": 798.0,
+      "power_w": 9.49,
+      "driver_version": "610.88"
+    },
+    "boinc_active": true,
+    "boinc_driver": "cuda_ptx_bls_gpu_worker",
+    "cuda_fold": {
+      "backend": "nvidia_cuda_driver_ptx_sm50",
+      "cuda_device": "NVIDIA GeForce RTX 2070",
+      "cuda_total_vram_mib": 8191,
+      "n_points_folded": 16384,
+      "vram_allocated_bytes": 131072,
+      "kernel_exec_ms": 0.257,
+      "recovered_transit_depth_ppm": 5385.0,
+      "orbital_period_days": 24.73723,
+      "result_sha256": "c754c64f86527671b4cf6771c4a664ab8a22cb495c3326ba4855c83c211b5673"
+    },
+    "sha256": "c754c64f86527671b4cf6771c4a664ab8a22cb495c3326ba4855c83c211b5673",
+    "sync": {
+      "local_hub": {
+        "ok": true,
+        "handle": "@Commander_Puck_FR",
+        "gpu_name": "NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi)",
+        "idle_seconds": 12.4,
+        "project_id": "hivemind_tess_at_home",
+        "target_name": "K2-18 b",
+        "bls_depth_ppm": 2923.6,
+        "bls_snr_sigma": 127.33,
+        "cobblestones_earned": 45.0,
+        "hmt_points_earned": 250,
+        "gcp_cloud_synced": true,
+        "gcp_lease_id": "LEASE-83f2e09e782446db",
+        "receipt_sha256": "2d0f9a437686d6c338f52b2aeb1a8a63ca090632944c92ec083817d6a1399105",
+        "receipt": {
+          "receipt_id": "BOINC-BLS-2D0F9A43",
+          "result_sha256": "2d0f9a437686d6c338f52b2aeb1a8a63ca090632944c92ec083817d6a1399105",
+          "target_planet": "K2-18 b",
+          "bls_transit_metrics": {
+            "best_period_days": 3.2888,
+            "transit_depth_ppm": 2923.6,
+            "snr": 127.33
+          },
+          "gcp_cloud_run_lease_id": "LEASE-83f2e09e782446db",
+          "gcp_federated_sync": "ONLINE (200 OK)",
+          "cobblestones_earned": 45.0,
+          "game_points_earned": 250
+        },
+        "charter": "0.00 EUR / 0.00 USD (Non-Monetary Reciprocal Compute Points & Citizen Science)"
+      },
+      "gcp_cloud_run": {
+        "workunit_id": "WU-S10-PHYSICS_SIM-0028",
+        "lease_id": "LEASE-07c9964251ee840a",
+        "lease_version_tag": 28,
+        "ttl_seconds": 600,
+        "contributor_handle": "Cmdr_Gamer_Idle_BOINC",
+        "hardware_device": "NVIDIA GeForce RTX 2070",
+        "execution_class": "fp16_amp_cuda",
+        "domain_name": "physics_sim",
+        "target_cell_id": "ALVEOLE-03-PHYSICS-SIM",
+        "shard_id": "SHARD-S10-PHYSICS_SIM",
+        "shard_cas_cid": "cid://sha256/c96f2a99ff73cfd756cfe08e3d8ec494",
+        "canonical_rank_r": 4,
+        "inner_steps_H": 8,
+        "wire_codec": "e8_2bit",
+        "base_cell_download_endpoint": "/api/la-ruche/download/cell/physics_sim",
+        "sample_training_texts": [
+          "[physics_sim] DiLoCo inner-loop QLoRA training sample for Honeycomb Cell ALVEOLE-03-PHYSICS-SIM."
+        ],
+        "assigned_at_epoch": 1793207300.9747853,
+        "charter": "0.00 EUR / 0.00 USD Non-Monetary Compute Reciprocity"
+      }
+    }
+  },
+  "boinc_cuda_ptx_8_target_benchmarks": [
+    {
+      "backend": "nvidia_cuda_driver_ptx_sm50",
+      "cuda_device": "NVIDIA GeForce RTX 2070",
+      "cuda_total_vram_mib": 8191,
+      "n_points_folded": 16384,
+      "vram_allocated_bytes": 131072,
+      "kernel_exec_ms": 0.312,
+      "recovered_transit_depth_ppm": 2789.0,
+      "orbital_period_days": 32.93962,
+      "result_sha256": "49c8e1041fa935d252dc5bdb03d246e9705e0bff64d39ff3af1912cadb03d36c"
+    },
+    {
+      "backend": "nvidia_cuda_driver_ptx_sm50",
+      "cuda_device": "NVIDIA GeForce RTX 2070",
+      "cuda_total_vram_mib": 8191,
+      "n_points_folded": 16384,
+      "vram_allocated_bytes": 131072,
+      "kernel_exec_ms": 0.319,
+      "recovered_transit_depth_ppm": 4996.0,
+      "orbital_period_days": 6.10101,
+      "result_sha256": "93b0b42ceb417cd2cfcb280409f8037a28ea9cc5dff6a379526cf008039a0326"
+    },
+    {
+      "backend": "nvidia_cuda_driver_ptx_sm50",
+      "cuda_device": "NVIDIA GeForce RTX 2070",
+      "cuda_total_vram_mib": 8191,
+      "n_points_folded": 16384,
+      "vram_allocated_bytes": 131072,
+      "kernel_exec_ms": 0.27,
+      "recovered_transit_depth_ppm": 5385.0,
+      "orbital_period_days": 24.73723,
+      "result_sha256": "c754c64f86527671b4cf6771c4a664ab8a22cb495c3326ba4855c83c211b5673"
+    },
+    {
+      "backend": "nvidia_cuda_driver_ptx_sm50",
+      "cuda_device": "NVIDIA GeForce RTX 2070",
+      "cuda_total_vram_mib": 8191,
+      "n_points_folded": 16384,
+      "vram_allocated_bytes": 131072,
+      "kernel_exec_ms": 0.243,
+      "recovered_transit_depth_ppm": 653.0,
+      "orbital_period_days": 37.42346,
+      "result_sha256": "312291023e6e410c64577a0e3094ecb8cc82596e9443d12440e66996bb8279f2"
+    },
+    {
+      "backend": "nvidia_cuda_driver_ptx_sm50",
+      "cuda_device": "NVIDIA GeForce RTX 2070",
+      "cuda_total_vram_mib": 8191,
+      "n_points_folded": 16384,
+      "vram_allocated_bytes": 131072,
+      "kernel_exec_ms": 0.299,
+      "recovered_transit_depth_ppm": 10179.0,
+      "orbital_period_days": 111.43676,
+      "result_sha256": "c6ae07d4cad466876ec163ad387c85a396dd56f5a3a704e6bf43a790bb1dfca8"
+    },
+    {
+      "backend": "nvidia_cuda_driver_ptx_sm50",
+      "cuda_device": "NVIDIA GeForce RTX 2070",
+      "cuda_total_vram_mib": 8191,
+      "n_points_folded": 16384,
+      "vram_allocated_bytes": 131072,
+      "kernel_exec_ms": 0.273,
+      "recovered_transit_depth_ppm": 19549.0,
+      "orbital_period_days": 4.05529,
+      "result_sha256": "24588d568b4f35994e27569ab81c3792ca0206ab97bad7353f90256da1ff4f69"
+    },
+    {
+      "backend": "nvidia_cuda_driver_ptx_sm50",
+      "cuda_device": "NVIDIA GeForce RTX 2070",
+      "cuda_total_vram_mib": 8191,
+      "n_points_folded": 16384,
+      "vram_allocated_bytes": 131072,
+      "kernel_exec_ms": 0.258,
+      "recovered_transit_depth_ppm": 458.0,
+      "orbital_period_days": 46.6888,
+      "result_sha256": "66d097c352817d4933fe616cb38d6f196f89465f27905fedd349a3b1fac4dc47"
+    },
+    {
+      "backend": "nvidia_cuda_driver_ptx_sm50",
+      "cuda_device": "NVIDIA GeForce RTX 2070",
+      "cuda_total_vram_mib": 8191,
+      "n_points_folded": 16384,
+      "vram_allocated_bytes": 131072,
+      "kernel_exec_ms": 0.265,
+      "recovered_transit_depth_ppm": 420.0,
+      "orbital_period_days": 129.9441,
+      "result_sha256": "0fa46eed5c548bf02bdff09f8062232af60c5b2b1f953ac5f9ba3b11bc8a0827"
+    }
+  ]
+}

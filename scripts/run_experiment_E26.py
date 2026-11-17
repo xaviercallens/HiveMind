@@ -84,6 +84,9 @@ RESIDENTIAL_LINKS: tuple[dict[str, Any], ...] = (
 )
 
 
+EVIDENCE_LABEL = {"evidence": "simulated", "not_a_measurement": True, "evidence_note": "links from a literal table and loss from a formula; no residential link was measured", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def build_e26_report(*, rounds_per_link: int = 6, seed: int = 20261107) -> dict[str, Any]:
     rng = np.random.default_rng(seed)
     # LoRA rank-8 projection block (e.g. 64 x 64 = 4,096 parameters per projection slice, scaled across 32 layers)
@@ -207,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report = build_e26_report()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **report}, indent=2) + "\n", encoding="utf-8")
     if report["verdict"] != "PASS":
         return 1
     print(

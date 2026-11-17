@@ -15,6 +15,23 @@
   - The PDF and the manuscript version (v4.2.0) are left unchanged until the next Zenodo release.
 - `ROADMAP.md` `HM-S10-11`: pointer to the E15-J draft.
 
+## v3.4.2 — 2026-11-15 — CrowdGPT weekend: honest pages, measured receipts, Multi-Krum (PRs #903, #912–#919, #923)
+
+- **Visitors land on the right page and read true statements (PR #917):** links pasted with trailing punctuation (`/signup)`, `/signup](…`) now redirect (307, allow-listed pages only) instead of returning 404; the `/raid` page shows the configured sign-up grant instead of a hard-coded "500 HMT", describes training the dense Crowd-v1 with CrowdGPT's official client instead of the stopped MoE split, and points to discussion #909; the agent-readable `/v1/hivemind/community/v34-outreach` JSON marks the MoE concept stopped. **Needs a gateway deploy to take effect.**
+- **HiveMinders can train Crowd-v1 (PR #916):** `scripts/hivemind_opentrainer_agent.py --crowdgpt` runs CrowdGPT's signed client with free-VRAM, heat and game guards (stop on memory pressure, pause on heat or other GPU work), `--ignore-app` for always-on inference servers, mid-round checkpoints with client 3.3, local receipts and no secrets in argv; the no-lateral-movement scan covers the new module.
+- **OpenTrainer rounds run Multi-Krum (PR #923):** the orchestrator now filters accepted deltas with Multi-Krum (f=1) before the outer step; rounds below 2f+3 deltas are recorded as unprotected, or re-offered with `refuse_below_multi_krum_minimum`.
+- **Receipts that say what they measure (PRs #918, #919):** the egress receipt labels its modeled rows and adds a CrowdGPT trainer measured from real T4 uploads (~1.5 GB/hour, budget 2 GiB/hour); the join page states each role's upload budget in five languages; the accounts receipt is measured on the gateway database with 24 h / 7 d / 30 d activity evidence (8 accounts active in 7 days; 3 hardware classes).
+- **CrowdGPT MoE tooling (PRs #912, #913):** the MoE coordinator enforces its configured quorum; the worker can train on real dataset rows with disjoint held-out shards. The Crowd-v1 MoE upcycle itself is parked (see `docs/roadmap/PARKED.md` on the roadmap branch).
+- **Weekend status for humans and agents (PR #914):** the training kit and `docs/announcements/2026-11-14-crowdgpt-weekend.json` say Crowd-v1 stays dense, how to train with CrowdGPT's client, and that the T4 stopped contributing.
+- **Auth (PR #903):** password-reset mail goes only to an account's primary address.
+- **Lessons learned:** new `LL.md` (GPU memory floor, upstream consent, page and receipt honesty, enforced stop decisions, volunteer onboarding, cost).
+
+## v3.4.1 — 2026-11-13 — Weekend Campaign Readiness (PR #908)
+
+- **Per-IP rate limits configurable, campaign defaults (PR #908):** GET 600→3000 and POST 300→900 per minute per instance, set with `HIVEMIND_RATE_GET_PER_MIN` and `HIVEMIND_RATE_POST_PER_MIN`; invalid values fall back to defaults. Shared NAT/carrier IPs no longer hit 429 at normal campaign traffic.
+- **Test hardening:** the forwarded-address bypass test pins the POST limit to 300 so it keeps checking the bypass.
+- **Ops (not in code):** Cloud Run scaling for the weekend: Ruche and web min 2 / max 3 with session affinity; OpenRouter min 1 / max 1, 2 vCPU, CPU always allocated.
+
 ## v3.1.2 — 2026-11-07 — Legacy PBKDF2-SHA256 Login Restoration, HTTPS Cloud Run Portal, OpenTrainer Campaign Gate, E8 Lattice Parity & Streaming TTFT Telemetry (PRs #692–#703)
 
 - **Legacy Email + Password Login Restoration & HTTPS Cloud Run Fixes (PR #702, deployed as `v3.1.2-https` across `hivemind-at-home`, `hivemind-at-home-ruche`, and `hivemind-openrouter`):**

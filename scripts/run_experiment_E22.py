@@ -42,6 +42,9 @@ MAX_DISCOVERY_P95_MS = 500.0
 MAX_FALSE_PEER_RATE = 0.0
 
 
+EVIDENCE_LABEL = {"evidence": "simulated", "not_a_measurement": True, "evidence_note": "an in-memory list stands in for the DHT; no pre-registration for its thresholds", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def _xor_distance(key_a: bytes, key_b: bytes) -> int:
     return int.from_bytes(key_a, "big") ^ int.from_bytes(key_b, "big")
 
@@ -181,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report = run_e22_gateway_off_discovery()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **report}, indent=2) + "\n", encoding="utf-8")
     if not report["passes_registered_thresholds"]:
         return 1
     print(

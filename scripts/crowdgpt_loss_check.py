@@ -52,12 +52,25 @@ def pick_dtype(name: str) -> torch.dtype:
     return {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}[name]
 
 
+def load_weights(spec: str, engram_spec: str | None) -> torch.Tensor:
+    """Trunk only, or trunk ‖ engram when an engram file is given (current Crowd-v1 checkpoints use the engram)."""
+    if engram_spec:
+        return lc.load_crowd_v1_with_engram(resolve(spec), resolve(engram_spec))
+    return lc.load_flat_safetensors(resolve(spec))
+
+
+def model_factory(a: argparse.Namespace):
+    if getattr(a, "base_engram", None):
+        return lambda: lc.CrowdV1(lc.CROWD_V1_ENGRAM_CONFIG)
+    return lc.CrowdV1
+
+
 def cmd_evaluate(a: argparse.Namespace) -> int:
-    base, cand = lc.load_flat_safetensors(resolve(a.base)), lc.load_flat_safetensors(resolve(a.candidate))
+    base, cand = load_weights(a.base, a.base_engram), load_weights(a.candidate, a.candidate_engram)
     held = load_tokens(Path(a.heldout))
     t = time.time()
     r = lc.make_receipt(evaluator_id=a.evaluator_id, key=Path(a.key_file).read_bytes().strip(), base=base, candidate=cand, heldout=held,
-                        window=a.window, n=a.n, seed=a.seed, model_factory=lc.CrowdV1, device=a.device, dtype=pick_dtype(a.dtype),
+                        window=a.window, n=a.n, seed=a.seed, model_factory=model_factory(a), device=a.device, dtype=pick_dtype(a.dtype),
                         round_id=a.round_id, batch=a.batch)
     Path(a.out).write_text(r.to_json())
     print(json.dumps({"out": a.out, "seconds": round(time.time() - t, 1), "mean_before": r.mean_before, "mean_after": r.mean_after,
@@ -71,13 +84,13 @@ def cmd_verify(a: argparse.Namespace) -> int:
     for item in a.evaluator:
         name, _, path = item.partition("=")
         keys[name] = Path(path).read_bytes().strip()
-    base, cand = lc.load_flat_safetensors(resolve(a.base)), lc.load_flat_safetensors(resolve(a.candidate))
+    base, cand = load_weights(a.base, a.base_engram), load_weights(a.candidate, a.candidate_engram)
     held = load_tokens(Path(a.heldout))
     torch.set_num_threads(a.threads)
     t = time.time()
     v = lc.verify_receipt(r, evaluator_keys=keys, server_secret=Path(a.secret_file).read_bytes().strip(),
                           expected_base_sha256=lc.weights_sha256(base), expected_candidate_sha256=lc.weights_sha256(cand), heldout=held,
-                          recompute=lc.cpu_recompute_fn(lc.CrowdV1, base, cand, held, r.window), k=a.k, tol=a.tol,
+                          recompute=lc.cpu_recompute_fn(model_factory(a), base, cand, held, r.window), k=a.k, tol=a.tol,
                           max_regression_tolerance=a.max_regression, min_windows=a.min_windows)
     print(json.dumps({"accepted": v.accepted, "reason": v.reason, "loss_before": v.loss_before, "loss_after": v.loss_after,
                       "delta_loss": v.delta_loss, "checked": list(v.checked), "detail": v.detail, "seconds": round(time.time() - t, 1)}))
@@ -85,11 +98,11 @@ def cmd_verify(a: argparse.Namespace) -> int:
 
 
 def cmd_calibrate(a: argparse.Namespace) -> int:
-    flat = lc.load_flat_safetensors(resolve(a.base))
+    flat = load_weights(a.base, a.base_engram)
     held = load_tokens(Path(a.heldout))
     starts = lc.heldout_windows(len(held), a.window, a.n, a.seed)
     out = {"window": a.window, "starts": starts, "device": a.device, "dtype": a.dtype}
-    m = lc.CrowdV1()
+    m = model_factory(a)()
     m.load_flat(flat)
     t = time.time()
     dev = lc.window_losses(m, held, starts, a.window, device=a.device, dtype=pick_dtype(a.dtype))
@@ -109,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     e = sub.add_parser("evaluate")
     e.add_argument("--base", required=True)
     e.add_argument("--candidate", required=True)
+    e.add_argument("--base-engram", default=None, help="engram_bf16.safetensors (path or hf:// spec) for current Crowd-v1 checkpoints; omit for trunk-only models")
+    e.add_argument("--candidate-engram", default=None, help="engram_bf16.safetensors (path or hf:// spec) for current Crowd-v1 checkpoints; omit for trunk-only models")
     e.add_argument("--heldout", required=True)
     e.add_argument("--evaluator-id", required=True)
     e.add_argument("--key-file", required=True)
@@ -124,6 +139,8 @@ def main(argv: list[str] | None = None) -> int:
     v.add_argument("--receipt", required=True)
     v.add_argument("--base", required=True)
     v.add_argument("--candidate", required=True)
+    v.add_argument("--base-engram", default=None, help="engram_bf16.safetensors (path or hf:// spec) for current Crowd-v1 checkpoints; omit for trunk-only models")
+    v.add_argument("--candidate-engram", default=None, help="engram_bf16.safetensors (path or hf:// spec) for current Crowd-v1 checkpoints; omit for trunk-only models")
     v.add_argument("--heldout", required=True)
     v.add_argument("--evaluator", action="append", required=True, help="NAME=KEYFILE, repeatable")
     v.add_argument("--secret-file", required=True)
@@ -134,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     v.add_argument("--threads", type=int, default=2)
     c = sub.add_parser("calibrate")
     c.add_argument("--base", required=True)
+    c.add_argument("--base-engram", default=None, help="engram_bf16.safetensors (path or hf:// spec) for current Crowd-v1 checkpoints; omit for trunk-only models")
     c.add_argument("--heldout", required=True)
     c.add_argument("--window", type=int, default=2048)
     c.add_argument("--n", type=int, default=2)

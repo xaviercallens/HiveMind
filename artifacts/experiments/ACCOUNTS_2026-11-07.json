@@ -1,4 +1,8 @@
 {
+  "evidence": "placeholder",
+  "not_a_measurement": true,
+  "evidence_note": "no accounts database was read; every count is 0",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md",
   "schema": "hivemind.accounts_receipt.v1",
   "roadmap_deliverable": "PS-03-D1",
   "generated_at_utc": "2026-11-07T20:19:36Z",

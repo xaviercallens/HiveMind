@@ -4,6 +4,16 @@
 > volunteer-run nodes whose operators are not verified, and the security of the gateway and dashboard is still being
 > hardened (see [SECURITY.md](SECURITY.md)).
 
+## TL;DR
+
+- **What it is:** a volunteer-GPU network that serves and fine-tunes open models (QLoRA adapters, BOINC work units), behind an OpenAI-compatible gateway on Google Cloud Run.
+- **What runs today:** the gateway and portal (password sign-in), one Tesla T4 that trains a few hours a day, and one RTX 2070 that serves.
+- **Privacy:** the volunteer node that answers a request sees its prompt. Send only public, non-sensitive text.
+- **Training status:** the BOINC training chain runs, but its mixed-data rounds made held-out loss worse on every domain when last measured (2026-11-05); the cause is not yet found.
+- **Evidence:** many results in `artifacts/experiments/` are simulations, not measurements; those files now say so (`"evidence"`, `"not_a_measurement"`). See the receipt audit (PR #878).
+- **Proofs and paper:** a Lean 4 specification with zero `sorry`, and a self-assessed foundation paper on Zenodo (not peer reviewed).
+- **Help wanted:** the 11 contributor streams of the master plan (PR #720), each with a definition of done and a validation command.
+
 <div align="center">
 
 <img src="docs/assets/hivemind_hero_banner.svg" alt="Project HiveMind — Decentralized Sparse MoE Training & Inference on Consumer Gaming GPUs" width="100%"/>

@@ -228,13 +228,14 @@ def _resolve_pinned_crowd_v1_files(
     """Locate or download pinned multi-key `Vxtzq/Crowd-v1` `model.safetensors` + `tokenizer.json`."""
     roots: list[Path] = []
     if cache_dir.strip():
+        # an explicit --cache-dir is the only place searched: the result must not depend on what else is on the machine
         roots.append(Path(cache_dir).expanduser())
-    for env_key in ("HF_HUB_CACHE", "HF_HOME"):
-        val = os.environ.get(env_key, "").strip()
-        if val:
-            roots.append(Path(val) / ("hub" if env_key == "HF_HOME" else ""))
-    roots.append(Path("/mnt/disks/disk-socrateai-local-1/hf_hub_cache"))
-    roots.append(Path.home() / ".cache" / "huggingface" / "hub")
+    else:
+        for env_key in ("HF_HUB_CACHE", "HF_HOME"):
+            val = os.environ.get(env_key, "").strip()
+            if val:
+                roots.append(Path(val) / ("hub" if env_key == "HF_HOME" else ""))
+        roots.append(Path.home() / ".cache" / "huggingface" / "hub")
 
     rev = pinned_revision.strip() or DEFAULT_PINNED_CROWD_REVISION
     cand_folders: list[Path] = []

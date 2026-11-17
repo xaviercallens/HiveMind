@@ -1414,3 +1414,197 @@ def test_the_users_report_rejects_a_bad_window(world: World, window: str) -> Non
     reply = world.app_client.get(f"/v1/hivemind/admin/users?window_s={window}", headers=ADMIN_HEADERS)
 
     assert reply.status_code == 400 and reply.json()["error"]["code"] == "invalid_request"
+
+
+def test_502_upstream_failure_log_names_the_model_and_producers_but_no_key(world: World, caplog: pytest.LogCaptureFixture) -> None:
+    consumer_id, key = world.consumer(10.0)
+    producer_id, _, _ = world.producer("prod-a.test", {"qwen": "q"}, agent=FakeProducer(explode=True))
+
+    with caplog.at_level("WARNING", logger="hivemind.router.gateway"):
+        response = world.chat(key)
+
+    assert response.status_code == 502
+    lines = [r.getMessage() for r in caplog.records if "upstream_failure" in r.getMessage()]
+    assert len(lines) == 1
+    assert "model=qwen " in lines[0] and producer_id in lines[0]
+    assert key not in lines[0] and PROMPT not in lines[0]
+
+
+# --- MVP criterion A1: failover under concurrent load, and a failed endpoint is tried last ------------------------------------------------------
+def test_a_failed_endpoint_is_tried_last_while_it_cools_down_and_first_again_after(world: World) -> None:
+    from hivemind.router.gateway import ENDPOINT_COOLDOWN_S
+
+    _, key = world.consumer(50.0)
+    _, _, heavy = world.producer("prod-heavy.test", {"qwen": "q"}, capacity=1000.0, agent=FakeProducer(explode=True))
+    _, _, light = world.producer("prod-light.test", {"qwen": "q"}, capacity=1.0)
+
+    assert world.chat(key).status_code == 200  # the heavy producer is tried first, fails, the light one answers
+    failed_calls = len(heavy.calls)
+    assert failed_calls == 1
+    for _ in range(5):
+        assert world.chat(key).status_code == 200
+    assert len(heavy.calls) == failed_calls  # while cooling it is not tried first: no failed attempt is paid for these requests
+    assert len(light.calls) == 6
+
+    heavy.explode = False  # it recovers; once the cooldown is over it is tried again
+    world.clock.now += ENDPOINT_COOLDOWN_S + 1
+    for _ in range(4):
+        assert world.chat(key).status_code == 200
+    assert len(heavy.calls) > failed_calls
+
+
+def test_concurrent_load_survives_a_producer_kill_and_the_money_balances(world: World) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    workers = 6
+    consumer_id, key = world.consumer(500.0)
+    a_id, _, a = world.producer("prod-a.test", {"qwen": "q"}, capacity=100.0)
+    b_id, _, b = world.producer("prod-b.test", {"qwen": "q"}, capacity=100.0)
+    minted = world.store.total_minted()
+
+    def burst(n: int) -> list[int]:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            return list(pool.map(lambda _: world.chat(key).status_code, range(n)))
+
+    first = burst(24)
+    assert first == [200] * 24 and len(a.calls) > 0 and len(b.calls) > 0  # both producers carry load
+    a_before = len(a.calls)
+
+    a.explode = True  # kill producer A in the middle of the run
+    second = burst(24)
+    assert second == [200] * 24  # no failed request: the gateway fails over
+    assert len(a.calls) - a_before <= workers  # at most one in-flight attempt per worker reached the dead producer before it started cooling
+    after_burst = len(a.calls)
+    assert [world.chat(key).status_code for _ in range(6)] == [200] * 6
+    assert len(a.calls) == after_burst  # afterwards the dead producer is not tried at all
+
+    spent = 500.0 - world.store.balance(consumer_id)
+    earned = world.store.balance(a_id) + world.store.balance(b_id)
+    assert spent > 0 and 0 < earned <= spent  # producers are paid out of what the consumer paid; the difference is the fee
+    assert abs(world.store.total_minted() - minted) < 1e-9 and abs(world.store.total_balances() - world.store.total_minted()) < 1e-6  # no HMT created or lost
+
+
+def test_usage_capture_is_cached_per_window_bucket_and_recomputed_after_the_ttl(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hivemind.router.gateway import USAGE_CAPTURE_TTL_S
+
+    calls: list[float] = []
+    real = world.store.usage_capture_summary
+
+    def counting(**kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs["window_s"])
+        return real(**kwargs)
+
+    monkeypatch.setattr(world.store, "usage_capture_summary", counting)
+    first = world.app_client.get("/v1/hivemind/usage-capture?window_s=86400")
+    second = world.app_client.get("/v1/hivemind/usage-capture?window_s=86400")
+    assert first.status_code == second.status_code == 200 and first.json() == second.json()
+    assert len(calls) == 1  # the second call inside the TTL did not scan
+    world.app_client.get("/v1/hivemind/usage-capture?window_s=3600")
+    assert len(calls) == 2  # a different window bucket is its own entry
+    world.clock.now += USAGE_CAPTURE_TTL_S + 1.0
+    world.app_client.get("/v1/hivemind/usage-capture?window_s=86400")
+    assert len(calls) == 3
+
+
+def test_failed_producer_log_names_the_reason_in_the_blocking_path(world: World, caplog: pytest.LogCaptureFixture) -> None:
+    consumer_id, key = world.consumer(10.0)
+    producer_id, _, _ = world.producer("prod-a.test", {"qwen": "q"}, agent=FakeProducer(explode=True))
+
+    with caplog.at_level("WARNING", logger="hivemind.router.gateway"):
+        assert world.chat(key).status_code == 502
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith(f"producer {producer_id} failed request")]
+    assert len(lines) == 1
+    reason = lines[0].rsplit(": ", 1)[-1]
+    assert reason and reason != lines[0] and key not in lines[0] and PROMPT not in lines[0]
+
+
+def test_ip278_raw_json_endpoints_validate_inputs_and_return_400_instead_of_500(world: World) -> None:
+    """IP-278: Raw request.body() endpoints must reject non-dict JSON, non-numeric parameters, and oversized questions with HTTP 400."""
+    bad_sim = world.app_client.post(
+        "/v1/hivemind/producers/scale-100-simulate",
+        json={"active_producers": "not-an-int"},
+    )
+    assert bad_sim.status_code == 400
+    assert bad_sim.json()["error"]["code"] == "invalid_parameter"
+
+    bad_rescue = world.app_client.post(
+        "/v1/hivemind/bees/rusty-sundials/rescue",
+        json={"steps": "not-an-int"},
+    )
+    assert bad_rescue.status_code == 400
+    assert bad_rescue.json()["error"]["code"] == "invalid_parameter"
+
+    bad_surrogate_list = world.app_client.post(
+        "/v1/hivemind/bees/rusty-sundials/surrogate",
+        json=[1, 2, 3],
+    )
+    assert bad_surrogate_list.status_code == 400
+    assert bad_surrogate_list.json()["error"]["code"] == "invalid_request"
+
+    bad_sweep_nan = world.app_client.post(
+        "/v1/hivemind/bees/rusty-sundials/sweep",
+        json={"steps": 16, "parameter_grid": ["bad"]},
+    )
+    assert bad_sweep_nan.status_code == 400
+    assert bad_sweep_nan.json()["error"]["code"] == "invalid_parameter"
+
+    oversized_question = world.app_client.post(
+        "/v1/hivemind/bees/science-bee/ask",
+        json={"question": "x" * 4001},
+    )
+    assert oversized_question.status_code == 400
+    assert oversized_question.json()["error"]["code"] == "invalid_question"
+
+
+def test_ip276_anonymous_solver_sweep_is_work_budgeted_and_fast(world: World) -> None:
+    """IP-276: Anonymous rusty-sundials parameter sweep bounds steps across the grid and runs in threadpool under 1.0s."""
+    import time as _time
+    import hivemind.swarm.rusty_sundials_scientific_bee  # noqa: F401 — pre-load module so timing measures endpoint execution
+
+    t0 = _time.perf_counter()
+    res = world.app_client.post(
+        "/v1/hivemind/bees/rusty-sundials/sweep",
+        json={"steps": 128, "parameter_grid": [0.1] * 16},
+    )
+    elapsed = _time.perf_counter() - t0
+    assert res.status_code == 200, res.text
+    assert elapsed < 1.0
+    body = res.json()
+    assert body["quorum_verified"] is True
+
+
+def test_ip277_bee_trade_endpoint_enforces_per_account_rate_limit(world: World) -> None:
+    """IP-277: /v1/hivemind/bees/trade enforces per-account rate limiting so an account cannot flood the order book."""
+    account_id, key = world.register("prosumer")
+    world.store.grant(account_id, 10.0, "test")
+    payload = {
+        "bee_id": "bee-math-01",
+        "side": "OFFER",
+        "subject_id": "hivemind/qwen3-8b-coder",
+        "capacity_1k": 10.0,
+        "price_per_1k": 0.25,
+    }
+    statuses = [
+        world.app_client.post("/v1/hivemind/bees/trade", headers=_auth(key), json=payload).status_code
+        for _ in range(21)
+    ]
+    assert statuses[:20] == [200] * 20
+    assert statuses[20] == 429
+
+
+def test_ip279_cloud_run_scaling_docs_and_deploy_scripts_agree_on_zero_to_one() -> None:
+    """IP-279: Cloud Run deploy script, spec, wiki, and autoscaler skill all specify min-instances=0 and max-instances=1."""
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[1]
+    deploy_sh = (repo_root / "deploy" / "gcp_openrouter" / "deploy.sh").read_text(encoding="utf-8")
+    spec_md = (repo_root / "docs" / "HIVEMIND_OPENROUTER_SPEC.md").read_text(encoding="utf-8")
+    wiki_md = (repo_root / "wiki" / "HiveMind-at-Home-GCP-Dashboard-and-La-Ruche-Vault.md").read_text(encoding="utf-8")
+    skill_md = (repo_root / ".agents" / "skills" / "gcp-cost-autoscaler-ops" / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "--min-instances 0" in deploy_sh and "--max-instances 1" in deploy_sh
+    assert "--min-instances 0 --max-instances 1" in spec_md
+    assert "--min-instances=0 --max-instances=1" in wiki_md
+    assert "--min-instances=1" not in skill_md
+    assert "--max-instances=2" not in skill_md
+    assert "--min-instances=0 --max-instances=1" in skill_md

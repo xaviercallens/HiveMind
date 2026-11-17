@@ -4,6 +4,8 @@ Description=HiveMind T4 node: private Ollama (gpt-oss:20b, MoE)
 After=network.target
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 User=CHANGE_ME
 Environment=OLLAMA_HOST=127.0.0.1:11436
 Environment=OLLAMA_FLASH_ATTENTION=1

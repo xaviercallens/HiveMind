@@ -54,10 +54,18 @@ def canonical_json(obj: Any) -> bytes:
 
 
 def sha256_hex(data: bytes) -> str:
+    if not isinstance(data, (bytes, bytearray)):
+        raise ValueError("data must be bytes")
     return hashlib.sha256(data).hexdigest()
 
 
 def _chk(name: str, status: str, detail: str, value=None, bound=None) -> dict:
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("name must be a non-empty string")
+    if status not in ("pass", "fail", "skip"):
+        raise ValueError("status must be 'pass', 'fail', or 'skip'")
+    if not isinstance(detail, str):
+        raise ValueError("detail must be a string")
     return {"name": name, "status": status, "value": value, "bound": bound, "detail": detail}
 
 
@@ -71,6 +79,10 @@ def _finite(x: Any) -> bool:
 
 def _safe(name: str, fn: Callable[[], dict]) -> dict:
     """Run one check; any exception becomes a failing check (fail closed)."""
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("name must be a non-empty string")
+    if not callable(fn):
+        raise ValueError("fn must be callable")
     try:
         return fn()
     except _CheckError as exc:
@@ -97,8 +109,14 @@ def decide(checks: dict[str, dict], *, usable: bool, has_problem: bool) -> tuple
     4. otherwise (a required check skipped, e.g. no rerun) -> UNVERIFIED
     """
     reasons: list[str] = []
+    if not isinstance(usable, bool) or not isinstance(has_problem, bool):
+        raise ValueError("usable and has_problem must be booleans")
+    if not isinstance(checks, dict):
+        raise ValueError("checks must be a dict")
     if not usable:
         return "UNVERIFIED", ["result could not be obtained or checked (fail closed)"]
+    if not all(isinstance(checks.get(n), dict) and checks[n].get("status") in ("pass", "fail", "skip") for n in _CHECK_NAMES):
+        raise ValueError("checks must contain valid status dicts for all check names")
     failed = [n for n in _CHECK_NAMES if checks[n]["status"] == "fail"]
     if failed:
         return "FAILED", [f"{n}: {checks[n]['detail']}" for n in failed]
@@ -119,18 +137,37 @@ def decide(checks: dict[str, dict], *, usable: bool, has_problem: bool) -> tuple
 
 # ------------------------------------------------------------------- the checks
 
+def _reject_constant(name: str) -> Any:
+    raise _CheckError(f"non-finite number literal {name} is not allowed")
+
+
+def _no_dup_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    d: dict[str, Any] = {}
+    for k, v in pairs:
+        if k in d:
+            raise _CheckError("duplicate key in JSON object")
+        d[k] = v
+    return d
+
+
 def _parse_spec(spec_bytes: bytes) -> dict:
     if not isinstance(spec_bytes, (bytes, bytearray)):
         raise _CheckError("spec_bytes must be bytes")
     if len(spec_bytes) > MAX_SPEC_BYTES:
         raise _CheckError(f"spec larger than {MAX_SPEC_BYTES} bytes")
-    spec = json.loads(bytes(spec_bytes).decode("utf-8"))
+    spec = json.loads(
+        bytes(spec_bytes).decode("utf-8"),
+        parse_constant=_reject_constant,
+        object_pairs_hook=_no_dup_pairs,
+    )
     if not isinstance(spec, dict) or spec.get("schema") != SPEC_SCHEMA:
         raise _CheckError("spec schema is not hivemind-solver-spec/1")
     return spec
 
 
 def _dimension(spec: dict) -> int:
+    if not isinstance(spec, dict) or not isinstance(spec.get("y0"), list):
+        raise _CheckError("spec must contain a y0 list")
     n = len(spec["y0"])
     if n < 1:
         raise _CheckError("empty y0")
@@ -139,7 +176,13 @@ def _dimension(spec: dict) -> int:
 
 def _validate_trajectory(res: dict, spec: dict, what: str) -> None:
     """Shared structural validation of a result against its spec."""
-    t_out = spec["t_out"]
+    if not isinstance(res, dict) or not isinstance(spec, dict):
+        raise _CheckError("res and spec must be dicts")
+    if not isinstance(what, str) or not what.strip():
+        raise _CheckError("what must be a non-empty string")
+    t_out = spec.get("t_out")
+    if not isinstance(t_out, list):
+        raise _CheckError(f"{what}: spec t_out must be a list")
     n = _dimension(spec)
     if res.get("schema") != RESULT_SCHEMA:
         raise _CheckError(f"{what}: schema is not {RESULT_SCHEMA}")
@@ -169,6 +212,8 @@ def _check_shape(spec: dict, result: dict) -> dict:
 
 
 def _check_hashes(spec_bytes: bytes, result: dict) -> tuple[dict, str | None]:
+    if not isinstance(spec_bytes, (bytes, bytearray)) or not isinstance(result, dict):
+        raise _CheckError("spec_bytes must be bytes and result must be a dict")
     got = result.get("input_sha256")
     want = sha256_hex(bytes(spec_bytes))
     try:
@@ -188,9 +233,13 @@ DEFAULT_ATOL = 1e-10
 
 
 def _tolerances(spec: dict, n: int) -> tuple[float, list[float]]:
+    if not isinstance(spec, dict):
+        raise _CheckError("spec must be a dict")
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise _CheckError("n must be a positive integer")
     rtol = spec.get("rtol", DEFAULT_RTOL)
     atol = spec.get("atol", DEFAULT_ATOL)
-    if not _finite(rtol) or rtol <= 0:
+    if not _finite(rtol) or rtol <= 0 or float(rtol) > 1.0:
         raise _CheckError("rtol must be a positive finite number")
     if _is_num(atol):
         atols = [float(atol)] * n
@@ -198,12 +247,18 @@ def _tolerances(spec: dict, n: int) -> tuple[float, list[float]]:
         atols = [float(a) for a in atol]
     else:
         raise _CheckError("atol must be a number or a list of n numbers")
-    if any(a < 0 for a in atols):
+    if any(a <= 0 or a > 1.0 for a in atols):
         raise _CheckError("atol must be non-negative")
     return float(rtol), atols
 
 
 def _worst_ratio(y, y_ref, rtol, atols, factor) -> float:
+    if not isinstance(y, list) or not isinstance(y_ref, list) or len(y) != len(y_ref):
+        raise _CheckError("y and y_ref must be lists of equal length")
+    if not _finite(rtol) or rtol <= 0 or not _finite(factor) or factor <= 0:
+        raise _CheckError("rtol and factor must be positive finite numbers")
+    if not isinstance(atols, list) or not atols or any(not _finite(a) or a <= 0 for a in atols):
+        raise _CheckError("atols must be a non-empty list of positive finite numbers")
     worst = 0.0
     for row, ref in zip(y, y_ref):
         for j, (a, b) in enumerate(zip(row, ref)):
@@ -268,23 +323,66 @@ def _mat(inv: dict, n: int) -> list[list[float]]:
 
 
 def _quad(m, x) -> float:
+    if not isinstance(m, list) or not isinstance(x, list) or len(m) != len(x) or len(x) == 0:
+        raise _CheckError("m and x must be non-empty lists of matching dimension")
     return sum(x[i] * m[i][j] * x[j] for i in range(len(x)) for j in range(len(x)))
 
 
 def _inv_linear(inv, spec, x):
+    if not isinstance(inv, dict) or not isinstance(spec, dict) or not isinstance(x, list) or len(x) == 0 or not all(_finite(v) for v in x):
+        raise _CheckError("inv and spec must be dicts and x must be a non-empty list of finite numbers")
     w = _vec(inv, "weights", len(x))
     return sum(a * b for a, b in zip(w, x))
 
 
 def _inv_quadratic_form(inv, spec, x):
+    if not isinstance(inv, dict) or not isinstance(spec, dict) or not isinstance(x, list) or len(x) == 0 or not all(_finite(v) for v in x):
+        raise _CheckError("inv and spec must be dicts and x must be a non-empty list of finite numbers")
     return _quad(_mat(inv, len(x)), x)
 
 
 def _inv_energy(inv, spec, x):
+    if not isinstance(inv, dict) or not isinstance(spec, dict) or not isinstance(x, list) or len(x) == 0 or not all(_finite(v) for v in x):
+        raise _CheckError("inv and spec must be dicts and x must be a non-empty list of finite numbers")
+    if "model" in inv:
+        model = inv.get("model")
+        inv_params = inv.get("params")
+        if inv_params is None:
+            inv_params = {}
+        if not isinstance(inv_params, dict):
+            raise _CheckError(f"invariant {inv.get('name')!r}: params must be an object")
+        spec_params = (spec.get("problem") or {}).get("params") or {}
+        if model == "pendulum":
+            if len(x) != 2:
+                raise _CheckError("pendulum energy needs 2 state components [theta, omega]")
+            g_over_l = inv_params.get("g_over_l", inv.get("g_over_l", spec_params.get("g_over_l")))
+            if not _finite(g_over_l):
+                raise _CheckError("pendulum energy needs finite g_over_l")
+            return 0.5 * x[1] * x[1] + float(g_over_l) * (1.0 - math.cos(x[0]))
+        if model == "kepler":
+            if len(x) != 4:
+                raise _CheckError("kepler energy needs 4 state components [x, y, vx, vy]")
+            mu = inv_params.get("mu", inv.get("mu", spec_params.get("mu")))
+            if not _finite(mu) or float(mu) <= 0:
+                raise _CheckError("kepler energy needs positive finite mu")
+            r = math.hypot(x[0], x[1])
+            if r <= 0:
+                raise _CheckError("kepler energy needs positive radius r > 0")
+            return 0.5 * (x[2] * x[2] + x[3] * x[3]) - float(mu) / r
+        if model == "projectile":
+            if len(x) != 4:
+                raise _CheckError("projectile energy needs 4 state components [x, y, vx, vy]")
+            g = inv_params.get("g", inv.get("g", spec_params.get("g")))
+            if not _finite(g):
+                raise _CheckError("projectile energy needs finite g")
+            return 0.5 * (x[2] * x[2] + x[3] * x[3]) + float(g) * x[1]
+        raise _CheckError(f"unknown energy model {model!r}")
     return 0.5 * _quad(_mat(inv, len(x)), x)
 
 
 def _inv_lv_first_integral(inv, spec, x):
+    if not isinstance(inv, dict) or not isinstance(spec, dict) or not isinstance(x, list) or not all(_finite(v) for v in x):
+        raise _CheckError("inv and spec must be dicts and x must be a list of finite numbers")
     # x' = alpha x - beta x y ; y' = delta x y - gamma y ; V = delta x - gamma ln x + beta y - alpha ln y
     if len(x) != 2:
         raise _CheckError("lv_first_integral needs 2 species")
@@ -322,11 +420,17 @@ _INVARIANT_KINDS: dict[str, Callable[[dict, dict, list], float]] = {
 
 
 def _check_invariants(spec: dict, result: dict, problem: dict | None) -> dict:
-    invs = (problem or {}).get("invariants") or []
-    if not invs:
+    if not isinstance(spec, dict) or not isinstance(result, dict) or (problem is not None and not isinstance(problem, dict)):
+        raise _CheckError("spec and result must be dicts and problem must be a dict or None")
+    invs = (problem or {}).get("invariants")
+    if invs is None or invs == []:
         return _chk("invariants", "skip", "no invariants defined")
+    if not isinstance(invs, list):
+        raise _CheckError("problem invariants must be a list")
     worst, worst_name = 0.0, ""
     for inv in invs:
+        if not isinstance(inv, dict):
+            raise _CheckError("each invariant must be an object")
         kind = inv.get("kind")
         fn = _INVARIANT_KINDS.get(kind)
         if fn is None:
@@ -335,7 +439,7 @@ def _check_invariants(spec: dict, result: dict, problem: dict | None) -> dict:
         if not _finite(tol) or tol < 0:
             raise _CheckError(f"invariant {inv.get('name')!r}: tol must be a non-negative number")
         value = inv.get("value")
-        if value is None and kind == "lv_first_integral":
+        if value is None and kind in ("lv_first_integral", "energy"):
             value = fn(inv, spec, [float(v) for v in spec["y0"]])
         if not _finite(value):
             raise _CheckError(f"invariant {inv.get('name')!r}: value must be a finite number")
@@ -353,6 +457,8 @@ def _check_invariants(spec: dict, result: dict, problem: dict | None) -> dict:
 def _check_tightening(spec_bytes: bytes, spec: dict, result: dict, rerun) -> dict:
     if rerun is None:
         return _chk("tightening", "skip", "no rerun callable supplied")
+    if not callable(rerun):
+        raise _CheckError("rerun must be callable")
     n = _dimension(spec)
     rtol, atols = _tolerances(spec, n)
     tight = dict(spec)
@@ -445,5 +551,99 @@ def verify(spec_bytes: bytes, result: dict, *, problem: dict | None = None,
         "binary_sha256": binary_sha256,
         "solver_rev": rev if isinstance(rev, str) else None,
         "verifier_version": VERIFIER_VERSION,
+        "caveat": CAVEAT,
+    }
+
+
+def certify_achieved_accuracy(
+    spec_bytes: bytes,
+    loose_result: dict,
+    tight_result: dict,
+    *,
+    problem: dict | None = None,
+    tightening_factor: float = 100.0,
+) -> dict:
+    """Return a Richardson empirical accuracy certificate (hivemind-accuracy-cert/1).
+
+    In Issue #273, long-horizon orbits (e.g. kepler_eccentric_long over 100 orbits)
+    accumulate global phase error at local rtol=1e-8 even though first integrals
+    (energy, angular momentum) are conserved and tightening tolerances by 100x cuts
+    global error 30x-70x (empirical order p in [0.73, 0.93]). This function reports
+    the achieved global accuracy without altering or loosening the contract rules
+    in verify() / decide().
+    """
+    if not isinstance(spec_bytes, (bytes, bytearray)) or not spec_bytes:
+        raise ValueError("spec_bytes must be non-empty bytes")
+    if not isinstance(loose_result, dict) or not isinstance(tight_result, dict):
+        raise ValueError("loose_result and tight_result must be dicts")
+    if problem is not None and not isinstance(problem, dict):
+        raise ValueError("problem must be a dict or None")
+    if tightening_factor <= 1.0 or not _finite(tightening_factor):
+        raise ValueError("tightening_factor must be a finite number > 1")
+    spec = _parse_spec(spec_bytes)
+    n = _dimension(spec)
+    rtol, atols = _tolerances(spec, n)
+    _validate_trajectory(loose_result, spec, "loose result")
+    _validate_trajectory(tight_result, spec, "tight result")
+
+    max_abs_diff = 0.0
+    max_rel_ratio = 0.0
+    for r_loose, r_tight in zip(loose_result["y"], tight_result["y"]):
+        for j, (yl, yt) in enumerate(zip(r_loose, r_tight)):
+            diff = abs(float(yl) - float(yt))
+            if diff > max_abs_diff:
+                max_abs_diff = diff
+            scale = TIGHTENING_FACTOR * (rtol * abs(float(yt)) + atols[j])
+            ratio = diff / scale if scale > 0 else (0.0 if diff == 0.0 else math.inf)
+            if ratio > max_rel_ratio:
+                max_rel_ratio = ratio
+
+    ref_err_loose = None
+    ref_err_tight = None
+    empirical_order_p = None
+    ref = (problem or {}).get("reference")
+    if isinstance(ref, dict) and isinstance(ref.get("y"), list) and isinstance(ref.get("t"), list):
+        ref_l = 0.0
+        ref_t = 0.0
+        matched_any = False
+        for tr, ref_row in zip(ref["t"], ref["y"]):
+            for i, tv in enumerate(spec["t_out"]):
+                if abs(float(tr) - float(tv)) <= _T_MATCH_RTOL * max(1.0, abs(float(tv))):
+                    matched_any = True
+                    yl_row = loose_result["y"][i]
+                    yt_row = tight_result["y"][i]
+                    for yl, yt, yr in zip(yl_row, yt_row, ref_row):
+                        ref_l = max(ref_l, abs(float(yl) - float(yr)))
+                        ref_t = max(ref_t, abs(float(yt) - float(yr)))
+                    break
+        if matched_any:
+            ref_err_loose = ref_l
+            ref_err_tight = ref_t
+            if ref_l > 0.0 and ref_t > 0.0:
+                empirical_order_p = math.log(ref_l / ref_t) / math.log(tightening_factor)
+
+    inv_loose = _safe("invariants", lambda: _check_invariants(spec, loose_result, problem))
+    inv_tight = _safe("invariants", lambda: _check_invariants(spec, tight_result, problem))
+    t0 = float(spec.get("t0", 0.0))
+    t_span = float(spec["t_out"][-1]) - t0 if spec.get("t_out") else 0.0
+    invariants_conserved = inv_loose["status"] == "pass" and inv_tight["status"] == "pass"
+    long_horizon_phase_warning = bool(
+        t_span >= 100.0 and max_rel_ratio > 1.0 and (invariants_conserved or inv_loose["status"] == "skip")
+    )
+
+    return {
+        "schema": "hivemind-accuracy-cert/1",
+        "id": spec.get("id"),
+        "tightening_factor": float(tightening_factor),
+        "achieved_abs_accuracy": max_abs_diff,
+        "achieved_rel_ratio": max_rel_ratio,
+        "reference_max_abs_err_loose": ref_err_loose,
+        "reference_max_abs_err_tight": ref_err_tight,
+        "empirical_order_p": empirical_order_p,
+        "invariant_drift_ratio_loose": inv_loose.get("value"),
+        "invariant_drift_ratio_tight": inv_tight.get("value"),
+        "invariants_conserved": invariants_conserved,
+        "t_span": t_span,
+        "long_horizon_phase_warning": long_horizon_phase_warning,
         "caveat": CAVEAT,
     }

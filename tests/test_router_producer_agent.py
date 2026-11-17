@@ -13,11 +13,19 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-_AGENT_PATH: Path = Path(__file__).resolve().parents[1] / "scripts" / "hivemind_producer_agent.py"
+_AGENT_PATH: Path = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "hivemind"
+    / "router"
+    / "hivemind_producer_agent.py"
+)
 
 
 def _load_agent() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("hivemind_producer_agent", _AGENT_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "hivemind.router.hivemind_producer_agent", _AGENT_PATH
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -222,6 +230,26 @@ def test_agent_refuses_a_non_https_gateway_before_sending_the_key(monkeypatch: p
 
     assert exit_info.value.code == 2
     assert sent == []
+
+
+@pytest.mark.parametrize("endpoint", ["http://gpu.example.com", "http://203.0.113.5:8787", "ftp://gpu.example.com", "gpu.example.com"])
+def test_agent_refuses_a_non_https_public_endpoint_before_sending_the_key(monkeypatch: pytest.MonkeyPatch, endpoint: str) -> None:
+    agent = _load_agent()
+    monkeypatch.setenv("HIVEMIND_API_KEY", "hm-test-key")
+    sent: list[httpx.Request] = []
+    transport = httpx.MockTransport(lambda request: sent.append(request) or httpx.Response(200, json={}))
+    with pytest.raises(SystemExit) as exit_info:
+        agent.main(["--gateway", GATEWAY, "--endpoint", endpoint, "--model", "m=local", "--no-residency", "--once"], transport=transport)
+    assert exit_info.value.code == 2
+    assert sent == []
+
+
+def test_agent_prints_the_proof_of_concept_notice(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    agent = _load_agent()
+    monkeypatch.setenv("HIVEMIND_API_KEY", "hm-test-key")
+    with pytest.raises(SystemExit):
+        agent.main(["--gateway", "http://gateway.example.com", "--endpoint", "https://gpu.example.com", "--model", "m=local", "--once"])
+    assert "Proof of concept" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------- presets, suggestions, preflight, endpoint token

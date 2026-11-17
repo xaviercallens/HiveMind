@@ -1,0 +1,100 @@
+{
+  "generated_at": "2026-10-31T09:49:41Z",
+  "receipts": [
+    {
+      "pr_index": 1,
+      "task_id": "HM-S29-01",
+      "branch": "feat/s29-01-adaptive-multi-split-wan",
+      "module": "src/hivemind/swarm/adaptive_multi_split_wan.py",
+      "test_module": "tests/test_adaptive_multi_split_wan.py",
+      "http_status": 200,
+      "completion_id": "chatcmpl-90",
+      "routed_model": "hivemind/coder",
+      "latency_ms": 23238.7,
+      "hivemind_settlement": {
+        "price_per_1k": 0.3088235294117647,
+        "charged_hmt": 0.12630882352941178,
+        "producer_id": "58fd3df19d2b5ef8c10031e1389aac6a",
+        "mechanism": "posted_price",
+        "request_id": "req-31d9b186a1b740839395a471eaf3f5d3"
+      },
+      "architect_blueprint_excerpt": "### Technical Specification for HM-S29-01: AdaptiveMultiSplitWANController\n\n1. **Dynamic Cut-Layer Selection**:\n   - Implement a method to dynamically select the cut-layer \\( L_c \\) between 1 and 4 based on the uplink Mbps and RTT ms.\n   - The selection should optimize for network efficiency and performance.\n\n2. **INT8 Boundary Activation Quantization**:\n   - Apply INT8 boundary activation quantization to reduce model size and improve inference speed.\n   - Ensure that the quantization process does not degrade model accuracy significantly.\n\n3. **Cohort Isolation**:\n   - Isolate SM < 8.0 FP32 models from SM >= 8.0 BF16 models to manage resources effectively.\n   - Implement a mechanism to dynamically adjust resource allocation based on the model type.\n\n4. **E20 Pre-registered Step-Time Benchm"
+    },
+    {
+      "pr_index": 2,
+      "task_id": "HM-S29-02",
+      "branch": "feat/s29-02-top1pct-dct-ef21-compression",
+      "module": "src/hivemind/swarm/top1pct_dct_ef21_compressor.py",
+      "test_module": "tests/test_top1pct_dct_ef21_compressor.py",
+      "http_status": 200,
+      "completion_id": "chatcmpl-0",
+      "routed_model": "hivemind/coder",
+      "latency_ms": 6493.9,
+      "hivemind_settlement": {
+        "price_per_1k": 0.3088235294117647,
+        "charged_hmt": 0.12291176470588236,
+        "producer_id": "58fd3df19d2b5ef8c10031e1389aac6a",
+        "mechanism": "posted_price",
+        "request_id": "req-fadb4f500fd14bcfac6aa8fe9dfbdc46"
+      },
+      "architect_blueprint_excerpt": "### Technical Specification for HM-S29-02: Top1PctQuantizedDCTEF21Compressor\n\n1. **Frequency-Domain DCT Selection**: Implement a method to select the top 1% of frequency components from the input data using Discrete Cosine Transform (DCT).\n2. **Quantization**: Apply 2-bit or 4-bit quantization to the selected frequency components.\n3. **Error Feedback**: Utilize host-RAM Error Feedback (EF21) to minimize reconstruction errors, with a maximum of 0 MiB extra GPU VRAM.\n4. **High Bandwidth Compression**: Ensure a compression ratio of at least 100x.\n5. **Exact Conservation Identity**: Implement a mechanism to ensure exact conservation identity, where \\( r_{t+1} = r_t + \\Delta_t \\).\n6. **Performance Optimization**: Optimize the implementation for both Cluster 1 and Cluster 7, ensuring high perfor"
+    },
+    {
+      "pr_index": 3,
+      "task_id": "HM-S30-01",
+      "branch": "feat/s30-01-zk-opoi-v5-snark-circuit",
+      "module": "src/hivemind/swarm/zk_opoi_v5_circuit.py",
+      "test_module": "tests/test_zk_opoi_v5_circuit.py",
+      "http_status": 200,
+      "completion_id": "chatcmpl-35",
+      "routed_model": "hivemind/coder",
+      "latency_ms": 6589.1,
+      "hivemind_settlement": {
+        "price_per_1k": 0.3088235294117647,
+        "charged_hmt": 0.1226029411764706,
+        "producer_id": "58fd3df19d2b5ef8c10031e1389aac6a",
+        "mechanism": "posted_price",
+        "request_id": "req-f30d1a62a7b54be998ccb85eed98aa5d"
+      },
+      "architect_blueprint_excerpt": "**Technical Specification:**\n\n1. **Circuit Design**: Implement a zk-SNARK circuit using R1CS/Halo2-style arithmetic for INT8/INT4 fixed-point operations over the Mersenne prime field p=2^61-1.\n2. **Commitment Mechanism**: Utilize SHA-256 to commit to shards, ensuring data integrity and authenticity.\n3. **Quantized LoRA Transition**: Incorporate quantized LoRA transition integrity checks to maintain model accuracy under resource constraints.\n4. **Spectral Norm Bounds**: Enforce spectral norm bounds to ensure the stability and robustness of the model.\n5. **Performance**: Achieve <10ms CPU verification time and <32KB proof size for efficient deployment and scalability.\n6. **Security**: Ensure the circuit is secure against common cryptographic attacks, including zero-knowledge proofs and side-"
+    },
+    {
+      "pr_index": 4,
+      "task_id": "HM-S30-02",
+      "branch": "feat/s30-02-krum-vs-zkopoi-v5-crossover",
+      "module": "src/hivemind/swarm/krum_vs_zkopoi_v5_benchmark.py",
+      "test_module": "tests/test_krum_vs_zkopoi_v5_benchmark.py",
+      "http_status": 200,
+      "completion_id": "chatcmpl-458",
+      "routed_model": "hivemind/coder",
+      "latency_ms": 6743.2,
+      "hivemind_settlement": {
+        "price_per_1k": 0.3088235294117647,
+        "charged_hmt": 0.12383823529411765,
+        "producer_id": "58fd3df19d2b5ef8c10031e1389aac6a",
+        "mechanism": "posted_price",
+        "request_id": "req-61afd9961ec048168b595568ebb5a98f"
+      },
+      "architect_blueprint_excerpt": "**Technical Specification:**\n1. **Experiment Name:** KrumVsZKOPoIV5ScalingBenchmark\n2. **Objective:** Compare the scalability of Multi-Krum with 10% GPU replay against ZK-OPoI v5 CPU verification.\n3. **Node Range:** N = 100 to 10000\n4. **Metrics:** Crossover N*, validator GPU hours saved, Joules per workunit\n5. **Technologies:** Multi-Krum, ZK-OPoI v5, GPU replay\n6. **Environment:** Python, PyTorch, TensorFlow, CUDA\n\n**Python Class Signature:**\n```python\nclass KrumVsZKOPoIV5ScalingBenchmark:\n    def __init__(self, node_range: range, gpu_replay_percentage: float = 0.10):\n        self.node_range = node_range\n        self.gpu_replay_percentage = gpu_replay_percentage\n\n    def run_experiment(self):\n        # Implement experiment logic here\n        pass\n\n    def measure_crossover_n"
+    },
+    {
+      "pr_index": 5,
+      "task_id": "HM-S31-01-02",
+      "branch": "feat/s31-01-geomesh-routing-and-fuzzy-quorum",
+      "module": "src/hivemind/swarm/geomesh_fuzzy_consensus.py",
+      "test_module": "tests/test_geomesh_fuzzy_consensus.py",
+      "http_status": 200,
+      "completion_id": "chatcmpl-452",
+      "routed_model": "hivemind/coder",
+      "latency_ms": 6921.9,
+      "hivemind_settlement": {
+        "price_per_1k": 0.3088235294117647,
+        "charged_hmt": 0.12476470588235294,
+        "producer_id": "58fd3df19d2b5ef8c10031e1389aac6a",
+        "mechanism": "posted_price",
+        "request_id": "req-d01adb55fa574049b945ec8e078f06b1"
+      },
+      "architect_blueprint_excerpt": "### Technical Specification\n\n1. **GeocryptographicNeuralMeshRouter**\n   - **Objective**: Reduce p95 Round-Trip Time (RTT) by 40% using joint RTT coordinates, semantic fingerprint, and SHA-256 adapter hash.\n   - **Components**:\n     - **RTT Coordinates**: Utilize geographically distributed nodes for lower latency.\n     - **Semantic Fingerprint**: Implement a lightweight, yet effective, fingerprinting mechanism to identify nodes based on their capabilities and roles.\n     - **SHA-256 Adapter Hash**: Ensure data integrity and security by using SHA-256 for hash-based routing decisions.\n\n2. **LocalizedFuzzySubSwarmConsensus**\n   - **Objective**: Achieve a fuzzy quorum of 15-20 neighbor nodes in less than 50ms with O(log N) complexity.\n   - **Components**:\n     - **Fuzzy Quorum**: Allow nodes to"
+    }
+  ]
+}

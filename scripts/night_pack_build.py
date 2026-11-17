@@ -313,6 +313,216 @@ BUILDERS = {"maths": build_maths, "exoplanet": build_exoplanet, "stars": build_s
             "physics_transfer": lambda o, c: build_mmlu_eval(o, c, "physics_transfer", ["high_school_physics", "college_physics", "conceptual_physics"]),
             "astro_transfer": lambda o, c: build_mmlu_eval(o, c, "astro_transfer", ["astronomy"])}
 
+SYS_CODE = "You are a careful Python programming assistant. Reply with executable Python code that passes all unit tests."
+
+
+def _parse_verifiable_reply(kind: str, text: str) -> str | None:
+    if kind == "numeric":
+        m = re.findall(r"final answer\s*[:=]\s*\$?\s*(-?[\d,]*\.?\d+)", text, re.I)
+        return m[-1].replace(",", "") if m else None
+    if kind == "mcq":
+        m = re.findall(r"answer\s*[:=]\s*\(?([ABCD])\b", text, re.I)
+        return m[-1].upper() if m else None
+    m = re.findall(r"(?:verdict|class)\s*[:=]\s*(confirmed|false positive|[OBAFGKM])\b", text, re.I)
+    return m[-1].upper() if m else None
+
+
+def _is_verified_reply(kind: str, text: str, gold: str) -> bool:
+    got = _parse_verifiable_reply(kind, text)
+    if got is None:
+        return False
+    if kind == "numeric":
+        try:
+            return abs(float(got) - float(gold)) < 1e-6
+        except ValueError:
+            return False
+    return got.upper() == gold.upper()
+
+
+def filter_verified_self_solutions(
+    candidates: list[dict[str, Any]],
+    *,
+    kind: str = "numeric",
+    cross_domain_completions: list[str] | None = None,
+) -> dict[str, Any]:
+    """Rejection-sample model self-solutions verified against ground-truth answers (E15 recipe, HM-S14-02 / #166).
+
+    Gold-text fine-tuning on terse GSM8K answers hurt Qwen2.5-Coder-7B (0.785 -> 0.715, 130 vs 157 on the 173 items
+    both parsed). This function filters `k` model-generated candidate completions per training prompt, retains only
+    samples whose parsed final answer matches `gold`, selects the most concise verified self-solution that preserves
+    native step-by-step reasoning, and constructs a cross-domain control rather than a 0-scoring shuffled numeric control.
+    """
+    verified_train: list[dict[str, Any]] = []
+    rejected_prompts: list[str] = []
+    total_samples = 0
+    verified_samples = 0
+    for row in candidates:
+        key = str(row["key"])
+        gold = str(row["gold"])
+        messages = list(row["messages"])
+        samples = [str(s) for s in row.get("samples", [])]
+        total_samples += len(samples)
+        passing = [s.strip() for s in samples if _is_verified_reply(kind, s, gold)]
+        verified_samples += len(passing)
+        if not passing:
+            rejected_prompts.append(key)
+            continue
+        chosen = min(passing, key=lambda s: (len(s), s))
+        verified_train.append(
+            {
+                "key": key,
+                "messages": messages,
+                "completion": chosen,
+                "gold": gold,
+                "verified_candidates_count": len(passing),
+                "total_candidates_count": len(samples),
+            }
+        )
+    cross_control: list[dict[str, Any]] = []
+    if cross_domain_completions and verified_train:
+        for i, row in enumerate(verified_train):
+            cross_control.append(
+                {
+                    "key": row["key"],
+                    "messages": row["messages"],
+                    "completion": str(cross_domain_completions[i % len(cross_domain_completions)]),
+                }
+            )
+    return {
+        "kind": kind,
+        "prompts_total": len(candidates),
+        "prompts_accepted": len(verified_train),
+        "prompts_rejected": len(rejected_prompts),
+        "rejected_keys": rejected_prompts,
+        "samples_total": total_samples,
+        "samples_verified": verified_samples,
+        "acceptance_rate": round(len(verified_train) / max(1, len(candidates)), 4),
+        "train_rows": verified_train,
+        "cross_domain_control_rows": cross_control,
+    }
+
+
+def execute_code_candidate_tests(
+    code: str,
+    tests: list[str],
+    *,
+    setup: str = "",
+    timeout_s: float = 5.0,
+) -> tuple[bool, str]:
+    """Verify a Python code completion against executable unit tests in an isolated subprocess (HM-S14-07 / #169)."""
+    import ast
+    import subprocess
+
+    stripped = code.strip()
+    if stripped.startswith("```"):
+        blocks = re.findall(r"```(?:python)?\s*\n(.*?)```", stripped, re.S)
+        if blocks:
+            stripped = blocks[-1].strip()
+    if not stripped or not tests:
+        return False, "empty_code_or_tests"
+    try:
+        tree = ast.parse(stripped)
+    except SyntaxError as exc:
+        return False, f"syntax_error:{exc.msg}"
+    if not any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) for n in tree.body):
+        return False, "no_callable_definition"
+    script_parts = [setup.strip(), stripped, *tests, "print('HIVEMIND_CODE_TESTS_OK')"]
+    harness = "\n\n".join(p for p in script_parts if p)
+    try:
+        res = subprocess.run(
+            [sys.executable, "-I", "-B", "-c", harness],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            shell=False,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "timeout"
+    if res.returncode == 0 and "HIVEMIND_CODE_TESTS_OK" in res.stdout:
+        return True, "passed"
+    err = (res.stderr or res.stdout).strip().splitlines()
+    return False, (err[-1][:160] if err else f"exit_{res.returncode}")
+
+
+def filter_verified_cyber_mcq_targets(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Filter cyber training rows strictly to verifier-backed MCQ targets and drop unverified free-text or dual-use rows (HM-S14-07 / #169)."""
+    verified: list[dict[str, Any]] = []
+    for row in candidates:
+        u = str(row.get("question", "")).strip()
+        completion = str(row.get("completion", "")).strip()
+        gold = str(row.get("gold", "")).strip().upper()
+        if not u or not completion or gold not in {"A", "B", "C", "D"}:
+            continue
+        if DUAL_USE.search(u) or DUAL_USE.search(completion):
+            continue
+        if not _is_verified_reply("mcq", completion, gold):
+            continue
+        verified.append(
+            {
+                "key": str(row["key"]),
+                "messages": [
+                    {"role": "system", "content": SYS_MCQ},
+                    {"role": "user", "content": u},
+                ],
+                "completion": completion,
+                "gold": gold,
+            }
+        )
+    return verified
+
+
+def build_verified_code_expert_pack(
+    out: Path,
+    *,
+    train_problems: list[dict[str, Any]],
+    eval_problems: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build a `code` expert pack whose training and evaluation rows carry executable Python unit tests (HM-S14-07 / #169)."""
+    train_rows: list[dict[str, Any]] = []
+    for p in train_problems:
+        tests = [str(t) for t in p.get("tests", [])]
+        setup = str(p.get("setup", ""))
+        comp = str(p["completion"])
+        ok, reason = execute_code_candidate_tests(comp, tests, setup=setup)
+        if not ok:
+            raise RuntimeError(f"BLOCKED: code training row {p['key']} failed executable tests ({reason})")
+        prompt_text = f"{p['prompt'].strip()}\nYour code must pass:\n{tests[0]}"
+        train_rows.append(
+            {
+                "key": str(p["key"]),
+                "messages": [{"role": "system", "content": SYS_CODE}, {"role": "user", "content": prompt_text}],
+                "completion": comp,
+                "tests": tests,
+            }
+        )
+    eval_rows: list[dict[str, Any]] = []
+    for p in eval_problems:
+        tests = [str(t) for t in p.get("tests", [])]
+        if not tests:
+            raise RuntimeError(f"BLOCKED: code eval row {p['key']} has no executable tests")
+        prompt_text = f"{p['prompt'].strip()}\nYour code must pass:\n{tests[0]}"
+        eval_rows.append(
+            {
+                "key": str(p["key"]),
+                "kind": "code",
+                "gold": json.dumps(tests),
+                "tests": tests,
+                "messages": [{"role": "system", "content": SYS_CODE}, {"role": "user", "content": prompt_text}],
+            }
+        )
+    return write_pack(
+        out,
+        "code",
+        train_rows,
+        eval_rows,
+        {
+            "source": "verified executable Python unit-test problems (HM-S14-07 / #169)",
+            "licence_as_read": "Apache-2.0 / MIT verified problem suite",
+            "use": "RFT/SFT on 100% test-verified Python solutions; evaluated by isolated test execution",
+            "verified_train_rows": len(train_rows),
+        },
+    )
+
 
 def main() -> int:
     ap = argparse.ArgumentParser()

@@ -43,7 +43,7 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 import torch
 from peft import LoraConfig, TaskType, get_peft_model, get_peft_model_state_dict, set_peft_model_state_dict
@@ -103,6 +103,8 @@ def load_polyglot_8domain_fixture(
     fixture_path: Path = CAMPAIGN_FIXTURE_PATH,
 ) -> tuple[dict[str, Any], str]:
     """Load and validate the 8-domain UTF-8 token campaign fixture with zero train/holdout leakage."""
+    if isinstance(fixture_path, bool) or not isinstance(fixture_path, Path):
+        raise ValueError("fixture_path must be a Path")
     raw = fixture_path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     payload = json.loads(raw.decode("utf-8"))
@@ -116,6 +118,17 @@ def load_polyglot_8domain_fixture(
 
 def _try_fetch_live_hf_rows(dataset_id: str, max_rows: int = 2, timeout_sec: float = 2.5) -> list[str]:
     """Optionally fetch live sample rows from the Hugging Face Datasets Server API."""
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(max_rows, bool) or not isinstance(max_rows, int) or max_rows < 1:
+        raise ValueError("max_rows must be >= 1")
+    if (
+        isinstance(timeout_sec, bool)
+        or not isinstance(timeout_sec, (int, float))
+        or not math.isfinite(float(timeout_sec))
+        or float(timeout_sec) <= 0.0
+    ):
+        raise ValueError("timeout_sec must be a finite positive number")
     encoded_ds = urllib.parse.quote(dataset_id, safe="/")
     url = f"https://datasets-server.huggingface.co/first-rows?dataset={encoded_ds}&config=default&split=train"
     req = urllib.request.Request(url, headers={"User-Agent": "HiveMind-Community-Campaign/1.8"})
@@ -137,6 +150,10 @@ def _try_fetch_live_hf_rows(dataset_id: str, max_rows: int = 2, timeout_sec: flo
 
 def _build_seeded_campaign_peft_model(seed: int, device: torch.device) -> Qwen2ForCausalLM:
     """Construct a deterministic byte-level Qwen2ForCausalLM + PEFT LoRA model."""
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if not isinstance(device, torch.device):
+        raise ValueError("device must be a torch.device")
     torch.manual_seed(seed)
     cfg = Qwen2Config(**MODEL_CONFIG)
     cfg._attn_implementation = "eager"
@@ -148,12 +165,18 @@ def _build_seeded_campaign_peft_model(seed: int, device: torch.device) -> Qwen2F
 
 def _extract_lora_tensors_cpu(model: Qwen2ForCausalLM) -> dict[str, torch.Tensor]:
     """Return detached CPU float32 clones of all trainable PEFT LoRA parameters."""
+    if not isinstance(model, torch.nn.Module):
+        raise ValueError("model must be a torch.nn.Module")
     raw = adapter_state(model)
     return {k: v.detach().cpu().to(torch.float32).clone() for k, v in sorted(raw.items())}
 
 
 def _load_lora_tensors_into_model(model: Qwen2ForCausalLM, state: dict[str, torch.Tensor]) -> None:
     """Copy a LoRA parameter dict directly into the model's named parameters."""
+    if not isinstance(model, torch.nn.Module):
+        raise ValueError("model must be a torch.nn.Module")
+    if not isinstance(state, Mapping) or not state:
+        raise ValueError("state must be a non-empty Mapping")
     with torch.no_grad():
         for name, param in model.named_parameters():
             if name in state:
@@ -175,15 +198,38 @@ def run_multi_moe_hf_campaign(
     quorum_merge_mode: str = "rda",
 ) -> dict[str, Any]:
     """Execute the Large-Scale Multi-MoE & Hugging Face Dataset GPU Validation Campaign."""
-    if not contributor_handle or not contributor_handle.strip():
+    if not isinstance(contributor_handle, str) or not contributor_handle.strip():
         raise ValueError("contributor_handle must be non-empty")
-    if steps_per_domain < 2:
+    if isinstance(steps_per_domain, bool) or not isinstance(steps_per_domain, int) or steps_per_domain < 2:
         raise ValueError("steps_per_domain must be >= 2")
-    if not (2 <= domain_limit <= 8):
+    if isinstance(domain_limit, bool) or not isinstance(domain_limit, int) or not (2 <= domain_limit <= 8):
         raise ValueError("domain_limit must be between 2 and 8")
-    if not (0.0 <= grace_margin_gamma < 1.0):
+    if (
+        isinstance(learning_rate, bool)
+        or not isinstance(learning_rate, (int, float))
+        or not math.isfinite(float(learning_rate))
+        or float(learning_rate) <= 0.0
+    ):
+        raise ValueError("learning_rate must be a finite positive float")
+    if isinstance(sequence_length, bool) or not isinstance(sequence_length, int):
+        raise ValueError("sequence_length must be between 2 and 128")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if not isinstance(live_hf_stream, bool):
+        raise ValueError("live_hf_stream must be a boolean")
+    if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
+        raise ValueError("output_path must be a Path or None")
+    if min_quorum_k is not None:
+        if isinstance(min_quorum_k, bool) or not isinstance(min_quorum_k, int) or min_quorum_k < 1 or min_quorum_k > domain_limit:
+            raise ValueError("min_quorum_k must be an integer in [1, domain_limit]")
+    if (
+        isinstance(grace_margin_gamma, bool)
+        or not isinstance(grace_margin_gamma, (int, float))
+        or not math.isfinite(float(grace_margin_gamma))
+        or not (0.0 <= float(grace_margin_gamma) < 1.0)
+    ):
         raise ValueError("grace_margin_gamma must be in [0, 1)")
-    if quorum_merge_mode not in ("rda", "direct"):
+    if isinstance(quorum_merge_mode, bool) or not isinstance(quorum_merge_mode, str) or quorum_merge_mode not in ("rda", "direct"):
         raise ValueError("quorum_merge_mode must be 'rda' or 'direct'")
 
     t_campaign_start = time.perf_counter()
@@ -928,6 +974,7 @@ def run_multi_moe_hf_campaign(
     report: dict[str, Any] = {
         "campaign_id": fixture["campaign_id"],
         "campaign_title": "Operation Polyglot-Singularity-128: Multi-MoE & 8-Domain Hugging Face GPU Validation Campaign",
+        "simulated": True,
         "contributor_handle": contributor_handle.strip(),
         "timestamp_utc": round(time.time(), 3),
         "total_elapsed_ms": total_elapsed_ms,
@@ -1025,18 +1072,122 @@ def run_multi_moe_hf_campaign(
         },
     }
 
-    canonical_bytes = json.dumps(report, sort_keys=True).encode("utf-8")
+    canonical_bytes = json.dumps(report, sort_keys=True, allow_nan=False).encode("utf-8")
     report["campaign_sha256"] = hashlib.sha256(canonical_bytes).hexdigest()
 
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        output_path.write_text(json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
 
     return report
 
 
+def verify_multi_moe_hf_campaign_report(report: Mapping[str, Any]) -> bool:
+    """Verify the canonical SHA-256 digest and multi-stage invariants of a campaign report."""
+    if not isinstance(report, Mapping):
+        return False
+    expected = str(report.get("campaign_sha256") or "").strip().lower()
+    if len(expected) != 64:
+        return False
+    body = {k: v for k, v in report.items() if k != "campaign_sha256"}
+    try:
+        canonical = json.dumps(body, sort_keys=True, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError):
+        return False
+    if hashlib.sha256(canonical).hexdigest().lower() != expected:
+        return False
+    if body.get("all_checks_passed") is not True:
+        return False
+    handle = body.get("contributor_handle")
+    if not isinstance(handle, str) or not handle.strip():
+        return False
+    if body.get("non_monetary_charter") != NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE:
+        return False
+
+    s1 = body.get("stage1_hardware_and_corpus")
+    pts = body.get("symbolic_compute_reciprocity_points")
+    s23 = body.get("stage2_and_3_multi_domain_lora_and_ef21_cas")
+    s4 = body.get("stage4_byzantine_ties_merge_vs_naive")
+    s5 = body.get("stage5_128_expert_moe_and_zk_opoi_v4")
+    s6 = body.get("stage6_season8_iso_sparse_fomoe")
+    s7 = body.get("stage7_season9_10_quorum_and_lattice")
+    if not all(isinstance(m, Mapping) for m in (s1, pts, s23, s4, s5, s6, s7)):
+        return False
+    assert isinstance(s1, Mapping)
+    assert isinstance(pts, Mapping)
+    assert isinstance(s23, Mapping)
+    assert isinstance(s4, Mapping)
+    assert isinstance(s5, Mapping)
+    assert isinstance(s6, Mapping)
+    assert isinstance(s7, Mapping)
+
+    is_gpu = s1.get("is_gpu")
+    if not isinstance(is_gpu, bool) or s1.get("within_8gb_wddm_budget") is not True:
+        return False
+    expected_pts = 1500 if is_gpu else 750
+    if (
+        pts.get("monetary_payment_eur_usd") != 0.0
+        or pts.get("symbolic_points_preview_pts") != expected_pts
+    ):
+        return False
+
+    if not (
+        s23.get("all_domains_improved_train") is True
+        and s23.get("all_domains_improved_holdout") is True
+        and s23.get("all_cas_zero_step_transfers_exact") is True
+        and s23.get("all_ef21_residuals_conserved") is True
+    ):
+        return False
+
+    if not (
+        s4.get("ties_beats_poisoned_naive") is True
+        and s4.get("ties_beats_frozen_baseline") is True
+    ):
+        return False
+
+    if not (
+        s5.get("total_hierarchical_experts") == 128
+        and s5.get("gating_Compute_reduction_factor") == 8.0
+        and s5.get("zk_opoi_v4_batch_passed") is True
+        and s5.get("guild_insurance_pool_holdings_hive") == 400.0
+    ):
+        return False
+
+    if not (
+        s6.get("hm_s8_02_cpu_flat_bucket_extra_vram_bytes") == 0
+        and s6.get("hm_s7_01_looped_moe_backbone_logits_finite") is True
+    ):
+        return False
+
+    spot = s7.get("hm_s10_08_execution_class_spot_check")
+    cas_lease = s7.get("hm_s9_06_cas_lease_ledger")
+    async_rep = s7.get("hm_s9_13_continuous_async_learner")
+    kv_bench = s7.get("hm_s10_05_kv_cache_codec_benchmark")
+    if not all(isinstance(m, Mapping) for m in (spot, cas_lease, async_rep, kv_bench)):
+        return False
+    assert isinstance(spot, Mapping)
+    assert isinstance(cas_lease, Mapping)
+    assert isinstance(async_rep, Mapping)
+    assert isinstance(kv_bench, Mapping)
+    if not (
+        s7.get("hm_s9_01_quorum_reached") is True
+        and s7.get("hm_s9_05_momentum_restarted_on_step2") is True
+        and cas_lease.get("conservation_holds") is True
+        and async_rep.get("token_conservation_holds") is True
+        and kv_bench.get("controls_all_passed") is True
+        and spot.get("same_class_passed") is True
+        and spot.get("cross_dtype_rejected") is True
+        and spot.get("fixed_point_q16_exact") is True
+    ):
+        return False
+
+    return True
+
+
 def format_campaign_markdown_summary(report: dict[str, Any]) -> str:
     """Render a clean Markdown summary table for sharing in GitHub Discussions."""
+    if not isinstance(report, dict) or not report:
+        raise ValueError("report must be a non-empty dict")
     hw = report["stage1_hardware_and_corpus"]
     s23 = report["stage2_and_3_multi_moe_lora"] if "stage2_and_3_multi_moe_lora" in report else report["stage2_and_3_multi_domain_lora_and_ef21_cas"]
     s4 = report["stage4_byzantine_ties_merge_vs_naive"]
@@ -1069,6 +1220,8 @@ def format_campaign_markdown_summary(report: dict[str, Any]) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entrypoint for the Multi-MoE & Hugging Face Dataset GPU Validation Campaign."""
+    if argv is not None and (isinstance(argv, (str, bytes)) or not isinstance(argv, Sequence)):
+        raise ValueError("argv must be a sequence of strings or None")
     parser = argparse.ArgumentParser(
         description="Run Operation Polyglot-Singularity-128: Multi-MoE & 8-Domain Hugging Face GPU Validation Campaign."
     )

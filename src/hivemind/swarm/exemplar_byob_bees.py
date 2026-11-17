@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import time
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
@@ -62,6 +63,55 @@ class ExemplarBYOBBee:
     mcnemar_p_value: float
     benchmark_prompt: str
     sample_completion: str
+
+    def __post_init__(self) -> None:
+        for attr in (
+            "bee_id",
+            "public_id",
+            "title",
+            "domain",
+            "base_hf_repo",
+            "base_tier_id",
+            "hf_repo_id",
+            "revision",
+            "author_handle",
+            "description",
+            "license",
+            "benchmark_prompt",
+            "sample_completion",
+        ):
+            val = getattr(self, attr)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{attr} must be a non-empty string")
+        for id_attr in (
+            "bee_id",
+            "public_id",
+            "domain",
+            "base_hf_repo",
+            "base_tier_id",
+            "hf_repo_id",
+            "revision",
+            "author_handle",
+            "license",
+        ):
+            ival = getattr(self, id_attr)
+            if any(ord(c) < 32 or ord(c) == 127 for c in ival):
+                raise ValueError(f"{id_attr} must not contain control characters")
+        for num_attr in ("parameters_b", "test_accuracy_gain", "mcnemar_p_value"):
+            nval = getattr(self, num_attr)
+            if isinstance(nval, bool) or not isinstance(nval, (int, float)) or not math.isfinite(float(nval)):
+                raise ValueError(f"{num_attr} must be a finite numeric value")
+        if self.parameters_b <= 0.0:
+            raise ValueError("parameters_b must be positive")
+        if not (-1.0 < self.test_accuracy_gain <= 1.0):
+            raise ValueError("test_accuracy_gain must be in (-1.0, 1.0]")
+        if not (0.0 <= self.mcnemar_p_value <= 1.0):
+            raise ValueError("mcnemar_p_value must be in [0.0, 1.0]")
+        if self.public_id != f"hivemind/{self.bee_id}":
+            raise ValueError("public_id must equal 'hivemind/<bee_id>'")
+        rev = self.revision.strip()
+        if len(rev) != 40 or any(c not in "0123456789abcdefABCDEF" for c in rev):
+            raise ValueError("revision must be a 40-character hexadecimal commit SHA")
 
     def to_manifest(self) -> BeeManifest:
         """Generate the signed BeeManifest for this bee."""
@@ -196,44 +246,115 @@ class ExemplarBYOBRegistryManager:
     """Manages evaluation, attestation, and promotion of BYOB bees into the live swarm."""
 
     def __init__(self, expert_registry: ExpertRegistry | None = None) -> None:
+        if expert_registry is not None and not isinstance(expert_registry, ExpertRegistry):
+            raise TypeError("expert_registry must be an ExpertRegistry or None")
         self._expert_registry = expert_registry if expert_registry is not None else ExpertRegistry()
         self._live_exemplars: dict[str, ExemplarBYOBBee] = {b.bee_id: b for b in EXEMPLAR_BYOB_BEES}
         self._attestation_hashes: dict[str, str] = {}
 
     def get_bee(self, bee_id: str) -> ExemplarBYOBBee | None:
+        if (
+            not isinstance(bee_id, str)
+            or not bee_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in bee_id)
+        ):
+            raise ValueError("bee_id must be a non-empty string without control characters")
         return self._live_exemplars.get(bee_id)
 
     def list_live_bees(self) -> list[ExemplarBYOBBee]:
         return list(self._live_exemplars.values())
 
-    def register_and_attest_bee(self, bee: ExemplarBYOBBee) -> dict[str, Any]:
-        """Perform simulated static validation, McNemar gate verification, and register into ExpertRegistry."""
+    def register_and_attest_bee(
+        self,
+        bee: ExemplarBYOBBee,
+        *,
+        paired_outcomes: Sequence[tuple[bool, bool]] | None = None,
+        adapter_weights_bytes: bytes | None = None,
+        adapter_sha256: str | None = None,
+    ) -> dict[str, Any]:
+        """Perform static validation, paired McNemar gate verification, and register into ExpertRegistry."""
+        import math as _math
+
+        if not isinstance(bee, ExemplarBYOBBee):
+            raise TypeError("bee must be an ExemplarBYOBBee instance")
         manifest = bee.to_manifest()
 
-        # Deterministic attestation hash
+        # Deterministic attestation hash of the manifest
         raw_manifest = json.dumps(asdict(manifest), sort_keys=True).encode("utf-8")
         attestation_sha = hashlib.sha256(raw_manifest).hexdigest()
         self._attestation_hashes[bee.bee_id] = attestation_sha
 
-        # Register into S21 ExpertRegistry
-        rec = ExpertRecord(
-            expert_id=bee.bee_id,
-            kind=BYOB,
-            cluster_id=bee.domain,
-            base_model_id=bee.base_hf_repo,
-            adapter_sha256=attestation_sha,
-            adapter_size_mib=18,
+        # Compute adapter weights SHA-256 (distinct from the manifest JSON digest)
+        if adapter_weights_bytes is not None:
+            if not isinstance(adapter_weights_bytes, (bytes, bytearray)) or len(adapter_weights_bytes) == 0:
+                raise ValueError("adapter_weights_bytes must be non-empty bytes")
+            weights_sha = hashlib.sha256(adapter_weights_bytes).hexdigest()
+        elif adapter_sha256 is not None:
+            cleaned_sha = str(adapter_sha256).strip().lower()
+            if len(cleaned_sha) != 64 or any(c not in "0123456789abcdef" for c in cleaned_sha):
+                raise ValueError("adapter_sha256 must be a 64-character lowercase hex digest")
+            weights_sha = cleaned_sha
+        else:
+            weights_sha = hashlib.sha256(
+                f"safetensors_lora_r16:{bee.hf_repo_id}@{bee.revision}:{bee.sample_completion}".encode("utf-8")
+            ).hexdigest()
+
+        if paired_outcomes is not None:
+            if (
+                isinstance(paired_outcomes, (str, bytes))
+                or not isinstance(paired_outcomes, Sequence)
+                or not paired_outcomes
+            ):
+                raise ValueError("paired_outcomes must not be empty when provided")
+            for pair in paired_outcomes:
+                if (
+                    not isinstance(pair, (tuple, list))
+                    or len(pair) != 2
+                    or not isinstance(pair[0], bool)
+                    or not isinstance(pair[1], bool)
+                ):
+                    raise ValueError("paired_outcomes must contain pairs of booleans")
+            n01 = sum(1 for base_ok, bee_ok in paired_outcomes if (not base_ok) and bee_ok)
+            n10 = sum(1 for base_ok, bee_ok in paired_outcomes if base_ok and (not bee_ok))
+            n_total = len(paired_outcomes)
+            acc_gain = (n01 - n10) / float(n_total)
+            n_disc = n01 + n10
+            if n_disc == 0 or n01 <= n10:
+                p_val = 1.0
+            else:
+                tail = sum(_math.comb(n_disc, k) for k in range(n01, n_disc + 1)) * (0.5**n_disc)
+                p_val = min(1.0, 2.0 * tail)
+        else:
+            acc_gain = float(bee.test_accuracy_gain)
+            p_val = float(bee.mcnemar_p_value)
+
+        gate_passed = bool(
+            _math.isfinite(p_val)
+            and _math.isfinite(acc_gain)
+            and p_val < 0.05
+            and acc_gain > 0.0
         )
-        self._expert_registry.register(rec)
+
+        if gate_passed and bee.bee_id not in self._expert_registry:
+            rec = ExpertRecord(
+                expert_id=bee.bee_id,
+                kind=BYOB,
+                cluster_id=bee.domain,
+                base_model_id=bee.base_hf_repo,
+                adapter_sha256=weights_sha,
+                adapter_size_mib=18,
+            )
+            self._expert_registry.register(rec)
 
         return {
-            "status": "APPROVED_LIVE",
+            "status": "APPROVED_LIVE" if gate_passed else "REJECTED_MCNEMAR_GATE",
             "bee_id": bee.bee_id,
             "public_id": bee.public_id,
-            "stage": "live",
+            "stage": "live" if gate_passed else "rejected",
             "attestation_sha256": attestation_sha,
+            "adapter_sha256": weights_sha,
             "base_model": bee.base_hf_repo,
-            "mcnemar_p_value": bee.mcnemar_p_value,
-            "accuracy_gain": bee.test_accuracy_gain,
-            "gate_passed": bee.mcnemar_p_value < 0.05 and bee.test_accuracy_gain > 0.0,
+            "mcnemar_p_value": round(p_val, 6),
+            "accuracy_gain": round(acc_gain, 6),
+            "gate_passed": gate_passed,
         }

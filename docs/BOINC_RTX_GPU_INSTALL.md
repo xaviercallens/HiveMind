@@ -266,3 +266,38 @@ Engineering:
 * Measuring cross-architecture replay (RTX against T4): E12 did not run an RTX card (`not_run` in the E12 report), and the
   fixed-point clause is undecided (`analysis.P12-fixed-point` in the same report).
 * A recorded run of the self-contained download path (`artifacts/boinc_distribution/report.json` is not in the repo).
+
+
+## 10. Turnkey 1-Command RTX BOINC Server & Client Deployment (`scripts/hivemind_rtx_boinc_deploy.py`)
+
+For developers, volunteers, or low-cost VM operators who want an immediate, zero-MariaDB/zero-Apache deployment of both the **RTX BOINC Server** and **RTX BOINC Client** on Windows 10/11, Linux, or Docker:
+
+### A. Detect Your NVIDIA RTX GPU & BOINC Plan Class
+```bash
+python scripts/hivemind_rtx_boinc_deploy.py detect
+```
+Automatically detects your NVIDIA RTX GPU, driver version, total/free VRAM, and assigns:
+- `cuda_hivemind` (`hivemind_qlora_moe`, rank 8, `< 6,656 MiB` WDDM ceiling, `>= 1,536 MiB` free VRAM floor) for 8 GB–9.9 GB cards (e.g., RTX 2060, RTX 2070, RTX 2080, RTX 3060 Ti, RTX 3070, RTX 4060).
+- `cuda_hivemind_big` (`hivemind_qlora_moe_big`, rank 16, `>= 2,560 MiB` free VRAM floor on 12 GB cards / `>= 4,300 MiB` free VRAM floor on 16 GB T4) for 10 GB–24 GB+ cards (e.g., RTX 3060 12GB, RTX 4070, RTX 4080, RTX 3090, RTX 4090, Tesla T4).
+
+### B. Start the Turnkey RTX BOINC Server (Standalone or Docker Compose)
+```bash
+# Direct Python server (speaks BOINC XML RPC + JSON/HTTPS RTX Workunit API, backed by SQLite):
+python scripts/hivemind_rtx_boinc_deploy.py server --host 0.0.0.0 --port 8097
+
+# Or via Docker Compose (starts RTX BOINC Server on :8097 + Permanent OpenTrainer Orchestrator on :8096):
+docker compose -f deploy/rtx_boinc/docker-compose.rtx-boinc.yml up -d
+```
+
+### C. Deploy the RTX BOINC Client & Run a Verified CUDA Workunit
+```bash
+# 1. Generate cross-platform BOINC client XMLs (cc_config.xml, global_prefs_override.xml, app_info.xml,
+#    app_config.xml, account_*.xml) + Windows PowerShell & Linux systemd --user service manifests:
+python scripts/hivemind_rtx_boinc_deploy.py deploy-client --server http://127.0.0.1:8095 --handle your-handle
+
+# 2. Run one verified CUDA QLoRA + PTX BLS workunit (remove --once to run continuously when idle):
+python scripts/hivemind_rtx_boinc_deploy.py client --server http://127.0.0.1:8095 --handle your-handle --once
+
+# 3. Run full end-to-end Server + Client + CUDA self-test:
+python scripts/hivemind_rtx_boinc_deploy.py self-test --device cuda
+```

@@ -1,0 +1,34 @@
+{
+  "criterion": "B1",
+  "what": "custom dataset -> signed shards + held-out split",
+  "dataset": "1044 paragraphs of docs/*.md (this repository)",
+  "tokenizer": "ibm-granite/granite-3.1-1b-a400m-base (local snapshot)",
+  "checks": {
+    "script_exit_zero": true,
+    "enough_chunks": true,
+    "documents_split_disjoint": true,
+    "sha256_and_hmac_verify": true,
+    "wrong_secret_rejected": true,
+    "no_chunk_shared_between_train_and_heldout": true,
+    "signed_with_a_private_secret": true
+  },
+  "manifest": {
+    "domain": "hivemind_docs",
+    "seq_len": 128,
+    "documents": {
+      "total": 1044,
+      "train": 935,
+      "heldout": 109
+    },
+    "chunks": {
+      "train": 2082,
+      "heldout": 304
+    },
+    "train_sha256": "95cc882507bdaf443128e4fe1680af4b10696af65d3899084fb12a7a5b2179d1",
+    "heldout_sha256": "4c4df1e71bb2e5b10d5bc88b1a24f05d399533dcc64bad22b9a6e0077eb83365"
+  },
+  "network": "sockets are blocked while building (mcs.no_network); the unit test proves a connect attempt raises",
+  "error": null,
+  "passed": true,
+  "reason": ""
+}

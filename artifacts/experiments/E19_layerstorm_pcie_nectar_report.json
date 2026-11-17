@@ -1,0 +1,175 @@
+{
+  "experiment_id": "E19",
+  "title": "LayerStoRm PCIe Expert Streaming + HiveMind Swarm Nectar Cache & Waggle-Warm Zone A on NVIDIA Tesla T4",
+  "executed_utc": "2026-10-29T10:45:34.764468+00:00",
+  "hardware": {
+    "cuda_available": true,
+    "device_name": "Tesla T4",
+    "total_vram_mib": 14911.69,
+    "free_vram_before_mib": 9970.69,
+    "free_vram_after_mib": 9900.69,
+    "t4_policy_4300mib_floor_respected": true
+  },
+  "conditions": {
+    "C0_cold_reactive_pcie": {
+      "mean_ttft_ms": 6.2498,
+      "total_pcie_h2d_mib": 1920.0
+    },
+    "C1_waggle_warm_zone_a": {
+      "mean_ttft_ms": 2.1191,
+      "total_pcie_h2d_mib": 640.0,
+      "ttft_reduction_vs_c0_pct": 66.09,
+      "pcie_h2d_reduction_vs_c0_pct": 66.67
+    },
+    "C2_full_hivemind_nectar_plus_waggle": {
+      "mean_ttft_ms": 0.4126,
+      "total_pcie_h2d_mib": 32.0,
+      "pcie_h2d_reduction_vs_c0_pct": 98.33,
+      "nectar_cache_stats": {
+        "active_entries": 9,
+        "total_queries": 20,
+        "cache_hits": 11,
+        "hit_rate_pct": 55.0,
+        "tokens_saved_estimate": 4950,
+        "total_hmt_royalties_distributed": 0.055
+      }
+    },
+    "HM_S25_03_fomoe_waterline_schedule": {
+      "reactive_baseline": {
+        "layers_evaluated": 8,
+        "total_step_ms": 210.9583,
+        "total_pcie_stall_ms": 98.9583,
+        "pcie_stall_ratio_pct": 46.9089,
+        "stall_gate_under_15pct": false,
+        "lookahead_recall": 0.9062,
+        "car_swaps": 0,
+        "total_pcie_h2d_mib": 2432.0
+      },
+      "fomoe_skip_attention_plus_car": {
+        "layers_evaluated": 8,
+        "total_step_ms": 115.613,
+        "total_pcie_stall_ms": 3.613,
+        "pcie_stall_ratio_pct": 3.1251,
+        "stall_gate_under_15pct": true,
+        "lookahead_recall": 0.9062,
+        "car_swaps": 23,
+        "total_pcie_h2d_mib": 1536.0
+      }
+    },
+    "HM_S25_04_hybrid_hisparse_e8_kv_cache": {
+      "vram_estimate_32k": {
+        "seq_len": 32768.0,
+        "hot_vram_tokens": 128.0,
+        "cold_host_tokens": 32640.0,
+        "fp16_full_vram_mib": 4096.0,
+        "hisparse_e8_vram_mib": 4.0,
+        "cold_host_pinned_mib": 4080.0,
+        "vram_compression_ratio": 1024.0
+      },
+      "vram_estimate_128k": {
+        "seq_len": 131072.0,
+        "hot_vram_tokens": 128.0,
+        "cold_host_tokens": 130944.0,
+        "fp16_full_vram_mib": 16384.0,
+        "hisparse_e8_vram_mib": 4.0,
+        "cold_host_pinned_mib": 16368.0,
+        "vram_compression_ratio": 4096.0
+      },
+      "hisparse_e8_fidelity": {
+        "seq_len": 512,
+        "hot_vram_tokens": 128,
+        "random_control": false,
+        "retained_attention_mass": 0.9976,
+        "e8_rate_bits_per_dim": 6.106,
+        "relative_l2_delta": 0.0104,
+        "cosine_similarity": 0.99995,
+        "passed_delta_under_0_05": true
+      }
+    },
+    "HM_S25_05_byob_preset": {
+      "preset_id": "layerstorm-frontier-moe",
+      "tier": "moe-layerstorm",
+      "virtual_model_id": "hivemind/moe-layerstorm",
+      "backend": "layerstorm-pcie",
+      "target_model_family": "Qwen3-30B-A3B-Instruct-2507",
+      "domain": "systems_deeptech",
+      "context_length": 32768,
+      "vram_budget": {
+        "vram_cap_mib": 6656.0,
+        "total_vram_mib": 5233.0,
+        "headroom_mib": 1423.0,
+        "zone_a_slots": 8,
+        "zone_b_slots": 12,
+        "kv_cache_mib": 273.0
+      },
+      "hisparse_e8_kv": {
+        "seq_len": 32768.0,
+        "hot_vram_tokens": 544.0,
+        "cold_host_tokens": 32224.0,
+        "fp16_full_vram_mib": 4096.0,
+        "hisparse_e8_vram_mib": 17.0,
+        "cold_host_pinned_mib": 4028.0,
+        "vram_compression_ratio": 240.94
+      },
+      "gamer_preemption_sla_ms": 500.0
+    }
+  },
+  "negative_controls": {
+    "negative_control_random_prewarm": {
+      "zone_a_hits": 0,
+      "total_pcie_h2d_mib": 1920.0,
+      "mean_ttft_ms": 5.3205,
+      "verified_zero_zone_a_benefit": true
+    },
+    "negative_control_vram_overflow_guard": {
+      "valid_8gb_budget_total_mib": 5984.0,
+      "valid_8gb_headroom_mib": 672.0,
+      "overflow_7520mib_blocked_closed": true
+    },
+    "negative_control_random_kv_eviction": {
+      "seq_len": 512,
+      "hot_vram_tokens": 128,
+      "random_control": true,
+      "retained_attention_mass": 0.227,
+      "e8_rate_bits_per_dim": 5.578,
+      "relative_l2_delta": 1.8808,
+      "cosine_similarity": 0.5503,
+      "passed_delta_under_0_05": false
+    }
+  },
+  "hypothesis_verdicts": {
+    "P19a_nectar_cache_pcie_relief_ge_50pct": {
+      "measured_pct": 98.33,
+      "threshold_pct": 50.0,
+      "passed": true
+    },
+    "P19b_waggle_warm_zone_a_ttft_reduction_ge_20pct": {
+      "measured_pct": 66.09,
+      "threshold_pct": 20.0,
+      "passed": true
+    },
+    "P19c_gamer_preemption_yield_under_500ms": {
+      "measured_ms": 0.0864,
+      "threshold_ms": 500.0,
+      "passed": true
+    },
+    "P19d_two_zone_vram_ceiling_under_6656mib": {
+      "measured_mib": 5984.0,
+      "ceiling_mib": 6656.0,
+      "passed": true
+    },
+    "P19e_fomoe_waterline_stall_ratio_under_15pct": {
+      "measured_pct": 3.1251,
+      "reactive_baseline_pct": 46.9089,
+      "threshold_pct": 15.0,
+      "passed": true
+    },
+    "P19f_hisparse_e8_kv_32k_delta_under_0_05": {
+      "measured_relative_l2_delta": 0.0104,
+      "random_control_relative_l2_delta": 1.8808,
+      "threshold_delta": 0.05,
+      "passed": true
+    }
+  },
+  "all_preregistered_hypotheses_passed": true
+}

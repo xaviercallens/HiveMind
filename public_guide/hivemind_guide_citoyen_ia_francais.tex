@@ -1,0 +1,290 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[french]{babel}
+\usepackage[margin=0.95in]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{xurl}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+\usepackage{amsmath,amssymb}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+% Palette de couleurs
+\definecolor{hiveNavy}{RGB}{15,23,42}
+\definecolor{hiveCyan}{RGB}{2,132,199}
+\definecolor{hiveAmber}{RGB}{217,119,6}
+\definecolor{hiveEmerald}{RGB}{5,150,105}
+\definecolor{hiveCoral}{RGB}{220,38,38}
+\definecolor{hiveGrayBg}{RGB}{248,250,252}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=hiveCyan,
+    citecolor=hiveEmerald,
+    urlcolor=hiveCyan,
+    pdftitle={Projet HiveMind : L'Intelligence Artificielle Citoyenne},
+    pdfauthor={Xavier Callens et le Collectif Open-Source HiveMind}
+}
+
+\tcbset{
+    boxrule=1.2pt,
+    arc=4pt,
+    colback=hiveGrayBg,
+    colframe=hiveCyan!80!black,
+    fonttitle=\bfseries\color{white},
+    colbacktitle=hiveNavy
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\footnotesize \textbf{Projet HiveMind} --- Guide Complet de l'IA Citoyenne}
+\rhead{\footnotesize Version Française d'Impression}
+\cfoot{\thepage}
+
+\begin{document}
+
+% ============================================================================
+% PAGE DE TITRE
+% ============================================================================
+\begin{titlepage}
+    \hypersetup{pageanchor=false}
+    \centering
+    \vspace*{1.0cm}
+    
+    {\Huge \bfseries \color{hiveNavy} Projet HiveMind}\\[0.4cm]
+    {\LARGE \bfseries \color{hiveCyan} L'Intelligence Artificielle Citoyenne}\\[0.3cm]
+    {\large \bfseries La Ruche Informatique Décentralisée sur Cartes Graphiques Grand Public (8 Go)}\\[1.2cm]
+    
+    \begin{tcolorbox}[colback=hiveCyan!8, colframe=hiveCyan, width=0.95\textwidth]
+        \centering \small
+        \textbf{Guide Général Grand Public \& Manifeste Technologique}\\[0.2em]
+        \color{hiveNavy}
+        Comprendre la technologie simplement $\cdot$ Analogies du quotidien $\cdot$ L'OpenRouter $\cdot$ L'Équilibre de Nash producteur-consommateur $\cdot$ Résultats mesurés en astrophysique et programmation
+    \end{tcolorbox}
+    
+    \vspace{0.8cm}
+    
+    \includegraphics[width=0.92\textwidth]{figures/fig1_everyday_analogy.png}
+    
+    \vfill
+    
+    {\normalsize \textbf{Auteur :} Xavier Callens \& Le Collectif Open-Source HiveMind}\\[0.2cm]
+    {\small Recherche Ouverte, Science Citoyenne \& Calcul Partagé}\\[0.2cm]
+    {\footnotesize Portail Interactif : \url{https://hivemind-openrouter-1003063861791.us-central1.run.app/}}\\[0.2cm]
+    {\footnotesize Dépôt d'Archive Zenodo DOI : \texttt{10.5281/zenodo.22829767} $\cdot$ Édition Octobre 2026}
+\end{titlepage}
+
+\hypersetup{pageanchor=true}
+\tableofcontents
+\newpage
+
+% ============================================================================
+% SECTION 1: LA VISION ET L'ANALOGIE DU QUOTIDIEN
+% ============================================================================
+\section{La Vision : Du Barrage Monopolistique au Réseau Solaire Citoyen}
+
+Aujourd'hui, l'univers de l'intelligence artificielle est dominé par une poignée de géants technologiques. Pour concevoir et faire fonctionner les grands modèles de langage (les LLM qui alimentent les assistants textuels et de programmation), ces entreprises érigent de monumentaux centres de données (data centers). Ces installations consomment l'électricité de villes entières et abritent des dizaines de milliers de cartes graphiques industrielles ultra-spécialisées (comme la NVIDIA H100, facturée plus de 40\,000 euros l'unité).
+
+\subsection{L'Analogie de la Vie Quotidienne : Le Barrage Privé}
+Imaginez la situation actuelle comme un gigantesque barrage hydroélectrique privé, construit sur l'unique fleuve d'une vallée. Tout le monde a un besoin vital d'électricité (la puissance de l'IA). Cependant, pour allumer la moindre ampoule, chaque citoyen, chaque chercheur et chaque petite entreprise doit payer le péage fixé arbitrairement par le propriétaire du barrage.
+
+Si ce propriétaire décide de doubler ses tarifs du jour au lendemain, d'analyser vos communications privées, de censurer arbitrairement certains usages ou de fermer le robinet, nul n'a d'alternative. Le monde entier se retrouve captif d'un unique point de défaillance.
+
+\subsection{La Réponse de HiveMind : La Ruche et les Panneaux Solaires}
+Le projet \textbf{HiveMind} (la « pensée de ruche ») applique à l'informatique ce que la transition écologique a apporté à l'énergie : \textbf{l'autonomie par la coopération distribuée}.
+
+Dans le monde entier, des millions de citoyens, de joueurs de jeux vidéo (gamers), d'étudiants, d'ingénieurs et d'artisans possèdent chez eux des ordinateurs équipés de cartes graphiques ordinaires de 8~Go de mémoire vidéo (comme les populaires NVIDIA GeForce RTX 2070, RTX 3060, RTX 4060, ou les puces Apple M-series). 
+
+Isolée, une carte graphique de 8~Go ne dispose pas d'assez de mémoire pour entraîner un grand modèle de 100 milliards de paramètres. Mais lorsqu'elles sont coordonnées par les protocoles mathématiques de HiveMind, des milliers de ces cartes modestes s'unissent pour former un \textbf{supercalculateur mondial, citoyen et transparent}. 
+
+Exactement comme des milliers de panneaux solaires sur les toits créent un réseau électrique plus résilient et propre que n'importe quelle centrale unique, ou comme des milliers d'abeilles coopèrent pour bâtir une ruche prospère sans qu'aucune n'ait à porter tout le fardeau.
+
+% ============================================================================
+% SECTION 2: LES VERROUS TECHNOLOGIQUES
+% ============================================================================
+\section{Vaincre les Verrous Technologiques sur Cartes Grand Public (8 Go)}
+
+Pendant des années, le monde de la recherche a affirmé qu'il était strictement impossible d'entraîner une IA moderne sur des ordinateurs familiaux connectés par de simples box internet résidentielles. Deux obstacles physiques semblaient infranchissables :
+
+\begin{enumerate}[leftmargin=1.8em]
+    \item \textbf{Le Mur de la VRAM (Mémoire Vidéo) :} Les modèles actuels pèsent des dizaines ou centaines de gigaoctets. Une carte grand public de 8~Go saturait et plantait instantanément.
+    \item \textbf{Le Mur de la Bande Passante (Internet) :} Dans un centre de données, les cartes sont reliées par des fibres optiques ultra-rapides. Une connexion ADSL ou fibre domestique est jusqu'à 1\,000 fois plus lente.
+\end{enumerate}
+
+Le projet HiveMind a définitivement brisé ces deux verrous grâce à quatre innovations mathématiques :
+
+\begin{tcolorbox}[title=1. Le Streaming NF4 en 4 Bits (Fini la Saturation Mémoire)]
+Au lieu de charger l'intégralité d'un cerveau artificiel monolithique dans la mémoire de la carte graphique, HiveMind compresse les connexions neuronales en 4 bits haute fidélité (NormalFloat-4). Les couches du modèle sont chargées de manière fluide et dynamique ("streaming") uniquement au moment exact où le calcul s'exécute. Résultat prouvé : un modèle géant à 96 experts peut fonctionner dans \textbf{moins de 2~Go de VRAM}, laissant le reste de la carte disponible pour vos applications !
+\end{tcolorbox}
+
+\begin{tcolorbox}[title=2. L'Optimisation DiLoCo et Compression DCT 2-Bits (Diviser le Trafic par 1000)]
+Dans l'entraînement distribué classique, les ordinateurs doivent s'envoyer des messages à chaque microseconde de calcul, ce qui saturerait instantanément une box internet familiale. Avec DiLoCo, chaque ordinateur bénévole travaille de façon autonome pendant 500 étapes locales successives. Au moment d'échanger les découvertes avec le reste de la communauté, les modifications sont compressées par transformée en cosinus discrète (DCT) à 2 bits. Le volume de données échangé sur internet est \textbf{réduit de 99,9\%}, permettant un entraînement fluide sur une simple connexion domestique.
+\end{tcolorbox}
+
+\begin{tcolorbox}[title=3. L'Architecture FoMoE : Des Experts Spécialisés et des Jetons-Sautants]
+Imaginez un grand hôpital où aucun médecin ne prétend tout savoir : certains sont cardiologues, d'autres pédiatres ou radiologues. HiveMind découpe l'intelligence en 128 « experts » spécialisés. Chaque ordinateur volontaire n'héberge que 8 à 16 experts dans sa mémoire. Lorsqu'une phrase est traitée, les mots sont aiguillés uniquement vers les experts compétents. Si l'un des spécialistes requis est hébergé sur un ordinateur temporairement déconnecté, le jeton « saute » élégamment sans bloquer le reste du réseau (\emph{Skip-Tokens}).
+\end{tcolorbox}
+
+\begin{tcolorbox}[title=4. Sécurité Zéro-Confiance (Zero-Trust) \& Détection des Tricheurs]
+Dans un réseau citoyen ouvert à tous, comment s'assurer qu'un participant n'envoie pas des résultats falsifiés ou aléatoires pour voler des récompenses ? HiveMind effectue des \textbf{contrôles stricts et imprévisibles sur 10\% des calculs}, en les rejouant à l'identique bit par bit. Si un nœud triche ou transmet des calculs erronés, le consensus géométrique \emph{Multi-Krum} l'exclut immédiatement et sa récompense est ramenée à zéro.
+\end{tcolorbox}
+
+% ============================================================================
+% SECTION 3: L'OPENROUTER
+% ============================================================================
+\section{L'OpenRouter : Le Carrefour Intelligent entre Utilisateurs et Cartes Graphiques}
+
+L'infrastructure HiveMind intègre une passerelle universelle appelée \textbf{OpenRouter}. Elle adopte le protocole standard le plus répandu au monde (l'API de complétion de chat d'OpenAI), ce qui signifie que n'importe quel développeur ou citoyen peut l'utiliser immédiatement avec ses logiciels habituels, sans rien réécrire.
+
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/fig2_openrouter_architecture.png}
+    \caption{Architecture de l'OpenRouter HiveMind : flux des requêtes depuis les utilisateurs vers les cartes graphiques bénévoles, avec sécurisation par séquestre et vérification zéro-confiance.}
+    \label{fig:fr_openrouter}
+\end{figure}
+
+\subsection{Les Trois Rôles de la Communauté}
+\begin{itemize}[leftmargin=1.8em]
+    \item \textbf{Le Consommateur (Développeurs, Chercheurs, Étudiants, Citoyens) :} Vous posez des questions, demandez de l'aide pour rédiger un texte, analyser des données ou programmer. Vous payez un tarif transparent par millier de jetons (mots), sans abonnement captif.
+    \item \textbf{Le Producteur (Joueurs, Propriétaires d'ordinateurs avec GPU) :} Vous lancez un petit programme léger en tâche de fond. Dès que vous n'utilisez pas votre ordinateur, votre carte graphique met sa puissance au service du bien commun et accumule des crédits de calcul ($HMT$ / $\$HIVE$).
+    \item \textbf{Le « Prosommateur » :} Vous prêtez la puissance de votre ordinateur la nuit pour accumuler des crédits, et vous utilisez gratuitement l'IA le jour pour vos propres projets !
+\end{itemize}
+
+% ============================================================================
+% SECTION 4: L'ÉQUILIBRE DE NASH PRODUCTEUR-CONSOMMATEUR
+% ============================================================================
+\section{L'Équilibre de Nash : Pourquoi Tout le Monde Gagne Mathématiquement}
+
+Comment un marché sans patron ni autorité centrale peut-il garantir que les prix restent abordables pour les utilisateurs, tout en assurant que les propriétaires de cartes graphiques gagnent plus d'argent qu'ils n'en dépensent en électricité ?
+
+C'est ici qu'intervient la théorie des jeux et le célèbre concept d'\textbf{Équilibre de Nash} (théorie récompensée par le Prix Nobel d'Économie). Un équilibre de Nash est une situation économique où \emph{aucun participant n'a d'intérêt à modifier unilatéralement son comportement} : tricher, spéculer ou refuser de coopérer fait perdre de l'argent.
+
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.88\textwidth]{figures/fig3_nash_equilibrium_market.png}
+    \caption{Le Marché Économique HiveMind : Intersection de la courbe de demande des consommateurs (mécanisme de Kelly) et de l'offre des producteurs (concours de Tullock), délimitant la zone de profit mutuel (Win-Win).}
+    \label{fig:fr_nash}
+\end{figure}
+
+\subsection{1. Côté Consommateurs : L'Allocation Équitable de Kelly}
+Chaque utilisateur déclare le prix maximal qu'il est prêt à payer pour 1\,000 jetons ($v_j$). La passerelle OpenRouter résout à chaque instant une équation d'équilibre :
+\begin{equation}
+    \sum_j \max\left(0, 1 - \frac{\omega}{v_j}\right) = 1
+\end{equation}
+Chaque consommateur reçoit alors une part de la capacité de calcul proportionnelle à son offre. 
+\textbf{La conséquence fondamentale :} Le prix de marché $\omega^*$ est toujours inférieur ou égal au prix maximal consenti par l'utilisateur. Le consommateur ne paie jamais trop cher et bénéficie d'un \textbf{surplus économique garanti}.
+
+\subsection{2. Côté Producteurs : Le Concours de Recettes de Tullock}
+Chaque propriétaire de carte graphique connaît son coût de revient en électricité ($c_i$, quelques centimes par heure). Le réseau ne lui attribue des calculs que lorsque le revenu net après frais dépasse strictement sa facture électrique :
+\begin{equation}
+    \omega \cdot (1 - f) > c_i
+\end{equation}
+Si le prix du marché baisse en dessous de son coût électrique, le nœud se met automatiquement en veille. Ainsi, \textbf{un propriétaire de GPU ne travaille jamais à perte}. Ses gains nets sont mathématiquement verrouillés.
+
+\subsection{3. Le Prix de l'Anarchie : Au Moins 75\% de l'Efficacité Parfaite}
+Dans un théorème célèbre publié en 2004, les économistes et mathématiciens Ramesh Johari et John Tsitsiklis ont démontré que ce mécanisme de marché décentralisé possède un \emph{Prix de l'Anarchie} borné par $4/3$. 
+
+En langage courant : un réseau coopératif totalement libre, sans aucun directeur ni régulateur central, parvient à capter \textbf{au moins 75\% du bien-être économique maximal} qu'aurait pu atteindre un planificateur central omniscient !
+
+% ============================================================================
+% SECTION 5: RÉSULTATS CONCRETS ET CAS D'USAGE
+% ============================================================================
+\section{Des Résultats Concrets Déjà Mesurés et Vérifiés}
+
+HiveMind n'est pas une simple promesse théorique sur papier. Le système a été déployé, mesuré et rigoureusement audité sur du matériel grand public :
+
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/fig4_use_cases_and_results.png}
+    \caption{Trois réussites concrètes de HiveMind : l'analyse astronomique citoyenne, l'assistant de code GWAYA-Lite sur 8 Go et le jeu vidéo Steam sans la moindre saccade.}
+    \label{fig:fr_results}
+\end{figure}
+
+\subsection{1. Astrophysique et Cosmologie (Science Citoyenne)}
+Durant une campagne pilote de 24 heures menée sur des cartes graphiques grand public de la communauté :
+\begin{itemize}[leftmargin=1.8em]
+    \item \textbf{12\,840 galaxies lointaines} ont été minutieusement scannées.
+    \item \textbf{9\,420 spectres lumineux} ont été traités et analysés.
+    \item \textbf{4 nouveaux candidats de lentilles gravitationnelles} ont été détectés, contribuant directement à l'étude de la matière noire dans l'univers, sans dépenser le moindre centime en serveurs cloud industriels.
+\end{itemize}
+
+\subsection{2. L'Assistant de Programmation GWAYA-Lite}
+En utilisant les techniques d'entraînement décentralisé de HiveMind sous une contrainte stricte de 8~Go de VRAM (NVIDIA RTX 2070 et Tesla T4), nous avons entraîné le modèle \textbf{GWAYA-Lite} :
+\begin{itemize}[leftmargin=1.8em]
+    \item Il atteint un score de \textbf{48,7\% sur le benchmark standard HumanEval} (résolution automatique de problèmes de code en Python).
+    \item Ses performances égalent celles de modèles commerciaux entraînés sur des infrastructures privées deux fois plus onéreuses.
+\end{itemize}
+
+\subsection{3. Le Minage Utile Compatible avec les Jeux Vidéo (Steam PoUW)}
+La majorité des propriétaires de cartes graphiques puissantes sont des joueurs de jeux vidéo. HiveMind intègre un protocole de préemption ultra-rapide :
+\begin{itemize}[leftmargin=1.8em]
+    \item Dès que vous lancez un jeu (par exemple sur Steam), le logiciel détecte la demande graphique et libère 100\% de la mémoire et de la puissance du GPU en \textbf{moins de 1,5 seconde}.
+    \item Votre jeu tourne à 60 images par seconde sans aucune saccade.
+    \item Dès que vous quittez la partie, HiveMind se réactive discrètement en tâche de fond pour reprendre sa tâche scientifique et vous faire gagner des crédits.
+\end{itemize}
+
+% ============================================================================
+% SECTION 6: GUIDE PRATIQUE POUR COMMENCER
+% ============================================================================
+\section{Guide Pratique : Comment Rejoindre la Ruche Dès Aujourd'hui}
+
+\subsection{1. Essayer Immédiatement dans Votre Navigateur (Sans Rien Installer)}
+Vous pouvez tester la vitesse de l'IA citoyenne directement depuis votre navigateur web, sur PC, tablette ou smartphone :
+\begin{center}
+    \url{https://hivemind-openrouter-1003063861791.us-central1.run.app/}
+\end{center}
+Cette console vous permet d'échanger avec les modèles, d'observer la vitesse d'affichage en temps réel (plus de 35 jetons par seconde) et de vérifier votre solde de crédits.
+
+\subsection{2. Utiliser HiveMind dans Votre Éditeur de Code (Cursor, VSCode, Cline)}
+Pour les développeurs souhaitant programmer avec une IA respectueuse de la confidentialité de leur code source :
+\begin{enumerate}[leftmargin=1.8em]
+    \item Dans les paramètres de votre extension (Continue, Cline, Aider ou Cursor), choisissez le fournisseur \textbf{OpenAI Compatible}.
+    \item Renseignez l'adresse de base (Base URL) : \url{https://hivemind-openrouter-1003063861791.us-central1.run.app/v1}
+    \item Entrez votre clé API personnelle (de format \texttt{hm-...}).
+    \item Sélectionnez le modèle \texttt{hivemind/auto}.
+\end{enumerate}
+
+\subsection{3. Prêter Votre Carte Graphique en 3 Lignes de Commande}
+Si vous possédez un PC sous Linux, Windows (WSL2) ou macOS avec puce Apple Silicon :
+\begin{verbatim}
+# 1. Télécharger le moteur local
+ollama run qwen2.5:0.5b
+
+# 2. Cloner le projet HiveMind
+git clone https://github.com/xaviercallens/HiveMind.git && cd HiveMind
+
+# 3. Lancer le micro-producteur d'IA
+python -m hivemind.openrouter.producer --key hm-VOTRE_CLE
+\end{verbatim}
+Votre ordinateur commence instantanément à valider des fragments de calcul et à accumuler des jetons de calcul $HMT$, tout en s'interrompant automatiquement dès que vous utilisez votre machine !
+
+% ============================================================================
+% SECTION 7: FOIRE AUX QUESTIONS (FAQ)
+% ============================================================================
+\section{Foire Aux Questions (FAQ) pour le Grand Public}
+
+\paragraph{Est-ce que participer à HiveMind use prématurément ma carte graphique ?}
+Non. Contrairement au minage de cryptomonnaies d'ancienne génération (comme le Proof-of-Work de Bitcoin ou Ethereum autrefois) qui poussait le matériel à ses limites thermiques maximales 24h/24, HiveMind effectue des inférences d'IA très douces par petits paquets, avec des tensions modérées. De plus, le système respecte automatiquement vos plafonds de température.
+
+\paragraph{Combien d'électricité cela consomme-t-il ?}
+Une carte graphique grand public en inférence d'IA consomme généralement entre 70 et 150 watts (soit l'équivalent d'une ou deux ampoules traditionnelles). Grâce au mécanisme de Nash expliqué plus haut, le système s'assure que la valeur des crédits que vous gagnez est toujours supérieure à ce que vous payez sur votre facture d'électricité.
+
+\paragraph{Mes données personnelles ou mon code restent-ils confidentiels ?}
+Oui. Dans les grands clouds américains, vos conversations sont souvent stockées pour réentraîner des modèles propriétaires. Avec HiveMind, les requêtes sont découpées et distribuées sur des modèles ouverts, sans enregistrement central de vos données privées, garantissant une souveraineté numérique totale.
+
+\paragraph{Qui possède les modèles d'intelligence artificielle créés ?}
+Personne et tout le monde à la fois : ils appartiennent au bien commun. Tous les modèles, poids synaptiques, codes sources et preuves mathématiques développés par la communauté HiveMind sont publiés sous licences libres et déposés de façon immuable sur l'archive scientifique internationale Zenodo (DOI : \texttt{10.5281/zenodo.22829767}).
+
+\vspace{1.0cm}
+\begin{tcolorbox}[colback=hiveEmerald!8, colframe=hiveEmerald, title=\textbf{Conclusion : Reprenons le Contrôle de l'Intelligence Artificielle}]
+L'intelligence artificielle est la technologie la plus déterminante du XXI\textsuperscript{e} siècle. Elle ne doit pas devenir le monopole exclusif de quelques multinationales. En unissant nos cartes graphiques de salon, nous construisons une intelligence libre, accessible à tous, souveraine et véritablement citoyenne. Bienvenue dans la Ruche !
+\end{tcolorbox}
+
+\end{document}

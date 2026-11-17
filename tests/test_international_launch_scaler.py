@@ -1,0 +1,328 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
+"""Unit and integration tests for Season 29 International Launch Scaler, Human/Agent Calendar & Nocturnal Image-MoE Monitor."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import numpy as np
+from fastapi.testclient import TestClient
+
+from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+from hivemind.swarm.international_launch_scaler import (
+    CLIENT_PRELUDE_MAX_VRAM_MIB,
+    GLOBAL_LAUNCH_REGIONS,
+    OPENROUTER_MAX_CONCURRENCY,
+    SUPPORTED_LAUNCH_LANGUAGES,
+    TESLA_T4_MIN_FREE_VRAM_MIB,
+    build_international_launch_calendar,
+    build_international_launch_roadmap,
+    coalesce_ledger_settlement_batch,
+    compress_top1pct_dct_ef21,
+    compute_hierarchical_fanout_plan,
+    decompress_top1pct_dct,
+    enroll_launch_participant,
+    monitor_nocturnal_image_moe_evolution,
+    query_local_tesla_t4_vram_guard,
+    route_follow_the_sun_workload,
+    select_adaptive_multisplit_cut,
+    select_boinc_plan_class_for_participant,
+)
+
+
+def test_hm_s29_01_adaptive_multisplit_cut_respects_1500mb_vram_ceiling() -> None:
+    """HM-S29-01: Adaptive Multi-Split ML cut-layer selection stays strictly <= 1,536 MiB and cuts WAN latency."""
+    slow_link = select_adaptive_multisplit_cut(
+        uplink_mbps=12.0,
+        rtt_ms=65.0,
+        client_vram_limit_mib=CLIENT_PRELUDE_MAX_VRAM_MIB,
+    )
+    assert slow_link.within_1500mb_background_ceiling is True
+    assert slow_link.client_prelude_vram_mib <= CLIENT_PRELUDE_MAX_VRAM_MIB
+    assert slow_link.step_latency_reduction_pct >= 85.0
+
+    fast_link = select_adaptive_multisplit_cut(
+        uplink_mbps=500.0,
+        rtt_ms=15.0,
+        client_vram_limit_mib=CLIENT_PRELUDE_MAX_VRAM_MIB,
+    )
+    assert fast_link.within_1500mb_background_ceiling is True
+    assert fast_link.client_prelude_vram_mib <= CLIENT_PRELUDE_MAX_VRAM_MIB
+    # Higher bandwidth allows deeper local cut (cut_index >= slow_link.selected_cut_index)
+    assert fast_link.selected_cut_index >= slow_link.selected_cut_index
+
+    # Ultra-constrained <700 MiB ceiling selects cut_index 1
+    ultra_low = select_adaptive_multisplit_cut(
+        uplink_mbps=100.0,
+        rtt_ms=20.0,
+        client_vram_limit_mib=700.0,
+    )
+    assert ultra_low.selected_cut_index == 1
+    assert ultra_low.client_prelude_vram_mib <= 700.0
+
+
+def test_hm_s29_02_top1pct_dct_ef21_exceeds_100x_compression_and_conserves_residual() -> None:
+    """HM-S29-02: Top-1% 2D-DCT + 2-bit quantization achieves >= 100x compression and exact EF21 conservation."""
+    rng = np.random.default_rng(42)
+    shape = (128, 128)
+    ef21_res = np.zeros(shape, dtype=np.float32)
+
+    for _ in range(3):
+        delta = rng.normal(0.0, 0.1, size=shape).astype(np.float32)
+        packet, recon_direct, next_res = compress_top1pct_dct_ef21(
+            delta,
+            ef21_residual_buffer=ef21_res,
+            top_k_fraction=0.01,
+        )
+        recon_wire = decompress_top1pct_dct(packet)
+
+        assert packet.compression_ratio >= 100.0
+        assert packet.residual_conservation_l2_error <= 1e-6
+        assert np.max(np.abs(recon_wire - recon_direct)) <= 1e-5
+
+        compensated = delta + ef21_res
+        drift = float(np.max(np.abs((recon_wire + next_res) - compensated)))
+        assert drift <= 1e-5
+        ef21_res = next_res
+
+
+def test_hm_s31_02_hierarchical_fanout_and_sqlite_coalescing() -> None:
+    """HM-S31-02: 6-Region Super-Peer fanout bounds coordinator ingress and SQLite coalescing conserves HMT."""
+    plan = compute_hierarchical_fanout_plan(
+        total_leaf_nodes=10_000,
+        branching_factor=32,
+        subswarm_size=18,
+        coordinator_wave_stagger_batches=5,
+    )
+    assert plan.regions_active == len(GLOBAL_LAUNCH_REGIONS) == 6
+    assert 15 <= plan.target_subswarm_size <= 20
+    assert plan.ingress_reduction_factor >= 30.0
+    assert plan.within_openrouter_concurrency_cap is True
+    assert sum(r["leaf_nodes"] for r in plan.regional_breakdown) == 10_000
+
+    # Coalesce 200 settlement events across 20 unique contributors
+    events = [
+        {
+            "contributor_handle": f"@bee-{i % 20:02d}",
+            "region_id": "eu-west" if i % 2 == 0 else "us-east",
+            "campaign_id": "NIGHT-REDDIT-VISION-MOE-V1",
+            "hmt_points": (i % 5) + 1,
+            "workunits": 1,
+        }
+        for i in range(200)
+    ]
+    batch = coalesce_ledger_settlement_batch(events, window_ms=250)
+    assert batch.raw_event_count == 200
+    assert batch.coalesced_row_count == 20
+    assert batch.write_iops_reduction_pct == 90.0
+    assert batch.hmt_conservation_exact is True
+    assert batch.total_hmt_before == batch.total_hmt_after > 0
+
+    empty_batch = coalesce_ledger_settlement_batch([])
+    assert empty_batch.raw_event_count == 0
+    assert empty_batch.hmt_conservation_exact is True
+
+
+def test_follow_the_sun_and_international_launch_calendar_human_and_agent() -> None:
+    """Verify Follow-the-Sun routing, multilingual Human announcements, and Agent A2A/MCP enrollment."""
+    sun = route_follow_the_sun_workload(utc_hour=23)
+    assert len(sun["regional_assignments"]) == 6
+    assert len(sun["nocturnal_training_regions"]) + len(sun["diurnal_inference_regions"]) == 6
+
+    cal = build_international_launch_calendar()
+    assert cal["event_id"] == "HIVEMIND-INTL-LAUNCH-WEEKEND-2026-10-30"
+    assert cal["non_monetary_charter"]["financial_value_usd_eur"] == 0.0
+    assert len(SUPPORTED_LAUNCH_LANGUAGES) == 10
+    for lang in SUPPORTED_LAUNCH_LANGUAGES:
+        assert lang in cal["multilingual_human_announcements"]
+    assert len(cal["boinc_global_plan_classes"]) == 3
+    assert len(cal["schedule_phases"]) == 4
+    assert len(cal["grand_challenges"]) == 4
+    assert "/.well-known/hivemind-launch-calendar.json" in (
+        cal["agent_a2a_mcp_protocol"]["discovery_endpoints"]["well_known_manifest"]
+    )
+    assert "/api/v1/launch/roadmap" in (
+        cal["agent_a2a_mcp_protocol"]["discovery_endpoints"]["roadmap_json"]
+    )
+
+    # Verify BOINC plan-class mapping across CPU, 8GB Consumer GPU, and 24GB Big GPU
+    cpu_boinc = select_boinc_plan_class_for_participant(gpu_vendor="cpu", vram_mib=0.0)
+    assert cpu_boinc["recommended_plan_class"] == "cpu_hivemind_solver"
+    assert cpu_boinc["quorum_replication"]["min_quorum"] == 2
+
+    mid_boinc = select_boinc_plan_class_for_participant(gpu_vendor="nvidia", vram_mib=8192.0)
+    assert mid_boinc["recommended_plan_class"] == "cuda_hivemind"
+
+    big_boinc = select_boinc_plan_class_for_participant(gpu_vendor="nvidia", vram_mib=24576.0)
+    assert big_boinc["recommended_plan_class"] == "cuda_hivemind_big"
+
+    # Enroll a Turing (sm_75 -> pre-Ampere FP32) human gamer and an Ada (sm_89 -> BF16) autonomous agent
+    human_rec = enroll_launch_participant(
+        handle="@CitizenParis",
+        participant_type="human",
+        region_id="eu-west",
+        compute_capability=(7, 5),
+        vram_mib=8192.0,
+        preferred_lang="de",
+    )
+    assert human_rec["participant_type"] == "human"
+    assert human_rec["preferred_language"] == "de"
+    assert human_rec["precision_cohort"]["is_pre_ampere_fp32"] is True
+    assert human_rec["precision_cohort"]["enforced_dtype"] == "fp32"
+    assert human_rec["adaptive_multisplit_plan"]["within_1500mb_background_ceiling"] is True
+    assert human_rec["boinc_integration_plan"]["recommended_plan_class"] == "cuda_hivemind"
+
+    agent_rec = enroll_launch_participant(
+        handle="agent://ruche/scout-bee-01",
+        participant_type="agent",
+        region_id="apac-east",
+        compute_capability=(8, 9),
+        vram_mib=1536.0,
+        preferred_lang="ko",
+    )
+    assert agent_rec["participant_type"] == "agent"
+    assert agent_rec["preferred_language"] == "ko"
+    assert agent_rec["precision_cohort"]["is_pre_ampere_fp32"] is False
+    assert agent_rec["precision_cohort"]["enforced_dtype"] == "bf16"
+
+
+def test_five_wave_international_launch_roadmap_and_compliance_matrix() -> None:
+    """Verify the 5-Wave International Launch Master Roadmap (S29-S33) and 6-region privacy/non-monetary compliance."""
+    roadmap = build_international_launch_roadmap()
+    assert roadmap["roadmap_id"] == "HIVEMIND-INTL-MASTER-ROADMAP-S29-S33"
+    assert roadmap["non_monetary_charter"]["financial_value_usd_eur"] == 0.0
+    assert len(roadmap["supported_languages"]) == 10
+    assert len(roadmap["waves"]) == 5
+    assert [w["wave_id"] for w in roadmap["waves"]] == [
+        "WAVE-0-PRELAUNCH-ENGINEERING-AND-NOCTURNAL-LOCK",
+        "WAVE-1-SUNDAY-PRODUCER-FIRST-IGNITION",
+        "WAVE-2-PROSUMER-AND-DEVELOPER-MIX-EXPANSION",
+        "WAVE-3-GLOBAL-MULTILINGUAL-CONSUMER-AND-CITIZEN-SCIENCE",
+        "WAVE-4-NEXTGEN-ZK-GEOMESH-AND-PUBLIC-AI-COMMONS",
+    ]
+    assert all(w["go_no_go_gate"]["gate_passed"] is True for w in roadmap["waves"])
+    assert roadmap["boinc_and_amcp_convergence"]["plan_classes"] == [
+        "cpu_hivemind_solver",
+        "cuda_hivemind",
+        "cuda_hivemind_big",
+    ]
+    assert len(roadmap["regional_sovereignty_and_compliance"]) == 6
+    assert all(r["financial_value_eur_usd"] == 0.0 for r in roadmap["regional_sovereignty_and_compliance"])
+    assert roadmap["scalability_milestones"]["wave3_10k_leaf_plan"]["total_leaf_nodes"] == 10_000
+    assert roadmap["scalability_milestones"]["wave4_100k_leaf_plan"]["total_leaf_nodes"] == 100_000
+
+
+def test_nocturnal_image_moe_evolution_monitor_and_dashboard_routes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify Nocturnal Image-MoE Pareto evolution monitor, Tesla T4 VRAM guard, and FastAPI endpoints."""
+    import subprocess
+
+    # IP-147 negative control: when nvidia-smi raises, guard must fail closed (not substitute 10,521 MiB)
+    def _raise_no_nvidia_smi(*_args: object, **_kwargs: object) -> str:
+        raise FileNotFoundError("nvidia-smi not found")
+
+    monkeypatch.setattr(subprocess, "check_output", _raise_no_nvidia_smi)
+    vram_unavail = query_local_tesla_t4_vram_guard()
+    assert vram_unavail["vram_headroom_guard_passed"] is False
+    assert vram_unavail["free_vram_mib"] is None
+    assert vram_unavail["probe_status"] == "NVIDIA_SMI_UNAVAILABLE"
+
+    # Positive control with measured nvidia-smi output
+    monkeypatch.setattr(
+        subprocess,
+        "check_output",
+        lambda *_a, **_kw: "NVIDIA Tesla T4, 15360, 4839, 10521\n",
+    )
+    vram = query_local_tesla_t4_vram_guard()
+    assert vram["min_required_free_vram_mib"] == TESLA_T4_MIN_FREE_VRAM_MIB
+    assert vram["vram_headroom_guard_passed"] is True
+    assert vram["probe_status"] == "MEASURED_NVIDIA_SMI"
+
+    mon = monitor_nocturnal_image_moe_evolution(
+        generations=2,
+        base_inner_steps=15,
+        repo_root=tmp_path,
+        save_artifacts=True,
+    )
+    assert mon["status"] == "ACTIVE_EVOLVING_GREEN"
+    assert mon["generations_executed"] == 2
+    assert mon["rejected_generations"] == 0
+    assert mon["pareto_ratchet_monotone_verified"] is True
+    assert (tmp_path / "artifacts" / "nocturnal_image_moe_evolution_monitor.json").exists()
+
+    # IP-231 negative control: strictly worsening candidate losses must NOT report verified or GREEN
+    worsening = monitor_nocturnal_image_moe_evolution(
+        generations=2,
+        base_inner_steps=15,
+        repo_root=tmp_path,
+        save_artifacts=False,
+        candidate_losses_override=[
+            {"reddit": 1.0, "astro": 1.0, "massive": 1.0},
+            {"reddit": 1.5, "astro": 1.5, "massive": 1.5},
+        ],
+    )
+    assert worsening["pareto_ratchet_monotone_verified"] is False
+    assert worsening["candidate_losses_monotone"] is False
+    assert worsening["rejected_generations"] == 1
+    assert worsening["status"] != "ACTIVE_EVOLVING_GREEN"
+
+    app = create_hivemind_at_home_app()
+    client = TestClient(app)
+
+    r_cal = client.get("/api/v1/launch/calendar")
+    assert r_cal.status_code == 200
+    assert r_cal.json()["event_id"] == "HIVEMIND-INTL-LAUNCH-WEEKEND-2026-10-30"
+
+    r_wk = client.get("/.well-known/hivemind-launch-calendar.json")
+    assert r_wk.status_code == 200
+    assert len(r_wk.json()["grand_challenges"]) == 4
+
+    r_rm = client.get("/api/v1/launch/roadmap")
+    assert r_rm.status_code == 200
+    assert r_rm.json()["roadmap_id"] == "HIVEMIND-INTL-MASTER-ROADMAP-S29-S33"
+    assert len(r_rm.json()["waves"]) == 5
+
+    r_wk_rm = client.get("/.well-known/hivemind-launch-roadmap.json")
+    assert r_wk_rm.status_code == 200
+    assert len(r_wk_rm.json()["supported_languages"]) == 10
+
+    r_enr = client.post(
+        "/api/v1/launch/enroll",
+        json={
+            "handle": "@AutonomousBeeAgent",
+            "participant_type": "agent",
+            "region_id": "us-east",
+            "compute_capability": [8, 6],
+            "vram_mib": 1536,
+            "uplink_mbps": 100.0,
+            "rtt_ms": 20.0,
+        },
+    )
+    assert r_enr.status_code == 200
+    assert r_enr.json()["status"] == "ENROLLED_INTERNATIONAL_LAUNCH"
+
+    r_plan = client.post(
+        "/api/v1/launch/scalability-plan",
+        json={"uplink_mbps": 30.0, "rtt_ms": 40.0, "total_leaf_nodes": 10000},
+    )
+    assert r_plan.status_code == 200
+    assert r_plan.json()["adaptive_multisplit_cut"]["within_1500mb_background_ceiling"] is True
+    assert r_plan.json()["hierarchical_fanout_plan"]["ingress_reduction_factor"] >= 30.0
+
+    r_evo = client.get("/api/v1/night-moe/reddit-vision/evolution")
+    assert r_evo.status_code == 200
+    assert r_evo.json()["pareto_ratchet_monotone_verified"] is True
+
+    # Also execute E20 benchmark suite live and verify all predictions pass (IP-122)
+    import sys
+
+    repo_root = Path(__file__).resolve().parents[1]
+    if str(repo_root / "scripts") not in sys.path:
+        sys.path.insert(0, str(repo_root / "scripts"))
+    from run_international_launch_and_vmoe_monitor import run_e20_benchmark_suite
+
+    e20_data = run_e20_benchmark_suite()
+    assert e20_data["status"] == "VERIFIED_PASS"
+    assert all(e20_data["predictions_check"].values())

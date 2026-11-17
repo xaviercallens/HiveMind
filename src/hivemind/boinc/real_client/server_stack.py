@@ -24,6 +24,7 @@ from typing import Any
 
 PLATFORM = "x86_64-pc-linux-gnu"
 PLAN_CLASS = "cuda_hivemind"
+CPU_SOLVER_PLAN_CLASS = "cpu_hivemind_solver"
 from hivemind.boinc.real_client.moe_profiles import PROFILES  # noqa: E402  (plan classes of the training profiles)
 APACHE_MODULES = {
     "mpm_prefork_module": "mod_mpm_prefork.so", "authz_core_module": "mod_authz_core.so", "authz_host_module": "mod_authz_host.so",
@@ -34,6 +35,10 @@ APACHE_MODULES = {
 
 
 def sh(cmd: list[str], cwd: Path | None = None, env: dict[str, str] | None = None, check: bool = True, timeout: int = 600) -> subprocess.CompletedProcess:
+    if not isinstance(cmd, list) or not cmd or not all(isinstance(c, str) and c for c in cmd):
+        raise ValueError("cmd must be a non-empty list of non-empty strings")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
+        raise ValueError("timeout must be a positive number")
     r = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout)
     if check and r.returncode:
         raise RuntimeError(f"{' '.join(cmd)} -> rc {r.returncode}\n{r.stdout[-1500:]}\n{r.stderr[-1500:]}")
@@ -42,14 +47,24 @@ def sh(cmd: list[str], cwd: Path | None = None, env: dict[str, str] | None = Non
 
 class Stack:
     def __init__(self, base: Path, boinc_src: Path, venv_python: str, repo_src: Path, port: int = 8081, name: str = "hmproj") -> None:
+        if isinstance(port, bool) or not isinstance(port, int) or not (1 <= port <= 65535):
+            raise ValueError("port must be an integer in [1, 65535]")
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_]+", name):
+            raise ValueError("name must be a non-empty alphanumeric/underscore identifier")
+        if not isinstance(venv_python, str) or not venv_python.strip():
+            raise ValueError("venv_python must be a non-empty string")
         self.base, self.src, self.venv_python, self.repo_src, self.port, self.name = base, boinc_src, venv_python, repo_src, port, name
         self.root = base / "project" / name
         self.url = f"http://127.0.0.1:{port}"
         self.master_url = f"{self.url}/{name}/"
         self.dbname, self.dbuser = name, "hmboinc"
         self.pwfile = base / "db_password"
+        self.account_seed_file = base / "account_password_seed"
         for d in ("log", "run", "project"):
             (base / d).mkdir(parents=True, exist_ok=True)
+        if not self.account_seed_file.exists():
+            self.account_seed_file.write_text(secrets.token_hex(16))
+            self.account_seed_file.chmod(0o600)
 
     # ------------------------------------------------------------------ database
     def sql(self, statement: str) -> str:
@@ -121,7 +136,8 @@ class Stack:
         text = re.sub(r"<host>[^<]*</host>", f"<host>{socket.gethostname().split('.')[0]}</host>", text, count=1)
         daemons = ["<daemons>", "<daemon><cmd>feeder -d 3</cmd></daemon>", "<daemon><cmd>transitioner -d 3</cmd></daemon>", "<daemon><cmd>file_deleter -d 3</cmd></daemon>"]
         for app in apps:  # same executable twice needs distinct output/pid files, or the start script skips the second
-            daemons.append(f"<daemon><cmd>script_validator -d 3 --app {app} --init_script \"{validator_shim} files result_id\"</cmd>"
+            compare_arg = f' --compare_script "{validator_shim} compare files2"' if app == "hivemind_solver_sweep" else ""
+            daemons.append(f"<daemon><cmd>script_validator -d 3 --app {app} --init_script \"{validator_shim} files result_id\"{compare_arg}</cmd>"
                            f"<output>validator_{app}.log</output><pid_file>validator_{app}.pid</pid_file></daemon>")
             daemons.append(f"<daemon><cmd>script_assimilator -d 3 --app {app} --script \"{assimilator_shim} wu_id files\"</cmd>"
                            f"<output>assimilator_{app}.log</output><pid_file>assimilator_{app}.pid</pid_file></daemon>")
@@ -135,7 +151,8 @@ class Stack:
         (self.root / "html" / "user" / "schedulers.txt").write_text(f"<scheduler>{self.url}/{self.name}_cgi/cgi</scheduler>\n")
 
     def write_plan_class_spec(self) -> None:
-        """One plan class per training profile; the big one has a higher ``min_gpu_ram_mb`` so the scheduler never offers its app to a small GPU."""
+        """One plan class per training profile; the big one has a higher ``min_gpu_ram_mb`` so the scheduler never offers its app to a small GPU.
+        Also registers ``cpu_hivemind_solver`` (Wave 2 Issue #270) as a CPU-only plan class without NVIDIA/CUDA coprocessor requirements."""
         classes = {PLAN_CLASS: 3500, **{p["plan_class"]: p["min_gpu_ram_mb"] for p in PROFILES.values()}}
         body = "".join(
             f" <plan_class>\n  <name>{name}</name>\n  <gpu_type>nvidia</gpu_type>\n  <cuda/>\n"
@@ -143,31 +160,70 @@ class Stack:
             "  <gpu_peak_flops_scale>0.1</gpu_peak_flops_scale>\n </plan_class>\n"
             for name, mb in classes.items()
         )
-        (self.root / "plan_class_spec.xml").write_text("<plan_classes>\n" + body + "</plan_classes>\n")
+        cpu_body = (
+            f" <plan_class>\n  <name>{CPU_SOLVER_PLAN_CLASS}</name>\n"
+            "  <cpu_frac>1.0</cpu_frac>\n  <avg_ncpus>1</avg_ncpus>\n </plan_class>\n"
+        )
+        (self.root / "plan_class_spec.xml").write_text("<plan_classes>\n" + body + cpu_body + "</plan_classes>\n")
 
     # ------------------------------------------------------------------ apps, templates, work
     def install_app(self, app: str, launcher_body: str, n_inputs: int, outputs: list[str], max_nbytes: int, version: int = 100,
-                    plan_class: str = PLAN_CLASS, gpu_ram_mb: int = 3500) -> None:
+                    plan_class: str = PLAN_CLASS, gpu_ram_mb: int = 3500, *, cpu_only: bool = False,
+                    min_quorum: int = 1, target_nresults: int | None = None) -> None:
+        is_cpu = cpu_only or plan_class == CPU_SOLVER_PLAN_CLASS
+        quorum = max(1, int(min_quorum))
+        target_res = max(quorum, int(target_nresults if target_nresults is not None else quorum))
+        max_err = max(2, target_res)
+        max_tot = max(3, target_res + 2)
         vdir = self.root / "apps" / app / str(version) / f"{PLATFORM}__{plan_class}"
         vdir.mkdir(parents=True, exist_ok=True)
         exe = vdir / f"{app}_{version}_{PLATFORM}"
         exe.write_text(launcher_body)
         exe.chmod(0o755)
-        (vdir / "version.xml").write_text(
-            f"<version>\n <file>\n  <physical_name>{exe.name}</physical_name>\n  <main_program/>\n </file>\n"
-            f" <plan_class>{plan_class}</plan_class>\n <avg_ncpus>1</avg_ncpus>\n <flops>4e12</flops>\n"
-            f" <coproc>\n  <type>NVIDIA</type>\n  <count>1</count>\n </coproc>\n <gpu_ram>{gpu_ram_mb * 1_000_000}</gpu_ram>\n</version>\n"
-        )
+        if is_cpu:
+            (vdir / "version.xml").write_text(
+                f"<version>\n <file>\n  <physical_name>{exe.name}</physical_name>\n  <main_program/>\n </file>\n"
+                f" <plan_class>{plan_class}</plan_class>\n <avg_ncpus>1</avg_ncpus>\n <flops>1.28e11</flops>\n</version>\n"
+            )
+        else:
+            (vdir / "version.xml").write_text(
+                f"<version>\n <file>\n  <physical_name>{exe.name}</physical_name>\n  <main_program/>\n </file>\n"
+                f" <plan_class>{plan_class}</plan_class>\n <avg_ncpus>1</avg_ncpus>\n <flops>4e12</flops>\n"
+                f" <coproc>\n  <type>NVIDIA</type>\n  <count>1</count>\n </coproc>\n <gpu_ram>{gpu_ram_mb * 1_000_000}</gpu_ram>\n</version>\n"
+            )
         tdir = self.root / "templates"
         tdir.mkdir(exist_ok=True)
         ins = "".join(f"<file_info><number>{i}</number></file_info>\n" for i in range(n_inputs))
         refs = "".join(f"<file_ref><file_number>{i}</file_number><open_name>{n}</open_name></file_ref>\n" for i, n in enumerate(["in.json", "adapter.pt"][:n_inputs]))
         (tdir / f"{app}_in").write_text(ins + "<workunit>\n" + refs + "<rsc_memory_bound>4e9</rsc_memory_bound>\n<rsc_disk_bound>2e9</rsc_disk_bound>\n"
-                                        "<delay_bound>86400</delay_bound>\n<min_quorum>1</min_quorum>\n<target_nresults>1</target_nresults>\n"
-                                        "<max_error_results>2</max_error_results>\n<max_total_results>3</max_total_results>\n<max_success_results>1</max_success_results>\n</workunit>\n")
+                                        f"<delay_bound>86400</delay_bound>\n<min_quorum>{quorum}</min_quorum>\n<target_nresults>{target_res}</target_nresults>\n"
+                                        f"<max_error_results>{max_err}</max_error_results>\n<max_total_results>{max_tot}</max_total_results>\n<max_success_results>{target_res}</max_success_results>\n</workunit>\n")
         outs = "".join(f"<file_info><name><OUTFILE_{i}/></name><generated_locally/><upload_when_present/><max_nbytes>{max_nbytes}</max_nbytes><url><UPLOAD_URL/></url></file_info>\n" for i in range(len(outputs)))
         orefs = "".join(f"<file_ref><file_name><OUTFILE_{i}/></file_name><open_name>{n}</open_name><copy_file/></file_ref>\n" for i, n in enumerate(outputs))
         (tdir / f"{app}_out").write_text(outs + "<result>\n" + orefs + "</result>\n")
+
+    def install_cpu_sweep_app(
+        self,
+        launcher_body: str,
+        *,
+        app: str = "hivemind_solver_sweep",
+        version: int = 100,
+        min_quorum: int = 2,
+        max_nbytes: int = 16_000_000,
+    ) -> None:
+        """Install the Wave 2 CPU-only parameter sweep app (``hivemind_solver_sweep``, quorum of 2)."""
+        self.install_app(
+            app=app,
+            launcher_body=launcher_body,
+            n_inputs=1,
+            outputs=["out.json"],
+            max_nbytes=max_nbytes,
+            version=version,
+            plan_class=CPU_SOLVER_PLAN_CLASS,
+            cpu_only=True,
+            min_quorum=min_quorum,
+            target_nresults=min_quorum,
+        )
 
     def project_env(self) -> dict[str, str]:
         return dict(os.environ, PYTHONPATH=f"{self.src}/py:{self.root}/py" + os.pathsep + os.environ.get("PYTHONPATH", ""), PATH=f"{self.base}/shims:{self.root}/bin:" + os.environ["PATH"])
@@ -187,11 +243,17 @@ class Stack:
         return r.stdout[-1500:]
 
     def deprecate_versions_below(self, version: int) -> None:
+        if isinstance(version, bool) or not isinstance(version, int) or version < 0:
+            raise ValueError("version must be a non-negative integer")
         self.sql(f"use {self.dbname}; update app_version set deprecated=1 where version_num<{version};")
 
     def stage(self, name: str, data: bytes) -> None:
+        if not isinstance(name, str) or not name.strip() or "/" in name or ".." in name:
+            raise ValueError("stage name must be a safe single filename")
+        if not isinstance(data, (bytes, bytearray)):
+            raise ValueError("data must be bytes")
         # create_work copies download/<name> into the hashed download hierarchy itself
-        (self.root / "download").mkdir(exist_ok=True)
+        (self.root / "download").mkdir(parents=True, exist_ok=True)
         (self.root / "download" / name).write_bytes(data)
 
     def ensure_chain_template(self, app: str = "hivemind_qlora_moe") -> str:
@@ -226,8 +288,15 @@ class Stack:
         sh(["bin/stop"], cwd=self.root, env=self.project_env(), check=False)
 
     # ------------------------------------------------------------------ accounts (through the real web stack)
+    def account_passwd_hash(self, email: str = "node@local.invalid") -> str:
+        if not self.account_seed_file.exists():
+            self.account_seed_file.write_text(secrets.token_hex(16))
+            self.account_seed_file.chmod(0o600)
+        seed = self.account_seed_file.read_text().strip()
+        return hashlib.md5((seed + email).encode()).hexdigest()
+
     def create_account(self, email: str = "node@local.invalid", name: str = "hivemind-t4") -> str:
-        pw_hash = hashlib.md5(("local-secret" + email).encode()).hexdigest()
+        pw_hash = self.account_passwd_hash(email)
         q = urllib.parse.urlencode({"email_addr": email, "passwd_hash": pw_hash, "user_name": name})
         body = urllib.request.urlopen(f"{self.master_url}create_account.php?{q}", timeout=30).read().decode()
         m = re.search(r"<authenticator>(.*?)</authenticator>", body)
@@ -247,9 +316,15 @@ class Stack:
 
 
 def launcher(venv_python: str, repo_src: Path, module: str, args: list[str], env: dict[str, str]) -> str:
+    if not isinstance(venv_python, str) or not venv_python.strip():
+        raise ValueError("venv_python must be a non-empty string")
+    if not isinstance(module, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", module):
+        raise ValueError("module must be a valid dotted Python module path")
     exports = "".join(f"export {k}={v}\n" for k, v in env.items())
     return f"#!/bin/bash\nunset LD_LIBRARY_PATH\nexport PYTHONPATH={repo_src}\n{exports}exec {venv_python} -W ignore -m {module} {' '.join(args)} \"$@\"\n"
 
 
 def copy_tree(src: Path, dst: Path) -> None:
+    if not isinstance(src, Path) or not isinstance(dst, Path):
+        raise TypeError("src and dst must be Path instances")
     shutil.copytree(src, dst, dirs_exist_ok=True)

@@ -1,0 +1,562 @@
+{
+  "all_supported": true,
+  "controls": {
+    "all_negative_passed": true,
+    "all_positive_passed": true,
+    "valid_run": true
+  },
+  "experiment_id": "S14_S15_MOE_ROUTER_INTERFERENCE_SELFSOL_CODE_BANDIT",
+  "hypotheses_supported": {
+    "HM_S14_02": true,
+    "HM_S14_03": true,
+    "HM_S14_04": true,
+    "HM_S14_07": true,
+    "HM_S15_03": true
+  },
+  "prereg_file": "S14_S15_moe_router_interference_selfsol_code_bandit_prereg.json",
+  "prereg_sha256": "2e68a5cc8750b525c415cdef543fcd477f9e143b1f49eedca6f608186fd35908",
+  "results": {
+    "HM_S14_02": {
+      "comparison": {
+        "gold_adapter_gate_receipt": {
+          "b": 33,
+          "baseline_pass": 157,
+          "both_fail": 24,
+          "both_pass": 124,
+          "c": 19,
+          "candidate_pass": 143,
+          "decision": "REJECT",
+          "n": 200,
+          "p_improvement": 0.9817582999958201,
+          "p_regression": 0.03519711053353114,
+          "p_two_sided": 0.07039422106706228,
+          "policy": {
+            "alpha": 0.05,
+            "max_unverified_fraction": 0.05,
+            "min_n": 30,
+            "require_improvement": true,
+            "tolerated_net_loss": 0
+          },
+          "reasons": [
+            "net loss 14 tasks (b=33, c=19) exceeds tolerated 0"
+          ],
+          "receipt_sha256": "d53966db09ffb90fe939aa84901e8d2f0152e23ec94691c01823bc0ee4d3597d",
+          "unverified_baseline": 0,
+          "unverified_candidate": 0,
+          "unverified_fraction": 0.0
+        },
+        "gold_adapter_vs_base_all": {
+          "a_accuracy": 0.715,
+          "a_correct": 143,
+          "b_accuracy": 0.785,
+          "b_correct": 157,
+          "delta": -0.07,
+          "mcnemar_exact_p": 0.07039422106706228,
+          "n": 200,
+          "only_a_right": 19,
+          "only_b_right": 33,
+          "significant_gain": false,
+          "significant_harm": false
+        },
+        "gold_adapter_vs_base_parsed": {
+          "a_accuracy": 0.7514,
+          "a_correct": 130,
+          "b_accuracy": 0.9075,
+          "b_correct": 157,
+          "delta": -0.1561,
+          "mcnemar_exact_p": 1.429926123819314e-05,
+          "n": 173,
+          "only_a_right": 6,
+          "only_b_right": 33,
+          "significant_gain": false,
+          "significant_harm": true
+        },
+        "n_base_parsed": 173,
+        "n_items": 200,
+        "self_solution_gate_receipt": {
+          "b": 1,
+          "baseline_pass": 157,
+          "both_fail": 16,
+          "both_pass": 156,
+          "c": 27,
+          "candidate_pass": 183,
+          "decision": "ACCEPT",
+          "n": 200,
+          "p_improvement": 1.0803341865539551e-07,
+          "p_regression": 0.9999999962747097,
+          "p_two_sided": 2.1606683731079102e-07,
+          "policy": {
+            "alpha": 0.05,
+            "max_unverified_fraction": 0.05,
+            "min_n": 30,
+            "require_improvement": true,
+            "tolerated_net_loss": 0
+          },
+          "reasons": [
+            "candidate did not lose on net"
+          ],
+          "receipt_sha256": "e0ba691695c098b0661f8f373663a8719f5412c5b7e2b50f89134b104052c68e",
+          "unverified_baseline": 0,
+          "unverified_candidate": 0,
+          "unverified_fraction": 0.0
+        },
+        "self_solution_vs_base_all": {
+          "a_accuracy": 0.915,
+          "a_correct": 183,
+          "b_accuracy": 0.785,
+          "b_correct": 157,
+          "delta": 0.13,
+          "mcnemar_exact_p": 2.1606683731079102e-07,
+          "n": 200,
+          "only_a_right": 27,
+          "only_b_right": 1,
+          "significant_gain": true,
+          "significant_harm": false
+        },
+        "self_solution_vs_base_parsed_h2": {
+          "a_accuracy": 0.9653,
+          "a_correct": 167,
+          "b_accuracy": 0.9075,
+          "b_correct": 157,
+          "delta": 0.0578,
+          "mcnemar_exact_p": 0.00634765625,
+          "n": 173,
+          "only_a_right": 11,
+          "only_b_right": 1,
+          "significant_gain": true,
+          "significant_harm": false
+        },
+        "self_solution_vs_cross_domain_control_h1": {
+          "a_accuracy": 0.915,
+          "a_correct": 183,
+          "b_accuracy": 0.605,
+          "b_correct": 121,
+          "delta": 0.31,
+          "mcnemar_exact_p": 4.336808689942018e-19,
+          "n": 200,
+          "only_a_right": 62,
+          "only_b_right": 0,
+          "significant_gain": true,
+          "significant_harm": false
+        },
+        "self_solution_vs_gold_adapter": {
+          "a_accuracy": 0.915,
+          "a_correct": 183,
+          "b_accuracy": 0.715,
+          "b_correct": 143,
+          "delta": 0.2,
+          "mcnemar_exact_p": 1.8189894035458565e-12,
+          "n": 200,
+          "only_a_right": 40,
+          "only_b_right": 0,
+          "significant_gain": true,
+          "significant_harm": false
+        },
+        "supported": true,
+        "unparsable_counts": {
+          "base": 27,
+          "gold_adapter": 1,
+          "self_solution_adapter": 0
+        }
+      },
+      "negative_control_passed": true,
+      "positive_control_passed": true,
+      "rejection_sampling_filter": {
+        "acceptance_rate": 0.8333,
+        "prompts_accepted": 50,
+        "prompts_rejected": 10,
+        "prompts_total": 60
+      },
+      "supported": true
+    },
+    "HM_S14_03": {
+      "admitted_adapters": [
+        "exoplanet",
+        "stars"
+      ],
+      "best_single_adapter": "exoplanet",
+      "corrupted_misrouted_negative_control_receipt": {
+        "b": 348,
+        "baseline_pass": 1226,
+        "both_fail": 830,
+        "both_pass": 878,
+        "c": 201,
+        "candidate_pass": 1079,
+        "decision": "REJECT",
+        "n": 2257,
+        "p_improvement": 0.9999999998956487,
+        "p_regression": 1.8302969107523205e-10,
+        "p_two_sided": 3.660593821504641e-10,
+        "policy": {
+          "alpha": 0.05,
+          "max_unverified_fraction": 0.05,
+          "min_n": 30,
+          "require_improvement": true,
+          "tolerated_net_loss": 0
+        },
+        "reasons": [
+          "net loss 147 tasks (b=348, c=201) exceeds tolerated 0"
+        ],
+        "receipt_sha256": "ddfa0d221377cb1b55652311f33269f8b116cbe21aecb7d3980b3afaacfbcedd",
+        "unverified_baseline": 0,
+        "unverified_candidate": 0,
+        "unverified_fraction": 0.0
+      },
+      "gated_harm_packs": [],
+      "gated_vs_base_receipt": {
+        "b": 37,
+        "baseline_pass": 1226,
+        "both_fail": 559,
+        "both_pass": 1189,
+        "c": 472,
+        "candidate_pass": 1661,
+        "decision": "ACCEPT",
+        "n": 2257,
+        "p_improvement": 1.7317847056462075e-97,
+        "p_regression": 1.0,
+        "p_two_sided": 3.463569411292415e-97,
+        "policy": {
+          "alpha": 0.05,
+          "max_unverified_fraction": 0.05,
+          "min_n": 30,
+          "require_improvement": true,
+          "tolerated_net_loss": 0
+        },
+        "reasons": [
+          "candidate did not lose on net"
+        ],
+        "receipt_sha256": "e94ec877f762e2945590f5ffb5279eda7112658e06344a8048bca623fd049358",
+        "unverified_baseline": 0,
+        "unverified_candidate": 0,
+        "unverified_fraction": 0.0
+      },
+      "gated_vs_best_single_plateau_receipt": {
+        "b": 1,
+        "baseline_pass": 1501,
+        "both_fail": 595,
+        "both_pass": 1500,
+        "c": 161,
+        "candidate_pass": 1661,
+        "decision": "ACCEPT",
+        "n": 2257,
+        "p_improvement": 2.7882281455681785e-47,
+        "p_regression": 1.0,
+        "p_two_sided": 5.576456291136357e-47,
+        "policy": {
+          "alpha": 0.05,
+          "max_unverified_fraction": 0.05,
+          "min_n": 30,
+          "require_improvement": true,
+          "tolerated_net_loss": 0
+        },
+        "reasons": [
+          "candidate did not lose on net"
+        ],
+        "receipt_sha256": "82fb55a773ba8ad03bcf79f5f35765f4bf817630babdadf4ddefd8072cc3bd6b",
+        "unverified_baseline": 0,
+        "unverified_candidate": 0,
+        "unverified_fraction": 0.0
+      },
+      "heldout_router_accuracy": 1.0,
+      "negative_control_passed": true,
+      "per_pack_routing": {
+        "astro_transfer": {
+          "base_correct": 108,
+          "gated_adapter": "base",
+          "gated_correct": 108,
+          "gated_unparsable": 0,
+          "n": 152,
+          "ungated_adapter": "stars",
+          "ungated_correct": 111,
+          "ungated_unparsable": 0
+        },
+        "cyber": {
+          "base_correct": 325,
+          "gated_adapter": "base",
+          "gated_correct": 325,
+          "gated_unparsable": 1,
+          "n": 500,
+          "ungated_adapter": "cyber",
+          "ungated_correct": 330,
+          "ungated_unparsable": 1
+        },
+        "exoplanet": {
+          "base_correct": 217,
+          "gated_adapter": "exoplanet",
+          "gated_correct": 524,
+          "gated_unparsable": 0,
+          "n": 600,
+          "ungated_adapter": "exoplanet",
+          "ungated_correct": 524,
+          "ungated_unparsable": 0
+        },
+        "maths": {
+          "base_correct": 157,
+          "gated_adapter": "base",
+          "gated_correct": 157,
+          "gated_unparsable": 27,
+          "n": 200,
+          "ungated_adapter": "maths",
+          "ungated_correct": 143,
+          "ungated_unparsable": 1
+        },
+        "physics_transfer": {
+          "base_correct": 264,
+          "gated_adapter": "base",
+          "gated_correct": 264,
+          "gated_unparsable": 2,
+          "n": 488,
+          "ungated_adapter": "maths",
+          "ungated_correct": 167,
+          "ungated_unparsable": 155
+        },
+        "stars": {
+          "base_correct": 155,
+          "gated_adapter": "stars",
+          "gated_correct": 283,
+          "gated_unparsable": 0,
+          "n": 317,
+          "ungated_adapter": "stars",
+          "ungated_correct": 283,
+          "ungated_unparsable": 0
+        }
+      },
+      "positive_control_passed": true,
+      "routing_plateau": {
+        "accuracy": 0.665,
+        "correct": 1501,
+        "n": 2257,
+        "unparsable": 36
+      },
+      "single_adapter_totals": {
+        "base": {
+          "accuracy": 0.5432,
+          "correct": 1226,
+          "n": 2257,
+          "unparsable": 30
+        },
+        "cyber": {
+          "accuracy": 0.5587,
+          "correct": 1261,
+          "n": 2257,
+          "unparsable": 27
+        },
+        "exoplanet": {
+          "accuracy": 0.665,
+          "correct": 1501,
+          "n": 2257,
+          "unparsable": 36
+        },
+        "maths": {
+          "accuracy": 0.4834,
+          "correct": 1091,
+          "n": 2257,
+          "unparsable": 388
+        },
+        "stars": {
+          "accuracy": 0.5875,
+          "correct": 1326,
+          "n": 2257,
+          "unparsable": 25
+        }
+      },
+      "supported": true,
+      "system_totals": {
+        "base_accuracy": 0.5432,
+        "base_correct": 1226,
+        "gated_routed_accuracy": 0.7359,
+        "gated_routed_correct": 1661,
+        "n": 2257,
+        "ungated_routed_accuracy": 0.6903,
+        "ungated_routed_correct": 1558
+      },
+      "ungated_harm_packs": [
+        "maths",
+        "physics_transfer"
+      ]
+    },
+    "HM_S14_04": {
+      "grid_report": {
+        "bonferroni_alpha": 0.0025,
+        "bonferroni_survivors": [
+          "cyber->exoplanet:GAIN",
+          "cyber->maths:HARM",
+          "cyber->stars:GAIN",
+          "exoplanet->maths:HARM",
+          "exoplanet->physics_transfer:HARM",
+          "exoplanet->stars:GAIN",
+          "maths->astro_transfer:HARM",
+          "maths->cyber:HARM",
+          "maths->exoplanet:GAIN",
+          "maths->physics_transfer:HARM",
+          "maths->stars:GAIN",
+          "stars->maths:HARM"
+        ],
+        "complete_full_size_grid": true,
+        "missing_cells": [],
+        "n_off_diagonal_cells": 20,
+        "n_packs": 6,
+        "n_subjects": 4,
+        "sampled_cells": [],
+        "timeout_cells": []
+      },
+      "legacy_maths_timeout_min": 12.0,
+      "measured_maths_eval_min": 36.0,
+      "negative_control_passed": true,
+      "no_limit_in_full_grid_plan": true,
+      "positive_control_passed": true,
+      "sized_timeouts_min": {
+        "astro_transfer": 15.0,
+        "cyber": 29.3,
+        "exoplanet": 28.8,
+        "maths": 57.6,
+        "physics_transfer": 27.3,
+        "stars": 15.0
+      },
+      "supported": true
+    },
+    "HM_S14_07": {
+      "code_expert_vs_base_receipt": {
+        "b": 0,
+        "baseline_pass": 24,
+        "both_fail": 3,
+        "both_pass": 24,
+        "c": 13,
+        "candidate_pass": 37,
+        "decision": "ACCEPT",
+        "n": 40,
+        "p_improvement": 0.0001220703125,
+        "p_regression": 1.0,
+        "p_two_sided": 0.000244140625,
+        "policy": {
+          "alpha": 0.05,
+          "max_unverified_fraction": 0.05,
+          "min_n": 30,
+          "require_improvement": true,
+          "tolerated_net_loss": 0
+        },
+        "reasons": [
+          "candidate did not lose on net"
+        ],
+        "receipt_sha256": "b6d773e39972055c2f8959f15aac6a194a27d03a3ad9072ccb64d8a39ef6bce0",
+        "unverified_baseline": 0,
+        "unverified_candidate": 0,
+        "unverified_fraction": 0.0
+      },
+      "code_expert_vs_control_receipt": {
+        "b": 0,
+        "baseline_pass": 8,
+        "both_fail": 3,
+        "both_pass": 8,
+        "c": 29,
+        "candidate_pass": 37,
+        "decision": "ACCEPT",
+        "n": 40,
+        "p_improvement": 1.862645149230957e-09,
+        "p_regression": 1.0,
+        "p_two_sided": 3.725290298461914e-09,
+        "policy": {
+          "alpha": 0.05,
+          "max_unverified_fraction": 0.05,
+          "min_n": 30,
+          "require_improvement": true,
+          "tolerated_net_loss": 0
+        },
+        "reasons": [
+          "candidate did not lose on net"
+        ],
+        "receipt_sha256": "7a27b6d9d44b0a4049571d127d3c27888633e121d48e90a05e1d772a67511c80",
+        "unverified_baseline": 0,
+        "unverified_candidate": 0,
+        "unverified_fraction": 0.0
+      },
+      "code_pack_manifest": {
+        "leakage": {
+          "identical_prompt_overlap": 0,
+          "key_overlap": 0
+        },
+        "n_eval": 40,
+        "n_train": 60,
+        "verified_train_rows": 60
+      },
+      "negative_control_passed": true,
+      "positive_control_passed": true,
+      "supported": true,
+      "verified_cyber_kept_keys": [
+        "cti-1",
+        "cti-2"
+      ]
+    },
+    "HM_S15_03": {
+      "arm_means": {
+        "bandit_cold": {
+          "early_regret": 17.233,
+          "last_half_expected_pass_rate": 0.9967,
+          "last_half_verified_pass_rate": 0.9967,
+          "regret": 18.667
+        },
+        "bandit_warm_budgeted": {
+          "early_regret": 7.692,
+          "last_half_expected_pass_rate": 0.9983,
+          "last_half_verified_pass_rate": 0.9983,
+          "regret": 8.542
+        },
+        "best_single_expert": {
+          "early_regret": 38.083,
+          "last_half_expected_pass_rate": 0.3833,
+          "last_half_verified_pass_rate": 0.385,
+          "regret": 149.833
+        },
+        "near_oracle_90": {
+          "early_regret": 4.125,
+          "last_half_expected_pass_rate": 0.9379,
+          "last_half_verified_pass_rate": 0.9371,
+          "regret": 15.817
+        },
+        "oracle": {
+          "early_regret": 0.0,
+          "last_half_expected_pass_rate": 1.0,
+          "last_half_verified_pass_rate": 1.0,
+          "regret": 0.0
+        },
+        "uniform": {
+          "early_regret": 43.317,
+          "last_half_expected_pass_rate": 0.2795,
+          "last_half_verified_pass_rate": 0.2833,
+          "regret": 173.792
+        }
+      },
+      "best_single_expert": "expert_coder",
+      "cold_beats_best_single_expert_seeds": 20,
+      "cold_beats_uniform_seeds": 20,
+      "controls": {
+        "negative_flat_world": true,
+        "positive_discriminating": true,
+        "positive_wiring": true
+      },
+      "n_seeds": 20,
+      "n_tasks": 24,
+      "negative_control_passed": true,
+      "positive_control_passed": true,
+      "rounds": 240,
+      "routing_plateau_pass_rate": 0.375,
+      "served_experts": [
+        "expert_astro",
+        "expert_coder",
+        "expert_math",
+        "expert_security"
+      ],
+      "single_expert_verified_pass_rates": {
+        "expert_astro": 0.25,
+        "expert_coder": 0.375,
+        "expert_math": 0.25,
+        "expert_security": 0.25
+      },
+      "supported": true,
+      "warm_beats_best_single_expert_seeds": 20,
+      "warm_lower_early_regret_than_cold_seeds": 20
+    }
+  },
+  "run_utc": "2026-11-06T16:50:23Z",
+  "wall_s": 10.944
+}

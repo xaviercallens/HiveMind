@@ -44,7 +44,7 @@ import json
 import math
 from pathlib import Path
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping
 
 import torch
 import torch.nn as nn
@@ -102,11 +102,29 @@ class HypothesisVerificationRecord:
     passed: bool
     key_metrics: Dict[str, Any]
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.hypothesis_id, str) or not self.hypothesis_id.strip():
+            raise ValueError("hypothesis_id must be a non-empty string")
+        if not isinstance(self.title, str) or not self.title.strip():
+            raise ValueError("title must be a non-empty string")
+        if not isinstance(self.category, str) or not self.category.strip():
+            raise ValueError("category must be a non-empty string")
+        if not isinstance(self.passed, bool):
+            raise ValueError("passed must be a boolean")
+        if not isinstance(self.key_metrics, Mapping):
+            raise ValueError("key_metrics must be a mapping")
+
 
 class TinyLoRALinear(nn.Module):
     """Deterministic LoRA-wrapped linear projection for fast inner-loop replay tests."""
 
     def __init__(self, in_features: int, out_features: int, rank_r: int = 8) -> None:
+        if isinstance(in_features, bool) or not isinstance(in_features, int) or in_features <= 0:
+            raise ValueError("in_features must be a positive integer")
+        if isinstance(out_features, bool) or not isinstance(out_features, int) or out_features <= 0:
+            raise ValueError("out_features must be a positive integer")
+        if isinstance(rank_r, bool) or not isinstance(rank_r, int) or rank_r <= 0:
+            raise ValueError("rank_r must be a positive integer")
         super().__init__()
         self.base_layer = nn.Linear(in_features, out_features, bias=False)
         self.base_layer.weight.requires_grad_(False)
@@ -115,6 +133,12 @@ class TinyLoRALinear(nn.Module):
         self.scaling = 2.0
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if not isinstance(x, torch.Tensor) or x.ndim < 1 or x.numel() == 0:
+            raise ValueError("x must be a non-empty torch.Tensor with at least 1 dimension")
+        if x.shape[-1] != self.base_layer.in_features:
+            raise ValueError(
+                f"x last dimension ({x.shape[-1]}) must match in_features ({self.base_layer.in_features})"
+            )
         return self.base_layer(x) + self.scaling * ((x @ self.lora_A.t()) @ self.lora_B.t())
 
 
@@ -122,6 +146,12 @@ class TinyDeterministicLoRALM(nn.Module):
     """Compact deterministic CausalLM with trainable 2D LoRA parameters."""
 
     def __init__(self, vocab_size: int = 128, hidden_size: int = 32, rank_r: int = 8) -> None:
+        if isinstance(vocab_size, bool) or not isinstance(vocab_size, int) or vocab_size < 2:
+            raise ValueError("vocab_size must be an integer >= 2")
+        if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 4:
+            raise ValueError("hidden_size must be an integer >= 4")
+        if isinstance(rank_r, bool) or not isinstance(rank_r, int) or rank_r <= 0:
+            raise ValueError("rank_r must be a positive integer")
         super().__init__()
         self.embed = nn.Embedding(vocab_size, hidden_size)
         self.embed.weight.requires_grad_(False)
@@ -131,6 +161,11 @@ class TinyDeterministicLoRALM(nn.Module):
         self.head.weight.requires_grad_(False)
 
     def forward(self, input_ids: torch.Tensor, labels: torch.Tensor | None = None) -> Any:
+        if not isinstance(input_ids, torch.Tensor) or input_ids.ndim != 2 or input_ids.numel() == 0:
+            raise ValueError("input_ids must be a non-empty 2D torch.Tensor")
+        if labels is not None:
+            if not isinstance(labels, torch.Tensor) or labels.shape != input_ids.shape:
+                raise ValueError("labels must be a torch.Tensor with the same shape as input_ids")
         h = self.embed(input_ids)
         h = torch.tanh(self.q_proj(h) + self.v_proj(h))
         logits = self.head(h)
@@ -158,6 +193,23 @@ def _build_tiny_qwen_and_branches(
     lora_rank_r: int = 8,
 ) -> tuple[nn.Module, Dict[str, Dict[str, torch.Tensor]]]:
     """Construct a deterministic Qwen2 QLoRA bundle and specialized domain LoRA branches."""
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if isinstance(num_branches, bool) or not isinstance(num_branches, int) or not (1 <= num_branches <= 4):
+        raise ValueError("num_branches must be an integer in 1..4")
+    if isinstance(num_layers, bool) or not isinstance(num_layers, int) or num_layers < 1:
+        raise ValueError("num_layers must be a positive integer")
+    if (
+        isinstance(hidden_size, bool)
+        or not isinstance(hidden_size, int)
+        or hidden_size < 4
+        or hidden_size % 4 != 0
+    ):
+        raise ValueError("hidden_size must be an integer >= 4 divisible by 4")
+    if isinstance(intermediate_size, bool) or not isinstance(intermediate_size, int) or intermediate_size < 4:
+        raise ValueError("intermediate_size must be an integer >= 4")
+    if isinstance(lora_rank_r, bool) or not isinstance(lora_rank_r, int) or lora_rank_r < 1:
+        raise ValueError("lora_rank_r must be a positive integer")
     torch.manual_seed(seed)
     base_model, _, _ = build_local_qwen2_backbone(
         seed=seed,
@@ -201,6 +253,8 @@ class ArchitectureHypothesisVerifier:
     """Executes all 10 architecture hypothesis verifications (`H1`..`H10`) deterministically."""
 
     def __init__(self, seed: int = 2026) -> None:
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         self.seed = int(seed)
 
     def verify_h1_opendiloco_cpu_flat_bucket(self) -> HypothesisVerificationRecord:
@@ -489,8 +543,27 @@ class ArchitectureHypothesisVerifier:
             },
         )
 
-    def verify_h5_skip_attention_car_and_async_dma(self) -> HypothesisVerificationRecord:
+    def verify_h5_skip_attention_car_and_async_dma(
+        self,
+        *,
+        simulated_attention_compute_ms: float = 5.0,
+        min_transfer_latency_ms: float = 0.0,
+    ) -> HypothesisVerificationRecord:
         """H5: Skip-Attention Speculative Expert Prefetch, Cache-Aware Routing (CAR) & Async DMA."""
+        if (
+            isinstance(simulated_attention_compute_ms, bool)
+            or not isinstance(simulated_attention_compute_ms, (int, float))
+            or not math.isfinite(float(simulated_attention_compute_ms))
+            or float(simulated_attention_compute_ms) < 0.0
+        ):
+            raise ValueError("simulated_attention_compute_ms must be a finite number >= 0.0")
+        if (
+            isinstance(min_transfer_latency_ms, bool)
+            or not isinstance(min_transfer_latency_ms, (int, float))
+            or not math.isfinite(float(min_transfer_latency_ms))
+            or float(min_transfer_latency_ms) < 0.0
+        ):
+            raise ValueError("min_transfer_latency_ms must be a finite number >= 0.0")
         gen = torch.Generator().manual_seed(self.seed + 5)
         num_experts = 16
         hidden_dim = 32
@@ -506,7 +579,9 @@ class ArchitectureHypothesisVerifier:
         for name in expert_names:
             streamer.stage_expert_in_pinned_ram(name, sample_expert_tensors)
         for name in expert_names[:4]:
-            streamer.async_dma_prefetch_to_vram(name, simulated_attention_compute_ms=5.0)
+            streamer.async_dma_prefetch_to_vram(
+                name, simulated_attention_compute_ms=simulated_attention_compute_ms
+            )
 
         out = streamer.prefetch_and_route_skip_attention_car(
             post_ffn_residual=post_ffn,
@@ -518,8 +593,12 @@ class ArchitectureHypothesisVerifier:
             top_k=2,
             car_threshold=0.45,
             max_prefetch_experts=6,
-            simulated_attention_compute_ms=5.0,
+            simulated_attention_compute_ms=simulated_attention_compute_ms,
         )
+        effective_raw_dma_ms = max(float(out["total_raw_dma_ms"]), float(min_transfer_latency_ms))
+        exposed_swap_ms = round(max(0.0, effective_raw_dma_ms - float(simulated_attention_compute_ms)), 3)
+        out["total_raw_dma_ms"] = round(effective_raw_dma_ms, 3)
+        out["exposed_swap_latency_ms_simulated"] = exposed_swap_ms
 
         passed = (
             out["speculative_topk_accuracy"] >= 0.75
@@ -894,6 +973,10 @@ class ArchitectureHypothesisVerifier:
 
     def run_all_verifications(self, output_path: Path | None = None) -> Dict[str, Any]:
         """Run all 10 architecture hypothesis checks and emit a cryptographically signed report."""
+        if output_path is not None:
+            if not isinstance(output_path, (Path, str)) or not str(output_path).strip():
+                raise ValueError("output_path must be a non-empty Path or string when provided")
+            output_path = Path(output_path)
         t0 = time.perf_counter()
         records = [
             self.verify_h1_opendiloco_cpu_flat_bucket(),

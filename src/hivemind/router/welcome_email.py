@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import math
 import os
 import smtplib
 import time
@@ -53,6 +54,8 @@ GITHUB_REPO_URL: str = "https://github.com/xaviercallens/HiveMind"
 
 def build_install_producer_shell_script(gateway_url: str = PUBLIC_RUCHE_URL) -> str:
     """Return a standalone 1-command bash onboarding script for GPU Producers."""
+    if not isinstance(gateway_url, str) or not gateway_url.strip() or not gateway_url.startswith(("https://", "http://")):
+        raise ValueError("gateway_url must be a non-empty http(s) URL")
     gw = gateway_url.rstrip("/")
     return f"""#!/usr/bin/env bash
 # ==============================================================================
@@ -102,7 +105,7 @@ fi
 ENDPOINT_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 echo ""
 echo "=============================================================================="
-echo "🛡️ SAFE & EASY GPU PRODUCER ONBOARDING (T4 16GB / RTX 2070 8GB / ANY GPU):"
+echo "GPU PRODUCER ONBOARDING (T4 16GB / RTX 2070 8GB / ANY GPU) - PROOF OF CONCEPT, public data only:"
 echo "=============================================================================="
 echo "1. Pull & run your recommended Ollama model locally:"
 echo "   • RTX 2070 (8 GB) / Consumer 8 GB:  ollama run qwen2.5-coder:7b"
@@ -133,6 +136,18 @@ def build_welcome_email_content(
     is_pioneer_first_user: bool = False,
 ) -> dict[str, Any]:
     """Generate the bilingual (EN + FR) subject, plain-text body, and HTML body for a user."""
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ValueError("account_id must be a non-empty string")
+    if not isinstance(handle, str):
+        raise ValueError("handle must be a string")
+    if not isinstance(role, str) or not role.strip():
+        raise ValueError("role must be a non-empty string")
+    if isinstance(balance_hmt, bool) or not isinstance(balance_hmt, (int, float)) or not math.isfinite(float(balance_hmt)) or float(balance_hmt) < 0.0:
+        raise ValueError("balance_hmt must be a finite non-negative float")
+    if recipient_email is not None and not isinstance(recipient_email, str):
+        raise ValueError("recipient_email must be a string or None")
+    if not isinstance(is_pioneer_first_user, bool):
+        raise ValueError("is_pioneer_first_user must be a boolean")
     safe_handle = html.escape(handle or account_id[:12])
     safe_account = html.escape(account_id)
     safe_role = html.escape(role)
@@ -185,6 +200,7 @@ def build_welcome_email_content(
 
     text_body = (
         f"Hello {handle or account_id[:12]},\n\n"
+        "PROOF OF CONCEPT: HiveMind is not a production service yet. Until it is fully secured, send only public, non-sensitive data (no secrets, passwords, API keys, personal, private or enterprise data). Prompts are processed by volunteer-run nodes whose operators are not verified.\n\n"
         f"{pioneer_banner_text}"
         "Thank you for joining Project HiveMind@home & La Ruche OpenRouter!\n\n"
         "1. YOUR ACCOUNT & HIVEMIND POINTS (HMT) SUMMARY\n"
@@ -243,6 +259,7 @@ def build_welcome_email_content(
 </head>
 <body style="margin:0;padding:24px;background:#0d0e11;color:#e4e2e6;font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.6;">
   <div style="max-width:720px;margin:0 auto;background:#131417;border:1px solid rgba(255,201,67,0.35);border-radius:12px;padding:28px;">
+    <p style="margin:0 0 16px;padding:10px 12px;border:1px solid #ffc943;border-radius:8px;color:#ffc943;font-size:13px;"><strong>&#9888; Proof of concept.</strong> HiveMind is not a production service yet. Until it is fully secured, send only public, non-sensitive data (no secrets, passwords, API keys, personal, private or enterprise data). Prompts are processed by volunteer-run nodes whose operators are not verified.</p>
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:16px;margin-bottom:20px;">
       <div>
         <div style="font-size:18px;font-weight:800;color:#ffc943;">🐝 PROJECT HIVEMIND@HOME &amp; LA RUCHE OPENROUTER</div>
@@ -265,7 +282,7 @@ def build_welcome_email_content(
         Across the world, millions of gamers, students, and researchers own capable consumer GPUs (4 GB to 24 GB VRAM) that sit idle 80% of the day. Like neighborhood rooftop solar panels feeding a shared smart grid:
       </p>
       <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:#cbd5e1;">
-        <li><strong>When your PC is idle:</strong> Your Worker Bee serves coding/scientific prompts or trains compact QLoRA adapters compressed <strong>30.89&times;</strong> via 8D Gosset $E_8$ lattice geometry.</li>
+        <li><strong>When your PC is idle:</strong> Your Worker Bee serves coding/scientific prompts or trains compact QLoRA adapters compressed via 8D Gosset $E_8$ lattice geometry (<strong>16&times;</strong> dense at 2 bits/dim; <strong>30.89&times;</strong> with top-k sparsity, ref: <code>artifacts/experiments/E10_lattice_diloco.json</code>).</li>
         <li><strong>Instant &lt;1.5s Game Preemption:</strong> Launch any game (Steam, Cyberpunk, Blender) and the hardware circuit-breaker frees 100% of your GPU in under 1.5 seconds.</li>
         <li><strong>Kelly-Tullock Nash Equilibrium:</strong> Producers earn <strong>85%</strong> of settled HMT points directly to their hash-chained ledger; Consumers get instant access to 5 capability tiers and 8 specialist Honeycomb Bees.</li>
       </ul>
@@ -319,6 +336,8 @@ def build_welcome_email_content(
 
 def _mask_email(email: str) -> str:
     """Mask an email address for safe telemetry display (e.g. ``x***@example.org``)."""
+    if not isinstance(email, str):
+        raise ValueError("email must be a string")
     clean = email.strip()
     if "@" not in clean:
         return "***"

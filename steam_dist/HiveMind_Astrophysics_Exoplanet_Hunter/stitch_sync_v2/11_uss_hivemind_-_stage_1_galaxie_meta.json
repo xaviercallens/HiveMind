@@ -1,0 +1,17 @@
+{
+  "name": "projects/10018415280079892710/screens/0a809c9ac9ed42c4b6db79e59efc7b48",
+  "title": "USS Hivemind - Stage 1: Galaxie",
+  "screenshot": {
+    "name": "projects/10018415280079892710/screens/0a809c9ac9ed42c4b6db79e59efc7b48/fileEntries/screenshot",
+    "downloadUrl": "https://stitch.googleapis.com/v1/projects/10018415280079892710/files/screenshot_00065ee22a35d14703b1bd978a2b25cf:download",
+    "mimeType": "image/png"
+  },
+  "htmlCode": {
+    "name": "projects/10018415280079892710/screens/0a809c9ac9ed42c4b6db79e59efc7b48/fileEntries/html",
+    "downloadUrl": "https://stitch.googleapis.com/v1/projects/10018415280079892710/files/0a809c9ac9ed42c4b6db79e59efc7b48:download",
+    "mimeType": "text/html"
+  },
+  "width": "780",
+  "height": "1768",
+  "deviceType": "MOBILE"
+}

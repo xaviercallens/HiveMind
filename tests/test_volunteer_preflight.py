@@ -61,7 +61,9 @@ def test_ready_machine_rtx3060() -> None:
     g = by_id(cs, "gpu")
     assert g.status == "ok"
     assert g.data["tiers_servable_total"] == [
+        "granite-1b-base",
         "crowd-v1",
+        "granite-moe",
         "coder-lite",
         "gemma-core",
         "bee-stars",
@@ -78,7 +80,7 @@ def test_ready_machine_rtx3060() -> None:
 
 def test_four_gb_card_trains_but_only_small_tiers() -> None:
     g = by_id(run(runner=smi(SMALL4)), "gpu")
-    assert g.status == "ok" and g.data["tiers_servable_total"] == ["crowd-v1", "coder-lite"]
+    assert g.status == "ok" and g.data["tiers_servable_total"] == ["granite-1b-base", "crowd-v1", "granite-moe", "coder-lite"]
 
 
 def test_two_gb_card_fails() -> None:
@@ -97,6 +99,13 @@ def test_no_gpu_fails_and_says_cpu_only_unsupported() -> None:
     g = by_id(cs, "gpu")
     assert g.status == "fail" and "No NVIDIA GPU found" in g.reason and "CPU-only" in g.reason
     assert pf.verdict_of(cs) == "not_ready"
+
+
+def test_allow_cpu_solver_succeeds_for_cpu_hivemind_solver() -> None:
+    cs = run(runner=no_smi, allow_cpu_solver=True)
+    g = by_id(cs, "gpu")
+    assert g.status == "ok" and g.data["plan_class"] == "cpu_hivemind_solver"
+    assert pf.verdict_of(cs) == "ready"
 
 
 @pytest.mark.parametrize("bad", ["garbage", "a, b, c, d, e", "x, 100, 5000, 1, 1", "only,two"])

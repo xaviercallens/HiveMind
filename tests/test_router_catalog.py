@@ -34,15 +34,63 @@ def test_every_tier_id_is_routable_and_unique_and_ordered_by_memory() -> None:
 
 def test_moe_tiers_exist_and_declare_their_active_parameters() -> None:
     moe = [tier for tier in TIERS if tier.moe]
-    assert {tier.tier_id for tier in moe} == {"bee-ruche-moe", "moe-qwen35-bee", "moe-general", "moe-coder"}
+    assert {tier.tier_id for tier in moe} == {"granite-1b-base", "granite-moe", "bee-ruche-moe", "moe-qwen35-bee", "moe-general", "moe-coder"}
     assert all(tier.active_params_b is not None and tier.active_params_b < 10 for tier in moe)
     assert all(tier.active_params_b is None for tier in TIERS if not tier.moe)
+
+
+def test_every_tier_says_what_it_really_is_base_adapter_or_alias() -> None:
+    from hivemind.router.catalog import catalog_payload
+
+    by_id = {t.tier_id: t for t in TIERS}
+    assert {t.kind for t in TIERS} <= {"base", "adapter", "alias"}
+    assert by_id["bee-stars"].kind == "adapter"  # a LoRA served under a local alias, not an Ollama library tag
+    assert by_id["coder"].kind == "base" and by_id["bee-rusty-sundials"].kind == "alias" and by_id["bee-rusty-sundials"].alias_of == "coder"
+    assert by_id["moe-general"].kind == "base" and by_id["bee-ruche-moe"].alias_of == "moe-general" and by_id["moe-qwen35-bee"].alias_of == "moe-general"
+    for tier in TIERS:  # an alias always points at a base tier that has the very same model tag
+        if tier.kind == "alias":
+            assert by_id[tier.alias_of].kind == "base" and by_id[tier.alias_of].ollama_tag == tier.ollama_tag
+        else:
+            assert tier.alias_of == ""
+    exposed = {t["tier_id"]: t for t in catalog_payload()["tiers"]}
+    assert exposed["bee-rusty-sundials"]["kind"] == "alias" and exposed["bee-rusty-sundials"]["alias_of"] == "coder"
+    # one model tag, several labels: the number of distinct pullable models is smaller than the number of tiers
+    assert len({t.ollama_tag for t in TIERS if t.kind != "adapter"}) < len([t for t in TIERS if t.kind != "adapter"])
+
+
+def test_no_catalog_entry_links_to_an_unpublished_repository_or_claims_training_it_did_not_do() -> None:
+    """Every partner entry whose Hugging Face repository does not exist is shown as unpublished, without a link, a parameter
+    count or a training-token count, and names the off-the-shelf model that actually serves its tier."""
+    from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, UNPUBLISHED_HF_REPOS
+
+    assert UNPUBLISHED_HF_REPOS
+    for entry in PREWIRED_PARTNER_MODELS:
+        assert entry.hf_repo not in UNPUBLISHED_HF_REPOS
+        assert not entry.hf_repo.startswith("xaviercallens/"), entry.public_id
+        if not entry.published:
+            assert entry.hf_repo == "" and entry.parameters_b == 0.0 and entry.tokens_trained_b == 0.0
+            assert entry.status == "UNPUBLISHED_NOT_TRAINED" and entry.title.startswith("Planned, not trained yet")
+        if entry.tier_id in {t.tier_id for t in TIERS}:
+            assert entry.served_by, entry.public_id
+
+
+def test_no_trained_moe_status_on_an_off_the_shelf_tier() -> None:
+    """A status that names a trained MoE is only shown when a HiveMind-built artefact serves the tier; otherwise the
+    entry is exposed as planned, not trained (owner decision, 2026-11-07)."""
+    from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, TRAINED_MOE_STATUSES
+
+    for entry in PREWIRED_PARTNER_MODELS:
+        if entry.status in TRAINED_MOE_STATUSES:
+            assert entry.served_by.startswith("hivemind-"), entry.public_id
+        if not entry.published:
+            assert entry.status == "UNPUBLISHED_NOT_TRAINED" and entry.tokens_trained_b == 0.0, entry.public_id
 
 
 @pytest.mark.parametrize(
     ("vram", "expected"),
     [
-        (3.9, None),
+        (0.4, None),
+        (3.9, "granite-1b-base"),  # the CPU-capable base tier fits any card; it is a text-completion model, not an assistant
         (4.0, "coder-lite"),
         (4.5, "gemma-core"),
         (5.5, "bee-stars"),
@@ -198,5 +246,61 @@ def test_season19_swarm_plan_endpoint_for_bees_and_miners(tmp_path: Path) -> Non
     assert len(plan["specialized_bees"]) == 14
     assert len(plan["seven_day_roadmap"]["days"]) == 6
     assert plan["target_cluster_shares"]["coding"] > 0.55
+
+
+def test_wave2_scientific_moe_models_and_producer_quorum_activation(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+    from hivemind.router.catalog import (
+        CPU_HYBRID_SOLVER_CATALOG,
+        normalize_model_alias,
+        resolve_producer_quorum_moe_state,
+    )
+
+    # Verify new Wave 2 Scientific MoE and frontier MoE aliases resolve to valid tiers
+    assert normalize_model_alias("hivemind/moe-scientific-wave2") == "bee-rusty-sundials"
+    assert normalize_model_alias("hivemind/moe-surrogate-sundials") == "bee-rusty-sundials"
+    assert normalize_model_alias("hivemind/moe-pde-fluid-quantum") == "moe-qwen35-bee"
+    assert normalize_model_alias("hivemind/moe-cosmology-dualscale") == "bee-stars"
+    assert normalize_model_alias("hivemind/moe-genetics-hopfield") == "bee-rusty-sundials"
+    assert normalize_model_alias("hivemind/moe-deepseek-prover-v2") == "bee-lean-prover"
+    assert normalize_model_alias("hivemind/moe-qwen3-coder-next") == "moe-coder"
+    assert normalize_model_alias("hivemind/moe-glm45-air-science") == "moe-general"
+
+    assert len(CPU_HYBRID_SOLVER_CATALOG) == 3
+    assert CPU_HYBRID_SOLVER_CATALOG[0].min_vram_gb == 0.0
+    assert CPU_HYBRID_SOLVER_CATALOG[1].min_quorum == 2
+
+    store = RouterStore(tmp_path / "router_quorum.db", b"k" * 32)
+    app = create_router_app(store, allow_private_producers=True)
+    client = TestClient(app)
+
+    cat = client.get("/v1/hivemind/catalog").json()
+    assert len(cat["cpu_hybrid_solver_tiers"]) == 3
+    assert len(cat["wave2_scientific_moe_quorum_stages"]) == 5
+
+    # Register 2 live producers and verify /v1/hivemind/moe/quorum-status activates Wave 2 Scientific MoE
+    for idx in range(2):
+        pid, _ = store.register(f"wave2-prod-{idx}", "producer")
+        store.upsert_producer(
+            pid,
+            f"https://prod-{idx}.hivemind.net",
+            [{"id": "bee-rusty-sundials", "local_name": "rusty-sundials-7b"}],
+            0.35,
+            40.0,
+            "gpu",
+        )
+
+    quorum = client.get("/v1/hivemind/moe/quorum-status").json()
+    assert quorum["connected_producers"] == 2
+    assert quorum["wave2_scientific_moe_active"] is True
+    assert quorum["quorum_sweep_enabled"] is True
+    assert quorum["boinc_min_quorum"] == 2
+    assert "hivemind/moe-scientific-wave2" in quorum["unlocked_moe_models"]
+
+    # Check 8-producer full swarm stage
+    full_state = resolve_producer_quorum_moe_state(8, total_vram_gb=64.0)
+    assert full_state["stage_id"] == "stage_4_full_swarm_20_expert_super_moe"
+    assert full_state["max_concurrent_experts"] == 20
+
 
 

@@ -192,9 +192,105 @@ def test_exemplar_byob_bees_lifecycle_and_attestation() -> None:
         assert attestation["accuracy_gain"] > 0.25
         assert attestation["mcnemar_p_value"] < 0.001
         assert len(attestation["attestation_sha256"]) == 64
+        assert len(attestation["adapter_sha256"]) == 64
+        assert attestation["adapter_sha256"] != attestation["attestation_sha256"]
+
+    # IP-166 negative control: paired outcomes with no accuracy gain must fail McNemar gate
+    no_gain_attestation = manager.register_and_attest_bee(
+        live_bees[0],
+        paired_outcomes=[(True, True), (False, False), (True, False), (False, True)],
+    )
+    assert no_gain_attestation["gate_passed"] is False
+    assert no_gain_attestation["status"] == "REJECTED_MCNEMAR_GATE"
+    assert no_gain_attestation["accuracy_gain"] <= 0.0
+
+    # Positive paired outcomes + explicit weights bytes / sha256 validation
+    assert manager.get_bee("bee-quantum-simd") is not None
+    pos_outcomes = [(False, True)] * 10 + [(True, True)] * 5
+    pos_att = manager.register_and_attest_bee(
+        live_bees[0],
+        paired_outcomes=pos_outcomes,
+        adapter_weights_bytes=b"verified-safetensors-weights",
+    )
+    assert pos_att["gate_passed"] is True
+    assert pos_att["status"] == "APPROVED_LIVE"
+
+    sha_att = manager.register_and_attest_bee(
+        live_bees[1],
+        adapter_sha256="f" * 64,
+    )
+    assert sha_att["adapter_sha256"] == "f" * 64
+
+    with pytest.raises(ValueError, match="adapter_sha256"):
+        manager.register_and_attest_bee(live_bees[0], adapter_sha256="invalid-sha")
+    with pytest.raises(ValueError, match="paired_outcomes"):
+        manager.register_and_attest_bee(live_bees[0], paired_outcomes=[])
 
     # Verify registry records
     assert len(registry) == 3
     assert "bee-quantum-simd" in registry
     assert "bee-reverse-cve" in registry
     assert "bee-genomics-crispr" in registry
+
+
+def test_plan_producer_quorum_moe_serving_and_boinc_cpu_sweep_install(tmp_path: Path) -> None:
+    from hivemind.boinc.real_client.server_stack import (
+        CPU_SOLVER_PLAN_CLASS,
+        PLATFORM,
+        Stack,
+    )
+
+    scheduler = DiurnalMoETrainingScheduler()
+    now_utc = 86400.0 * 2000.0 + 2 * 3600.0
+    scheduler.register_producer_profile(
+        DiurnalProducerProfile("acc_1", "paris.rtx2070", 8.0, "cuda-sm75", 1.0)
+    )
+    scheduler.register_producer_profile(
+        DiurnalProducerProfile("acc_2", "berlin.rtx3080", 12.0, "cuda-sm86", 1.0)
+    )
+    scheduler.register_producer_profile(
+        DiurnalProducerProfile("acc_3", "mtl.rtx4070", 12.0, "cuda-sm89", -4.0)
+    )
+    scheduler.register_producer_profile(
+        DiurnalProducerProfile("acc_4", "tokyo.t4", 16.0, "turing-t4", 9.0)
+    )
+
+    records = [
+        ProducerRecord("acc_1", "https://p1.example.com", (("bee-rusty-sundials", "q"),), 0.35, 40.0, 80.0, "cuda-sm75"),
+        ProducerRecord("acc_2", "https://p2.example.com", (("moe-scientific-wave2", "q"),), 0.35, 40.0, 80.0, "cuda-sm86"),
+        ProducerRecord("acc_3", "https://p3.example.com", (("moe-pde-fluid-quantum", "q"),), 0.35, 40.0, 80.0, "cuda-sm89"),
+        ProducerRecord("acc_4", "https://p4.example.com", (("moe-coder", "q"),), 0.35, 40.0, 80.0, "turing-t4"),
+    ]
+    serving_plan = scheduler.plan_producer_quorum_moe_serving(
+        records,
+        now_utc=now_utc,
+        system_load_ratio=0.35,
+    )
+    assert serving_plan["connected_producers"] == 4
+    assert serving_plan["stage_id"] == "stage_3_mesh4_wave2_pde_and_cluster_moe"
+    assert serving_plan["wave2_scientific_moe_active"] is True
+    assert serving_plan["quorum_sweep_enabled"] is True
+    assert serving_plan["total_vram_gb"] == 48.0
+    assert "hivemind/moe-pde-fluid-quantum" in serving_plan["unlocked_moe_models"]
+
+    # Verify BOINC CPU solver sweep plan class and app template installation
+    stack = Stack(
+        base=tmp_path / "boinc_base",
+        boinc_src=tmp_path / "boinc_src",
+        venv_python="/usr/bin/python3",
+        repo_src=tmp_path / "repo_src",
+    )
+    stack.root.mkdir(parents=True, exist_ok=True)
+    stack.write_plan_class_spec()
+    xml_text = (stack.root / "plan_class_spec.xml").read_text(encoding="utf-8")
+    assert CPU_SOLVER_PLAN_CLASS in xml_text
+
+    stack.install_cpu_sweep_app("#!/usr/bin/env python3\n", min_quorum=2)
+    in_tpl = (stack.root / "templates" / "hivemind_solver_sweep_in").read_text(encoding="utf-8")
+    assert "<min_quorum>2</min_quorum>" in in_tpl
+    assert "<target_nresults>2</target_nresults>" in in_tpl
+    app_dir = stack.root / "apps" / "hivemind_solver_sweep" / "100" / f"{PLATFORM}__{CPU_SOLVER_PLAN_CLASS}"
+    version_xml = (app_dir / "version.xml").read_text(encoding="utf-8")
+    assert f"<plan_class>{CPU_SOLVER_PLAN_CLASS}</plan_class>" in version_xml
+    assert "NVIDIA" not in version_xml
+

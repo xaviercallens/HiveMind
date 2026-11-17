@@ -1,0 +1,52 @@
+{
+  "schema": "hivemind.measured.v1",
+  "note": "Only results that were actually measured appear here, each with its source, method and sample size. Add a result only together with the artifact or script that produced it. Nothing here is a projection.",
+  "results": [
+    {
+      "id": "bee-stars-held-out-pack",
+      "model_id": "hivemind/bee-stars",
+      "what": "Accuracy on a held-out star-classification pack (a narrow task, not general astrophysics ability)",
+      "n": 317,
+      "correct": 283,
+      "accuracy": 0.8927,
+      "wilson95": [0.8539, 0.9222],
+      "baseline": "qwen2.5-coder:7b-instruct without the adapter: 148 items only the adapter got right, 20 only the baseline got right (exact McNemar p < 0.001)",
+      "served_through_router": {"correct": 282, "n": 317, "accuracy": 0.8896, "wilson95": [0.8503, 0.9195]},
+      "control": "a shuffled-label adapter agreed with the replies on only 104 of 317 items, so the check can fail",
+      "date": "2026-10-25",
+      "hardware": "Tesla T4, llama.cpp llama-server --lora",
+      "method": "scripts/night_eval.py, temperature 0, seed 7; scripts/night_pack_build.py eval pack",
+      "source": "artifacts/experiments/BEE_STARS_serving_check.json",
+      "caveats": "One expert on one narrow pack. The regression gate on other packs (HM-S14-08) has not been run, so this tier is experimental."
+    },
+    {
+      "id": "coder-lite-e2e-smoke",
+      "model_id": "hivemind/coder-lite",
+      "what": "End-to-end request latency through shield, gateway, escrow and ledger (Qwen2.5-Coder 1.5B Q4 on CPU)",
+      "n": 2,
+      "latency_seconds": [2.42, 1.22],
+      "tokens": [{"prompt": 46, "completion": 58}, {"prompt": 30, "completion": 21}],
+      "ledger": {"consumer_spent_hmt": 0.038294, "producer_earned_hmt": 0.03255},
+      "date": "2026-11-03",
+      "hardware": "8 vCPU, no GPU (llama.cpp -ngl 0)",
+      "method": "scripts/mvp_e2e_smoke.py (15 checks, all passed)",
+      "source": "docs/MVP_E2E_SMOKE.md",
+      "caveats": "Two requests: a smoke test of the metering path, not a benchmark. End-to-end time, not time-to-first-token."
+    }
+    ,
+    {
+      "id": "granite-1b-base-cpu-smoke",
+      "model_id": "hivemind/granite-1b-base",
+      "what": "End-to-end request latency of the plain Granite 3.1 1B-A400M base model (Q4_K_M) on CPU through shield, gateway, escrow and ledger; speed measured with 6 threads",
+      "n": 2,
+      "latency_seconds": [0.95, 0.78],
+      "tokens": [{"prompt": 10, "completion": 48}, {"prompt": 5, "completion": 48}],
+      "ledger": {"consumer_spent_hmt": 0.027424, "producer_earned_hmt": 0.02331},
+      "date": "2026-11-03",
+      "hardware": "8 vCPU, no GPU (llama.cpp -ngl 0), about 1.2 GB RAM; generation about 68 tokens/s",
+      "method": "scripts/mvp_e2e_smoke.py --tier granite-1b-base (15 checks, all passed); deploy/granite_cpu/completion.jinja",
+      "source": "docs/MVP_E2E_SMOKE.md",
+      "caveats": "A base model: it continues text and does not follow instructions. Quality was not measured; in the two test prompts it named Uranus instead of Neptune as a large planet and repeated itself. Two requests: a metering-path smoke test, not a benchmark."
+    }
+  ]
+}

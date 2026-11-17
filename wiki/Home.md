@@ -1,5 +1,8 @@
 # 🧠⚡ Project HiveMind Wiki — Comprehensive Documentation for Human Developers & AI Agents (`v3.8.0`)
 
+> [!WARNING]
+> **Proof of concept (PoC): not a production service yet.** Until HiveMind is fully secured, send only **public, non-sensitive data**: no secrets, passwords, API keys, personal information, or private or enterprise data. See [SECURITY.md](https://github.com/xaviercallens/HiveMind/blob/main/SECURITY.md).
+
 Welcome to the official **Project HiveMind** Wiki! This knowledgebase is synchronized between the [`wiki/`](https://github.com/xaviercallens/HiveMind/tree/main/wiki) directory in the main repository and the live **[GitHub Wiki (`github.com/xaviercallens/HiveMind/wiki`)](https://github.com/xaviercallens/HiveMind/wiki)**, and is actively referenced by our **Autonomous PR & Discussion Orchestrators** across **[GitHub Discussions](https://github.com/xaviercallens/HiveMind/discussions)**.
 
 > **⚖️ Binding Non-Monetary Charter — No Payment Involved; Computing Processing Benefits Only via "Points" ([`LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md`](https://github.com/xaviercallens/HiveMind/blob/main/LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md)):**

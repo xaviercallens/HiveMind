@@ -1,0 +1,29 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+[syncer] listening on 10.77.0.4:8765; waiting for 2 learners, K=2, merge=rda, grace=off
+[syncer] round  0 closed in 8.52s admitted=['0', '1'] deferred=[] loss=3.6519
+[syncer] round  1 closed in 1.13s admitted=['1', '0'] deferred=[] loss=3.1730
+[syncer] round  2 closed in 1.26s admitted=['0', '1'] deferred=[] loss=2.7250
+[syncer] round  3 closed in 3.77s admitted=['1', '0'] deferred=[] loss=2.3938
+[syncer] round  4 closed in 1.12s admitted=['1', '0'] deferred=[] loss=2.1217
+[syncer] round  5 closed in 1.06s admitted=['1', '0'] deferred=[] loss=1.8358
+[syncer] round  6 closed in 1.37s admitted=['1', '0'] deferred=[] loss=1.6866
+[syncer] round  7 closed in 1.22s admitted=['1', '0'] deferred=[] loss=1.6772
+[syncer] round  8 closed in 1.01s admitted=['1', '0'] deferred=[] loss=1.7265
+[syncer] round  9 closed in 1.02s admitted=['1', '0'] deferred=[] loss=1.8337
+[syncer] round 10 closed in 1.26s admitted=['1', '0'] deferred=[] loss=1.9987
+[syncer] round 11 closed in 1.37s admitted=['1', '0'] deferred=[] loss=2.2847
+{
+  "final_loss": 2.284651517868042,
+  "round_latency_s": {
+    "p50": 1.2392680644989014,
+    "p95": 5.907125449180599,
+    "p99": 7.995176119804385,
+    "mean": 2.009458541870117
+  },
+  "rounds_completed": 12,
+  "completed": true,
+  "receipt_sha256": "b9b239aa5070322cdd17659e30a5ee0da45187d865cb8ae07faabfd1af569443"
+}

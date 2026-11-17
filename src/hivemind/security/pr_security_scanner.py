@@ -19,6 +19,7 @@ Protects the decentralized AI swarm repository against:
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass, field
@@ -158,11 +159,23 @@ CRYPTO_WALLET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 # 2. Hardcoded Secrets & Private Keys
 SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("PEM Private Key Block", re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----")),
+    ("PEM Private Key Block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----")),
     ("GitHub Personal Access Token", re.compile(r"\b(?:ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{82})\b")),
+    ("GitHub OAuth / Server / User / Refresh Token", re.compile(r"\bgh[osur]_[A-Za-z0-9]{36}\b")),
+    # Anthropic (sk-ant-), OpenRouter (sk-or-v1-) and OpenAI (sk-, sk-proj-) keys: 32+ key characters after the prefix keeps
+    # short words such as "risk-" or "sk-learn" out (the pattern also needs a word boundary before "sk").
+    ("LLM Provider API Key (Anthropic / OpenRouter / OpenAI)", re.compile(r"\bsk-(?:ant-|or-v1-|proj-)?[A-Za-z0-9_-]{32,}")),
+    ("Google API Key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
+    ("Stripe Live Key", re.compile(r"\b[sr]k_live_[0-9A-Za-z]{24,}\b")),
+    ("JSON Web Token", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
     ("Hugging Face API Token", re.compile(r"\bhf_[A-Za-z0-9]{34,}\b")),
     ("AWS Access Key ID", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("Slack Webhook / Bot Token", re.compile(r"\bxox[baprs]-[0-9A-Za-z\-]{10,48}\b")),
+    # HiveMind gateway keys are "hm-" + 43 URL-safe characters; 40+ avoids test fixtures such as "hm-test-...-do-not-print"
+    ("HiveMind Gateway API Key", re.compile(r"\bhm-[A-Za-z0-9_-]{40,}")),
+    # Dashboard live keys are "hm_live_" + 32 hex characters (the format of the GHSA-gjc6-74f9-wmrr leak); a source
+    # line that builds one at run time ("hm_live_" + secrets.token_hex(16)) carries no hex run and is not matched.
+    ("HiveMind Dashboard Live Key", re.compile(r"\bhm_live_(?:demo_)?[0-9a-f]{20,}\b")),
 ]
 
 # 3. Exfiltration & Suspicious Outbound Sinks
@@ -545,7 +558,8 @@ class PRSecurityScanner:
                             file_path=file_path,
                             line_number=idx,
                             description=f"Hardcoded credential or key detected: {secret_label}.",
-                            evidence_snippet=stripped[:100] + "...",
+                            # Never copy the match into the report (it would republish the credential): label, line and a hash prefix only.
+                            evidence_snippet=f"{secret_label}; match redacted (sha256 {hashlib.sha256(m_sec.group(0).encode()).hexdigest()[:8]})",
                             remediation="Remove hardcoded credentials immediately and rotate the compromised secret.",
                         )
                     )
@@ -626,7 +640,7 @@ class PRSecurityScanner:
         email_verified = (
             normalize_and_verify_owner_email(author_email).is_authorized_owner
             if author_email is not None
-            else (author_clean in self.trusted_maintainers)
+            else False
         )
         is_trusted_owner = (author_clean in self.trusted_maintainers) and email_verified
 
@@ -644,11 +658,7 @@ class PRSecurityScanner:
 
         # 1b. OwnerOrderGuardrail: Block any administrative/directive order not from callensxavier@gmail.com
         order_guard = OwnerOrderGuardrail(strict_orders_only=False)
-        effective_email = (
-            author_email
-            if author_email is not None
-            else (AUTHORIZED_OWNER_EMAIL if is_trusted_owner else "")
-        )
+        effective_email = author_email if author_email is not None else ""
         order_decision = order_guard.evaluate_request(
             OwnerOrderRequest(
                 request_id=f"PR#{pr_number}",
@@ -808,14 +818,13 @@ class PRSecurityScanner:
 
             # Python AST security check on full content or reconstructable Python source
             if raw_fname.endswith(".py") and status != "removed":
-                if not (is_trusted_owner and is_security_Rule_file):
-                    if isinstance(full_content, str) and full_content.strip():
-                        findings.extend(self.scan_python_ast_security(raw_fname, full_content))
-                    elif added_lines_text:
-                        # Also check added lines for dangerous sinks even if only diff patch is provided
-                        findings.extend(
-                            self._scan_added_python_diff_lines(raw_fname, added_lines_text)
-                        )
+                if isinstance(full_content, str) and full_content.strip():
+                    findings.extend(self.scan_python_ast_security(raw_fname, full_content))
+                elif added_lines_text and not (is_trusted_owner and is_security_Rule_file):
+                    # Also check added lines for dangerous sinks even if only diff patch is provided
+                    findings.extend(
+                        self._scan_added_python_diff_lines(raw_fname, added_lines_text)
+                    )
 
         # Rule CB-02 & CB-03: "Code Boubou" Hollow Bounty-Farming & Fake Issue Closure Detection
         claims_issue_or_bounty = bool(ISSUE_CLAIM_REGEX.search(combined_meta))

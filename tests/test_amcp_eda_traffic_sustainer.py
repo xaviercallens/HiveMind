@@ -13,6 +13,8 @@ from hivemind.swarm.amcp_eda_traffic_sustainer import (
     LEVERAGED_AMCP_AND_HIVEMIND_PRS,
     AMCPEventDrivenTrafficSustainer,
     build_sunday_producer_first_international_plan,
+    plan_100_producer_mesh_scaling,
+    select_100_node_optimal_producer,
 )
 
 
@@ -74,3 +76,54 @@ def test_gateway_exposes_amcp_eda_sunday_launch_plan(tmp_path: Path) -> None:
     amcp_plan = resp["amcp_eda_sunday_launch_plan"]
     assert amcp_plan["plan_id"] == "HM-S19-AMCP-EDA-SUNDAY-LAUNCH"
     assert len(amcp_plan["plan_sha256"]) == 64
+    assert amcp_plan["hundred_producer_mesh_scaling"]["active_producers"] == 100
+
+
+def test_select_100_node_optimal_producer_prefers_warm_residency_and_same_region() -> None:
+    regions = ("eu-west", "us-east", "us-west", "ap-northeast")
+    candidates = [
+        {
+            "account_id": f"prod-{i:03d}",
+            "endpoint_id": "ep-0",
+            "region": regions[i % 4],
+            "loaded": (i % 5 == 0),
+            "inflight": i % 7,
+            "capacity_1k": 30,
+            "models": ["hivemind/qwen3.5-coder-14b"],
+            "paused": (i == 0),  # prod-000 is paused and must be skipped
+        }
+        for i in range(100)
+    ]
+    res = select_100_node_optimal_producer(
+        candidates,
+        model_id="hivemind/qwen3.5-coder-14b",
+        client_region="eu-west",
+    )
+    assert res["total_eligible_candidates"] == 99
+    assert res["best_residency_tier"] == 0
+    selected = res["selected_producer"]
+    assert selected["account_id"] != "prod-000"
+    assert selected["loaded"] is True
+    assert selected["region"] == "eu-west"
+    assert res["warmup_recommended"] is False
+
+    mesh = plan_100_producer_mesh_scaling(active_producers=100, endpoints_per_producer=2, heartbeat_interval_s=30.0)
+    assert mesh["basis"] == "closed_form_model"
+    assert mesh["total_live_endpoints"] == 200
+    assert mesh["sqlite_lock_reduction_factor"] == 50.0
+
+
+def test_ip232_scale_100_status_empty_store_reports_zero_live_endpoints(tmp_path: Path) -> None:
+    """IP-232: scale-100-status with an empty store must report 0 live endpoints under live labels and basis=closed_form_model."""
+    store = RouterStore(tmp_path / "empty_router.db", b"k" * 32)
+    app = create_router_app(store, allow_private_producers=True)
+    client = TestClient(app)
+
+    resp = client.get("/v1/hivemind/producers/scale-100-status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["live_store_scale_status"]["live_endpoints"] == 0
+    assert body["amcp_mesh_scaling"]["total_live_endpoints"] == 0
+    assert body["amcp_mesh_scaling"]["active_producers"] == 0
+    assert body["amcp_mesh_scaling"]["basis"] == "closed_form_model"
+

@@ -113,6 +113,17 @@ def _encode_synthetic_regression_batch(
     """
     import math
 
+    if not isinstance(samples, (list, tuple)) or any(not isinstance(s, str) or "\x00" in s for s in samples):
+        raise ValueError("samples must be a sequence of strings")
+    if isinstance(in_features, bool) or not isinstance(in_features, int) or in_features < 1:
+        raise ValueError("in_features must be a positive integer")
+    if isinstance(out_features, bool) or not isinstance(out_features, int) or out_features < 1:
+        raise ValueError("out_features must be a positive integer")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+    if not isinstance(is_holdout, bool):
+        raise ValueError("is_holdout must be a boolean")
+
     gen_manifold = torch.Generator().manual_seed(seed)
     manifold_dim = min(4, in_features, out_features)
     basis_u = torch.randn(
@@ -154,6 +165,28 @@ def train_single_domain_lora_adapter(
     compression-only reconstruction.
     """
     import hashlib
+    import math
+
+    if not isinstance(domain_name, str) or not domain_name.strip():
+        raise ValueError("domain_name must be a non-empty string")
+    if not isinstance(reference_lora_state, dict) or not reference_lora_state:
+        raise ValueError("reference_lora_state must be a non-empty dictionary")
+    if isinstance(lora_rank_r, bool) or not isinstance(lora_rank_r, int):
+        raise ValueError("lora_rank_r must be an integer")
+    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, int):
+        raise ValueError("lora_alpha must be an integer")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int):
+        raise ValueError("inner_steps must be an integer")
+    if isinstance(lr, bool) or not isinstance(lr, (int, float)):
+        raise ValueError("lr must be a number")
+    if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)):
+        raise ValueError("topk_ratio must be a number")
+    if custom_corpus is not None and (
+        not isinstance(custom_corpus, (list, tuple))
+        or len(custom_corpus) == 0
+        or any(not isinstance(s, str) or not s.strip() for s in custom_corpus)
+    ):
+        raise ValueError("custom_corpus must be None or a non-empty sequence of non-empty strings")
 
     guard = SwarmTrainingAndStoreGuard()
     spec = SEASON_3_DOMAIN_EXPERT_SPECS.get(
@@ -210,6 +243,14 @@ def train_single_domain_lora_adapter(
             prefix = k.split("lora_B")[0]
             prefix_groups.setdefault(prefix, {})["B"] = v.detach().clone().to(torch.float32)
             prefix_groups[prefix]["key_B"] = k  # type: ignore[assignment]
+
+    if not prefix_groups:
+        raise ValueError("reference_lora_state must contain at least one (lora_A, lora_B) adapter pair")
+    for prefix, grp in prefix_groups.items():
+        if "A" not in grp or "B" not in grp:
+            raise ValueError(f"reference_lora_state prefix {prefix!r} is missing a matched lora_A/lora_B pair")
+        if grp["A"].ndim != 2 or grp["B"].ndim != 2 or int(grp["A"].shape[0]) != int(grp["B"].shape[1]):
+            raise ValueError(f"reference_lora_state prefix {prefix!r} must have 2D (lora_A, lora_B) with matching rank")
 
     init_state = {k: v.detach().clone().to(torch.float32) for k, v in reference_lora_state.items()}
     trained_state: Dict[str, torch.Tensor] = {}
@@ -324,6 +365,23 @@ def train_and_publish_season3_domain_experts(
     Text shards are stored but not used to construct training inputs/targets.
     The optional hot-plug exercises model wiring, not domain capability.
     """
+    if not isinstance(store, ContentAddressedSwarmStore):
+        raise ValueError("store must be a ContentAddressedSwarmStore")
+    if not isinstance(reference_lora_state, dict) or not reference_lora_state:
+        raise ValueError("reference_lora_state must be a non-empty dictionary")
+    if moe_model is not None and not isinstance(moe_model, UpcycledSparseMoEModel):
+        raise ValueError("moe_model must be None or an UpcycledSparseMoEModel")
+    if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not (0.0 < float(topk_ratio) <= 1.0):
+        raise ValueError("topk_ratio must be in (0.0, 1.0]")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
+    if domains is not None and (
+        not isinstance(domains, (list, tuple))
+        or len(domains) == 0
+        or any(not isinstance(d, str) or not d.strip() or any(ord(c) < 32 for c in d) for d in domains)
+        or len({d.strip() for d in domains}) != len(domains)
+    ):
+        raise ValueError("domains must be None or a non-empty sequence of unique non-empty strings")
     target_domains = list(domains) if domains is not None else list(SEASON_3_DOMAIN_EXPERT_SPECS.keys())
     registry = Season3DomainExpertRegistry()
     receipts: Dict[str, Dict[str, Any]] = {}
@@ -399,6 +457,13 @@ def train_and_publish_astrophysics_domain_experts(
     planet or star classification accuracy is measured. The optional hot-plug
     exercises model wiring, not domain capability.
     """
+    if domains is not None and (
+        not isinstance(domains, (list, tuple))
+        or len(domains) == 0
+        or any(not isinstance(d, str) or not d.strip() or any(ord(c) < 32 for c in d) for d in domains)
+        or len({d.strip() for d in domains}) != len(domains)
+    ):
+        raise ValueError("domains must be None or a non-empty sequence of unique non-empty strings")
     target_domains = (
         list(domains) if domains is not None else list(ASTROPHYSICS_DOMAIN_EXPERT_SPECS.keys())
     )

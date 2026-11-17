@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Cloud Run entrypoint: HiveMind@home dashboard, with sign-up and the OpenAI-compatible API served by the real router.
 
 The dashboard image carries its own `/v1/*`, `/signup`, `/login` and `/openrouter` routes, whose completions come from a
@@ -38,7 +39,26 @@ EXPERIMENTS = ARTIFACTS_DIR / "experiments"
 ROUTER = os.environ.get("HIVEMIND_ROUTER_URL", "https://hivemind-openrouter-1003063861791.us-central1.run.app").rstrip("/")
 PUBLIC_BASE = os.environ.get("HIVEMIND_PUBLIC_BASE", "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app").rstrip("/")
 REPLACED_PREFIXES = ("/v1/",)
-REPLACED_PATHS = {"/signup", "/login", "/openrouter", "/playground", "/join", "/rejoindre"}
+REPLACED_PATHS = {
+    "/signup",
+    "/login",
+    "/openrouter",
+    "/playground",
+    "/join",
+    "/rejoindre",
+    "/community",
+    "/boinc",
+    "/benchmarks",
+    "/comparatif",
+    "/life-as-a-bee",
+    "/manifesto",
+    "/manifeste",
+    "/night-moe",
+    "/api/v1/night-moe",
+    "/scripts/{script_name}",
+    "/api/v1/community/hub",
+    "/api/v1/community/boinc-sync",
+}
 HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade",
               "host", "content-length", "content-encoding"}
 
@@ -68,8 +88,54 @@ async def forward_to_router(path: str, request: Request) -> Response:
 
 @app.api_route("/signup", methods=["GET", "HEAD"])
 @app.api_route("/login", methods=["GET", "HEAD"])
+@app.api_route("/register", methods=["GET", "HEAD"])
+@app.api_route("/connexion", methods=["GET", "HEAD"])
 def signup_redirect() -> RedirectResponse:
     return RedirectResponse(f"{ROUTER}/signup", status_code=307)
+
+
+@app.api_route("/benchmarks", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@app.api_route("/comparatif", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def benchmarks_proxy(request: Request) -> Response:
+    lang_qs = f"?lang={request.query_params.get('lang')}" if request.query_params.get("lang") else ""
+    try:
+        resp = await _client.get(f"{ROUTER}{request.url.path}{lang_qs}", timeout=10.0)
+        out_headers = {k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP}
+        return Response(content=resp.content, status_code=resp.status_code, headers=out_headers)
+    except httpx.HTTPError:
+        return RedirectResponse(f"{ROUTER}{request.url.path}{lang_qs}", status_code=307)
+
+
+@app.api_route("/life-as-a-bee", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def life_as_a_bee_proxy() -> Response:
+    try:
+        resp = await _client.get(f"{ROUTER}/life-as-a-bee", timeout=10.0)
+        out_headers = {k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP}
+        return Response(content=resp.content, status_code=resp.status_code, headers=out_headers)
+    except httpx.HTTPError:
+        return RedirectResponse(f"{ROUTER}/life-as-a-bee", status_code=307)
+
+
+@app.api_route("/manifesto", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@app.api_route("/manifeste", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def manifesto_proxy(request: Request) -> Response:
+    lang_qs = f"?lang={request.query_params.get('lang')}" if request.query_params.get("lang") else ""
+    try:
+        resp = await _client.get(f"{ROUTER}{request.url.path}{lang_qs}", timeout=10.0)
+        out_headers = {k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP}
+        return Response(content=resp.content, status_code=resp.status_code, headers=out_headers)
+    except httpx.HTTPError:
+        return RedirectResponse(f"{ROUTER}{request.url.path}{lang_qs}", status_code=307)
+
+
+@app.get("/v1/hivemind/manifesto")
+async def manifesto_json_proxy() -> Response:
+    try:
+        resp = await _client.get(f"{ROUTER}/v1/hivemind/manifesto", timeout=10.0)
+        out_headers = {k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP}
+        return Response(content=resp.content, status_code=resp.status_code, headers=out_headers)
+    except httpx.HTTPError:
+        return RedirectResponse(f"{ROUTER}/v1/hivemind/manifesto", status_code=307)
 
 
 @app.api_route("/join", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -88,10 +154,15 @@ async def join_page(request: Request) -> HTMLResponse:
         google = any(p.get("name") == "google" for p in providers.get("providers", []))
         handles = bool(providers.get("handle_registration", True))
     except (httpx.HTTPError, ValueError, AttributeError):
-        pass
+        _ = None
+    live_telem = None
+    try:
+        live_telem = (await _client.get(f"{ROUTER}/v1/hivemind/live-telemetry", timeout=4.0)).json()
+    except (httpx.HTTPError, ValueError):
+        _ = None
     nonce = secrets.token_urlsafe(18)
     return HTMLResponse(
-        render_join_page(lang, nonce, tiers=tiers, api_url=ROUTER, path="/rejoindre" if french_path else "/join", google_enabled=google, handle_registration=handles),
+        render_join_page(lang, nonce, tiers=tiers, api_url=ROUTER, path="/rejoindre" if french_path else "/join", google_enabled=google, handle_registration=handles, live_telemetry=live_telem),
         headers={"Content-Security-Policy": join_content_security_policy(nonce), "Cache-Control": "no-store", "Vary": "Accept-Language",
                  "Content-Language": lang, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin"},
     )
@@ -147,6 +218,304 @@ def api_night_moe() -> JSONResponse:
     if report is None:
         return JSONResponse(status_code=404, content={"detail": "NIGHT-MOE-1 results are not deployed"})
     return JSONResponse(content=report)
+
+
+_COMMUNITY_STATE_PATH = Path(os.environ.get("HIVEMIND_COMMUNITY_STATE_PATH", "/tmp/hivemind_community_hub_state.json"))
+_DEFAULT_COMMUNITY_STATE: dict[str, Any] = {
+    "hub_title": "USS HiveMind NCC-31337 · Portail Communautaire BOINC, Joueurs Steam & Science Participative",
+    "charter": "0.00 EUR / 0.00 USD · Points de Réflexion HiveMind (HMT) & Science Citoyenne",
+    "boinc_idle_gpu_policy": {
+        "idle_threshold_seconds": 4.0,
+        "max_gpu_load_pct": 45.0,
+        "max_temp_c": 78.0,
+        "supported_boinc_projects": [
+            {
+                "project_id": "hivemind_tess_at_home",
+                "name": "HiveMind TESS/JWST Box-Least-Squares (BLS) Transit Folding",
+                "progress_pct": 68.5,
+                "cobblestones_awarded": 14820.0,
+            },
+            {
+                "project_id": "hivemind_night_moe_qlora",
+                "name": "Night-MoE QLoRA & Low-Bit Dream Teacher Consolidation (22:00-07:00 CET)",
+                "progress_pct": 74.0,
+                "cobblestones_awarded": 22450.0,
+            },
+        ],
+    },
+    "community_members": [],
+    "coop_discovery_feed": [],
+}
+
+
+def _load_community_state() -> dict[str, Any]:
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None  # type: ignore[assignment]
+
+    lock_path = _COMMUNITY_STATE_PATH.with_suffix(".lock")
+    try:
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            if fcntl is not None:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_SH)
+            if _COMMUNITY_STATE_PATH.exists():
+                raw = _COMMUNITY_STATE_PATH.read_text(encoding="utf-8")
+                try:
+                    loaded = json.loads(raw)
+                except ValueError:
+                    return {
+                        "status": "BLOCKED",
+                        "error": "community_state_corrupt",
+                        "community_members": [],
+                        "coop_discovery_feed": [],
+                    }
+                if not isinstance(loaded, dict):
+                    return {
+                        "status": "BLOCKED",
+                        "error": "community_state_corrupt",
+                        "community_members": [],
+                        "coop_discovery_feed": [],
+                    }
+                return loaded
+    except Exception:
+        return {
+            "status": "BLOCKED",
+            "error": "community_state_io_error",
+            "community_members": [],
+            "coop_discovery_feed": [],
+        }
+    _save_community_state(_DEFAULT_COMMUNITY_STATE)
+    return json.loads(json.dumps(_DEFAULT_COMMUNITY_STATE))
+
+
+def _save_community_state(state: dict[str, Any]) -> None:
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None  # type: ignore[assignment]
+
+    lock_path = _COMMUNITY_STATE_PATH.with_suffix(".lock")
+    try:
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            if fcntl is not None:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            tmp_path = _COMMUNITY_STATE_PATH.with_suffix(".tmp")
+            tmp_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+            tmp_path.replace(_COMMUNITY_STATE_PATH)
+    except Exception:
+        _ = None
+
+
+@app.get("/community", response_class=HTMLResponse)
+@app.get("/boinc", response_class=HTMLResponse)
+def community_hub_page() -> HTMLResponse:
+    st = _load_community_state()
+    members_rows = "".join(
+        f"<tr><td><code>{html.escape(str(m.get('handle', '')))}</code></td>"
+        f"<td>{html.escape(str(m.get('role', '')))}</td>"
+        f"<td>{html.escape(str(m.get('gpu', '')))}</td>"
+        f"<td style='text-align:right'>{int(m.get('boinc_workunits_completed', 0))}</td>"
+        f"<td style='text-align:right'>{float(m.get('boinc_cobblestones', 0.0)):.1f}</td>"
+        f"<td style='text-align:right'>{int(m.get('hmt_compute_points', 0))} HMT</td></tr>"
+        for m in st.get("community_members", [])[:25]
+    )
+    feed_items = "".join(
+        f"<li style='margin:0.5rem 0'><strong>{html.escape(str(f.get('event', '')))}</strong> · "
+        f"<code>{html.escape(str(f.get('gamer_handle', '')))}</code> ({html.escape(str(f.get('target', '')))}) — "
+        f"{html.escape(str(f.get('summary', '')))}</li>"
+        for f in st.get("coop_discovery_feed", [])[:12]
+    )
+    page_html = (
+        "<!doctype html><html lang='fr'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Portail Communautaire BOINC &amp; Science Participative · HiveMind La Ruche</title>"
+        "<style>body{font:16px/1.55 system-ui,-apple-system,sans-serif;max-width:64rem;margin:0 auto;padding:1.2rem;background:#0f172a;color:#f8fafc}"
+        "a{color:#38bdf8}table{width:100%;border-collapse:collapse;margin:1rem 0}th,td{border:1px solid #334155;padding:0.5rem;text-align:left}"
+        "th{background:#1e293b}code,pre{background:#1e293b;padding:0.15rem 0.35rem;border-radius:0.3rem;font-family:ui-monospace,monospace}"
+        "pre{padding:0.8rem;overflow-x:auto}.nav{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}</style></head><body>"
+        "<nav class='nav'><a href='/rejoindre?lang=fr'>← Rejoindre HiveMind (FR/EN/ES/DE/ZH)</a>"
+        "<a href='/'>🏠 HiveMind Portal</a>"
+        "<a href='/planet-forecast'>🌍 3D Planet HiveMiners (&gt;200 Nodes)</a>"
+        "<a href='/foundation-paper'>📜 Foundation Paper v4.2.0 (PDF &amp; E20)</a>"
+        f"<a href='{ROUTER}/signup'>🔑 Sign Up / Register &amp; Login (/signup)</a>"
+        f"<a href='{ROUTER}/benchmarks'>📊 Comparatif &amp; Benchmarks (5 Langues)</a>"
+        "<a href='/game'>🎮 Jouer dans le Navigateur (Cockpit 4 Étapes)</a>"
+        "<a href='/webgpu'>🌌 Jouer en WebGPU (@compute)</a>"
+        "<a href='/download/steam-fat-client'>⬇ Télécharger Client Windows .EXE (v2.12.0)</a>"
+        "<a href='/download/steam-package-zip'>📦 Archive Steam Win64 .ZIP</a>"
+        "<a href='/night-moe'>Résultats Night-MoE</a>"
+        "<a href='/life-as-a-bee'>Vie d'une Abeille (24 MoE)</a>"
+        "<a href='/api/v1/community/hub'>JSON API (/api/v1/community/hub)</a></nav>"
+        f"<h1>{html.escape(str(st.get('hub_title', 'HiveMind Community Hub')))}</h1>"
+        "<p>Classement en direct des producteurs GPU, volontaires BOINC nocturnes (22h–07h CET) et joueurs Steam (AppID 3133700, pause GPU automatique &lt; 4 s). "
+        "Les Points de Réflexion HiveMind (HMT) n'ont aucune valeur monétaire.</p>"
+        "<h2>Rejoindre en 1 commande (Agent BOINC / Pause GPU Automatique)</h2>"
+        f"<pre><code>curl -sLO {PUBLIC_BASE}/scripts/hivemind_boinc_idle_worker.py\n"
+        f"python3 hivemind_boinc_idle_worker.py --coordinator {PUBLIC_BASE} --handle votre-pseudo --domain physics_sim --once</code></pre>"
+        "<h2>Classement des Contributeurs BOINC &amp; GPU</h2>"
+        "<table><thead><tr><th>Pseudonyme</th><th>Rôle</th><th>Carte GPU</th><th>Unités BOINC</th><th>Cobblestones</th><th>Points HMT</th></tr></thead>"
+        f"<tbody>{members_rows}</tbody></table>"
+        "<h2>Journal des Découvertes &amp; Unités Calculées en Direct</h2>"
+        f"<ul>{feed_items}</ul>"
+        "<section id='community-live-telemetry' style='margin-top:1.2rem;padding:0.75rem 1rem;border:1px solid #38bdf8;border-radius:0.5rem;background:#0f172a'>"
+        "<strong>🟢 GCP TELEMETRY (/v1/hivemind/live-telemetry):</strong> <span id='comm-gcp-stats'>Synchronisation /v1/hivemind/live-telemetry...</span>"
+        "<script>(function(){function v(x){return (x!==undefined&&x!==null&&x!=='')?x:'n/a';}function u(){fetch('/v1/hivemind/live-telemetry',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){"
+        "var el=document.getElementById('comm-gcp-stats');if(!el||!d)return;"
+        "var a=d.accounts||{},m=d.models||{},p=d.producers||d.producer_fleet||{},t=d.t4_boinc||d.tesla_t4_boinc||{},o=d.opentrainer||{};"
+        "el.textContent='Accounts: '+v(a.total_registered_accounts)+' | Live Models: '+v(m.live_count)+' | Active HiveMinders: '+v(p.live_hiveminders)+'/'+v(p.total_hiveminders)+' | Tesla T4 BOINC WUs: '+v(t.assimilated_workunits)+' | OpenTrainer: '+v(o.status);"
+        "}).catch(function(){});}u();setInterval(u,15000);})();</script></section>"
+        "</body></html>"
+    )
+    return HTMLResponse(content=page_html)
+
+
+@app.get("/api/v1/community/hub", response_class=JSONResponse)
+def api_get_community_hub() -> JSONResponse:
+    st = _load_community_state()
+    if st.get("status") == "BLOCKED":
+        return JSONResponse(status_code=503, content=st)
+    return JSONResponse(content=st)
+
+
+_MAX_SYNC_COBBLESTONES_PER_WU = 100.0
+_MAX_SYNC_HMT_PER_WU = 250
+
+
+@app.post("/api/v1/community/boinc-sync", response_class=JSONResponse)
+def api_boinc_sync(request: Request, payload: dict[str, Any] | None = None) -> JSONResponse:
+    import hashlib
+    import hmac
+    import time
+
+    sync_secret = os.environ.get("HIVEMIND_BOINC_SYNC_KEY", "").strip()
+    if not sync_secret:
+        # fail closed: with no key configured this route credited HMT and cobblestones to any handle, anonymously
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "error": "BOINC sync is closed until HIVEMIND_BOINC_SYNC_KEY is configured", "code": "sync_closed"},
+        )
+    if sync_secret:
+        provided = (
+            request.headers.get("x-admin-key")
+            or request.headers.get("x-boinc-sync-key")
+            or request.headers.get("authorization", "").removeprefix("Bearer ").removeprefix("bearer ").strip()
+            or ""
+        )
+        if not provided or not hmac.compare_digest(provided, sync_secret):
+            return JSONResponse(
+                status_code=401,
+                content={"ok": False, "error": "Invalid or missing BOINC sync key", "code": "invalid_sync_key"},
+            )
+
+    body = payload or {}
+    st = _load_community_state()
+    handle = str(body.get("handle") or body.get("commander") or "@Volunteer_FR")[:64]
+    gpu_name = str(body.get("gpu_name") or body.get("gpu_model") or "NVIDIA GeForce RTX 2070")[:96]
+    project_id = str(body.get("project_id") or "hivemind_tess_at_home")[:64]
+    target_name = str(body.get("target_name") or body.get("target_planet") or "K2-18 b")[:64]
+    idle_seconds = max(0.0, float(body.get("idle_seconds") or body.get("gpu_idle_seconds") or 10.0))
+    raw_cobblestones = float(body.get("cobblestones_delta", body.get("cobblestones", 45.0)))
+    raw_hmt_bonus = int(body.get("hmt_delta", body.get("hmt_bonus", 250)))
+    cobblestones_delta = round(max(0.0, min(raw_cobblestones, _MAX_SYNC_COBBLESTONES_PER_WU)), 1)
+    hmt_bonus = max(0, min(raw_hmt_bonus, _MAX_SYNC_HMT_PER_WU))
+
+    cuda_fold = body.get("cuda_fold") if isinstance(body.get("cuda_fold"), dict) else {}
+    bls_depth_ppm = float(cuda_fold.get("recovered_transit_depth_ppm") or 2789.0)
+    receipt_seed = f"{handle}:{gpu_name}:{project_id}:{target_name}:{bls_depth_ppm:.2f}:{time.time()}"
+    receipt_sha256 = str(body.get("receipt_sha256") or body.get("digest") or hashlib.sha256(receipt_seed.encode("utf-8")).hexdigest())
+
+    existing_receipts = {str(f.get("gcp_receipt_sha256", "")) for f in st.get("coop_discovery_feed", [])}
+    if receipt_sha256 in existing_receipts:
+        return JSONResponse(
+            content={
+                "ok": True,
+                "deduplicated": True,
+                "duplicate_receipt": True,
+                "handle": handle,
+                "gpu_name": gpu_name,
+                "project_id": project_id,
+                "target_name": target_name,
+                "bls_depth_ppm": round(bls_depth_ppm, 1),
+                "cobblestones_earned": 0.0,
+                "hmt_points_earned": 0,
+                "receipt_sha256": receipt_sha256,
+                "charter": "HiveMind Reflexion Points (HMT) - Non-Monetary Compute Reciprocity",
+            }
+        )
+
+    found = False
+    for m in st.get("community_members", []):
+        if str(m.get("handle", "")).lower() == handle.lower():
+            m["boinc_workunits_completed"] = int(m.get("boinc_workunits_completed", 0)) + 1
+            m["boinc_cobblestones"] = round(float(m.get("boinc_cobblestones", 0.0)) + cobblestones_delta, 1)
+            m["hmt_compute_points"] = int(m.get("hmt_compute_points", 0)) + hmt_bonus
+            found = True
+            break
+    if not found:
+        st.setdefault("community_members", []).insert(
+            0,
+            {
+                "handle": handle,
+                "role": "Volunteer BOINC & Idle-GPU Donor",
+                "gpu": gpu_name,
+                "boinc_workunits_completed": 1,
+                "boinc_cobblestones": round(cobblestones_delta, 1),
+                "hmt_compute_points": hmt_bonus,
+                "favorite_world": target_name,
+            },
+        )
+    st.setdefault("coop_discovery_feed", []).insert(
+        0,
+        {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "gamer_handle": handle,
+            "scientist_handle": "@GCP_BOINC_Validator",
+            "target": target_name,
+            "event": f"IDLE-GPU BOINC WORKUNIT COMPLETED ({project_id.upper()})",
+            "summary": f"GPU idle {idle_seconds:.1f}s on {gpu_name} -> Folded {target_name} ({bls_depth_ppm:.1f} ppm) -> +{cobblestones_delta:.1f} Cobblestones & +{hmt_bonus} HMT",
+            "gcp_receipt_sha256": receipt_sha256,
+        },
+    )
+    st["coop_discovery_feed"] = st["coop_discovery_feed"][:25]
+    _save_community_state(st)
+    return JSONResponse(
+        content={
+            "ok": True,
+            "deduplicated": False,
+            "duplicate_receipt": False,
+            "handle": handle,
+            "gpu_name": gpu_name,
+            "project_id": project_id,
+            "target_name": target_name,
+            "bls_depth_ppm": round(bls_depth_ppm, 1),
+            "cobblestones_earned": cobblestones_delta,
+            "hmt_points_earned": hmt_bonus,
+            "receipt_sha256": receipt_sha256,
+            "charter": "HiveMind Reflexion Points (HMT) - Non-Monetary Compute Reciprocity",
+        }
+    )
+
+
+@app.get("/scripts/{script_name}")
+def download_onboarding_script(script_name: str) -> Response:
+    allowed_scripts = {
+        "hivemind_boinc_idle_worker.py",
+        "hivemind_producer_agent.py",
+        "hivemind_producer_shield.py",
+        "hivemind_volunteer_preflight.py",
+    }
+    if script_name not in allowed_scripts:
+        return JSONResponse(status_code=404, content={"detail": "Unknown onboarding script"})
+    for candidate_dir in (BASE_DIR / "scripts", Path("/app/scripts")):
+        sp = candidate_dir / script_name
+        if sp.exists():
+            return Response(
+                content=sp.read_text(encoding="utf-8"),
+                media_type="text/x-python; charset=utf-8",
+                headers={"Content-Disposition": f'inline; filename="{script_name}"'},
+            )
+    return JSONResponse(status_code=404, content={"detail": "Script file not present on server"})
 
 
 if __name__ == "__main__":

@@ -1,0 +1,26 @@
+{
+ "experiment": "HN1: is the H-Net boundary signal (low cosine between adjacent hidden states) present in a token-level model HiveMind already serves?",
+ "registered_utc": "2026-11-01T17:36:00Z",
+ "status": "preregistered before the first run; the report records this file's sha256",
+ "source": "Hwang, Wang, Gu, Dynamic Chunking for End-to-End Hierarchical Sequence Modeling (arXiv 2507.07955), routing module: boundary where cos(h_t, h_{t-1}) is low",
+ "why": "H-Net's chunker fires where adjacent representations disagree. If the same signal exists in Qwen2.5-0.5B's hidden states, a local bee could use it to decide where a segment ends before handing it to a remote expert, without any H-Net weights. If it does not, chunk-level routing is parked.",
+ "what_is_run": "Qwen2.5-0.5B (base, local Hugging Face cache, CPU, fp32), windows of 256 tokens from four text sets in this repository: english (docs/RESEARCH_PROGRAM.md), french (docs/CROWDGPT_GPU_LOSS_CHECK.md), python (src/hivemind/queenbee/dance.py + src/hivemind/boinc/node_federation_plan.py), lean (lean4/*.lean). At most 8 windows per set. Hidden states at the middle layer and the last layer.",
+ "measures": {
+  "score": "s_t = -cos(h_t, h_{t-1}) for t >= 1 (higher = more likely a boundary)",
+  "label": "word_start_t = the token's text starts with a space or a newline (the tokenizer's G-dot or C-dot marker)",
+  "auroc": "area under the ROC of s_t predicting word_start_t, pooled over the set's windows (rank-based, ties at 0.5)",
+  "surprisal": "nll_t = -log p(token_t | tokens_<t) from the same forward pass",
+  "spearman": "Spearman correlation between s_t and nll_t over the set"
+ },
+ "hypotheses": {
+  "H1": "AUROC at the middle layer > 0.60 in at least 3 of the 4 sets: the trained model's adjacent-state disagreement marks word starts better than chance.",
+  "H2": "Spearman(s_t, nll_t) > 0.10 in all 4 sets: boundaries coincide with surprise, which is the mechanism the paper assumes.",
+  "H3": "Boundary density at a fixed threshold (the English median of s_t) differs between python and english by more than 0.10 absolute: code and prose would be chunked at different rates."
+ },
+ "controls": {
+  "positive": "newline tokens are definite segment boundaries: AUROC of s_t predicting newline-start tokens must be >= the word-start AUROC in each set; if newlines are not detected the measure is broken",
+  "negative": "the same model class with randomly initialised weights (seed 0): AUROC at the middle layer must lie in [0.45, 0.55] for every set; if the random model also 'detects' word starts, the signal comes from token identity, not from learned context, and H1 is void"
+ },
+ "decision_rule": "H1, H2 and H3 each reported as supported or not; the controls decide validity. Only if H1 holds and both controls pass is a boundary-gated hand-off worth a second experiment. The result says nothing about H-Net checkpoints, bytes, or network cost.",
+ "not_claimed": "nothing about byte-level models, about the released H-Net weights, about traffic between nodes, or about any downstream accuracy"
+}

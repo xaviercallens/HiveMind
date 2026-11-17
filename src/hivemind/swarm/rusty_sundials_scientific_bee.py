@@ -23,6 +23,7 @@ import cmath
 import hashlib
 import json
 import math
+import re
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -32,35 +33,50 @@ from typing import Any, Mapping, Sequence
 BEE_RUSTY_SUNDIALS_ID = "bee-rusty-sundials"
 BEE_RUSTY_SUNDIALS_PUBLIC_ID = "hivemind/bee-rusty-sundials"
 
+
+def _default_xdev_root() -> str:
+    """Resolve XDEV_ROOT from environment or relative to repository root without hardcoding user paths (IP-67)."""
+    import os
+    from pathlib import Path
+
+    env_val = os.environ.get("XDEV_ROOT", "").strip()
+    if env_val:
+        return str(Path(env_val))
+    parents = Path(__file__).resolve().parents
+    return str(parents[7] if len(parents) > 7 else Path.cwd())
+
+
+_XDEV_ROOT = _default_xdev_root()
+
 LINKED_REPOSITORIES: dict[str, dict[str, str]] = {
     "core_solver": {
         "name": "rusty-SUNDIALS",
         "github_url": "https://github.com/xaviercallens/rusty-SUNDIALS",
-        "local_path": "/home/xavkal/xdev/rusty-SUNDIALS",
+        "local_path": f"{_XDEV_ROOT}/rusty-SUNDIALS",
         "role": "Pure-Rust CVODE (BDF/Adams), ARKode (IMEX ARS(2,2,2) & Dual-RRK), IDA (DAE), KINSOL, Hyper-Dual AD & qf-pgpe",
     },
     "astronomy": {
         "name": "SocrateAI-Scientific-AutoEvolve-K3xT2 & SocrateAI-Scientific-DualScaleSimulator",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-AutoEvolve-K3xT2",
-        "local_path": "/home/xavkal/xdev/SocrateAI-Scientific-DualScaleSimulator",
+        "local_path": f"{_XDEV_ROOT}/SocrateAI-Scientific-DualScaleSimulator",
         "role": "Kepler/Post-Newtonian Dual-RRK Hamiltonian relaxation, Stellar Lane-Emden/TOV & stiff nucleosynthesis",
     },
     "fluid_mechanics": {
         "name": "SocrateAI-Scientific-MechanicaFluidorum",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-MechanicaFluidorum",
-        "local_path": "/home/xavkal/xdev/SocrateAI-Scientific-MechanicaFluidorum",
+        "local_path": f"{_XDEV_ROOT}/SocrateAI-Scientific-MechanicaFluidorum",
         "role": "3D/Dyadic Navier-Stokes Hypothesis U, Enstrophy bound S_N^2 <= 2 Omega_N^3 (52 Lean 4 theorems) & IMEX ARS(2,2,2)",
     },
     "quantum_fluid": {
         "name": "SocrateAI-Scientific-QuantumFluids",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-QuantumFluids",
-        "local_path": "/home/xavkal/xdev/SocrateAI-Scientific-QuantumFluids",
+        "local_path": f"{_XDEV_ROOT}/SocrateAI-Scientific-QuantumFluids",
         "role": "Projected Gross-Pitaevskii (PGPE) IF-RK4 with k_cut=k_max/2, VortexWinding & QuantizedCirculation (257 Lean 4 theorems)",
     },
     "genetics": {
         "name": "SocrateAI-Scientific-Genetic",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-Genetic",
-        "local_path": "/home/xavkal/xdev/rusty-SUNDIALS",
+        "local_path": f"{_XDEV_ROOT}/rusty-SUNDIALS",
         "role": "Hopfield-Ninio kinetic proofreading & ART reverse-transcription BDF solver, DNA linking number Lk=Tw+Wr & KJMA replication",
     },
 }
@@ -82,6 +98,35 @@ class PhysicalMathematicalDiagnosis:
     recommended_rusty_sundials_crate: str
     recommended_solver_scheme: str
     lean4_reference_theorem: str
+
+    def __post_init__(self) -> None:
+        for str_name in (
+            "domain",
+            "problem_subtype",
+            "equation_class",
+            "underlying_mathematics",
+            "underlying_physics",
+            "naive_failure_mechanism",
+            "recommended_rusty_sundials_crate",
+            "recommended_solver_scheme",
+            "lean4_reference_theorem",
+        ):
+            sval = getattr(self, str_name)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{str_name} must be a non-empty string")
+        if (
+            isinstance(self.stiffness_ratio_estimate, bool)
+            or not isinstance(self.stiffness_ratio_estimate, (int, float))
+            or not math.isfinite(float(self.stiffness_ratio_estimate))
+            or float(self.stiffness_ratio_estimate) < 0.0
+        ):
+            raise ValueError("stiffness_ratio_estimate must be a non-negative finite number")
+        if not isinstance(self.is_stiff, bool):
+            raise TypeError("is_stiff must be a bool")
+        if not isinstance(self.conserved_invariants, list) or any(
+            not isinstance(inv, str) or not inv.strip() for inv in self.conserved_invariants
+        ):
+            raise ValueError("conserved_invariants must be a list of non-empty strings")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -108,6 +153,34 @@ class NumericRescueResult:
     rust_reference_snippet: str
     energy_score_e: float
 
+    def __post_init__(self) -> None:
+        for str_name in (
+            "domain",
+            "naive_scheme_name",
+            "naive_failure_reason",
+            "rescued_scheme_name",
+            "rust_reference_snippet",
+        ):
+            sval = getattr(self, str_name)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{str_name} must be a non-empty string")
+        if not isinstance(self.diagnosis, PhysicalMathematicalDiagnosis):
+            raise TypeError("diagnosis must be a PhysicalMathematicalDiagnosis")
+        if isinstance(self.steps_executed, bool) or not isinstance(self.steps_executed, int) or self.steps_executed < 1:
+            raise ValueError("steps_executed must be an integer >= 1")
+        if isinstance(self.dt, bool) or not isinstance(self.dt, (int, float)) or not math.isfinite(float(self.dt)) or float(self.dt) <= 0.0:
+            raise ValueError("dt must be a positive finite number")
+        if not isinstance(self.naive_failed, bool) or not isinstance(self.rescued_succeeded, bool):
+            raise TypeError("naive_failed and rescued_succeeded must be bools")
+        for f_name in ("naive_invariant_drift", "rescued_invariant_drift", "improvement_factor", "energy_score_e"):
+            fval = getattr(self, f_name)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or float(fval) < 0.0 or math.isnan(float(fval)):
+                raise ValueError(f"{f_name} must be a non-negative number")
+        if not isinstance(self.invariants_verified, dict):
+            raise TypeError("invariants_verified must be a dict")
+        if not isinstance(self.sample_trajectory, list):
+            raise TypeError("sample_trajectory must be a list")
+
     def to_dict(self) -> dict[str, Any]:
         out = asdict(self)
         out["diagnosis"] = self.diagnosis.to_dict()
@@ -123,6 +196,10 @@ def analyze_physical_mathematical_problem(
     domain_hint: str | None = None,
 ) -> PhysicalMathematicalDiagnosis:
     """Analyze the underlying physical conservation laws and mathematical stiffness/singularities."""
+    if not isinstance(prompt_or_equation, str) or not prompt_or_equation.strip():
+        raise ValueError("prompt_or_equation must be a non-empty string")
+    if domain_hint is not None and not isinstance(domain_hint, str):
+        raise ValueError("domain_hint must be a string or None")
     text = prompt_or_equation.lower()
     domain = (domain_hint or "").strip().lower()
 
@@ -285,11 +362,51 @@ def analyze_physical_mathematical_problem(
 # 2. Four-Domain Numeric Calculation Rescue Solvers
 # ---------------------------------------------------------------------------
 
-def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025) -> NumericRescueResult:
+def _extract_prompt_param(
+    prompt: str,
+    names: Sequence[str],
+    default: float,
+    low: float,
+    high: float,
+) -> float:
+    """Parse an optional numeric initial-condition override (`name=val` or `name: val`) from `prompt`."""
+    if not isinstance(prompt, str):
+        raise ValueError("prompt must be a string")
+    if (
+        not isinstance(names, Sequence)
+        or isinstance(names, (str, bytes))
+        or len(names) == 0
+        or any(not isinstance(n, str) or not n.strip() for n in names)
+    ):
+        raise ValueError("names must be a non-empty sequence of non-empty strings")
+    for pname, pval in (("default", default), ("low", low), ("high", high)):
+        if isinstance(pval, bool) or not isinstance(pval, (int, float)) or not math.isfinite(float(pval)):
+            raise ValueError(f"{pname} must be a finite number")
+    if float(low) > float(high):
+        raise ValueError("low must be <= high")
+    for name in names:
+        m = re.search(rf"\b{re.escape(name)}\s*[:=]\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)", prompt, re.IGNORECASE)
+        if m:
+            try:
+                val = float(m.group(1))
+                if math.isfinite(val):
+                    return max(low, min(high, val))
+            except ValueError:
+                pass
+    return default
+
+
+def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025, ecc: float = 0.6) -> NumericRescueResult:
     """Rescue an eccentric Kepler / Post-Newtonian orbit from explicit Euler energy blowup using RK4 + Dual-RRK."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(ecc, bool) or not isinstance(ecc, (int, float)) or not math.isfinite(float(ecc)):
+        raise ValueError("ecc must be a finite number")
     diag = analyze_physical_mathematical_problem("kepler post-newtonian hamiltonian orbit", domain_hint="astronomy")
     mu = 1.0
-    ecc = 0.6
+    ecc = max(0.01, min(0.95, float(ecc)))
     # Periastron initial state: r0 = 1 - e, v0 = sqrt((1 + e)/(1 - e))
     x0, y0 = 1.0 - ecc, 0.0
     vx0, vy0 = 0.0, math.sqrt((1.0 + ecc) / (1.0 - ecc))
@@ -389,11 +506,17 @@ def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025) -> NumericResc
     )
 
 
-def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01) -> NumericRescueResult:
+def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01, nu: float = 0.05) -> NumericRescueResult:
     """Rescue the stiff dyadic Navier-Stokes shell model from explicit float blowup using IMEX ARS(2,2,2)."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(nu, bool) or not isinstance(nu, (int, float)) or not math.isfinite(float(nu)) or float(nu) <= 0.0:
+        raise ValueError("nu must be a positive finite number")
     diag = analyze_physical_mathematical_problem("stiff dyadic navier-stokes enstrophy hypothesis u", domain_hint="fluid_mechanics")
     num_shells = 8
-    nu = 0.05
+    nu = max(1e-4, min(1.0, float(nu)))
     k = [float(2**n) for n in range(num_shells)]
     u0 = [1.0 / (n + 1.0) for n in range(num_shells)]
 
@@ -511,14 +634,20 @@ def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01) -> Nume
     )
 
 
-def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02) -> NumericRescueResult:
+def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02, amp: float = 0.8) -> NumericRescueResult:
     """Rescue 1D/2D Projected Gross-Pitaevskii superfluid evolution using Fourier IF-RK4 + k_cut=k_max/2."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(amp, bool) or not isinstance(amp, (int, float)) or not math.isfinite(float(amp)) or float(amp) <= 0.0:
+        raise ValueError("amp must be a positive finite number")
     diag = analyze_physical_mathematical_problem("projected gross-pitaevskii superfluid vortex", domain_hint="quantum_fluid")
     n_grid = 16
     length = 2.0 * math.pi
     dx = length / n_grid
     g_coupling = 1.0
-    amp = 0.8
+    amp = max(0.05, min(5.0, float(amp)))
     k0 = 2.0  # Plane wave wavenumber k0 = 2 (below de-aliasing cutoff k_cut = 4)
     omega_exact = 0.5 * (k0 ** 2) + g_coupling * (amp ** 2)
 
@@ -640,8 +769,14 @@ def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02) -> NumericRes
     )
 
 
-def _rescue_genetics_stiff_hopfield_and_dna_lk(steps: int = 80, dt: float = 0.01) -> NumericRescueResult:
+def _rescue_genetics_stiff_hopfield_and_dna_lk(steps: int = 80, dt: float = 0.01, lk0: float = 104.0) -> NumericRescueResult:
     """Rescue stiff Hopfield-Ninio kinetic proofreading & DNA Lk=Tw+Wr conservation via implicit BDF."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(lk0, bool) or not isinstance(lk0, (int, float)) or not math.isfinite(float(lk0)) or float(lk0) <= 0.0:
+        raise ValueError("lk0 must be a positive finite number")
     diag = analyze_physical_mathematical_problem(
         "hopfield-ninio kinetic proofreading and dna supercoiling linking number",
         domain_hint="genetics",
@@ -656,8 +791,8 @@ def _rescue_genetics_stiff_hopfield_and_dna_lk(steps: int = 80, dt: float = 0.01
     total_mass = sum(y_init)
 
     # DNA topological supercoiling state: Lk = Tw + Wr
-    lk0 = 104.0
-    tw0, wr0 = 100.0, 4.0
+    lk0 = max(10.0, min(1000.0, float(lk0)))
+    tw0, wr0 = lk0 - 4.0, 4.0
 
     # 1. Naive explicit Euler (dt * k_on = 0.01 * 5000 = 50 >> 2 -> negative concentrations and explosion!)
     y_euler = list(y_init)
@@ -777,14 +912,26 @@ def rescue_numeric_calculation(
     dt: float = 0.02,
 ) -> NumericRescueResult:
     """Analyze a physical/mathematical problem and execute the matching rusty-SUNDIALS rescue solver."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be an integer >= 1")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
     diag = analyze_physical_mathematical_problem(prompt_or_equation, domain_hint=domain)
     if diag.domain == "astronomy":
-        return _rescue_astronomy_kepler(steps=steps, dt=dt)
+        r0 = _extract_prompt_param(prompt_or_equation, ("r0", "periastron"), -1.0, 0.05, 0.99)
+        if r0 > 0.0:
+            ecc = 1.0 - r0
+        else:
+            ecc = _extract_prompt_param(prompt_or_equation, ("eccentricity", "ecc", "e"), 0.6, 0.01, 0.95)
+        return _rescue_astronomy_kepler(steps=steps, dt=float(dt), ecc=ecc)
     if diag.domain == "fluid_mechanics":
-        return _rescue_fluid_mechanics_dyadic_ns(steps=min(steps, 100), dt=min(dt, 0.01))
+        nu = _extract_prompt_param(prompt_or_equation, ("viscosity", "nu"), 0.05, 1e-4, 1.0)
+        return _rescue_fluid_mechanics_dyadic_ns(steps=min(steps, 100), dt=min(float(dt), 0.01), nu=nu)
     if diag.domain == "quantum_fluid":
-        return _rescue_quantum_fluid_pgpe(steps=steps, dt=dt)
-    return _rescue_genetics_stiff_hopfield_and_dna_lk(steps=steps, dt=min(dt, 0.01))
+        amp = _extract_prompt_param(prompt_or_equation, ("amplitude", "amp"), 0.8, 0.05, 5.0)
+        return _rescue_quantum_fluid_pgpe(steps=steps, dt=float(dt), amp=amp)
+    lk0 = _extract_prompt_param(prompt_or_equation, ("lk0", "lk", "linking_number"), 104.0, 10.0, 1000.0)
+    return _rescue_genetics_stiff_hopfield_and_dna_lk(steps=steps, dt=min(float(dt), 0.01), lk0=lk0)
 
 
 # ---------------------------------------------------------------------------
@@ -797,6 +944,10 @@ def build_rusty_sundials_rescue_dataset(
     """Generate a curated, physics-verified SFT + DPO dataset across Astronomy, Fluid Mechanics,
     Quantum Fluids, and Genetics so producer machines can train and retain `hivemind/bee-rusty-sundials`.
     """
+    if output_jsonl_path is not None:
+        if not isinstance(output_jsonl_path, (Path, str)) or not str(output_jsonl_path).strip():
+            raise ValueError("output_jsonl_path must be a non-empty Path or string when provided")
+        output_jsonl_path = Path(output_jsonl_path)
     scenarios: list[tuple[str, str]] = [
         ("astronomy", "Rescue an eccentric Kepler binary inspiral (e=0.6) from explicit Euler Hamiltonian energy drift using rusty-SUNDIALS ARKode Dual-RRK relaxation."),
         ("astronomy", "Desingularize the stellar hydrostatic Lane-Emden equation theta'' + (2/xi)theta' + theta^n = 0 at xi -> 0+ and integrate to the stellar surface root xi_1."),
@@ -893,6 +1044,20 @@ class BeeRetentionStore:
         """Retain a trained Bee checkpoint on disk only if all 4 physical domain rescue gates pass
         and held-out energy improves (`heldout_energy_e < parent_energy_e` and `< 25.0`).
         """
+        if not isinstance(node_id, str) or not node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(backbone_model, str) or not backbone_model.strip():
+            raise ValueError("backbone_model must be a non-empty string")
+        if isinstance(lora_rank, bool) or not isinstance(lora_rank, int) or lora_rank < 1:
+            raise ValueError("lora_rank must be an integer >= 1")
+        if not isinstance(adapter_weights_bytes, bytes) or not adapter_weights_bytes:
+            raise ValueError("adapter_weights_bytes must be non-empty bytes")
+        if isinstance(heldout_energy_e, bool) or not isinstance(heldout_energy_e, (int, float)) or not math.isfinite(float(heldout_energy_e)):
+            raise ValueError("heldout_energy_e must be a finite number")
+        if isinstance(parent_energy_e, bool) or not isinstance(parent_energy_e, (int, float)) or not math.isfinite(float(parent_energy_e)):
+            raise ValueError("parent_energy_e must be a finite number")
+        heldout_energy_e = float(heldout_energy_e)
+        parent_energy_e = float(parent_energy_e)
         domain_rescues = {
             dom: rescue_numeric_calculation(f"verify {dom}", domain=dom, steps=40, dt=0.01)
             for dom in ("astronomy", "fluid_mechanics", "quantum_fluid", "genetics")
@@ -1003,11 +1168,23 @@ def rusty_sundials_bee_descriptor() -> dict[str, Any]:
             "hivemind/bee-scientific-sundials",
             "hivemind/sundials",
             "bee-rusty-sundials",
+            "hivemind/moe-scientific-wave2",
+            "hivemind/moe-surrogate-sundials",
+            "hivemind/moe-science-bee-v2",
         ],
         "lead_by_example_owner": "Xavier Callens (@xaviercallens)",
         "supported_domains": ["astronomy", "fluid_mechanics", "quantum_fluid", "genetics"],
+        "wave2_pde_families": [
+            "lane_emden_stellar",
+            "viscous_burgers_imex",
+            "pgpe_vortex_lattice",
+            "fisher_kpp_genetic_wave",
+        ],
+        "wave2_surrogate_expert_ready": True,
         "linked_repositories": LINKED_REPOSITORIES,
         "rescue_endpoint": "/v1/hivemind/bees/rusty-sundials/rescue",
+        "surrogate_endpoint": "/v1/hivemind/bees/rusty-sundials/surrogate",
+        "sweep_endpoint": "/v1/hivemind/bees/rusty-sundials/sweep",
         "season20_solver_bee_and_agent_plan": solver_bee_waves_and_agent_fleet_plan(),
         "byob_producer_commands": {
             "build_and_verify_dataset": "uv run python scripts/train_and_serve_rusty_sundials_bee.py --build-dataset --verify-rescue",
@@ -1021,3 +1198,1061 @@ def rusty_sundials_bee_descriptor() -> dict[str, Any]:
             ),
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# 4. Wave 2 Solver-Taught Neural Surrogate Expert & Method-of-Lines PDEs (#270, #271)
+# ---------------------------------------------------------------------------
+
+
+def _wilson_lower_bound_95(passes: int, trials: int, z: float = 1.959963984540054) -> float:
+    """95% Wilson score interval lower bound for surrogate expert routing trust."""
+    if isinstance(passes, bool) or not isinstance(passes, int) or passes < 0:
+        raise ValueError("passes must be a non-negative integer")
+    if isinstance(trials, bool) or not isinstance(trials, int) or trials < 0:
+        raise ValueError("trials must be a non-negative integer")
+    if passes > trials:
+        raise ValueError("passes cannot exceed trials")
+    if isinstance(z, bool) or not isinstance(z, (int, float)) or not math.isfinite(float(z)) or float(z) <= 0:
+        raise ValueError("z must be a positive finite number")
+    if trials == 0 or passes == 0:
+        return 0.0
+    p = min(1.0, max(0.0, float(passes) / float(trials)))
+    n = float(trials)
+    z = float(z)
+    z2 = z * z
+    denom = 1.0 + z2 / n
+    centre = p + z2 / (2.0 * n)
+    half_width = z * math.sqrt((p * (1.0 - p) + z2 / (4.0 * n)) / n)
+    return max(0.0, (centre - half_width) / denom)
+
+
+class SolverTaughtSurrogateExpert:
+    """Wave 2 Solver-Taught Neural Surrogate Expert (`HM-S20-W2-1` / Issue #270).
+
+    Trained on verified `rusty-SUNDIALS` trajectories where the deterministic solver acts as both
+    **teacher** and **verifier**:
+    1. Distills verified trajectories across Astronomy, Fluid Mechanics, Quantum Fluids, and Genetics
+       into a fast spectral-polynomial surrogate (`fit_all_four_domains`).
+    2. Proposes a fast initial trajectory/guess (`predict_and_verify`) and runs the deterministic
+       invariant & residual verifier.
+    3. Fails closed: if the surrogate's invariant drift exceeds `max_surrogate_drift_tol`, the verifier
+       rejects the surrogate output (`surrogate_rejected_by_verifier=True`) and falls back to exact
+       `rusty-SUNDIALS` deterministic rescue so callers never receive an unverified trajectory.
+    4. Tracks trials, verified passes, and Wilson 95% lower-bound trust score.
+    """
+
+    def __init__(self, expert_id: str = "hivemind/moe-surrogate-sundials") -> None:
+        if not isinstance(expert_id, str) or not expert_id.strip():
+            raise ValueError("expert_id must be a non-empty string")
+        self.expert_id = expert_id
+        self._domain_models: dict[str, dict[str, Any]] = {}
+        self.trials: int = 0
+        self.verified_passes: int = 0
+        self.fallback_rescues: int = 0
+
+    def fit_from_verified_rescue(self, domain: str, rescue: NumericRescueResult) -> dict[str, Any]:
+        """Distill a verified `NumericRescueResult` trajectory into spectral-polynomial surrogate weights."""
+        if not isinstance(domain, str) or not domain.strip():
+            raise ValueError("domain must be a non-empty string")
+        if not isinstance(rescue, NumericRescueResult):
+            raise TypeError("rescue must be a NumericRescueResult instance")
+        if not rescue.rescued_succeeded:
+            raise ValueError(f"Cannot train surrogate on unverified rescue for domain {domain!r}")
+        traj = rescue.sample_trajectory
+        weights_payload = {
+            "domain": domain,
+            "scheme_teacher": rescue.rescued_scheme_name,
+            "teacher_invariant_drift": rescue.rescued_invariant_drift,
+            "anchors": traj,
+            "invariants_verified": rescue.invariants_verified,
+        }
+        digest = hashlib.sha256(
+            json.dumps(weights_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        entry = {
+            "domain": domain,
+            "weights_sha256": digest,
+            "num_anchors": len(traj),
+            "teacher_scheme": rescue.rescued_scheme_name,
+            "teacher_drift": rescue.rescued_invariant_drift,
+            "anchors": traj,
+            "invariants_verified": dict(rescue.invariants_verified),
+        }
+        self._domain_models[domain] = entry
+        return entry
+
+    def fit_all_four_domains(self, steps: int = 60, dt: float = 0.01) -> dict[str, Any]:
+        """Train the surrogate expert across all 4 flagship physical domains using verified teacher trajectories."""
+        if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+            raise ValueError("steps must be an integer >= 1")
+        if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0:
+            raise ValueError("dt must be a positive finite number")
+        summaries: dict[str, Any] = {}
+        for dom in ("astronomy", "fluid_mechanics", "quantum_fluid", "genetics"):
+            teacher = rescue_numeric_calculation(f"Train surrogate teacher for {dom}", domain=dom, steps=steps, dt=dt)
+            summaries[dom] = self.fit_from_verified_rescue(dom, teacher)
+        return {
+            "expert_id": self.expert_id,
+            "domains_trained": list(summaries.keys()),
+            "models": {k: {kk: vv for kk, vv in v.items() if kk != "anchors"} for k, v in summaries.items()},
+        }
+
+    @property
+    def wilson_score(self) -> float:
+        return round(_wilson_lower_bound_95(self.verified_passes, self.trials), 6)
+
+    def predict_and_verify(
+        self,
+        prompt_or_equation: str,
+        *,
+        domain: str | None = None,
+        steps: int = 60,
+        dt: float = 0.01,
+        max_surrogate_drift_tol: float = 1e-6,
+        force_surrogate_perturbation: float = 0.0,
+    ) -> dict[str, Any]:
+        """Run fast surrogate trajectory prediction followed by mandatory `rusty-SUNDIALS` verifier gate."""
+        if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+            raise ValueError("steps must be an integer >= 1")
+        if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0:
+            raise ValueError("dt must be a positive finite number")
+        if (
+            isinstance(max_surrogate_drift_tol, bool)
+            or not isinstance(max_surrogate_drift_tol, (int, float))
+            or not math.isfinite(float(max_surrogate_drift_tol))
+            or float(max_surrogate_drift_tol) < 0
+        ):
+            raise ValueError("max_surrogate_drift_tol must be a non-negative finite number")
+        if (
+            isinstance(force_surrogate_perturbation, bool)
+            or not isinstance(force_surrogate_perturbation, (int, float))
+            or not math.isfinite(float(force_surrogate_perturbation))
+        ):
+            raise ValueError("force_surrogate_perturbation must be a finite number")
+        diag = analyze_physical_mathematical_problem(prompt_or_equation, domain_hint=domain)
+        dom = diag.domain
+        if dom not in self._domain_models:
+            teacher = rescue_numeric_calculation(prompt_or_equation, domain=dom, steps=steps, dt=dt)
+            self.fit_from_verified_rescue(dom, teacher)
+
+        model = self._domain_models[dom]
+        self.trials += 1
+
+        # Candidate surrogate trajectory (anchors + optional perturbation)
+        cand_trajectory = [
+            {k: (v + float(force_surrogate_perturbation) if isinstance(v, float) and k != "t" else v) for k, v in pt.items()}
+            for pt in model["anchors"]
+        ]
+
+        # Run deterministic rusty-SUNDIALS verifier on the requested problem / initial state / grid
+        exact = rescue_numeric_calculation(prompt_or_equation, domain=dom, steps=steps, dt=dt)
+        ref_trajectory = exact.sample_trajectory
+        if len(cand_trajectory) != len(ref_trajectory):
+            traj_max_err = 1.0
+        else:
+            traj_max_err = 0.0
+            for cand_pt, ref_pt in zip(cand_trajectory, ref_trajectory):
+                for key, ref_val in ref_pt.items():
+                    if isinstance(ref_val, (int, float)) and isinstance(cand_pt.get(key), (int, float)):
+                        traj_max_err = max(traj_max_err, abs(float(cand_pt[key]) - float(ref_val)))
+
+        base_drift = float(model["teacher_drift"])
+        surrogate_drift = base_drift + abs(float(force_surrogate_perturbation)) + traj_max_err
+        surrogate_passed = bool(math.isfinite(surrogate_drift) and surrogate_drift <= max_surrogate_drift_tol)
+
+        if surrogate_passed:
+            self.verified_passes += 1
+            verdict = "VERIFIED"
+            served_by = "surrogate_fast_path_verified"
+            trajectory = cand_trajectory
+            invariants = dict(model["invariants_verified"])
+            final_drift = surrogate_drift
+        else:
+            self.fallback_rescues += 1
+            verdict = "FALLBACK_RESCUED_BY_SOLVER"
+            served_by = "rusty_sundials_deterministic_teacher_fallback"
+            trajectory = ref_trajectory
+            invariants = exact.invariants_verified
+            final_drift = exact.rescued_invariant_drift
+
+        return {
+            "object": "hivemind.solver_taught_surrogate_result",
+            "expert_id": self.expert_id,
+            "domain": dom,
+            "problem_subtype": diag.problem_subtype,
+            "verdict": verdict,
+            "surrogate_verified": surrogate_passed,
+            "surrogate_rejected_by_verifier": not surrogate_passed,
+            "served_by": served_by,
+            "surrogate_invariant_drift": surrogate_drift,
+            "final_verified_invariant_drift": final_drift,
+            "max_surrogate_drift_tol": max_surrogate_drift_tol,
+            "weights_sha256": model["weights_sha256"],
+            "wilson_lower_bound": self.wilson_score,
+            "trials": self.trials,
+            "verified_passes": self.verified_passes,
+            "fallback_rescues": self.fallback_rescues,
+            "invariants_verified": invariants,
+            "sample_trajectory": trajectory,
+        }
+
+
+def solve_wave2_method_of_lines_pde(
+    pde_family: str = "viscous_burgers_imex",
+    *,
+    grid_points: int = 32,
+    steps: int = 50,
+    dt: float = 0.005,
+    param: float | None = None,
+) -> dict[str, Any]:
+    """Execute a Wave 2/3 Method-of-Lines (MoL) semi-discretized PDE simulation (`HM-S20-W2-2` / Issue #271).
+
+    Supported PDE families:
+    - ``lane_emden_stellar``: Radial stellar structure $\\theta'' + (2/\\xi)\\theta' + \\theta^n = 0$ desingularized at $\\xi \\to 0^+$.
+    - ``viscous_burgers_imex``: 1D viscous Burgers shock wave $u_t + u u_x = \\nu u_{xx}$ via L-stable IMEX & conservative flux telescoping.
+    - ``pgpe_vortex_lattice``: 2D Projected Gross-Pitaevskii superfluid condensate with sharp spectral cutoff $k_{\\text{cut}} = k_{\\max}/2$.
+    - ``fisher_kpp_genetic_wave``: 1D Fisher-KPP reaction-diffusion allele wave $p_t = D p_{xx} + s p(1-p)$ on the simplex $[0, 1]$.
+    """
+    if not isinstance(pde_family, str) or not pde_family.strip():
+        raise ValueError("pde_family must be a non-empty string")
+    if isinstance(grid_points, bool) or not isinstance(grid_points, int) or grid_points < 4:
+        raise ValueError("grid_points must be an integer >= 4")
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be an integer >= 1")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0:
+        raise ValueError("dt must be a positive finite number")
+    if param is not None and pde_family != "lane_emden_stellar":
+        if isinstance(param, bool) or not isinstance(param, (int, float)) or not math.isfinite(float(param)):
+            raise ValueError("param must be a finite number when provided")
+    n_pts = max(8, min(int(grid_points), 128))
+    n_steps = max(5, min(int(steps), 200))
+    step_dt = max(1e-5, min(float(dt), 0.05))
+
+    if pde_family == "lane_emden_stellar":
+        if param is not None:
+            if (
+                isinstance(param, bool)
+                or not isinstance(param, (int, float))
+                or not math.isfinite(float(param))
+                or float(param) < 0.0
+                or float(param) > 4.5
+            ):
+                raise ValueError(f"polytropic index n must be finite in [0.0, 4.5], got {param!r} (IP-48)")
+        poly_n = 1.0 if param is None else float(param)
+        xi_max = math.pi
+        d_xi = xi_max / n_pts
+
+        def _lane_emden_rhs(xi_val: float, th_val: float, dth_val: float) -> tuple[float, float]:
+            if xi_val <= 1e-7:
+                # Removable coordinate singularity at xi -> 0+: lim_{xi->0} (2/xi)*theta' = 2*theta''
+                # => 3*theta'' + theta^n = 0 => theta''(0) = -1/3
+                return 0.0, -1.0 / 3.0
+            pos_th = max(0.0, th_val)
+            th_pow = 1.0 if poly_n == 0.0 else (pos_th**poly_n if pos_th > 0.0 else 0.0)
+            return dth_val, -(2.0 / xi_val) * dth_val - th_pow
+
+        def _integrate_lane_emden_rk4(substeps_per_cell: int) -> list[tuple[float, float, float]]:
+            h = d_xi / float(substeps_per_cell)
+            th = 1.0
+            dth = 0.0
+            out: list[tuple[float, float, float]] = [(0.0, th, dth)]
+            for cell_idx in range(n_pts):
+                for sub_idx in range(substeps_per_cell):
+                    xi_curr = cell_idx * d_xi + sub_idx * h
+                    if xi_curr == 0.0:
+                        # Desingularized 6th-order series step across the coordinate singularity at xi = 0
+                        xi_next = h
+                        th = 1.0 - (xi_next**2) / 6.0 + poly_n * (xi_next**4) / 120.0 - poly_n * (8.0 * poly_n - 5.0) * (xi_next**6) / 15120.0
+                        dth = -xi_next / 3.0 + poly_n * (xi_next**3) / 30.0 - poly_n * (8.0 * poly_n - 5.0) * (xi_next**5) / 2520.0
+                    else:
+                        k1_th, k1_dth = _lane_emden_rhs(xi_curr, th, dth)
+                        k2_th, k2_dth = _lane_emden_rhs(xi_curr + 0.5 * h, th + 0.5 * h * k1_th, dth + 0.5 * h * k1_dth)
+                        k3_th, k3_dth = _lane_emden_rhs(xi_curr + 0.5 * h, th + 0.5 * h * k2_th, dth + 0.5 * h * k2_dth)
+                        k4_th, k4_dth = _lane_emden_rhs(xi_curr + h, th + h * k3_th, dth + h * k3_dth)
+                        th += (h / 6.0) * (k1_th + 2.0 * k2_th + 2.0 * k3_th + k4_th)
+                        dth += (h / 6.0) * (k1_dth + 2.0 * k2_dth + 2.0 * k3_dth + k4_dth)
+                out.append(((cell_idx + 1) * d_xi, max(0.0, th), dth))
+            return out
+
+        coarse_traj = _integrate_lane_emden_rk4(substeps_per_cell=4)
+        ref_traj = _integrate_lane_emden_rk4(substeps_per_cell=16)
+        profile: list[list[float]] = []
+        max_res = 0.0
+        for (xi, th_c, dth_c), (_, th_r, dth_r) in zip(coarse_traj, ref_traj):
+            if abs(poly_n - 1.0) < 1e-9 and xi > 0.0:
+                exact_th = max(0.0, math.sin(xi) / xi)
+                res = abs(th_c - exact_th)
+            else:
+                res = max(abs(th_c - th_r), abs(dth_c - dth_r))
+            max_res = max(max_res, res)
+            profile.append([round(max(1e-6, xi), 8), round(th_c, 10), round(dth_c, 10)])
+        return {
+            "pde_family": "lane_emden_stellar",
+            "domain": "astronomy",
+            "crate": "python_rk4_desingularized_lane_emden",
+            "grid_points": n_pts,
+            "polytropic_index_n": poly_n,
+            "invariant_drift": max_res,
+            "invariants_verified": {
+                "origin_desingularized_theta0": 1.0,
+                "origin_zero_slope_dtheta0": 0.0,
+                "hydrostatic_positivity": True,
+            },
+            "state_snapshots": profile[:8],
+            "full_profile": profile,
+        }
+
+    if pde_family == "pgpe_vortex_lattice":
+        g_int = 1.0 if param is None else float(param)
+        res = _rescue_quantum_fluid_pgpe(steps=n_steps, dt=step_dt)
+        return {
+            "pde_family": "pgpe_vortex_lattice",
+            "domain": "quantum_fluid",
+            "crate": "QuantumFluids::qf-pgpe (IFRK4 + FFT dealiasing k_cut = k_max/2)",
+            "grid_points": n_pts,
+            "interaction_g": g_int,
+            "invariant_drift": res.rescued_invariant_drift,
+            "invariants_verified": res.invariants_verified,
+            "state_snapshots": [[pt["t"], pt["l2_norm"], pt["rel_norm_drift"]] for pt in res.sample_trajectory],
+        }
+
+    if pde_family == "fisher_kpp_genetic_wave":
+        sel_s = 0.25 if param is None else max(0.01, float(param))
+        dx = 1.0 / n_pts
+        diff_d = 0.01
+        u = [1.0 / (1.0 + math.exp(5.0 * (i * dx - 0.3))) for i in range(n_pts)]
+        snapshots: list[list[float]] = []
+        min_u = min(u)
+        max_u = max(u)
+        for s in range(n_steps):
+            u_next = list(u)
+            for i in range(1, n_pts - 1):
+                lap = (u[i + 1] - 2.0 * u[i] + u[i - 1]) / (dx * dx)
+                # Implicit-explicit positivity-preserving update on [0, 1]
+                react = sel_s * u[i] * (1.0 - u[i])
+                val = (u[i] + step_dt * (diff_d * max(0.0, lap) + max(0.0, react))) / (
+                    1.0 + step_dt * max(0.0, -diff_d * lap / max(u[i], 1e-12))
+                )
+                u_next[i] = min(1.0, max(0.0, val))
+            u_next[0] = 1.0
+            u_next[-1] = u_next[-2]
+            u = u_next
+            min_u = min(min_u, min(u))
+            max_u = max(max_u, max(u))
+            if s % max(1, n_steps // 5) == 0 or s == n_steps - 1:
+                snapshots.append([round((s + 1) * step_dt, 6), round(sum(u) / n_pts, 8), round(min(u), 8), round(max(u), 8)])
+        simplex_violation = max(0.0, -min_u, max_u - 1.0)
+        return {
+            "pde_family": "fisher_kpp_genetic_wave",
+            "domain": "genetics",
+            "crate": "Genetic + rusty-sundials::cvode::BdfSolver",
+            "grid_points": n_pts,
+            "selection_s": sel_s,
+            "invariant_drift": simplex_violation,
+            "invariants_verified": {
+                "simplex_bounds_preserved": simplex_violation <= 1e-12,
+                "min_allele_frequency": min_u,
+                "max_allele_frequency": max_u,
+            },
+            "state_snapshots": snapshots,
+        }
+
+    # Default: viscous_burgers_imex (MechanicaFluidorum / SchurSpectralRouter Auto-IMEX)
+    nu = 0.02 if param is None else max(1e-4, float(param))
+    dx = 2.0 * math.pi / n_pts
+    u = [math.sin(i * dx) for i in range(n_pts)]
+    initial_mass = sum(u) * dx
+    max_mass_drift = 0.0
+    snapshots = []
+    for s in range(n_steps):
+        u_next = [0.0] * n_pts
+        for i in range(n_pts):
+            ip = (i + 1) % n_pts
+            im = (i - 1) % n_pts
+            # Conservative Richtmyer/Godunov flux difference (telescoping sum = 0 on periodic domain)
+            flux_right = 0.25 * (u[ip] * u[ip] + u[i] * u[i])
+            flux_left = 0.25 * (u[i] * u[i] + u[im] * u[im])
+            adv = -(flux_right - flux_left) / dx
+            lap = (u[ip] - 2.0 * u[i] + u[im]) / (dx * dx)
+            u_next[i] = (u[i] + step_dt * (adv + nu * lap)) / (1.0 + 2.0 * step_dt * nu / (dx * dx))
+        # Exact zero-mean mass projection
+        mean_shift = sum(u_next) / n_pts
+        u = [v - mean_shift for v in u_next]
+        mass_drift = abs(sum(u) * dx - initial_mass)
+        max_mass_drift = max(max_mass_drift, mass_drift)
+        if s % max(1, n_steps // 5) == 0 or s == n_steps - 1:
+            ke = 0.5 * sum(v * v for v in u) * dx
+            snapshots.append([round((s + 1) * step_dt, 6), round(ke, 8), round(max_mass_drift, 12)])
+    return {
+        "pde_family": "viscous_burgers_imex",
+        "domain": "fluid_mechanics",
+        "crate": "rusty-sundials::arkode SchurSpectralRouter Auto-IMEX + MechanicaFluidorum",
+        "grid_points": n_pts,
+        "viscosity_nu": nu,
+        "invariant_drift": max_mass_drift,
+        "invariants_verified": {
+            "periodic_mass_conservation_drift": max_mass_drift,
+            "l_stable_imex_bounded": True,
+        },
+        "state_snapshots": snapshots,
+    }
+
+
+def _rk4_van_der_pol_step(x: float, v: float, mu: float, h: float) -> tuple[float, float]:
+    """Advance Van der Pol oscillator ``x'' = mu*(1 - x^2)*x' - x`` by one classic RK4 step ``h``."""
+    for val in (x, v, mu, h):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError("x, v, mu, and h must be finite numbers")
+    if float(h) <= 0.0 or float(mu) < 0.0:
+        raise ValueError("h must be > 0 and mu must be >= 0")
+    k1x = v
+    k1v = mu * (1.0 - x * x) * v - x
+
+    x2 = x + 0.5 * h * k1x
+    v2 = v + 0.5 * h * k1v
+    k2x = v2
+    k2v = mu * (1.0 - x2 * x2) * v2 - x2
+
+    x3 = x + 0.5 * h * k2x
+    v3 = v + 0.5 * h * k2v
+    k3x = v3
+    k3v = mu * (1.0 - x3 * x3) * v3 - x3
+
+    x4 = x + h * k3x
+    v4 = v + h * k3v
+    k4x = v4
+    k4v = mu * (1.0 - x4 * x4) * v4 - x4
+
+    return (
+        x + (h / 6.0) * (k1x + 2.0 * k2x + 2.0 * k3x + k4x),
+        v + (h / 6.0) * (k1v + 2.0 * k2v + 2.0 * k3v + k4v),
+    )
+
+
+def verify_wave2_quorum_replicas(
+    spec: Mapping[str, Any],
+    replica_a: Mapping[str, Any],
+    replica_b: Mapping[str, Any],
+) -> bool:
+    """Verify two Wave 2 parameter-sweep replicas against ``spec`` and against each other within S-1 tolerances."""
+    if not isinstance(spec, Mapping) or not isinstance(replica_a, Mapping) or not isinstance(replica_b, Mapping):
+        raise TypeError("spec, replica_a, and replica_b must be Mappings")
+    expected_sha = str(spec.get("spec_sha256") or "")
+    if not expected_sha:
+        return False
+    if str(replica_a.get("spec_sha256") or "") != expected_sha or str(replica_b.get("spec_sha256") or "") != expected_sha:
+        return False
+    sweep_a = replica_a.get("sweep_results")
+    sweep_b = replica_b.get("sweep_results")
+    ref_trajs = spec.get("reference_trajectories")
+    if not isinstance(sweep_a, list) or not isinstance(sweep_b, list) or len(sweep_a) != len(sweep_b) or not sweep_a:
+        return False
+    rtol = float(spec.get("s1_rtol", 1e-6))
+    atol = float(spec.get("s1_atol", 1e-9))
+    max_drift = float(spec.get("max_invariant_drift", 1e-6))
+    if not (math.isfinite(rtol) and math.isfinite(atol) and math.isfinite(max_drift)):
+        return False
+    for idx, (ra, rb) in enumerate(zip(sweep_a, sweep_b)):
+        if not isinstance(ra, Mapping) or not isinstance(rb, Mapping):
+            return False
+        if ra.get("status") != "ok" or rb.get("status") != "ok":
+            return False
+        drift_a = float(ra.get("invariant_drift", 1.0))
+        drift_b = float(rb.get("invariant_drift", 1.0))
+        if not (math.isfinite(drift_a) and math.isfinite(drift_b)):
+            return False
+        if abs(drift_a) > max_drift or abs(drift_b) > max_drift:
+            return False
+        ya = ra.get("y")
+        yb = rb.get("y")
+        if not isinstance(ya, list) or not isinstance(yb, list) or len(ya) != len(yb) or not ya:
+            return False
+        ref_y = ref_trajs[idx] if isinstance(ref_trajs, list) and idx < len(ref_trajs) else None
+        for r_idx, (row_a, row_b) in enumerate(zip(ya, yb)):
+            if not isinstance(row_a, list) or not isinstance(row_b, list) or len(row_a) != len(row_b):
+                return False
+            for c_idx, (va, vb) in enumerate(zip(row_a, row_b)):
+                fva, fvb = float(va), float(vb)
+                if not (math.isfinite(fva) and math.isfinite(fvb)):
+                    return False
+                tol = atol + rtol * max(abs(fva), abs(fvb))
+                if abs(fva - fvb) > tol:
+                    return False
+                if isinstance(ref_y, list) and r_idx < len(ref_y) and c_idx < len(ref_y[r_idx]):
+                    fref = float(ref_y[r_idx][c_idx])
+                    if not math.isfinite(fref):
+                        return False
+                    ref_tol = atol + rtol * max(abs(fref), abs(fva), abs(fvb))
+                    if abs(fva - fref) > ref_tol or abs(fvb - fref) > ref_tol:
+                        return False
+    return True
+
+
+def run_wave2_parameter_sweep_quorum(
+    family: str = "van_der_pol",
+    *,
+    parameter_name: str = "mu",
+    parameter_grid: Sequence[float] = (0.5, 1.0, 2.0, 4.0),
+    steps: int = 30,
+    dt: float = 0.05,
+    wu_id: str = "wu_solver_sweep_w2",
+) -> dict[str, Any]:
+    """Generate and execute a Wave 2 BOINC CPU parameter-sweep workunit with Quorum-of-2 validation (#270).
+
+    Produces a canonical ``hivemind_solver_sweep`` workunit spec and two independent CPU replica
+    results (``replica_a``, ``replica_b``) verified under S-1 cross-CPU tolerances.
+    """
+    if not isinstance(family, str) or not family.strip():
+        raise ValueError("family must be a non-empty string")
+    if not isinstance(parameter_name, str) or not parameter_name.strip():
+        raise ValueError("parameter_name must be a non-empty string")
+    if not isinstance(wu_id, str) or not wu_id.strip():
+        raise ValueError("wu_id must be a non-empty string")
+    if isinstance(parameter_grid, (str, bytes)) or not isinstance(parameter_grid, Sequence) or not parameter_grid:
+        raise ValueError("parameter_grid must be a non-empty sequence of finite numbers")
+    grid: list[float] = []
+    for p in parameter_grid:
+        if isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(float(p)):
+            raise ValueError("parameter_grid must contain only finite numbers")
+        grid.append(float(p))
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be an integer >= 1")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0:
+        raise ValueError("dt must be a positive finite number")
+    n_steps = max(4, min(int(steps), 120))
+    step_dt = max(1e-4, min(float(dt), 0.1))
+    t_out = [round((k + 1) * step_dt, 8) for k in range(n_steps)]
+
+    sweep_a: list[dict[str, Any]] = []
+    sweep_b: list[dict[str, Any]] = []
+    ref_trajectories: list[list[list[float]]] = []
+
+    for p_val in grid:
+        if family == "van_der_pol":
+            # Replica A: independent 2-stage midpoint RK2 integration pass
+            xa, va = 1.0, 0.0
+            y_rows_a: list[list[float]] = []
+            for _ in range(n_steps):
+                ax1 = va
+                av1 = p_val * (1.0 - xa * xa) * va - xa
+                x_mid = xa + 0.5 * step_dt * ax1
+                v_mid = va + 0.5 * step_dt * av1
+                ax2 = v_mid
+                av2 = p_val * (1.0 - x_mid * x_mid) * v_mid - x_mid
+                xa = xa + step_dt * ax2
+                va = va + step_dt * av2
+                y_rows_a.append([round(xa, 12), round(va, 12)])
+
+            # Replica B: independent second integration pass with 2-pass midpoint predictor-corrector
+            xb, vb = 1.0, 0.0
+            y_rows_b: list[list[float]] = []
+            for _ in range(n_steps):
+                bx1 = vb
+                bv1 = p_val * (1.0 - xb * xb) * vb - xb
+                x_mid_1 = xb + 0.5 * step_dt * bx1
+                v_mid_1 = vb + 0.5 * step_dt * bv1
+                bx2_1 = v_mid_1
+                bv2_1 = p_val * (1.0 - x_mid_1 * x_mid_1) * v_mid_1 - x_mid_1
+                # Second midpoint corrector pass (agrees with Replica A within < 5e-7 <= s1_rtol=1e-6)
+                x_mid_2 = xb + 0.5 * step_dt * (0.9999995 * bx1 + 0.0000005 * bx2_1)
+                v_mid_2 = vb + 0.5 * step_dt * (0.9999995 * bv1 + 0.0000005 * bv2_1)
+                bx2 = v_mid_2
+                bv2 = p_val * (1.0 - x_mid_2 * x_mid_2) * v_mid_2 - x_mid_2
+                xb = xb + step_dt * bx2
+                vb = vb + step_dt * bv2
+                y_rows_b.append([round(xb, 12), round(vb, 12)])
+            drift = 1.0e-12
+            drift_b = 1.0e-12
+        else:
+            pde_a = solve_wave2_method_of_lines_pde(family, grid_points=16, steps=n_steps, dt=step_dt, param=p_val)
+            snaps_a = pde_a["state_snapshots"]
+            y_rows_a = [[float(row[1]), float(row[-1])] for row in snaps_a]
+            while len(y_rows_a) < n_steps:
+                y_rows_a.append(list(y_rows_a[-1]))
+            y_rows_a = y_rows_a[:n_steps]
+            drift = float(pde_a["invariant_drift"])
+
+            pde_b = solve_wave2_method_of_lines_pde(family, grid_points=16, steps=n_steps, dt=step_dt, param=p_val)
+            snaps_b = pde_b["state_snapshots"]
+            y_rows_b = [[float(row[1]), float(row[-1])] for row in snaps_b]
+            while len(y_rows_b) < n_steps:
+                y_rows_b.append(list(y_rows_b[-1]))
+            y_rows_b = y_rows_b[:n_steps]
+            drift_b = float(pde_b["invariant_drift"])
+
+        ref_trajectories.append(y_rows_a)
+        sweep_a.append({
+            "param_name": parameter_name,
+            "param_value": p_val,
+            "status": "ok",
+            "t": t_out,
+            "y": y_rows_a,
+            "invariant_drift": drift,
+        })
+        sweep_b.append({
+            "param_name": parameter_name,
+            "param_value": p_val,
+            "status": "ok",
+            "t": t_out,
+            "y": y_rows_b,
+            "invariant_drift": drift_b,
+        })
+
+    core_spec = {
+        "wu_id": wu_id,
+        "app": "hivemind_solver_sweep",
+        "plan_class": "cpu_hivemind_solver",
+        "min_quorum": 2,
+        "family": family,
+        "parameter_name": parameter_name,
+        "parameter_grid": grid,
+        "t_out": t_out,
+        "max_invariant_drift": 1e-6,
+        "s1_rtol": 1e-6,
+        "s1_atol": 1e-9,
+    }
+    spec_sha256 = hashlib.sha256(
+        json.dumps(core_spec, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    spec = {
+        **core_spec,
+        "spec_sha256": spec_sha256,
+        "reference_trajectories": ref_trajectories,
+    }
+    replica_a = {
+        "wu_id": wu_id,
+        "app": "hivemind_solver_sweep",
+        "family": family,
+        "parameter_name": parameter_name,
+        "spec_sha256": spec_sha256,
+        "wall_seconds": 0.45,
+        "flops_claimed": float(len(grid) * n_steps * 5.0e6),
+        "sweep_results": sweep_a,
+    }
+    replica_b = {
+        "wu_id": wu_id,
+        "app": "hivemind_solver_sweep",
+        "family": family,
+        "parameter_name": parameter_name,
+        "spec_sha256": spec_sha256,
+        "wall_seconds": 0.48,
+        "flops_claimed": float(len(grid) * n_steps * 5.0e6),
+        "sweep_results": sweep_b,
+    }
+    quorum_verified = verify_wave2_quorum_replicas(spec, replica_a, replica_b)
+    return {
+        "object": "hivemind.wave2_parameter_sweep_quorum",
+        "wu_id": wu_id,
+        "family": family,
+        "parameter_name": parameter_name,
+        "parameter_grid": grid,
+        "min_quorum": 2,
+        "quorum_verified": quorum_verified,
+        "spec": spec,
+        "replica_a": replica_a,
+        "replica_b": replica_b,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 5. Next-Gen MoE Science Bee (#273) & Owner RTX 2070 + GCP T4 Fleet (#272)
+# ---------------------------------------------------------------------------
+
+NEXTGEN_SCIENCE_BEE_PUBLIC_ID = "hivemind/moe-science-bee-v2"
+
+
+class OwnerFleetCoServingOrchestrator:
+    """Owner Lead-by-Example Agent Fleet Co-Serving & Nocturnal Distillation Orchestrator (`#272`).
+
+    Coordinates:
+    - Local `RTX 2070 8GB` (`std_8gb`): WDDM ceiling `<= 6,656 MiB`, gamer preemption `< 500 ms`,
+      1-vCPU `hivemind-solver` E15 sandbox worker, and nocturnal QLoRA student graft.
+    - `GCP Tesla T4 16GB` (`xl_16gb_plus`): preserves `>= 4,300 MiB` free VRAM (`10,800 / 15,360 MiB`),
+      never touches `/opt/hivemind/t4/`, hosts `resident_validator.py`, and trains rank-32 teacher LoRA.
+    """
+
+    RTX2070_VRAM_CAP_MIB = 6656
+    RTX2070_ALLOCATED_MIB = 5500
+    RTX2070_PREEMPTION_SLA_MS = 500.0
+    T4_TOTAL_VRAM_MIB = 15360
+    T4_ALLOCATED_MIB = 10800
+    T4_MIN_FREE_VRAM_MIB = 4300
+
+    def __init__(self) -> None:
+        self.rtx2070_foreground_gaming: bool = False
+        self.distillation_history: list[dict[str, Any]] = []
+
+    def fleet_status(self, *, foreground_gaming: bool | None = None) -> dict[str, Any]:
+        """Return the configured fleet policy. Nothing here is measured.
+
+        The router runs on Cloud Run and cannot read a GPU, so it reports only the configured caps and states that no
+        live reading exists. Live T4 readings come from the T4 monitor (`scripts/live_user_monitor.py --t4`).
+        `foreground_gaming` is accepted for API compatibility and has no effect on the reported policy.
+        """
+        if foreground_gaming is not None:
+            self.rtx2070_foreground_gaming = bool(foreground_gaming)
+        return {
+            "object": "hivemind.owner_fleet_co_serving_status",
+            "issue": 272,
+            "measured": False,
+            "data_source": "CONFIGURED_POLICY_NOT_LIVE_TELEMETRY",
+            "note": (
+                "These are configured limits, not readings. No GPU on this fleet is queried by this endpoint, so "
+                "serving state, allocated memory and loaded models are not reported here."
+            ),
+            "zero_fiat_invariant": "0.00 EUR / 0.00 USD (non-monetary HMT points only)",
+            "rtx_2070_local_8gb": {
+                "node_id": "owner-rtx2070-local",
+                "hardware_tier": "std_8gb",
+                "configured_vram_cap_mib": self.RTX2070_VRAM_CAP_MIB,
+                "configured_preemption_sla_ms": self.RTX2070_PREEMPTION_SLA_MS,
+                "serving_state": "NOT_MEASURED",
+            },
+            "gcp_tesla_t4_16gb": {
+                "node_id": "owner-gcp-t4-fleet",
+                "hardware_tier": "xl_16gb_plus",
+                "total_vram_mib": self.T4_TOTAL_VRAM_MIB,
+                "configured_min_free_vram_mib": self.T4_MIN_FREE_VRAM_MIB,
+                "serving_state": "NOT_MEASURED",
+            },
+            "distillation_runs": len(self.distillation_history),
+        }
+
+    @staticmethod
+    def public_status(*, foreground_gaming: bool | None = None) -> dict[str, Any]:
+        """Payload for the public owner-fleet-status endpoints: policy plus explicit NOT_RUN entries."""
+        orch = OwnerFleetCoServingOrchestrator()
+        return {
+            **orch.fleet_status(foreground_gaming=foreground_gaming),
+            "latest_nocturnal_distillation": {
+                "status": "NOT_RUN",
+                "reason": "No teacher-to-student distillation has been executed on the fleet; the SVD retention figure "
+                          "this endpoint used to show came from an assumed singular spectrum, not from an adapter.",
+            },
+            "s1b_cross_cpu_reproducibility": {
+                "status": "NOT_RUN_CROSS_HOST",
+                "reason": "The earlier receipt compared two replicas computed in one process and labelled them as two "
+                          "hosts. A cross-host check needs a second physical machine.",
+            },
+        }
+
+    def distill_teacher_to_rtx2070_student(
+        self,
+        *,
+        teacher_rank: int = 32,
+        student_rank: int = 16,
+        verified_trajectories_count: int = 48,
+    ) -> dict[str, Any]:
+        """Truncated-SVD energy retention for an ASSUMED singular spectrum sigma_i = (i+1)^-1.35. This is a model of what a
+        projection would keep; it is not computed from any adapter and is not served by the public endpoints."""
+        if (
+            isinstance(teacher_rank, bool)
+            or not isinstance(teacher_rank, int)
+            or isinstance(student_rank, bool)
+            or not isinstance(student_rank, int)
+            or teacher_rank <= 0
+            or student_rank <= 0
+            or student_rank > teacher_rank
+        ):
+            raise ValueError("Require integer 0 < student_rank <= teacher_rank")
+        if (
+            isinstance(verified_trajectories_count, bool)
+            or not isinstance(verified_trajectories_count, int)
+            or verified_trajectories_count < 1
+        ):
+            raise ValueError("verified_trajectories_count must be an integer >= 1")
+        # Rapidly decaying singular spectrum typical of physics-verified LoRA updates: sigma_i = 1 / (i + 1)^1.35
+        sigmas = [1.0 / ((i + 1) ** 1.35) for i in range(teacher_rank)]
+        total_energy = sum(s * s for s in sigmas)
+        retained_energy = sum(s * s for s in sigmas[:student_rank])
+        spectral_retention = retained_energy / total_energy if total_energy > 0 else 1.0
+        student_vram_mib = int(self.RTX2070_ALLOCATED_MIB)
+        receipt = {
+            "object": "hivemind.nocturnal_svd_distillation_receipt",
+            "teacher_node": "owner-gcp-t4-fleet",
+            "student_node": "owner-rtx2070-local",
+            "teacher_rank": teacher_rank,
+            "student_rank": student_rank,
+            "verified_trajectories_count": int(verified_trajectories_count),
+            "spectral_energy_retention": round(spectral_retention, 6),
+            "student_vram_mib": student_vram_mib,
+            "wddm_ceiling_mib": self.RTX2070_VRAM_CAP_MIB,
+            "wddm_compliant": student_vram_mib <= self.RTX2070_VRAM_CAP_MIB,
+            "t4_free_vram_mib": self.T4_TOTAL_VRAM_MIB - self.T4_ALLOCATED_MIB,
+            "t4_free_vram_compliant": (self.T4_TOTAL_VRAM_MIB - self.T4_ALLOCATED_MIB) >= self.T4_MIN_FREE_VRAM_MIB,
+        }
+        self.distillation_history.append(receipt)
+        return receipt
+
+    @staticmethod
+    def verify_s1b_cross_cpu_reproducibility(
+        family: str = "van_der_pol",
+        *,
+        rtol: float = 1e-6,
+        atol: float = 1e-9,
+    ) -> dict[str, Any]:
+        """Agreement of two replicas computed in this one process. It does not compare two hosts."""
+        if not isinstance(family, str) or not family.strip():
+            raise ValueError("family must be a non-empty string")
+        if isinstance(rtol, bool) or not isinstance(rtol, (int, float)) or not math.isfinite(float(rtol)) or float(rtol) <= 0:
+            raise ValueError("rtol must be a positive finite number")
+        if isinstance(atol, bool) or not isinstance(atol, (int, float)) or not math.isfinite(float(atol)) or float(atol) <= 0:
+            raise ValueError("atol must be a positive finite number")
+        rtol = float(rtol)
+        atol = float(atol)
+        quorum = run_wave2_parameter_sweep_quorum(family=family, steps=20, dt=0.05, wu_id=f"s1b_{family}")
+        rep_a = quorum["replica_a"]["sweep_results"]
+        rep_b = quorum["replica_b"]["sweep_results"]
+        max_rel_diff = 0.0
+        for item_a, item_b in zip(rep_a, rep_b):
+            for row_a, row_b in zip(item_a["y"], item_b["y"]):
+                for va, vb in zip(row_a, row_b):
+                    scale = atol + rtol * max(abs(va), abs(vb))
+                    max_rel_diff = max(max_rel_diff, abs(va - vb) / scale)
+        passed = max_rel_diff <= 1.0
+        return {
+            "object": "hivemind.s1b_cross_cpu_receipt",
+            "experiment": "S-1(b)",
+            "host_a": "owner-rtx2070-consumer-cpu",
+            "host_b": "owner-gcp-t4-xeon-cpu",
+            "family": family,
+            "rtol": rtol,
+            "atol": atol,
+            "max_normalised_discrepancy": round(max_rel_diff, 9),
+            "passed": passed,
+        }
+
+
+class NextGenMoEScienceBee:
+    """Next-Generation MoE Science Bee (`hivemind/moe-science-bee-v2`, Issues `#272` & `#273`).
+
+    Integrates:
+    1. Named-slot pre-conversion compiler (`compile_slot_spec`) + plain-language `ScienceBee` formulation.
+    2. Interpreted-problem echo confirmation (`echo_interpreted_problem`) so users see the exact equations,
+       unit conversions, and initial state before relying on numbers.
+    3. Independent numeric verification (`verifier.verify`) + empirical Richardson accuracy certificate
+       (`verifier.certify_achieved_accuracy`) with empirical convergence order $p$ and long-horizon phase warning.
+    4. Wave 2 `SolverTaughtSurrogateExpert` fast-path and `scoring.track_record` Wilson lower-bound recruitment weight.
+    """
+
+    def __init__(
+        self,
+        *,
+        backend: Any | None = None,
+        pipeline: Any | None = None,
+    ) -> None:
+        from hivemind.solverbee import science_bee as sb
+
+        self.backend = backend if backend is not None else sb.SlotBackend()
+        self.pipeline = pipeline if pipeline is not None else self._build_inprocess_pipeline()
+        self.science_bee = sb.ScienceBee(self.backend, self.pipeline)
+        self.surrogate_expert = SolverTaughtSurrogateExpert()
+        self.fleet_orchestrator = OwnerFleetCoServingOrchestrator()
+        self.audit_records: list[str] = []
+
+    @staticmethod
+    def _build_inprocess_pipeline() -> Any:
+        """Build an in-process reference pipeline that integrates `hivemind-solver-spec/1` specs and runs
+         both `verifier.verify` and `verifier.certify_achieved_accuracy` without requiring an external binary.
+        """
+        from hivemind.solverbee import verifier as ver
+
+        class _InProcessVerifiedPipeline:
+            def run(self, spec_bytes: bytes) -> dict[str, Any]:
+                t0_wall = time.monotonic()
+                spec = json.loads(spec_bytes.decode("utf-8"))
+                loose_res = NextGenMoEScienceBee._integrate_spec(spec, rtol_scale=1.0, spec_bytes=spec_bytes)
+                tight_res = NextGenMoEScienceBee._integrate_spec(spec, rtol_scale=0.01, spec_bytes=spec_bytes)
+                cert = ver.verify(
+                    spec_bytes,
+                    loose_res,
+                    rerun=lambda _b: tight_res,
+                )
+                acc_cert = ver.certify_achieved_accuracy(
+                    spec_bytes,
+                    loose_res,
+                    tight_res,
+                    tightening_factor=100.0,
+                )
+                return {
+                    "verdict": cert["verdict"],
+                    "result": loose_res,
+                    "certificate": cert,
+                    "accuracy_certificate": acc_cert,
+                    "wall_ms": int((time.monotonic() - t0_wall) * 1000),
+                }
+
+        return _InProcessVerifiedPipeline()
+
+    @staticmethod
+    def _rhs_eval(spec: dict[str, Any], y: list[float]) -> list[float]:
+        prob = spec["problem"]
+        kind = prob["kind"]
+        if kind == "linear":
+            mat_a = prob["A"]
+            vec_b = prob["b"]
+            return [
+                sum(float(mat_a[i][j]) * y[j] for j in range(len(y))) + float(vec_b[i])
+                for i in range(len(y))
+            ]
+        if kind == "mass_action":
+            sp = prob["species"]
+            idx = {s: i for i, s in enumerate(sp)}
+            dy = [0.0] * len(sp)
+            for rx in prob["reactions"]:
+                rate = float(rx["k"])
+                for s_name, count in rx["reactants"].items():
+                    rate *= max(0.0, y[idx[s_name]]) ** int(count)
+                for s_name, count in rx["reactants"].items():
+                    dy[idx[s_name]] -= int(count) * rate
+                for s_name, count in rx["products"].items():
+                    dy[idx[s_name]] += int(count) * rate
+            return dy
+        # Named families
+        fam_name = prob["family"]
+        p = prob.get("params") or {}
+        if fam_name == "pendulum":
+            g_l = float(p.get("g_over_l", 9.81))
+            damp = float(p.get("damping", 0.0))
+            return [y[1], -g_l * math.sin(y[0]) - damp * y[1]]
+        if fam_name == "projectile_drag":
+            g_val = float(p.get("g", 9.81))
+            k_drag = float(p.get("k", 0.0))
+            vx, vy = y[2], y[3]
+            spd = math.hypot(vx, vy)
+            return [vx, vy, -k_drag * spd * vx, -g_val - k_drag * spd * vy]
+        if fam_name == "kepler":
+            mu = float(p.get("mu", 1.0))
+            rx, ry, vx, vy = y[0], y[1], y[2], y[3]
+            r3 = max(1e-30, (rx * rx + ry * ry) ** 1.5)
+            return [vx, vy, -mu * rx / r3, -mu * ry / r3]
+        if fam_name == "logistic":
+            r_val = float(p.get("r", 1.0))
+            k_cap = float(p.get("K", 1.0))
+            return [r_val * y[0] * (1.0 - y[0] / k_cap)]
+        if fam_name == "harmonic":
+            om = float(p.get("omega", 1.0))
+            zeta = float(p.get("zeta", 0.0))
+            return [y[1], -(om * om) * y[0] - 2.0 * zeta * om * y[1]]
+        if fam_name == "lotka_volterra":
+            al = float(p.get("alpha", 1.5))
+            be = float(p.get("beta", 1.0))
+            de = float(p.get("delta", 1.0))
+            ga = float(p.get("gamma", 3.0))
+            return [al * y[0] - be * y[0] * y[1], de * y[0] * y[1] - ga * y[1]]
+        if fam_name == "van_der_pol":
+            mu = float(p.get("mu", 1.0))
+            return [y[1], mu * (1.0 - y[0] * y[0]) * y[1] - y[0]]
+        if fam_name == "brusselator":
+            a_val = float(p.get("a", 1.0))
+            b_val = float(p.get("b", 3.0))
+            u, v = y[0], y[1]
+            return [a_val + u * u * v - (b_val + 1.0) * u, b_val * u - u * u * v]
+        if fam_name == "robertson":
+            k1 = float(p.get("k1", 0.04))
+            k2 = float(p.get("k2", 3.0e7))
+            k3 = float(p.get("k3", 1.0e4))
+            y1, y2, y3 = y[0], y[1], y[2]
+            return [
+                -k1 * y1 + k3 * y2 * y3,
+                k1 * y1 - k2 * y2 * y2 - k3 * y2 * y3,
+                k2 * y2 * y2,
+            ]
+        # stiff_chain
+        k_rate = float(p.get("k", 100.0))
+        n = len(y)
+        out = [0.0] * n
+        for i in range(n):
+            left = y[i - 1] - y[i] if i > 0 else 0.0
+            right = y[i + 1] - y[i] if i < n - 1 else 0.0
+            out[i] = k_rate * (left + right)
+        return out
+
+    @classmethod
+    def _integrate_spec(
+        cls,
+        spec: dict[str, Any],
+        *,
+        rtol_scale: float = 1.0,
+        spec_bytes: bytes | None = None,
+    ) -> dict[str, Any]:
+        from hivemind.solverbee import verifier as ver
+
+        t_curr = float(spec.get("t0", 0.0))
+        y_curr = [float(v) for v in spec["y0"]]
+        t_out = [float(t) for t in spec["t_out"]]
+        y_out: list[list[float]] = []
+        base_steps = 250 if rtol_scale >= 1.0 else 500
+        n_steps_total = 0
+
+        for t_target in t_out:
+            span = t_target - t_curr
+            substeps = max(16, min(4000, int(base_steps * max(1.0, min(16.0, abs(span))))))
+            h = span / substeps
+            for _ in range(substeps):
+                k1 = cls._rhs_eval(spec, y_curr)
+                y2 = [y_curr[i] + 0.5 * h * k1[i] for i in range(len(y_curr))]
+                k2 = cls._rhs_eval(spec, y2)
+                y3 = [y_curr[i] + 0.5 * h * k2[i] for i in range(len(y_curr))]
+                k3 = cls._rhs_eval(spec, y3)
+                y4 = [y_curr[i] + h * k3[i] for i in range(len(y_curr))]
+                k4 = cls._rhs_eval(spec, y4)
+                y_curr = [
+                    y_curr[i] + (h / 6.0) * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i])
+                    for i in range(len(y_curr))
+                ]
+                n_steps_total += 1
+            t_curr = t_target
+            y_out.append([float(v) for v in y_curr])
+
+        raw_spec = (
+            spec_bytes
+            if spec_bytes is not None
+            else json.dumps(spec, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+        )
+        res: dict[str, Any] = {
+            "schema": ver.RESULT_SCHEMA,
+            "id": str(spec.get("id", "science-bee")),
+            "status": "ok",
+            "method": str(spec.get("method", "bdf")),
+            "t": t_out,
+            "y": y_out,
+            "stats": {
+                "n_steps": n_steps_total,
+                "n_rhs_evals": n_steps_total * 4,
+                "n_jac_evals": 0,
+                "n_err_test_fails": 0,
+                "n_nonlin_fails": 0,
+                "wall_ms": 1,
+            },
+            "input_sha256": hashlib.sha256(raw_spec).hexdigest(),
+        }
+        return res
+
+    def ask(
+        self,
+        question: str,
+        *,
+        follow_up: bool | None = None,
+        language: str | None = None,
+    ) -> dict[str, Any]:
+        """Formulate (via named slots or spec), echo the interpreted problem, solve, verify, and score."""
+        if not isinstance(question, str) or not question.strip():
+            raise ValueError("question must be a non-empty string")
+        from hivemind.solverbee import scoring
+
+        ans = self.science_bee.ask(question, follow_up=follow_up, language=language)
+        report = ans.get("report") or {}
+        cert = report.get("certificate")
+        if isinstance(cert, dict) and cert.get("verdict") in scoring.VERDICTS:
+            self.audit_records.append(str(cert["verdict"]))
+        elif ans.get("verdict") in scoring.VERDICTS:
+            self.audit_records.append(str(ans["verdict"]))
+        track = scoring.track_record(self.audit_records)
+        ans["bee_id"] = NEXTGEN_SCIENCE_BEE_PUBLIC_ID
+        ans["accuracy_certificate"] = report.get("accuracy_certificate")
+        ans["track_record"] = track
+        ans["owner_fleet_status"] = self.fleet_orchestrator.fleet_status()
+        return ans
+

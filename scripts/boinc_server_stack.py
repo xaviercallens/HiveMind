@@ -34,17 +34,28 @@ def _class_kwargs(spec: dict) -> dict:
     return {k: spec[k] for k in ("plan_class", "gpu_ram_mb") if k in spec}
 
 
-def shim(stack: Stack, cmd: str, venv_python: str) -> str:
+DEFAULT_STABLE_CODE_SRC = Path("/opt/hivemind/t4/src")
+
+
+def _resolve_code_src(code_src: Path | None = None) -> Path:
+    if code_src is not None:
+        return code_src
+    return DEFAULT_STABLE_CODE_SRC if DEFAULT_STABLE_CODE_SRC.exists() else (ROOT / "src")
+
+
+def shim(stack: Stack, cmd: str, venv_python: str, code_src: Path | None = None) -> str:
+    effective_src = _resolve_code_src(code_src)
     return (
         "#!/bin/bash\nunset LD_LIBRARY_PATH\n"
-        f"export PYTHONPATH={ROOT / 'src'}\nexport HF_HUB_OFFLINE=1\n"
+        f"export PYTHONPATH={effective_src}\nexport HF_HUB_OFFLINE=1\n"
         f"export HIVEMIND_SPEC_DIR={stack.root}/hivemind_specs\nexport HIVEMIND_LEDGER_DIR={stack.root}/hivemind_ledger\n"
         f"export HIVEMIND_STACK_BASE={stack.base}\nexport HIVEMIND_BOINC_SRC={stack.src}\n"  # lets the validator look a result up in the project DB (community mode)
         f"exec {venv_python} -W ignore -m hivemind.boinc.real_client.boinc_server_scripts {cmd} \"$@\"\n"
     )
 
 
-def setup(stack: Stack, venv_python: str) -> None:
+def setup(stack: Stack, venv_python: str, code_src: Path | None = None) -> None:
+    effective_src = _resolve_code_src(code_src)
     stack.make_project()
     stack.write_apache()
     stack.write_plan_class_spec()
@@ -53,10 +64,10 @@ def setup(stack: Stack, venv_python: str) -> None:
         (stack.root / d).mkdir(exist_ok=True)
     for name, cmd in (("hivemind_validate", "validate"), ("hivemind_assimilate", "assimilate")):
         p = stack.root / "bin" / name
-        p.write_text(shim(stack, cmd, venv_python))
+        p.write_text(shim(stack, cmd, venv_python, code_src=effective_src))
         p.chmod(0o755)
     for app, spec in APPS.items():
-        body = launcher(venv_python, ROOT / "src", "hivemind.boinc.real_client.moe_app", spec["args"], {"HF_HUB_OFFLINE": "1"})
+        body = launcher(venv_python, effective_src, "hivemind.boinc.real_client.moe_app", spec["args"], {"HF_HUB_OFFLINE": "1"})
         stack.install_app(app, body, spec["n_inputs"], spec["outputs"], spec["max_nbytes"], **_class_kwargs(spec))
     stack.configure("hivemind_validate", "hivemind_assimilate", list(APPS))
     stack.register_apps(list(APPS))
@@ -66,15 +77,15 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("action", choices=["setup", "start", "stop", "apps"])
     ap.add_argument("--version", type=int, default=101, help="app version to publish with the 'apps' action")
-    ap.add_argument("--code-src", type=Path, default=Path("/opt/hivemind/t4/src"), help="stable code path baked into the 'apps' launchers")
+    ap.add_argument("--code-src", type=Path, default=DEFAULT_STABLE_CODE_SRC, help="stable code path baked into the 'apps' launchers")
     ap.add_argument("--base", type=Path, required=True)
     ap.add_argument("--boinc-src", type=Path, required=True)
     ap.add_argument("--venv-python", required=True)
     ap.add_argument("--port", type=int, default=8081)
     a = ap.parse_args()
-    st = Stack(a.base, a.boinc_src, a.venv_python, ROOT / "src", a.port)
+    st = Stack(a.base, a.boinc_src, a.venv_python, a.code_src, a.port)
     if a.action == "setup":
-        setup(st, a.venv_python)
+        setup(st, a.venv_python, code_src=a.code_src)
         print("setup done:", st.master_url)
     elif a.action == "apps":
         # publish a new app version whose launcher points at a stable code path (not an ephemeral git worktree); older versions are deprecated

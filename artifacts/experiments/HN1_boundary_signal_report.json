@@ -1,0 +1,124 @@
+{
+ "schema_version": "hivemind-experiment-HN1/v1.0",
+ "experiment_id": "HN1-boundary-signal",
+ "prereg_sha256": "d4e4c3c4569167982649941258cfeecaf5b038d7633f41672f6161dadb61594c",
+ "model": "Qwen/Qwen2.5-0.5B",
+ "hidden_layer_mid": 12,
+ "window_tokens": 256,
+ "device": "cpu",
+ "torch": "2.14.0+cu130",
+ "python": "3.12.3",
+ "elapsed_s": 445.2,
+ "sets": {
+  "english": {
+   "status": "MEASURED",
+   "n_windows": 4,
+   "text_sha256": "8f32c90c94dd53ee776c5c601506a04af35edbb024ed56382ec8057f02570f59",
+   "trained": {
+    "n_positions": 1020,
+    "word_start_rate": 0.5941176470588235,
+    "auroc_word_start_mid": 0.6177875033880199,
+    "auroc_word_start_last": 0.3298616093493407,
+    "auroc_newline_mid": 0.4693200663349917,
+    "spearman_score_surprisal_mid": 0.5588723851024802,
+    "mean_cos_mid": 0.5150844116234129,
+    "boundary_density_at_english_median": 0.49901960784313726
+   },
+   "random_init": {
+    "auroc_word_start_mid": 0.5209020902090209,
+    "auroc_newline_mid": 0.39124378109452734,
+    "mean_cos_mid": 0.7927524771176132
+   }
+  },
+  "french": {
+   "status": "MEASURED",
+   "n_windows": 4,
+   "text_sha256": "c042bc19e40da6b9c0f3f508851e6dbee0ae43bea9d0e7f3d92ef31c223cd4ea",
+   "trained": {
+    "n_positions": 1020,
+    "word_start_rate": 0.4872549019607843,
+    "auroc_word_start_mid": 0.6554047035559437,
+    "auroc_word_start_last": 0.4222928392534942,
+    "auroc_newline_mid": 0.779466809258269,
+    "spearman_score_surprisal_mid": 0.6039064424547981,
+    "mean_cos_mid": 0.508791313810484,
+    "boundary_density_at_english_median": 0.5019607843137255
+   },
+   "random_init": {
+    "auroc_word_start_mid": 0.43804317299591045,
+    "auroc_newline_mid": 0.5395309754793369,
+    "mean_cos_mid": 0.7698257613415812
+   }
+  },
+  "python": {
+   "status": "MEASURED",
+   "n_windows": 4,
+   "text_sha256": "eb2680574b2e2f61b8acb250d9da11f96b835dd8705310d67211ffec5d5cac52",
+   "trained": {
+    "n_positions": 1020,
+    "word_start_rate": 0.5019607843137255,
+    "auroc_word_start_mid": 0.550658218503937,
+    "auroc_word_start_last": 0.5099578617125984,
+    "auroc_newline_mid": 0.5552562814070352,
+    "spearman_score_surprisal_mid": 0.4285984818641043,
+    "mean_cos_mid": 0.5148567560736054,
+    "boundary_density_at_english_median": 0.5196078431372549
+   },
+   "random_init": {
+    "auroc_word_start_mid": 0.47720841535433073,
+    "auroc_newline_mid": 0.5257889447236181,
+    "mean_cos_mid": 0.8050461244349386
+   }
+  },
+  "lean": {
+   "status": "MEASURED",
+   "n_windows": 4,
+   "text_sha256": "87b5bb169249aa0d69d0cb0fef3dd162bb7bd2b1bc22790c9782cfffa131d28f",
+   "trained": {
+    "n_positions": 1020,
+    "word_start_rate": 0.4245098039215686,
+    "auroc_word_start_mid": 0.7199090376164079,
+    "auroc_word_start_last": 0.5649739742142101,
+    "auroc_newline_mid": 0.8208582834331337,
+    "spearman_score_surprisal_mid": 0.5995815067104063,
+    "mean_cos_mid": 0.5417356385949853,
+    "boundary_density_at_english_median": 0.4
+   },
+   "random_init": {
+    "auroc_word_start_mid": 0.4832888095022642,
+    "auroc_newline_mid": 0.38983144821468174,
+    "mean_cos_mid": 0.8211838421283983
+   }
+  }
+ },
+ "verdict": {
+  "H1_supported": true,
+  "H1_sets_above_0.60": [
+   "english",
+   "french",
+   "lean"
+  ],
+  "H2_supported": true,
+  "H2_sets_above_0.10": [
+   "english",
+   "french",
+   "python",
+   "lean"
+  ],
+  "H3_density_gap_python_vs_english": 0.020588235294117685,
+  "H3_supported": false,
+  "positive_control_passed_sets": [
+   "french",
+   "python",
+   "lean"
+  ],
+  "positive_control_valid": false,
+  "negative_control_passed_sets": [
+   "english",
+   "python",
+   "lean"
+  ],
+  "negative_control_valid": false,
+  "experiment_valid": false
+ }
+}

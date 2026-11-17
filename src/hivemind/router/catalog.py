@@ -13,7 +13,7 @@ does not yet verify that a producer really serves the model behind a tier id (``
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 # Same shape the gateway accepts for a model id; kept here so a catalog entry can never be unroutable.
@@ -34,6 +34,11 @@ class ModelTier:
     suggested_cost_per_1k: float  # HMT per 1,000 tokens a producer might ask; HMT have no cash value
     suggested_capacity_1k: float  # 1,000-token units per epoch to advertise
     good_for: str
+    # What the tier really is (set by ``_classify_tiers``, never by hand): "base" = an off-the-shelf model you can pull as is; "adapter" = a LoRA
+    # served under a local alias (the tag is a llama-server alias, not a pullable model); "alias" = the same model as another tier under a
+    # different name (``alias_of`` names that tier), so it is a label, not a different model.
+    kind: str = "base"
+    alias_of: str = ""
 
     def __post_init__(self) -> None:
         if not self.tier_id or set(self.tier_id) - _ID_CHARS:
@@ -57,8 +62,16 @@ class ModelTier:
 
 # Ordered by min_vram_gb ascending; ``recommend_tier`` relies on that order (checked by __post_init__ of the tuple below).
 TIERS: tuple[ModelTier, ...] = (
+    # Runs on CPU (no GPU memory): the plain IBM Granite 3.1 1B-A400M BASE model, Q4_K_M GGUF (about 0.8 GB, about 1.2 GB RAM, 68 tokens/s measured on 6 CPU
+    # threads, 2026-11-03). There is no Ollama library tag for the base model: serve the GGUF with deploy/granite_cpu/start.sh. It is NOT instruction tuned.
+    ModelTier("granite-1b-base", "Granite 3.1 1B-A400M base (CPU, text completion)", "granite-3.1-1b-a400m-base", 0.8, 0.5, True, 0.4, 0.05, 30.0,
+              "CPU-only text continuation (it continues your text, it does not follow instructions or chat); the base model the BOINC training chain starts from"),
     ModelTier("crowd-v1", "CrowdGPT Crowd-v1 (1B Generalist Trunk)", "hf.co/Vxtzq/Crowd-v1", 1.1, 4.0, False, None, 0.15, 50.0,
               "1B citizen generalist trunk trained on 7B FineWeb tokens (CrowdGPT x La Ruche joint federation)"),
+    # Real small MoE for 4-8 GB cards: IBM Granite 3.1 MoE, 3.3B parameters with 800M active, Apache-2.0
+    # (Ollama library granite3.1-moe:3b; weights ibm-granite/granite-3.1-3b-a800m-instruct, both checked 2026-11-02).
+    ModelTier("granite-moe", "IBM Granite 3.1 MoE (3B, 800M active)", "granite3.1-moe:3b", 2.0, 4.0, True, 0.8, 0.2, 50.0,
+              "a genuine open mixture-of-experts model small enough for 4-8 GB cards: summaries, tool calls, light code"),
     ModelTier("coder-lite", "Coder Lite (3B)", "qwen2.5-coder:3b", 1.9, 4.0, False, None, 0.2, 40.0,
               "quick edits, explanations and small scripts on entry-level cards"),
     ModelTier("gemma-core", "Google Gemma 3 Core (4B Multimodal & Multilingual)", "gemma3:4b", 3.3, 4.5, False, None, 0.25, 55.0,
@@ -75,11 +88,11 @@ TIERS: tuple[ModelTier, ...] = (
               "everyday Python and simple game code: functions, classes, pygame loops, tracebacks"),
     ModelTier("bee-lean-prover", "Goedel-Prover-V2 & DeepSeek-Prover-V2 Formal Lean 4 Bee (8B)", "hf.co/mradermacher/Goedel-Prover-V2-8B-GGUF:Q6_K", 6.7, 8.5, False, None, 0.55, 60.0,
               "formal Lean 4 theorem proving, sorry elimination, Mathlib4 tactic synthesis and invariant verification"),
-    ModelTier("bee-ruche-moe", "La Ruche 8-Expert Sparse MoE Community Bee (2.4B active)", "gpt-oss:20b", 13.0, 10.0, True, 2.4, 0.65, 75.0,
+    ModelTier("bee-ruche-moe", "La Ruche community tier (served by gpt-oss 20B MoE; HiveMind-trained experts not published yet)", "gpt-oss:20b", 13.0, 10.0, True, 3.6, 0.65, 75.0,
               "8-expert top-2 sparse Mixture-of-Experts community bee combining code, math, astrophysics, fluids and bilingual synthesis"),
     ModelTier("coder-plus", "Coder Plus (14B)", "qwen2.5-coder:14b", 9.0, 12.0, False, None, 0.7, 80.0,
               "larger refactors, multi-file reasoning, tests"),
-    ModelTier("moe-qwen35-bee", "Qwen 3.5 Polyglot-Singularity MoE Bee (3.0B active)", "gpt-oss:20b", 13.0, 15.0, True, 3.0, 0.85, 85.0,
+    ModelTier("moe-qwen35-bee", "Polyglot MoE tier (served by gpt-oss 20B MoE, 3.6B active)", "gpt-oss:20b", 13.0, 15.0, True, 3.6, 0.85, 85.0,
               "high-diversity MoE specialist bee routing across coding, formal proofs, scientific PDEs and multilingual reasoning on large GPU producers"),
     # Measured 2026-10-24 on a Tesla T4 (15,360 MiB): 12,331 MiB resident at 4,096 context with an 8-bit KV cache, flash attention
     # and the card otherwise empty; it does not fit beside a 7B and a 3B beside it is partly on CPU. It thinks before answering.
@@ -88,6 +101,26 @@ TIERS: tuple[ModelTier, ...] = (
     ModelTier("moe-coder", "Coder MoE (Qwen3-Coder 30B, 3.3B active)", "qwen3-coder:30b", 19.0, 24.0, True, 3.3, 1.2, 100.0,
               "the strongest coding tier: agentic edits across files with a long context"),
 )
+
+
+def _classify_tiers(tiers: tuple[ModelTier, ...]) -> tuple[ModelTier, ...]:
+    """Set ``kind``/``alias_of`` from the data: several tiers sharing one model tag are labels of the same model, and a tag that is a local
+    llama-server alias (``hivemind-*``) is a LoRA adapter, not something ``ollama pull`` can fetch."""
+    groups: dict[str, list[ModelTier]] = {}
+    for tier in tiers:
+        groups.setdefault(tier.ollama_tag, []).append(tier)
+    out: list[ModelTier] = []
+    for tier in tiers:
+        if tier.ollama_tag.startswith("hivemind-"):
+            out.append(replace(tier, kind="adapter"))
+            continue
+        group = groups[tier.ollama_tag]
+        base = next((t for t in group if "bee" not in t.tier_id), group[0])  # the plainly named tier is the model, the rest are branded labels of it
+        out.append(tier if base.tier_id == tier.tier_id else replace(tier, kind="alias", alias_of=base.tier_id))
+    return tuple(out)
+
+
+TIERS = _classify_tiers(TIERS)
 
 
 @dataclass(frozen=True)
@@ -108,6 +141,8 @@ class PrewiredPartnerModel:
     license: str
     status: str
     aliases: tuple[str, ...]
+    published: bool = True  # False: the hf_repo named for it does not exist; see UNPUBLISHED_HF_REPOS
+    served_by: str = ""  # the off-the-shelf model that actually answers requests for this entry's tier
 
     def to_dict(self) -> dict[str, Any]:
         out = asdict(self)
@@ -888,7 +923,632 @@ PREWIRED_PARTNER_MODELS: tuple[PrewiredPartnerModel, ...] = (
             "qwen-0.8b",
         ),
     ),
+    PrewiredPartnerModel(
+        tier_id="moe-general",
+        public_id="hivemind/layerstorm-frontier-moe",
+        partner_id="layerstorm/qwen3-30b-a3b-pcie",
+        hf_repo="Qwen/Qwen3-30B-A3B-Instruct-2507",
+        github_repo="Paradox-Lab-504/LayerStoRm",
+        website="https://arxiv.org/abs/2604.04192",
+        title="LayerStoRm x HiveMind Waggle-Warm Two-Zone PCIe MoE (Qwen3-30B-A3B on 8 GB VRAM + Host RAM)",
+        parameters_b=30.0,
+        tokens_trained_b=36000.0,
+        tokenizer="Qwen3",
+        shard_format="safetensors_pcie_two_zone_q4",
+        license="Apache-2.0",
+        status="PREWIRED_READY",
+        aliases=(
+            "hivemind/layerstorm-frontier-moe",
+            "layerstorm-frontier-moe",
+            "layerstorm-moe",
+            "hivemind/moe-layerstorm",
+            "layerstorm/qwen3-30b-a3b-pcie",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="bee-rusty-sundials",
+        public_id="hivemind/moe-scientific-wave2",
+        partner_id="hivemind/wave2-scientific-moe-ensemble",
+        hf_repo="xaviercallens/hivemind-moe-scientific-wave2",
+        github_repo="xaviercallens/HiveMind",
+        website="https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/hivemind/bees/rusty-sundials/surrogate",
+        title="Wave 2 Scientific MoE Ensemble (rusty-SUNDIALS + Teacher-Verified Neural Surrogate + 4 Scientific Bees)",
+        parameters_b=16.5,
+        tokens_trained_b=240.0,
+        tokenizer="Qwen3.5/Mistral/SUNDIALS-IR",
+        shard_format="safetensors_moe_top2_solver_verified",
+        license="AGPL-3.0",
+        status="LIVE_WAVE2_SCIENTIFIC_MOE",
+        aliases=(
+            "hivemind/moe-scientific-wave2",
+            "moe-scientific-wave2",
+            "scientific-moe-wave2",
+            "wave2-scientific-moe",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="bee-rusty-sundials",
+        public_id="hivemind/moe-surrogate-sundials",
+        partner_id="hivemind/wave2-solver-taught-surrogate",
+        hf_repo="xaviercallens/hivemind-moe-surrogate-sundials",
+        github_repo="xaviercallens/HiveMind",
+        website="https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/hivemind/bees/rusty-sundials/surrogate",
+        title="Wave 2 Solver-Taught Neural Surrogate Expert (Fail-Closed rusty-SUNDIALS Teacher & Invariant Gate)",
+        parameters_b=4.2,
+        tokens_trained_b=95.0,
+        tokenizer="SUNDIALS-StateVector-IR",
+        shard_format="safetensors_surrogate_rk4_bdf",
+        license="AGPL-3.0",
+        status="LIVE_WAVE2_SCIENTIFIC_MOE",
+        aliases=(
+            "hivemind/moe-surrogate-sundials",
+            "moe-surrogate-sundials",
+            "surrogate-sundials",
+            "solver-taught-surrogate",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="moe-qwen35-bee",
+        public_id="hivemind/moe-pde-fluid-quantum",
+        partner_id="hivemind/wave2-mol-pde-fluid-quantum",
+        hf_repo="xaviercallens/hivemind-moe-pde-fluid-quantum",
+        github_repo="xaviercallens/HiveMind",
+        website="https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/hivemind/bees/rusty-sundials/sweep",
+        title="Wave 2 Method-of-Lines PDE MoE (Viscous Burgers IMEX + PGPE Quantum Vortex + Stellar Lane-Emden)",
+        parameters_b=35.0,
+        tokens_trained_b=320.0,
+        tokenizer="Qwen3.5/SUNDIALS-ARKODE",
+        shard_format="safetensors_moe_top2_mol_pde",
+        license="AGPL-3.0",
+        status="LIVE_WAVE2_SCIENTIFIC_MOE",
+        aliases=(
+            "hivemind/moe-pde-fluid-quantum",
+            "moe-pde-fluid-quantum",
+            "pde-fluid-quantum-moe",
+            "arkode-mol-pde-moe",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="bee-stars",
+        public_id="hivemind/moe-cosmology-dualscale",
+        partner_id="hivemind/wave2-cosmology-dualscale-moe",
+        hf_repo="xaviercallens/hivemind-moe-cosmology-dualscale",
+        github_repo="xaviercallens/HiveMind",
+        website="https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app",
+        title="Wave 2 Dual-Scale Cosmology & Orbital Mechanics MoE (Friedmann LambdaCDM + Symplectic Kepler + Lane-Emden)",
+        parameters_b=14.0,
+        tokens_trained_b=210.0,
+        tokenizer="Mistral/Nemo/SUNDIALS",
+        shard_format="safetensors_moe_top2_symplectic",
+        license="AGPL-3.0",
+        status="LIVE_WAVE2_SCIENTIFIC_MOE",
+        aliases=(
+            "hivemind/moe-cosmology-dualscale",
+            "moe-cosmology-dualscale",
+            "cosmology-dualscale-moe",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="bee-rusty-sundials",
+        public_id="hivemind/moe-genetics-hopfield",
+        partner_id="hivemind/wave2-genetics-hopfield-moe",
+        hf_repo="xaviercallens/hivemind-moe-genetics-hopfield",
+        github_repo="xaviercallens/HiveMind",
+        website="https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app",
+        title="Wave 2 Gene Regulatory & Hopfield Dynamics MoE (Hill Repressilator + Fisher-KPP Wave + Lyapunov Hopfield)",
+        parameters_b=9.5,
+        tokens_trained_b=180.0,
+        tokenizer="Gemma2/SUNDIALS-CVODE",
+        shard_format="safetensors_moe_top2_cvode",
+        license="AGPL-3.0",
+        status="LIVE_WAVE2_SCIENTIFIC_MOE",
+        aliases=(
+            "hivemind/moe-genetics-hopfield",
+            "moe-genetics-hopfield",
+            "genetics-hopfield-moe",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="bee-lean-prover",
+        public_id="hivemind/moe-deepseek-prover-v2",
+        partner_id="deepseek-ai/DeepSeek-Prover-V2-7B",
+        hf_repo="deepseek-ai/DeepSeek-Prover-V2-7B",
+        github_repo="deepseek-ai/DeepSeek-Prover-V2",
+        website="https://huggingface.co/deepseek-ai/DeepSeek-Prover-V2-7B",
+        title="DeepSeek-Prover-V2 7B x Lean 4 Formal Theorem Proving & Invariant Verification MoE",
+        parameters_b=7.0,
+        tokens_trained_b=8500.0,
+        tokenizer="DeepSeek-V2",
+        shard_format="gguf_q4_k_m",
+        license="MIT",
+        status="PREWIRED_READY",
+        aliases=(
+            "hivemind/moe-deepseek-prover-v2",
+            "deepseek-ai/DeepSeek-Prover-V2-7B",
+            "deepseek-prover-v2",
+            "moe-deepseek-prover-v2",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="moe-coder",
+        public_id="hivemind/moe-qwen3-coder-next",
+        partner_id="qwen/qwen3-coder-30b-a3b-instruct",
+        hf_repo="Qwen/Qwen3-Coder-30B-A3B-Instruct",
+        github_repo="QwenLM/Qwen3-Coder",
+        website="https://huggingface.co/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+        title="Qwen3-Coder 30B-A3B MoE (3.3B Active / 30B Total Agentic Rust, CUDA & Scientific Systems Coder)",
+        parameters_b=30.5,
+        tokens_trained_b=36000.0,
+        tokenizer="Qwen3",
+        shard_format="gguf_q4_k_m_moe",
+        license="Apache-2.0",
+        status="PREWIRED_READY",
+        aliases=(
+            "hivemind/moe-qwen3-coder-next",
+            "qwen/qwen3-coder-30b-a3b-instruct",
+            "qwen3-coder-30b-a3b",
+            "moe-qwen3-coder-next",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="moe-general",
+        public_id="hivemind/moe-glm45-air-science",
+        partner_id="zai-org/GLM-4.5-Air",
+        hf_repo="zai-org/GLM-4.5-Air",
+        github_repo="THUDM/GLM-4.5",
+        website="https://huggingface.co/zai-org/GLM-4.5-Air",
+        title="GLM-4.5-Air Scientific Reasoning & Agentic Tool-Synthesis MoE (12B Active / 106B Total Hybrid MoE)",
+        parameters_b=106.0,
+        tokens_trained_b=23000.0,
+        tokenizer="GLM4.5",
+        shard_format="safetensors_moe_top2_pcie",
+        license="MIT",
+        status="PREWIRED_READY",
+        aliases=(
+            "hivemind/moe-glm45-air-science",
+            "zai-org/GLM-4.5-Air",
+            "glm-4.5-air",
+            "moe-glm45-air-science",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="bee-rusty-sundials",
+        public_id="hivemind/moe-science-bee-v2",
+        partner_id="hivemind/science-bee-slots-and-accuracy",
+        hf_repo="xaviercallens/hivemind-moe-science-bee-v2",
+        github_repo="xaviercallens/HiveMind",
+        website="https://github.com/xaviercallens/HiveMind/issues/273",
+        title="Next-Gen MoE Science Bee v2: Named-Slot Unit Compiler, Echo Confirmation, Richardson Accuracy & RTX2070+T4 Co-Serving",
+        parameters_b=7.6,
+        tokens_trained_b=18.0,
+        tokenizer="Qwen2.5-Coder",
+        shard_format="gguf_q4_k_m_plus_hivemind_solver_slots",
+        license="AGPL-3.0 / Apache-2.0",
+        status="LIVE_ON_SMALL_GPU",
+        aliases=(
+            "hivemind/moe-science-bee-v2",
+            "hivemind/science-bee-v2",
+            "hivemind/science-bee",
+            "moe-science-bee-v2",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="moe-coder",
+        public_id="hivemind/moe-coder-polyglot-3tome",
+        partner_id="hivemind/polyglot-dev-coding-moe-3tome",
+        hf_repo="xaviercallens/hivemind-moe-coder-polyglot-3tome",
+        github_repo="xaviercallens/HiveMind",
+        website="https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/life-as-a-bee",
+        title=(
+            "3-Tome Polyglot Developer Coding MoE (Python, C, C++, Rust • 8 Clusters, 16 Bees: "
+            "Architecture, Task Splitting, Unit Test, Sanitizer QA, Coding, Semantic PR Merge, AVX2/CUDA Perf, CWE Security)"
+        ),
+        parameters_b=30.5,
+        tokens_trained_b=420.0,
+        tokenizer="Qwen2.5-Coder/DeepSeek-Coder-V2",
+        shard_format="safetensors_moe_top2_3tome_pie",
+        license="AGPL-3.0 / Apache-2.0",
+        status="LIVE_NOCTURNAL_MOE",
+        aliases=(
+            "hivemind/moe-coder-polyglot-3tome",
+            "moe-coder-polyglot-3tome",
+            "hivemind/polyglot-coder-moe",
+            "polyglot-coder-moe",
+            "hivemind/dev-moe",
+            "dev-moe",
+            "hivemind/moe-coder-3tome",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="bee-ruche-moe",
+        public_id="hivemind/moe-image-gen",
+        partner_id="hivemind/vision-and-image-generation-moe",
+        hf_repo="xaviercallens/hivemind-vision-image-moe",
+        github_repo="xaviercallens/HiveMind",
+        website="https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/life-as-a-bee#image-moe-gallery",
+        title=(
+            "7-Division 104-Bee Image Generation & Vision-MoE (Janus-Pro-7B + FLUX.1-schnell/SDXL-Lightning LoRA + "
+            "Qwen2.5-VL-7B & SmolVLM2 <1.5 GB Micro-VRAM Aesthetic & Scientific Verifier)"
+        ),
+        parameters_b=22.4,
+        tokens_trained_b=380.0,
+        tokenizer="Qwen2.5-VL/Janus-Pro-SigLIP",
+        shard_format="safetensors_fomoe_top2_2d_dct",
+        license="AGPL-3.0 / Apache-2.0",
+        status="LIVE_NOCTURNAL_MOE",
+        aliases=(
+            "hivemind/moe-image-gen",
+            "moe-image-gen",
+            "hivemind/vision-moe",
+            "vision-moe",
+            "hivemind/bee-reddit-vision",
+            "bee-reddit-vision",
+            "hivemind/bee-exoplanet-vmoe",
+            "bee-exoplanet-vmoe",
+            "hivemind/image-moe",
+            "image-moe",
+        ),
+    ),
+    PrewiredPartnerModel(
+        tier_id="moe-general",
+        public_id="hivemind/video-moe",
+        partner_id="hivemind/spatiotemporal-video-generation-moe",
+        hf_repo="xaviercallens/hivemind-spatiotemporal-video-moe",
+        github_repo="xaviercallens/HiveMind",
+        website="https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/life-as-a-bee",
+        title=(
+            "Spatio-Temporal Video Generation & Motion-Synthesis MoE (Wan2.1-T2V-14B/1.3B + LTX-Video-2B + "
+            "CogVideoX-5B Temporal LoRA Bees with 225.4x 3D-DCT Compression & Citizen Keyframe Verifiers)"
+        ),
+        parameters_b=28.0,
+        tokens_trained_b=310.0,
+        tokenizer="UMT5-XXL/3D-VAE-SpatioTemporal",
+        shard_format="safetensors_moe_top2_3d_dct",
+        license="AGPL-3.0 / Apache-2.0",
+        status="LIVE_NOCTURNAL_MOE",
+        aliases=(
+            "hivemind/video-moe",
+            "video-moe",
+            "hivemind/moe-video-gen",
+            "moe-video-gen",
+            "hivemind/wan21-video-moe",
+            "wan21-video-moe",
+            "ltx-video-moe",
+        ),
+    ),
 )
+
+# Hugging Face repositories named above that do not exist (checked on 2026-11-02 against huggingface.co/api/models and
+# /api/datasets: both 401/404). The "xaviercallens/*" entries described HiveMind-trained MoE weights with parameter and
+# token counts, but no such weights were ever published; every tier is served by the off-the-shelf model in TIERS.
+UNPUBLISHED_HF_REPOS: frozenset[str] = frozenset({
+    "xaviercallens/hivemind-la-ruche-moe",
+    "xaviercallens/hivemind-moe-coder-polyglot-3tome",
+    "xaviercallens/hivemind-moe-cosmology-dualscale",
+    "xaviercallens/hivemind-moe-cyber-crypto",
+    "xaviercallens/hivemind-moe-frontier-science",
+    "xaviercallens/hivemind-moe-genetics-hopfield",
+    "xaviercallens/hivemind-moe-pde-fluid-quantum",
+    "xaviercallens/hivemind-moe-reasoning-bio",
+    "xaviercallens/hivemind-moe-science-bee-v2",
+    "xaviercallens/hivemind-moe-scientific-wave2",
+    "xaviercallens/hivemind-moe-surrogate-sundials",
+    "xaviercallens/hivemind-moe-systems-formal",
+    "xaviercallens/hivemind-spatiotemporal-video-moe",
+    "xaviercallens/hivemind-vision-image-moe",
+    "xaviercallens/rusty-SUNDIALS",
+    "Qwen/Qwen3.5-2B-Instruct",
+    "Qwen/Qwen3.5-4B-Instruct",
+    "0xPARC/zk-bench",
+    "ASSERT-KTH/DISL-Solidity-Smart-Contracts",
+    "MultimodalUniverse/multimodal_universe",
+    "chainer/zinc250k",
+    "epfl-llm/guidance-biomedical",
+    "giskard_cti/cti-bench",
+    "nasa-impact/hls-foundation",
+    "neuralmagic/LLM_Compression_Code",
+    "vxunderground/malware-analysis-prompts",
+})
+
+
+TRAINED_MOE_STATUSES = frozenset({"LIVE_NOCTURNAL_MOE", "LIVE_WAVE2_SCIENTIFIC_MOE"})
+
+
+def _truthful(entry: PrewiredPartnerModel) -> PrewiredPartnerModel:
+    """Describe an entry by what really exists: an unpublished repository gets no link, no training claim and a status that
+    says so, plus the off-the-shelf model that actually serves its tier."""
+    tier = next((t for t in TIERS if t.tier_id == entry.tier_id), None)
+    served = tier.ollama_tag if tier is not None else ""
+    # A status that says "trained MoE" is only true when a HiveMind-built artefact serves the tier. An off-the-shelf
+    # tag under such a status is relabelled the same way as an unpublished repository (owner decision, 2026-11-07).
+    claims_training_on_off_the_shelf = entry.status in TRAINED_MOE_STATUSES and not served.startswith("hivemind-")
+    if entry.hf_repo not in UNPUBLISHED_HF_REPOS and not claims_training_on_off_the_shelf:
+        return replace(entry, served_by=served)
+    return replace(
+        entry,
+        hf_repo="",
+        title=f"Planned, not trained yet: {entry.title}",
+        parameters_b=0.0,
+        tokens_trained_b=0.0,
+        status="UNPUBLISHED_NOT_TRAINED",
+        published=False,
+        served_by=served,
+    )
+
+
+PREWIRED_PARTNER_MODELS = tuple(_truthful(m) for m in PREWIRED_PARTNER_MODELS)
+
+
+@dataclass(frozen=True)
+class CpuHybridSolverTier:
+    """CPU-only or CPU+GPU hybrid solver capability tier (Issue #271 §6.1).
+
+    Separated from ``TIERS`` so GPU-VRAM-ordered ``recommend_tier()`` invariants remain untouched
+    while allowing pure-CPU BOINC hosts (``min_vram_gb == 0.0``) to advertise and serve Wave 2
+    scientific parameter sweeps.
+    """
+
+    tier_id: str
+    public_id: str
+    title: str
+    plan_class: str
+    min_cpu_cores: int
+    min_vram_gb: float
+    min_quorum: int
+    solver_families: tuple[str, ...]
+    suggested_cost_per_1k: float
+    good_for: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+CPU_HYBRID_SOLVER_CATALOG: tuple[CpuHybridSolverTier, ...] = (
+    CpuHybridSolverTier(
+        tier_id="solver-cpu-ivp",
+        public_id="hivemind/solver-cpu-ivp",
+        title="Wave 1/2 CPU Deterministic ODE/DAE IVP Rescue Worker (rusty-SUNDIALS CVODE/IDA/ARKODE/KINSOL)",
+        plan_class="cpu_hivemind_solver",
+        min_cpu_cores=2,
+        min_vram_gb=0.0,
+        min_quorum=1,
+        solver_families=("CVODE", "ARKODE", "IDA", "KINSOL"),
+        suggested_cost_per_1k=0.05,
+        good_for="Pure-CPU deterministic ODE/DAE rescue for scientific Bees (0 GB GPU VRAM required).",
+    ),
+    CpuHybridSolverTier(
+        tier_id="solver-cpu-sweep-quorum",
+        public_id="hivemind/solver-cpu-sweep-quorum",
+        title="Wave 2 BOINC Quorum-of-2 CPU Parameter-Sweep Worker (S-1 Cross-CPU Deterministic Verification)",
+        plan_class="cpu_hivemind_solver",
+        min_cpu_cores=4,
+        min_vram_gb=0.0,
+        min_quorum=2,
+        solver_families=("CVODE", "ARKODE", "IDA", "KINSOL", "MOL_PDE"),
+        suggested_cost_per_1k=0.08,
+        good_for="BOINC quorum-of-2 multi-trajectory scientific parameter sweeps across heterogeneous x86_64/ARM64 CPUs.",
+    ),
+    CpuHybridSolverTier(
+        tier_id="solver-hybrid-surrogate-pde",
+        public_id="hivemind/solver-hybrid-surrogate-pde",
+        title="Wave 2/3 Hybrid GPU Surrogate + CPU rusty-SUNDIALS Teacher Verifier & Method-of-Lines PDE Worker",
+        plan_class="cuda_hivemind_8gb",
+        min_cpu_cores=4,
+        min_vram_gb=6.5,
+        min_quorum=2,
+        solver_families=("SURROGATE_VERIFIED", "ARKODE_IMEX", "MOL_PDE", "CVODE_BDF"),
+        suggested_cost_per_1k=0.45,
+        good_for="Low-latency neural surrogate rollouts gated by deterministic rusty-SUNDIALS invariant verification.",
+    ),
+)
+
+WAVE2_PRODUCER_QUORUM_STAGES: tuple[dict[str, Any], ...] = (
+    {
+        "stage_id": "stage_0_standby",
+        "min_producers": 0,
+        "min_total_vram_gb": 0.0,
+        "wave": "wave_1_local_fallback",
+        "description": "Zero live external producers connected; deterministic CPU solver rescue and local fallback only.",
+        "unlocked_moe_models": [
+            "hivemind/bee-rusty-sundials",
+            "hivemind/moe-surrogate-sundials",
+        ],
+        "quorum_sweep_enabled": False,
+        "active_experts_per_token": 1,
+        "max_concurrent_experts": 1,
+    },
+    {
+        "stage_id": "stage_1_single_producer_wave1",
+        "min_producers": 1,
+        "min_total_vram_gb": 4.0,
+        "wave": "wave_1_scientific_rescue",
+        "description": "Single producer connected (>= 1 node): Wave 1 Scientific Bee + local Top-2 MoE & deterministic solver rescue.",
+        "unlocked_moe_models": [
+            "hivemind/bee-rusty-sundials",
+            "hivemind/moe-surrogate-sundials",
+            "hivemind/bee-ruche-moe",
+            "hivemind/moe-coder",
+            "hivemind/moe-general",
+            "hivemind/moe-deepseek-prover-v2",
+        ],
+        "quorum_sweep_enabled": False,
+        "active_experts_per_token": 2,
+        "max_concurrent_experts": 4,
+    },
+    {
+        "stage_id": "stage_2_quorum2_wave2_scientific_moe",
+        "min_producers": 2,
+        "min_total_vram_gb": 8.0,
+        "wave": "wave_2_scientific_moe_quorum",
+        "description": (
+            "Quorum of >= 2 producers connected: unlocks Wave 2 Scientific MoE ensemble, BOINC min_quorum=2 "
+            "cross-CPU parameter sweeps, and Solver-Taught Neural Surrogate with deterministic teacher verification."
+        ),
+        "unlocked_moe_models": [
+            "hivemind/bee-rusty-sundials",
+            "hivemind/moe-surrogate-sundials",
+            "hivemind/moe-scientific-wave2",
+            "hivemind/moe-cosmology-dualscale",
+            "hivemind/moe-genetics-hopfield",
+            "hivemind/bee-ruche-moe",
+            "hivemind/moe-coder",
+            "hivemind/moe-general",
+            "hivemind/moe-deepseek-prover-v2",
+            "hivemind/moe-qwen3-coder-next",
+        ],
+        "quorum_sweep_enabled": True,
+        "active_experts_per_token": 2,
+        "max_concurrent_experts": 8,
+    },
+    {
+        "stage_id": "stage_3_mesh4_wave2_pde_and_cluster_moe",
+        "min_producers": 4,
+        "min_total_vram_gb": 24.0,
+        "wave": "wave_2_mol_pde_and_cluster_moe",
+        "description": (
+            "Mesh of >= 4 producers connected: unlocks Method-of-Lines PDE MoE (Viscous Burgers IMEX, PGPE Quantum "
+            "Vortex, Stellar Lane-Emden, Fisher-KPP) plus 3x 4-expert domain Cluster Super-MoEs."
+        ),
+        "unlocked_moe_models": [
+            "hivemind/bee-rusty-sundials",
+            "hivemind/moe-surrogate-sundials",
+            "hivemind/moe-scientific-wave2",
+            "hivemind/moe-pde-fluid-quantum",
+            "hivemind/moe-cosmology-dualscale",
+            "hivemind/moe-genetics-hopfield",
+            "hivemind/moe-cyber-crypto",
+            "hivemind/moe-frontier-science",
+            "hivemind/moe-reasoning-bio",
+            "hivemind/bee-ruche-moe",
+            "hivemind/moe-qwen35-bee",
+            "hivemind/moe-coder",
+            "hivemind/moe-general",
+            "hivemind/moe-deepseek-prover-v2",
+            "hivemind/moe-qwen3-coder-next",
+            "hivemind/moe-coder-polyglot-3tome",
+            "hivemind/moe-image-gen",
+            "hivemind/video-moe",
+            "hivemind/layerstorm-frontier-moe",
+        ],
+        "quorum_sweep_enabled": True,
+        "active_experts_per_token": 4,
+        "max_concurrent_experts": 12,
+    },
+    {
+        "stage_id": "stage_4_full_swarm_20_expert_super_moe",
+        "min_producers": 8,
+        "min_total_vram_gb": 48.0,
+        "wave": "wave_2_full_swarm_super_moe",
+        "description": (
+            "Full swarm quorum (>= 8 producers connected): activates all 20 specialized Bees, Wave 2 Scientific MoE, "
+            "GLM-4.5-Air 106B Hybrid MoE, and full diurnal/nocturnal distributed expert parallelism."
+        ),
+        "unlocked_moe_models": [
+            "hivemind/bee-rusty-sundials",
+            "hivemind/moe-surrogate-sundials",
+            "hivemind/moe-scientific-wave2",
+            "hivemind/moe-pde-fluid-quantum",
+            "hivemind/moe-cosmology-dualscale",
+            "hivemind/moe-genetics-hopfield",
+            "hivemind/moe-cyber-crypto",
+            "hivemind/moe-frontier-science",
+            "hivemind/moe-reasoning-bio",
+            "hivemind/moe-20-expert-swarm",
+            "hivemind/bee-ruche-moe",
+            "hivemind/moe-qwen35-bee",
+            "hivemind/moe-coder",
+            "hivemind/moe-general",
+            "hivemind/moe-deepseek-prover-v2",
+            "hivemind/moe-qwen3-coder-next",
+            "hivemind/moe-coder-polyglot-3tome",
+            "hivemind/moe-image-gen",
+            "hivemind/video-moe",
+            "hivemind/moe-glm45-air-science",
+            "hivemind/layerstorm-frontier-moe",
+        ],
+        "quorum_sweep_enabled": True,
+        "active_experts_per_token": 4,
+        "max_concurrent_experts": 20,
+    },
+)
+
+
+def resolve_producer_quorum_moe_state(
+    connected_producers: int,
+    total_vram_gb: float = 0.0,
+    live_models: tuple[str, ...] | list[str] = (),
+) -> dict[str, Any]:
+    """Resolve the active MoE wave and unlocked models based on live producer quorum.
+
+    As more producers connect to serve traffic, higher MoE stages unlock monotonically:
+    - ``0`` producers -> ``stage_0_standby`` (local deterministic CPU solver + surrogate gate)
+    - ``>= 1`` producer -> ``stage_1_single_producer_wave1`` (Wave 1 Scientific Bee + Top-2 MoE)
+    - ``>= 2`` producers -> ``stage_2_quorum2_wave2_scientific_moe`` (Wave 2 Scientific MoE + BOINC quorum-of-2 sweeps)
+    - ``>= 4`` producers -> ``stage_3_mesh4_wave2_pde_and_cluster_moe`` (Wave 2 MOL PDE MoE + 3x Cluster Super-MoEs)
+    - ``>= 8`` producers -> ``stage_4_full_swarm_20_expert_super_moe`` (Full 20-Expert Super-MoE + 106B Hybrid MoE)
+    """
+    n_prod = max(0, int(connected_producers))
+    vram = max(0.0, float(total_vram_gb))
+    # Monotone stage selection by producer count (VRAM is advisory if producers report 0/CPU-only,
+    # so pure-CPU + GPU producer meshes still unlock monotonically with producer count).
+    selected = WAVE2_PRODUCER_QUORUM_STAGES[0]
+    for stage in WAVE2_PRODUCER_QUORUM_STAGES:
+        if n_prod >= int(stage["min_producers"]):
+            selected = stage
+
+    next_stage: dict[str, Any] | None = None
+    for stage in WAVE2_PRODUCER_QUORUM_STAGES:
+        if int(stage["min_producers"]) > n_prod:
+            next_stage = stage
+            break
+
+    # Traffic routing allocation across deterministic solver, neural surrogate, and LLM MoE experts
+    if n_prod == 0:
+        routing_weights = {
+            "deterministic_rusty_sundials": 0.70,
+            "solver_taught_surrogate_verified": 0.30,
+            "distributed_llm_moe_experts": 0.00,
+        }
+    elif n_prod == 1:
+        routing_weights = {
+            "deterministic_rusty_sundials": 0.35,
+            "solver_taught_surrogate_verified": 0.25,
+            "distributed_llm_moe_experts": 0.40,
+        }
+    elif n_prod < 4:
+        routing_weights = {
+            "deterministic_rusty_sundials": 0.20,
+            "solver_taught_surrogate_verified": 0.35,
+            "distributed_llm_moe_experts": 0.45,
+        }
+    else:
+        routing_weights = {
+            "deterministic_rusty_sundials": 0.15,
+            "solver_taught_surrogate_verified": 0.35,
+            "distributed_llm_moe_experts": 0.50,
+        }
+
+    return {
+        "connected_producers": n_prod,
+        "total_vram_gb": round(vram, 2),
+        "live_models": list(live_models),
+        "stage_id": selected["stage_id"],
+        "wave": selected["wave"],
+        "description": selected["description"],
+        "wave2_scientific_moe_active": n_prod >= 2,
+        "quorum_sweep_enabled": bool(selected["quorum_sweep_enabled"]),
+        "boinc_min_quorum": 2 if bool(selected["quorum_sweep_enabled"]) else 1,
+        "active_experts_per_token": int(selected["active_experts_per_token"]),
+        "max_concurrent_experts": int(selected["max_concurrent_experts"]),
+        "unlocked_moe_models": list(selected["unlocked_moe_models"]),
+        "unlocked_moe_model_count": len(selected["unlocked_moe_models"]),
+        "traffic_routing_weights": routing_weights,
+        "producers_needed_for_next_stage": (
+            max(0, int(next_stage["min_producers"]) - n_prod) if next_stage is not None else 0
+        ),
+        "next_stage_id": next_stage["stage_id"] if next_stage is not None else None,
+    }
+
 
 _ALIAS_TO_TIER_ID: dict[str, str] = {
     alias.lower(): partner.tier_id
@@ -932,8 +1592,11 @@ def catalog_payload() -> dict[str, Any]:
         "note": "Tags are recommendations; verify them with your server. HMT are points with no cash value.",
         "season": "HM-S19-Q35",
         "swarm_plan_endpoint": "/v1/hivemind/swarm-plan",
+        "moe_quorum_status_endpoint": "/v1/hivemind/moe/quorum-status",
         "tiers": [tier.to_dict() for tier in TIERS],
         "prewired_partner_models": [partner.to_dict() for partner in PREWIRED_PARTNER_MODELS],
+        "cpu_hybrid_solver_tiers": [tier.to_dict() for tier in CPU_HYBRID_SOLVER_CATALOG],
+        "wave2_scientific_moe_quorum_stages": [ dict(stage) for stage in WAVE2_PRODUCER_QUORUM_STAGES ],
     }
 
 

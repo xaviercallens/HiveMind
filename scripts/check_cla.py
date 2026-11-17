@@ -22,6 +22,33 @@ ACCEPTED_PHRASES = (
 )
 
 
+def _text_has_signed_phrase(text: str, accepted: set[str]) -> bool:
+    """Return True only when an accepted CLA phrase appears outside an unchecked markdown task item (`- [ ]`)."""
+    import re
+
+    in_unchecked_item = False
+    unchecked_indent = 0
+    for raw_line in (text or "").splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        indent = len(raw_line) - len(raw_line.lstrip(" \t"))
+        line_lower = stripped.lower()
+        if re.match(r"^[-*+]\s*\[\s*\]\s+", line_lower):
+            in_unchecked_item = True
+            unchecked_indent = indent
+            continue
+        if re.match(r"^[-*+]\s*\[[xX]\]\s+", line_lower):
+            in_unchecked_item = False
+        elif in_unchecked_item:
+            if indent > unchecked_indent:
+                continue
+            in_unchecked_item = False
+        if any(p in line_lower for p in accepted):
+            return True
+    return False
+
+
 def verify_cla_signature(
     author: str,
     pr_body: str = "",
@@ -40,14 +67,13 @@ def verify_cla_signature(
         return True, f"@{author} is registered in .github/cla-signatures.json"
     if author_lower in exempt_bots:
         return True, f"@{author} is an exempt automated bot"
-    body_lower = (pr_body or "").lower()
-    if any(p in body_lower for p in accepted):
+    if _text_has_signed_phrase(pr_body or "", accepted):
         return True, f"@{author} signed the CLA in the PR body"
 
     for c in comments or []:
         c_user = (c.get("user") or "").strip().lower()
-        c_body = (c.get("body") or "").lower()
-        if c_user == author_lower and any(p in c_body for p in accepted):
+        c_body = c.get("body") or ""
+        if c_user == author_lower and _text_has_signed_phrase(c_body, accepted):
             return True, f"@{author} signed the CLA via PR comment"
 
     return (

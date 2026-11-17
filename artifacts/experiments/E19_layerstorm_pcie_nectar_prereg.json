@@ -1,0 +1,30 @@
+{
+  "experiment_id": "E19-layerstorm-pcie-nectar",
+  "registered_utc": "2026-10-29T08:55:00Z",
+  "registered_before_run": true,
+  "title": "LayerStoRm x HiveMind (Season 25): NUMA-Pinned PCIe Expert Streaming coupled with Kafka Waggle-Warm Two-Zone VRAM Caching and Upstream Swarm Nectar Cache",
+  "origin": "Collaboration roadmap Season 25 (docs/S25_LAYERSTORM_COLLABORATION_PLAN.md) integrating Konstantinos Kontosis's LayerStoRm (kkontosis/LayerStoRm) PCIe MoE expert streaming engine with HiveMind's Bi-Layer Honeybee Agent Mesh (HM-S22.1 Waggle Dance quorum lock and HM-S23 Swarm Nectar Cache).",
+  "what_is_measured": {
+    "models": "Frontier sparse MoE architectures exceeding single-GPU VRAM (e.g., Qwen3-Coder-30B-A3B / DeepSeek-Coder-V2-Lite-Instruct quantized to Q4_K_XL / NF4), where full routed experts reside in pinned NUMA host RAM (64 GB+) and active top-k experts stream over PCIe 4.0/5.0 x16",
+    "conditions": {
+      "C0_cold_reactive_pcie": "Baseline LayerStoRm reactive token-by-token PCIe expert fetching without upstream Swarm Nectar Cache and without Waggle Dance Zone A pre-warming",
+      "C1_waggle_warm_zone_a": "LayerStoRm with Zone A VRAM pre-warmed during the <450 ms Kafka Waggle Dance quorum election window using the elected domain cluster's top-k historical experts",
+      "C2_full_hivemind_nectar_plus_waggle": "Full Season 25 stack: upstream SHA-256 Swarm Nectar Cache (HM-S23) + Waggle-Warm Zone A (HM-S25-02) + FoMoE Skip-Attention waterline overlap (HM-S25-03)"
+    },
+    "resource_probes": "Peak GPU VRAM allocated (MiB via nvidia-smi and torch.cuda.max_memory_allocated), pinned host RAM footprint (MiB), cumulative PCIe H2D bytes transferred per 100 multi-turn coding/research requests (NVML pcie_rx_bytes), Time-To-First-Token (TTFT ms, p50/p95), decode throughput (tok/s, median over 3 seeds), and hardware game-preemption yield latency (ms from process signal to DMA drain completion)"
+  },
+  "hypotheses": {
+    "P19a": "Upstream Swarm Nectar Cache PCIe Relief: C2 reduces cumulative PCIe H2D bytes transferred over a 100-request workload (with 40% recurring sub-task patterns) by >= 50.0% compared to C0 -> supported; < 25.0% -> refuted; otherwise inconclusive",
+    "P19b": "Waggle-Warm TTFT Reduction: C1 reduces median TTFT (p50) on domain-tagged prompts by >= 20.0% compared to C0 without exceeding the configured VRAM ceiling -> supported; <= 0% -> refuted; otherwise inconclusive",
+    "P19c": "Gamer Preemption SLA under Active PCIe DMA: triggering the hardware circuit-breaker during saturated PCIe H2D expert streaming aborts in-flight DMA queues and releases GPU compute in < 500 ms (< 1500 ms hard SLA) with zero CUDA context errors -> supported; >= 1500 ms or CUDA error -> refuted",
+    "P19d": "Two-Zone VRAM Ceiling Soundness: peak GPU VRAM across all 100 requests in C0, C1, and C2 remains strictly <= 6656 MiB on 8 GB profiles (or configured prosumer tier cap) -> supported; any single breach > cap -> refuted"
+  },
+  "controls": {
+    "negative_control_random_prewarm": "Pre-warming Zone A with uniformly random expert indices on Waggle Dance lock must yield <= 5% TTFT reduction compared to C0; if random pre-warming achieves >= 20% TTFT reduction, P19b is marked invalid (artifact of general bus warming rather than domain routing)",
+    "negative_control_vram_overflow_guard": "Injecting a synthetic Zone A + Zone B configuration exceeding 6656 MiB on an 8 GB profile must fail closed before kernel launch",
+    "idle_gpu_baseline": "GPU memory used at start <= 1000 MiB with no concurrent compute processes",
+    "run_is_valid_iff": "negative_control_random_prewarm, negative_control_vram_overflow_guard, and idle_gpu_baseline all pass"
+  },
+  "scope": "Pre-registered before running joint hardware benchmarks. Until executed on physical PCIe 4.0/5.0 multi-GPU or high-RAM prosumer hardware, all Season 25 hypotheses remain pre-registered predictions.",
+  "non_monetary": "Settled exclusively in non-monetary HiveMind Reflexion Points (HMT); financial_payment_usd_eur: 0.0"
+}

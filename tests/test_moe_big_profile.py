@@ -63,7 +63,7 @@ def test_plan_class_spec_declares_both_classes_with_their_memory_floor(tmp_path:
     for p in (STD, BIG):
         block = xml.split(f"<name>{p['plan_class']}</name>")[1].split("</plan_class>")[0]
         assert f"<min_gpu_ram_mb>{p['min_gpu_ram_mb']}</min_gpu_ram_mb>" in block
-    assert xml.count("<plan_class>") == 2
+    assert xml.count("<plan_class>") == 3 and "<name>cpu_hivemind_solver</name>" in xml
 
 
 def test_install_app_puts_the_big_version_under_its_own_plan_class(tmp_path: Path) -> None:

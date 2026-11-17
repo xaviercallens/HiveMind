@@ -85,6 +85,12 @@ class LicenseDecision:
     reason: str
     conditions: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.status not in (ACCEPTED, REJECTED):
+            raise ValueError(f"status must be {ACCEPTED!r} or {REJECTED!r}")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+
 
 def classify_license(raw: object) -> LicenseDecision:
     """Classify a ``cardData.license`` value (a string, a list of strings or missing) against the allowlist.
@@ -129,17 +135,27 @@ class SourceSpec:
         missing = [k for k in ("id", "domain", "config", "split", "mapping", "verified_signal", "signal_basis") if k not in d]
         if missing:
             raise ValueError(f"candidate {d.get('id', '?')} lacks {missing}")
+        for k in ("id", "domain", "config", "split", "signal_basis"):
+            if not isinstance(d[k], str) or not d[k].strip():
+                raise ValueError(f"candidate {d.get('id', '?')}: {k} must be a non-empty string")
         if not isinstance(d["verified_signal"], bool):
             raise TypeError(f"candidate {d['id']}: verified_signal must be a boolean")
+        if not isinstance(d["mapping"], Mapping):
+            raise TypeError(f"candidate {d['id']}: mapping must be a mapping")
         kind = d["mapping"].get("kind")
         if kind not in MAPPERS:
             raise ValueError(f"candidate {d['id']}: unknown mapping kind {kind!r}")
-        return cls(str(d["id"]), str(d["domain"]), str(d["config"]), str(d["split"]), dict(d["mapping"]),
-                   bool(d["verified_signal"]), str(d["signal_basis"]), int(d.get("slice_rows", 300)))
+        raw_slice_rows = d.get("slice_rows", 300)
+        if isinstance(raw_slice_rows, bool) or not isinstance(raw_slice_rows, int) or raw_slice_rows <= 0:
+            raise ValueError(f"candidate {d['id']}: slice_rows must be a positive integer")
+        return cls(d["id"].strip(), d["domain"].strip(), d["config"].strip(), d["split"].strip(), dict(d["mapping"]),
+                   bool(d["verified_signal"]), d["signal_basis"].strip(), raw_slice_rows)
 
 
 def load_candidates(path: Path) -> tuple[dict[str, Any], list[SourceSpec]]:
     """Read the candidates file; returns (the raw document, parsed specs). Domains used by a source must be declared."""
+    if not isinstance(path, (Path, str)) or not str(path).strip():
+        raise ValueError("path must be a non-empty Path or string")
     doc = json.loads(Path(path).read_text(encoding="utf-8"))
     specs = [SourceSpec.from_dict(c) for c in doc["candidates"]]
     undeclared = sorted({s.domain for s in specs} - set(doc["domains"]))
@@ -154,6 +170,15 @@ def load_candidates(path: Path) -> tuple[dict[str, Any], list[SourceSpec]]:
 # ---------------------------------------------------------------- Hub API
 def default_fetch(url: str, timeout_s: float = 120.0) -> bytes:
     """HTTP GET with a project user agent. Errors propagate; callers turn them into REJECTED/BLOCKED records."""
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("url must be a non-empty string")
+    if (
+        isinstance(timeout_s, bool)
+        or not isinstance(timeout_s, (int, float))
+        or not math.isfinite(float(timeout_s))
+        or float(timeout_s) <= 0.0
+    ):
+        raise ValueError("timeout_s must be a finite positive number")
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout_s) as resp:
         return bytes(resp.read())
@@ -168,6 +193,17 @@ def retrying_fetch(fetch: Fetch, retries: int = 5, base_delay_s: float = 10.0,
 
     A 404 or any other client error is not retried: it is a real answer and is reported as such.
     """
+    if not callable(fetch):
+        raise ValueError("fetch must be callable")
+    if isinstance(retries, bool) or not isinstance(retries, int) or retries < 0:
+        raise ValueError("retries must be a non-negative integer")
+    if (
+        isinstance(base_delay_s, bool)
+        or not isinstance(base_delay_s, (int, float))
+        or not math.isfinite(float(base_delay_s))
+        or float(base_delay_s) < 0.0
+    ):
+        raise ValueError("base_delay_s must be a non-negative finite number")
     def wrapped(url: str) -> bytes:
         for attempt in range(retries + 1):
             try:
@@ -189,11 +225,19 @@ def utc_now() -> str:
 
 
 def _err(exc: BaseException) -> str:
+    if not isinstance(exc, BaseException):
+        raise TypeError("exc must be a BaseException")
     return f"{type(exc).__name__}: {exc}"[:240]
 
 
 def registry_entry(spec: SourceSpec, fetch: Fetch, retrieved_utc: str) -> dict[str, Any]:
     """Look one candidate up on the Hub and decide ACCEPTED / REJECTED. Every field but the spec comes from the API."""
+    if not isinstance(spec, SourceSpec):
+        raise TypeError("spec must be a SourceSpec")
+    if not callable(fetch):
+        raise TypeError("fetch must be callable")
+    if not isinstance(retrieved_utc, str) or not retrieved_utc.strip():
+        raise ValueError("retrieved_utc must be a non-empty string")
     entry: dict[str, Any] = {"id": spec.dataset_id, "domain": spec.domain, "config": spec.config, "split": spec.split,
                              "verified_signal": spec.verified_signal, "signal_basis": spec.signal_basis,
                              "retrieved_utc": retrieved_utc, "metadata_source": HUB_API + spec.dataset_id}
@@ -218,6 +262,10 @@ def registry_entry(spec: SourceSpec, fetch: Fetch, retrieved_utc: str) -> dict[s
 
 def split_size(spec: SourceSpec, fetch: Fetch) -> dict[str, Any]:
     """Row and byte counts for the configured split from datasets-server ``/size``; an error is returned, not raised."""
+    if not isinstance(spec, SourceSpec):
+        raise TypeError("spec must be a SourceSpec")
+    if not callable(fetch):
+        raise TypeError("fetch must be callable")
     url = f"{DATASETS_SERVER}/size?" + urllib.parse.urlencode({"dataset": spec.dataset_id, "config": spec.config})
     try:
         doc = json.loads(fetch(url))
@@ -238,6 +286,15 @@ class Shard:
     n_bytes: int
     n_rows: int
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.uri, str) or not self.uri.strip():
+            raise ValueError("uri must be a non-empty string")
+        if not isinstance(self.sha256, str) or len(self.sha256.strip()) != 64:
+            raise ValueError("sha256 must be a 64-character hex digest")
+        for field_name, val in (("n_bytes", self.n_bytes), ("n_rows", self.n_rows)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+
     def to_dict(self) -> dict[str, Any]:
         return {"uri": self.uri, "sha256": self.sha256, "bytes": self.n_bytes, "rows": self.n_rows}
 
@@ -249,10 +306,30 @@ class SliceResult:
     shards: list[Shard] = field(default_factory=list)
     reason: str = ""
 
+    def __post_init__(self) -> None:
+        if self.status not in (PASSED, FAILED, BLOCKED, BUILT):
+            raise ValueError(f"status must be one of {PASSED!r}, {FAILED!r}, {BLOCKED!r}, {BUILT!r}")
+        if not isinstance(self.rows, list) or any(not isinstance(r, Mapping) for r in self.rows):
+            raise ValueError("rows must be a list of mappings")
+        if not isinstance(self.shards, list) or any(not isinstance(s, Shard) for s in self.shards):
+            raise ValueError("shards must be a list of Shard instances")
+        if not isinstance(self.reason, str):
+            raise ValueError("reason must be a string")
+
 
 def slice_rows(spec: SourceSpec, fetch: Fetch, n_rows: int | None = None, page: int = 100) -> SliceResult:
     """Stream the first ``n_rows`` rows of the split through datasets-server ``/rows`` (no full download)."""
+    if not isinstance(spec, SourceSpec):
+        raise TypeError("spec must be a SourceSpec")
+    if not callable(fetch):
+        raise TypeError("fetch must be callable")
+    if n_rows is not None and (isinstance(n_rows, bool) or not isinstance(n_rows, int) or n_rows <= 0):
+        raise ValueError("n_rows must be a positive integer")
+    if isinstance(page, bool) or not isinstance(page, int) or page <= 0:
+        raise ValueError("page must be a positive integer")
     want = spec.slice_rows if n_rows is None else n_rows
+    if isinstance(want, bool) or not isinstance(want, int) or want <= 0:
+        raise ValueError("slice_rows must be a positive integer")
     out = SliceResult(PASSED)
     offset = 0
     while offset < want:
@@ -276,6 +353,13 @@ def slice_rows(spec: SourceSpec, fetch: Fetch, n_rows: int | None = None, page: 
 
 def read_jsonl_shards(paths: Sequence[Path]) -> tuple[list[dict[str, Any]], list[Shard]]:
     """Read local JSONL shards; each file's sha256 is taken over the exact bytes parsed."""
+    if (
+        not isinstance(paths, Sequence)
+        or isinstance(paths, (str, bytes))
+        or len(paths) == 0
+        or any(not isinstance(p, (Path, str)) or not str(p).strip() for p in paths)
+    ):
+        raise ValueError("paths must be a non-empty sequence of Paths")
     rows: list[dict[str, Any]] = []
     shards: list[Shard] = []
     for p in paths:
@@ -300,6 +384,8 @@ def _text(row: Mapping[str, Any], name: str) -> str:
 
 def fmt_number(v: float) -> str:
     """Plain decimal text, the same convention as the night packs: 6360, 2.48, 0.0123, 1.2e-05."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)):
+        raise ValueError("v must be a finite number")
     if v == 0:
         return "0"
     if abs(v) >= 1e7:
@@ -310,16 +396,24 @@ def fmt_number(v: float) -> str:
 
 
 def _passes_filters(row: Mapping[str, Any], mapping: Mapping[str, Any]) -> bool:
+    if not isinstance(row, Mapping) or not isinstance(mapping, Mapping):
+        raise TypeError("row and mapping must be Mappings")
     return all(row.get(k) in allowed for k, allowed in (mapping.get("filter_in") or {}).items())
 
 
 def _excluded(prompt: str, completion: str, mapping: Mapping[str, Any]) -> bool:
     """``exclude_pattern`` is matched against the text that would be trained on (prompt and completion), not unused columns."""
+    if not isinstance(prompt, str) or not isinstance(completion, str):
+        raise TypeError("prompt and completion must be strings")
+    if not isinstance(mapping, Mapping):
+        raise TypeError("mapping must be a Mapping")
     pat = mapping.get("exclude_pattern")
     return bool(pat and (re.search(pat, prompt, re.IGNORECASE) or re.search(pat, completion, re.IGNORECASE)))
 
 
 def _map_fields(row: Mapping[str, Any], m: Mapping[str, Any]) -> tuple[str, str]:
+    if not isinstance(row, Mapping) or not isinstance(m, Mapping):
+        raise TypeError("row and m must be Mappings")
     parts = [_text(row, f) for f in m["prompt_fields"][:1]]
     parts += [str(row[f]).strip() for f in m["prompt_fields"][1:] if isinstance(row.get(f), str) and row[f].strip()]
     return "\n\n".join(parts), m.get("completion_prefix", "") + _text(row, m["completion_field"])
@@ -375,6 +469,8 @@ def _map_label(row: Mapping[str, Any], m: Mapping[str, Any]) -> tuple[str, str]:
 
 def _label_filtered(row: Mapping[str, Any], m: Mapping[str, Any]) -> bool:
     """A label outside ``label_map`` (e.g. NO_SIGNAL, or a class the pack does not use) is a filter, not a schema error."""
+    if not isinstance(row, Mapping) or not isinstance(m, Mapping):
+        raise TypeError("row and m must be Mappings")
     if m.get("kind") != "label":
         return False
     raw = row.get(m["label_field"])
@@ -390,6 +486,8 @@ MAPPERS: dict[str, Callable[[Mapping[str, Any], Mapping[str, Any]], tuple[str, s
 
 def normalize_entity_key(value: Any, style: str) -> str | None:
     """Canonical entity id used to match train rows with eval keys: ``koi`` turns '5218.01' and 'K05218.01' into one id."""
+    if not isinstance(style, str) or style not in ("koi", "star", "raw"):
+        raise ValueError("style must be one of 'koi', 'star', or 'raw'")
     if not isinstance(value, str) or not value.strip():
         return None
     v = value.strip()
@@ -408,6 +506,8 @@ def entity_aliases(key: str) -> set[str]:
     """The ids an entity key matches on. A KOI also matches every other KOI of the same host star (``K05218.01`` and
     ``K05218.02`` share star features): the night exoplanet pack splits whole stars between train and eval, so a sibling
     KOI of an eval item is contamination too."""
+    if not isinstance(key, str) or not key.strip():
+        raise ValueError("key must be a non-empty string")
     mm = _KOI_KEY.fullmatch(key)
     return {key, f"koi-host-K{mm.group(1)}"} if mm else {key}
 
@@ -419,6 +519,14 @@ def map_row(spec: SourceSpec, row: Mapping[str, Any], system_prompt: str, index:
 
     Raises ``Unmappable`` when the row lacks the fields the mapping needs.
     """
+    if not isinstance(spec, SourceSpec):
+        raise TypeError("spec must be a SourceSpec")
+    if not isinstance(row, Mapping):
+        raise TypeError("row must be a Mapping")
+    if not isinstance(system_prompt, str) or not system_prompt.strip():
+        raise ValueError("system_prompt must be a non-empty string")
+    if isinstance(index, bool) or not isinstance(index, int) or index < 0:
+        raise ValueError("index must be a non-negative integer")
     m = spec.mapping
     if not _passes_filters(row, m) or _label_filtered(row, m):
         return None
@@ -440,6 +548,19 @@ def map_row(spec: SourceSpec, row: Mapping[str, Any], system_prompt: str, index:
 def validate_slice(spec: SourceSpec, rows: Sequence[Mapping[str, Any]], system_prompt: str,
                    max_unmappable_fraction: float = 0.10) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Map a streamed slice; PASSED iff at least one row maps and at most ``max_unmappable_fraction`` of unfiltered rows fail."""
+    if not isinstance(spec, SourceSpec):
+        raise TypeError("spec must be a SourceSpec")
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        raise TypeError("rows must be a Sequence of row Mappings")
+    if not isinstance(system_prompt, str) or not system_prompt.strip():
+        raise ValueError("system_prompt must be a non-empty string")
+    if (
+        isinstance(max_unmappable_fraction, bool)
+        or not isinstance(max_unmappable_fraction, (int, float))
+        or not math.isfinite(max_unmappable_fraction)
+        or not 0.0 <= float(max_unmappable_fraction) <= 1.0
+    ):
+        raise ValueError("max_unmappable_fraction must be in [0, 1]")
     mapped: list[dict[str, Any]] = []
     positions: list[int] = []
     filtered = 0
@@ -481,22 +602,45 @@ def validate_slice(spec: SourceSpec, rows: Sequence[Mapping[str, Any]], system_p
 # ---------------------------------------------------------------- decontamination
 def normalize_tokens(text: str) -> list[str]:
     """NFKC, case-folded, alphanumeric word tokens: punctuation and whitespace differences do not hide a duplicate."""
+    if not isinstance(text, str):
+        raise TypeError("text must be a string")
     folded = unicodedata.normalize("NFKC", unicodedata.normalize("NFKC", text).upper().casefold())  # upper first: 'ı' and 'i' meet
     return re.findall(r"[^\W_]+", folded)
 
 
 def text_hash(text: str) -> str:
+    if not isinstance(text, str):
+        raise TypeError("text must be a string")
     return hashlib.sha256(" ".join(normalize_tokens(text)).encode()).hexdigest()
 
 
 def ngram_hashes(tokens: Sequence[str], n: int = NGRAM_N) -> set[int]:
     """8-byte hashes of every word n-gram (empty when the text is shorter than n words)."""
+    if isinstance(tokens, (str, bytes)) or not isinstance(tokens, Sequence):
+        raise ValueError("tokens must be a sequence of word strings, not str/bytes")
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ValueError("n must be an integer >= 1")
     return {int.from_bytes(hashlib.blake2b(" ".join(tokens[i:i + n]).encode(), digest_size=8).digest(), "big")
             for i in range(len(tokens) - n + 1)}
 
 
 def _user_text(row: Mapping[str, Any]) -> str:
     return "\n".join(m["content"] for m in row.get("messages", []) if m.get("role") == "user")
+
+
+def _eval_answer_texts(row: Mapping[str, Any]) -> list[str]:
+    """Extract reference/answer/completion strings and assistant message turns from an eval row (IP-41)."""
+    out: list[str] = []
+    for field_name in ("completion", "answer", "reference", "target"):
+        val = row.get(field_name)
+        if isinstance(val, str) and val.strip():
+            out.append(val)
+    for m in row.get("messages", []):
+        if isinstance(m, Mapping) and m.get("role") == "assistant":
+            content = m.get("content")
+            if isinstance(content, str) and content.strip():
+                out.append(content)
+    return out
 
 
 @dataclass
@@ -510,7 +654,19 @@ class EvalIndex:
     keys: set[str] = field(default_factory=set)
     sources: dict[str, int] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if isinstance(self.n, bool) or not isinstance(self.n, int) or self.n < 1:
+            raise ValueError("n must be an integer >= 1")
+        if isinstance(self.max_doc_freq, bool) or not isinstance(self.max_doc_freq, int) or self.max_doc_freq < 1:
+            raise ValueError("max_doc_freq must be an integer >= 1")
+
     def add(self, name: str, texts: Iterable[str], keys: Iterable[str] = ()) -> None:
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("name must be a non-empty string")
+        if isinstance(texts, (str, bytes)):
+            raise ValueError("texts must be an iterable of strings, not str/bytes")
+        if isinstance(keys, (str, bytes)):
+            raise ValueError("keys must be an iterable of strings, not str/bytes")
         count = 0
         for t in texts:
             toks = normalize_tokens(t)
@@ -524,9 +680,17 @@ class EvalIndex:
         self.sources[name] = self.sources.get(name, 0) + count
 
     def add_eval_pack(self, pack_dir: Path) -> None:
-        """A night pack's ``eval.jsonl``: the user turns (system prompts are shared scaffolding) and the item keys."""
+        """A night pack's ``eval.jsonl``: the user turns, eval answers of ``>= n`` words (IP-41), and the item keys."""
         rows, _ = read_jsonl_shards([Path(pack_dir) / "eval.jsonl"])
         self.add(f"night_pack:{Path(pack_dir).name}", (_user_text(r) for r in rows), (str(r.get("key", "")) for r in rows))
+        long_answers = [
+            ans
+            for r in rows
+            for ans in _eval_answer_texts(r)
+            if len(normalize_tokens(ans)) >= self.n
+        ]
+        if long_answers:
+            self.add(f"night_pack_answers:{Path(pack_dir).name}", long_answers)
 
     @property
     def active_ngrams(self) -> set[int]:
@@ -543,6 +707,12 @@ def decontaminate(rows: Sequence[dict[str, Any]], index: EvalIndex,
 
     Order of checks, first hit wins: entity key, exact eval prompt, 13-gram overlap, exact duplicate of an earlier row.
     """
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        raise TypeError("rows must be a Sequence of row dicts")
+    if not isinstance(index, EvalIndex):
+        raise TypeError("index must be an EvalIndex")
+    if seen is not None and not isinstance(seen, set):
+        raise TypeError("seen must be a set or None")
     seen = set() if seen is None else seen
     active = index.active_ngrams
     counts = {"eval_entity_key": 0, "eval_exact": 0, "eval_ngram": 0, "exact_duplicate": 0, "kept": 0}
@@ -550,10 +720,13 @@ def decontaminate(rows: Sequence[dict[str, Any]], index: EvalIndex,
     for r in rows:
         user = _user_text(r)
         toks_user = normalize_tokens(user)
+        toks_comp = normalize_tokens(str(r.get("completion", "")))
         toks_all = normalize_tokens(user + "\n" + str(r.get("completion", "")))
         if r.get("entity_key") and entity_aliases(r["entity_key"]) & index.keys:
             counts["eval_entity_key"] += 1
-        elif hashlib.sha256(" ".join(toks_user).encode()).hexdigest() in index.exact:
+        elif hashlib.sha256(" ".join(toks_user).encode()).hexdigest() in index.exact or (
+            len(toks_comp) >= index.n and hashlib.sha256(" ".join(toks_comp).encode()).hexdigest() in index.exact
+        ):
             counts["eval_exact"] += 1
         elif ngram_hashes(toks_all, index.n) & active:
             counts["eval_ngram"] += 1
@@ -578,13 +751,27 @@ class MixtureConfig:
     seed: int = 20261028
 
     def __post_init__(self) -> None:
-        if self.total_rows <= 0:
+        if isinstance(self.total_rows, bool) or not isinstance(self.total_rows, int) or self.total_rows <= 0:
             raise ValueError("total_rows must be positive")
-        if not self.domain_weights or any(w < 0 for w in self.domain_weights.values()) or sum(self.domain_weights.values()) <= 0:
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int):
+            raise ValueError("seed must be an integer")
+        if (
+            not self.domain_weights
+            or any(
+                not isinstance(k, str)
+                or not k.strip()
+                or isinstance(w, bool)
+                or not isinstance(w, (int, float))
+                or not math.isfinite(w)
+                or w < 0
+                for k, w in self.domain_weights.items()
+            )
+            or sum(self.domain_weights.values()) <= 0
+        ):
             raise ValueError("domain_weights must be non-negative with a positive sum")
-        if not 0 < self.per_source_cap <= 1:
+        if isinstance(self.per_source_cap, bool) or not isinstance(self.per_source_cap, (int, float)) or not math.isfinite(self.per_source_cap) or not 0 < self.per_source_cap <= 1:
             raise ValueError("per_source_cap must be in (0, 1]")
-        if not 0 <= self.unverified_cap < 1:
+        if isinstance(self.unverified_cap, bool) or not isinstance(self.unverified_cap, (int, float)) or not math.isfinite(self.unverified_cap) or not 0 <= self.unverified_cap < 1:
             raise ValueError("unverified_cap must be in [0, 1)")
 
 
@@ -608,6 +795,23 @@ def plan_mixture(available: Mapping[str, tuple[str, bool, int]], cfg: MixtureCon
     verified rows are filled first, then unverified rows up to ``floor(cap / (1 - cap) * verified)`` so the unverified
     share never exceeds ``unverified_cap``. The shortfall against the target is reported, never backfilled silently.
     """
+    if not isinstance(cfg, MixtureConfig):
+        raise ValueError("cfg must be a MixtureConfig")
+    if not isinstance(available, Mapping):
+        raise ValueError("available must be a Mapping")
+    for src, entry in available.items():
+        if (
+            not isinstance(src, str)
+            or not src.strip()
+            or not isinstance(entry, tuple)
+            or len(entry) != 3
+            or not isinstance(entry[0], str)
+            or not isinstance(entry[1], bool)
+            or isinstance(entry[2], bool)
+            or not isinstance(entry[2], int)
+            or entry[2] < 0
+        ):
+            raise ValueError(f"Invalid available entry for source {src!r}")
     wsum = sum(cfg.domain_weights.values())
     alloc: dict[str, int] = {}
     domains: dict[str, Any] = {}
@@ -643,6 +847,17 @@ def sample_rows(rows: Sequence[dict[str, Any]], k: int, seed: int, source: str) 
     """Deterministic, order-independent sample: rank by sha256(seed:source:key) and keep the first ``k``.
 
     Ties (two rows with one key) are broken by the row's canonical JSON, so the result never depends on input order."""
+    if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence):
+        raise ValueError("rows must be a sequence of row mappings")
+    for idx, r in enumerate(rows):
+        if not isinstance(r, Mapping) or not isinstance(r.get("key"), str) or not r["key"].strip():
+            raise ValueError(f"rows[{idx}] must be a mapping with a non-empty string 'key'")
+    if isinstance(k, bool) or not isinstance(k, int):
+        raise ValueError("k must be an integer")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("source must be a non-empty string")
     def rank(r: dict[str, Any]) -> tuple[str, str]:
         return hashlib.sha256(f"{seed}:{source}:{r['key']}".encode()).hexdigest(), json.dumps(r, sort_keys=True)
 
@@ -656,6 +871,14 @@ def build_mixture(rows_by_source: Mapping[str, Sequence[dict[str, Any]]], verifi
 
     Returns (mixture rows, provenance manifest).
     """
+    if not isinstance(rows_by_source, Mapping) or not isinstance(verified, Mapping) or not isinstance(domain_of, Mapping):
+        raise TypeError("rows_by_source, verified, and domain_of must be Mappings")
+    if not isinstance(cfg, MixtureConfig):
+        raise TypeError("cfg must be a MixtureConfig")
+    if not isinstance(index, EvalIndex):
+        raise TypeError("index must be an EvalIndex")
+    if not isinstance(shards, Sequence) or isinstance(shards, (str, bytes)):
+        raise TypeError("shards must be a Sequence")
     seen: set[str] = set()
     clean: dict[str, list[dict[str, Any]]] = {}
     decon: dict[str, dict[str, int]] = {}

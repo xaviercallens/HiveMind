@@ -5,6 +5,8 @@ After=hivemind-t4-ollama-moe.service
 Requires=hivemind-t4-ollama-moe.service
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 User=CHANGE_ME
 WorkingDirectory=/path/to/HiveMind
 EnvironmentFile=/etc/hivemind/t4-node.env

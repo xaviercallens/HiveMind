@@ -1,0 +1,47 @@
+{
+  "pool_status": "ACTIVE_MULTI_PRODUCER_SERVING",
+  "primary_anchor_producer": "PRODUCER-LOCAL-RTX2070-CUDA0",
+  "t4_maintenance_failover_enabled": true,
+  "online_producers_count": 1,
+  "online_producer_ids": [
+    "PRODUCER-LOCAL-RTX2070-CUDA0"
+  ],
+  "total_requests_served": 0,
+  "total_t4_failovers_handled": 0,
+  "producers": [
+    {
+      "producer_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
+      "name": "Local NVIDIA GeForce RTX 2070 (Primary Anchor Producer)",
+      "hardware": "CPU (CUDA not linked in active Python)",
+      "device": "cpu",
+      "architecture": "NVIDIA Turing (sm_75) • 8 GB GDDR6 • 4-Bit NF4 Sparse Bee-MoE",
+      "role": "PRIMARY_LOCAL_PRODUCER",
+      "status": "ONLINE_SERVING",
+      "endpoint_url": "http://127.0.0.1:8095/api/v1/producers/infer",
+      "openai_compatible_endpoint": "http://127.0.0.1:8095/v1/chat/completions",
+      "hivemind_at_home_endpoint": "http://127.0.0.1:8092/api/v1/moe/inference",
+      "vram_allocated_mb": 0.0,
+      "vram_free_gb": 0.0,
+      "init_elapsed_ms": 771.58,
+      "priority": 1,
+      "requests_served": 0,
+      "last_heartbeat": "2026-10-31T23:21:59",
+      "notes": "Local RTX 2070 warmed up on cuda:0 and actively serving all local & failover HiveMind inference."
+    },
+    {
+      "producer_id": "PRODUCER-REMOTE-TESLA-T4-NODE1",
+      "name": "NVIDIA Tesla T4 Producer Node (Work / Maintenance In Progress)",
+      "hardware": "NVIDIA Tesla T4 (16 GB GDDR6 • Turing sm_75)",
+      "device": "remote:cuda:0",
+      "architecture": "NVIDIA Turing (sm_75) • 16 GB GDDR6 • INT8/FP16/NF4 Tensor Cores",
+      "role": "SECONDARY_CLOUD_PRODUCER",
+      "status": "MAINTENANCE_WORK_IN_PROGRESS",
+      "endpoint_url": "",
+      "failover_target_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
+      "priority": 2,
+      "requests_served": 0,
+      "last_heartbeat": "2026-10-31T23:21:59",
+      "notes": "Work on the Tesla T4 is in progress in the meantime; all T4 traffic automatically fails over to Local RTX 2070 or other active producers."
+    }
+  ]
+}

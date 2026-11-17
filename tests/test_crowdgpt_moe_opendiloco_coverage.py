@@ -466,3 +466,63 @@ def test_inner_steps_wrap_a_short_stream_to_fill_the_batch() -> None:
     after = extract_moe_trainable_buckets(model)
     assert all(torch.equal(out["pseudo_grads"][k], before[k] - after[k]) for k in before)
     assert any(torch.count_nonzero(v) > 0 for v in out["pseudo_grads"].values())
+
+
+def test_inner_steps_continue_through_the_stream_with_start_offset() -> None:
+    """IP-293: rounds used to retrain the stream's first steps*seq_len tokens; start_offset/next_offset move on."""
+    stream = torch.tensor([(i * 7 + 3) % 64 for i in range(400)], dtype=torch.long)
+    base = _small_model()
+    upcycle_crowd_v1_to_sparse_moe(base, num_experts=4, top_k=2, lora_rank=2)
+    start = extract_moe_trainable_buckets(base)
+
+    def run(offset: int | None) -> dict:
+        load_moe_trainable_buckets(base, start)
+        torch.manual_seed(1)
+        kw = {} if offset is None else {"start_offset": offset}
+        return run_crowd_moe_opendiloco_inner_steps(base, stream, steps=3, batch_size=1, seq_len=16, lr=3e-3, **kw)
+
+    first = run(None)
+    assert first["start_offset"] == 0 and first["next_offset"] == 48
+    again = run(0)
+    assert all(torch.equal(first["pseudo_grads"][k], again["pseudo_grads"][k]) for k in first["pseudo_grads"])
+    second = run(first["next_offset"])
+    assert second["start_offset"] == 48 and second["next_offset"] == 96
+    assert any(not torch.equal(first["pseudo_grads"][k], second["pseudo_grads"][k]) for k in first["pseudo_grads"])
+
+
+
+def test_non_finite_step_rejects_the_learner_round_instead_of_crashing(monkeypatch) -> None:
+    """2026-11-16: non-finite router logits ended a 49-round run; now the learner returns non_finite and no update."""
+    import hivemind.swarm.gcp_t4_crowd_diloco as g
+
+    stream = torch.tensor([(i * 7 + 3) % 64 for i in range(400)], dtype=torch.long)
+    model = _small_model()
+    upcycle_crowd_v1_to_sparse_moe(model, num_experts=4, top_k=2, lora_rank=2)
+    before = extract_moe_trainable_buckets(model)
+    calls = {"n": 0}
+    real = g.forward_crowd_v1_checkpointed
+
+    def flaky(*a, **kw):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise ValueError("router_logits must be finite")
+        return real(*a, **kw)
+
+    monkeypatch.setattr(g, "forward_crowd_v1_checkpointed", flaky)
+    out = run_crowd_moe_opendiloco_inner_steps(model, stream, steps=3, batch_size=1, seq_len=16, lr=3e-3)
+    assert out["non_finite"] is True and out["steps_completed"] == 1
+    assert out["next_offset"] == 32  # moved past the bad window
+    assert all(torch.count_nonzero(v) == 0 for v in out["pseudo_grads"].values())
+    after = extract_moe_trainable_buckets(model)
+    assert all(torch.equal(before[k], after[k]) for k in before)  # model restored
+    calls["n"] = 10
+    ok = run_crowd_moe_opendiloco_inner_steps(model, stream, steps=2, batch_size=1, seq_len=16, lr=3e-3)
+    assert ok["non_finite"] is False
+
+    def other_error(*a, **kw):
+        raise ValueError("token_chunk_size must be positive")
+
+    monkeypatch.setattr(g, "forward_crowd_v1_checkpointed", other_error)
+    import pytest as _pt
+    with _pt.raises(ValueError, match="token_chunk_size"):
+        run_crowd_moe_opendiloco_inner_steps(model, stream, steps=1, batch_size=1, seq_len=16, lr=3e-3)

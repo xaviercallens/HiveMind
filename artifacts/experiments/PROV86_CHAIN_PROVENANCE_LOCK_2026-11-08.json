@@ -1,4 +1,8 @@
 {
+  "evidence": "placeholder",
+  "not_a_measurement": true,
+  "evidence_note": "the check reads keys absent from the peer-review report and passes on its defaults",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md",
   "deliverable_id": "PS-01-D4",
   "check_id": "PROV-86",
   "generated_at": "2026-11-08T01:36:00Z",

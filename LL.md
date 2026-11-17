@@ -84,6 +84,64 @@ Context: a joint training weekend with CrowdGPT (Vxtzq) on the dense 1 B model C
 - **Rule.** After a scheduled stop, confirm the instance state; a schedule does not stop an instance that something
   restarted. Monthly target: 150 USD.
 
+### 10. Other projects' jobs share the GPU (night of 15–16 November)
+
+- **What happened.** An owner-authorized expert (MoE) night run had a hard memory cap of 5,091 MiB and stayed at
+  ≥ 5,161 MiB free for 250 rounds. At 03:02 Paris free VRAM fell to **365 MiB**. The cause was a cron job from another of
+  the owner's projects on the same VM (`0 2 * * * AutoevolveAI/scripts/run_cron_dream.sh`): it loads an 842 MB model and
+  trains a LoRA on the T4, peaking at about 6.6 GB. Next to llama-server alone it would leave about 3.5 GB free, below the
+  floor. The watchdog stopped the HiveMind worker; inference survived.
+- **Rules.** Before a night run, list every GPU job on the machine (`crontab -l`, systemd timers, other agent sessions),
+  not only HiveMind's. Every GPU job on the T4, from any project, must check free VRAM against the floor before it
+  starts.
+
+### 11. Write results as you go, and compare with the starting point
+
+- **What happened.** That night's worker printed its report only at the end, so the stop lost every round's result
+  (fixed: `<work_dir>/rounds.jsonl`, PR #926). Reconstructing from checkpoints, I first said no round changed the model
+  because all 250 checkpoints were identical. That was wrong. Compared with the **starting** state, round 1 had changed
+  it, reproducing byte for byte the one accepted round of 14 November.
+- **Rules.** Flush one result line per round. When judging whether training did anything, compare against the start
+  state (or a rejected run), not only consecutive checkpoints.
+
+### 12. Small bugs in the data path cost more than bad hyper-parameters (16 November)
+
+- **What happened.** The expert (MoE) training was stuck for two runs. The cause wasn't the learning rate but three
+  quiet bugs:
+  - every round trained on the same first `steps × 64` tokens (the window never moved with the round);
+  - the evaluation measured only the first of 7 experts;
+  - "more data" was never read, because of a 600-row cap per source.
+- **What changed once fixed (PR #926).** Held-out loss over all 7 experts fell from 5.385 to 5.271 (−2.12 %), with 26 of
+  75 rounds accepted. Before, only 1 round in ~257 had been accepted, always to the same state.
+- **Rules.**
+  - Log what each round actually trained on (`data_offsets`) and check that it moves.
+  - Make the evaluation cover every part of the model you claim to improve.
+  - When adding data, check how many tokens the run actually consumed. Here it was ~154 k of 1.66 M available.
+
+### 13. One bad step must not end a run; a recipe does not transfer by default
+
+- **What happened.** Round 50 raised `router_logits must be finite` (fp16 on a T4, where bf16 isn't available) and ended
+  a 49-round run. Separately, the JEPA study's recipe (lr 2e-5, taken from a paper on fully trained models) left
+  Crowd-v1, an early checkpoint, at 0 % exact match: the answer loss went 8.17 → ~3.0, and the predictions start right
+  but never stop.
+- **Rules.**
+  - A non-finite step rejects that round, restores the model and moves past the data window (PR #926). Only other
+    errors stop a run.
+  - Before a pre-registered comparison on a new model, check that the baseline can clear the floor. Calibrate the
+    learning rate on the baseline arm only, by training loss, never by test accuracy.
+  - If a frozen study turns out uninformative, don't re-score it: pre-register a separate follow-up before seeing more
+    data (E-STP-1b, committed before any E-STP-2 result).
+
+### 14. Read the failing step, not the first log you are shown
+
+- **What happened.** For PR #927, `gh run view --log-failed` showed the Lean audit step. I called the failure flaky and
+  re-ran it. It failed again. The job API showed the failing step was the test suite: 1 real failure in 6,005
+  (`test_no_lateral_movement`: the new `--train` mode fetches data from `datasets-server.huggingface.co`).
+- **Rules.**
+  - Use `gh api …/actions/runs/<id>/jobs` to find the failed **step**, then read that job's full log.
+  - Don't re-run CI before the failure is understood.
+  - A safety test that flags new egress is a policy question for the owner. Don't hide the URL from the scanner.
+
 ### 9. Tooling notes for agents
 
 - In worktree-isolated sessions, compound shell commands that touch git are refused: run plain, separate commands.

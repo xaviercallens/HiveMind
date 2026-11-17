@@ -70,6 +70,9 @@ PARKED_RESEARCH_CANDIDATES: tuple[dict[str, str], ...] = (
 )
 
 
+EVIDENCE_LABEL = {"evidence": "placeholder", "not_a_measurement": True, "evidence_note": "a stream is marked VERIFIED when its files exist; contents are not checked", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def validate_parked_candidates(
     candidates: list[dict[str, str]],
     repo_root: Path = REPO_ROOT,
@@ -201,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     report = audit_planetary_streams()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **report}, indent=2) + "\n", encoding="utf-8")
     print(
         json.dumps(
             {

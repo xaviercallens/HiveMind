@@ -88,6 +88,9 @@ HARDWARE_PROFILES: tuple[dict[str, Any], ...] = (
 )
 
 
+EVIDENCE_LABEL = {"evidence": "placeholder", "not_a_measurement": True, "evidence_note": "hard-coded rows; these GPUs were not measured", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def build_trainer_hardware_receipt() -> dict[str, Any]:
     rows = [dict(p) for p in HARDWARE_PROFILES]
     distinct_classes = sorted({r["gpu_class"] for r in rows})
@@ -162,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
 
     receipt = build_trainer_hardware_receipt()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **receipt}, indent=2) + "\n", encoding="utf-8")
     if receipt["violations"]:
         print(json.dumps({"ok": False, "violations": receipt["violations"]}), file=sys.stderr)
         return 1

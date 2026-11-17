@@ -70,6 +70,9 @@ ALLOWED_DOC_PLACEHOLDERS: frozenset[str] = frozenset({"host", "gateway", "your_p
 # Exact URLs that volunteer code only prints for the user (install instructions); our code never connects to them.
 # Exact match only: any other URL on the same host still fails the scan.
 ALLOWED_DISPLAY_URLS: frozenset[str] = frozenset({"https://github.com/Vxtzq/CrowdGPT"})
+# Owner decision 2026-11-17 (PR #927): volunteers may read PUBLIC training rows straight from Hugging Face's
+# datasets-server (read-only, no token). Exact host only; the Hub, other mirrors and look-alikes still fail.
+ALLOWED_READ_ONLY_DATA_HOSTS: frozenset[str] = frozenset({"datasets-server.huggingface.co"})
 
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 
@@ -91,6 +94,8 @@ def _is_allowed_host(host: str) -> bool:
     if not h or h in ALLOWED_LOOPBACK_HOSTS or h in ALLOWED_DOC_PLACEHOLDERS:
         return True
     if h.endswith(".run.app") or h == "storage.googleapis.com" or h.endswith(".googleapis.com"):
+        return True
+    if h in ALLOWED_READ_ONLY_DATA_HOSTS:
         return True
     return False
 
@@ -196,3 +201,13 @@ def test_display_url_allowance_is_exact() -> None:
                 "https://raw.githubusercontent.com/Vxtzq/CrowdGPT/main/install.sh"):
         assert audit_source_for_lateral_movement(f'U = "{bad}"\n', "x.py"), bad
 
+
+
+
+def test_read_only_training_data_host_is_exact() -> None:
+    """Only datasets-server.huggingface.co (public rows, read-only) is allowed; other hosts still fail the scan."""
+    ok = 'U = "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceFW%2Ffineweb-edu&offset=0&length=12"\n'
+    assert audit_source_for_lateral_movement(ok, "x.py") == []
+    for bad in ("https://huggingface.co/api/models", "https://datasets-server.huggingface.co.evil.example/rows",
+                "https://evil-datasets-server.huggingface.co/rows", "https://cdn-lfs.huggingface.co/x"):
+        assert audit_source_for_lateral_movement(f'U = "{bad}"\n', "x.py"), bad

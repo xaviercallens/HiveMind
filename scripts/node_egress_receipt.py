@@ -204,7 +204,8 @@ def _measure_opentrainer_worker_egress() -> dict[str, Any]:
         "measured_egress_bytes_per_hour": measured_per_hour,
         "declared_budget_bytes_per_hour": declared_budget,
         "within_budget": measured_per_hour <= declared_budget,
-        "allowed_destinations": ["https://hivemind-openrouter-1003063861791.us-central1.run.app"],
+        "allowed_destinations": ["https://hivemind-openrouter-1003063861791.us-central1.run.app",
+                                 "https://datasets-server.huggingface.co (--train: public training rows, read-only)"],
         "lateral_movement_allowed": False,
     }
 

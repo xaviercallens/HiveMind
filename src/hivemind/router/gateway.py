@@ -31,6 +31,7 @@ import os
 import threading
 import time
 import uuid
+from pathlib import Path
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
@@ -157,8 +158,48 @@ def estimate_tokens(num_bytes: int) -> int:
     return (max(0, num_bytes) + 3) // 4
 
 
+RECOUNT_SLACK = 1.25  # allowed excess over the gateway's own token count (special tokens, tokenizer version drift)
+
+
+class TokenCounter:
+    """Counts completion tokens with the served model's own tokenizer, when the gateway has it.
+
+    Tokenizer files come from ``HIVEMIND_TOKENIZER_DIR``: one Hugging Face ``tokenizer.json`` per public model id, named
+    after the id with ``/`` replaced by ``__`` (for example ``hivemind__crowd-v1.json``). A model without a file, or a
+    missing ``tokenizers`` package, gives ``None`` and billing falls back to the byte cap.
+    """
+
+    def __init__(self, directory: str | os.PathLike[str] | None = None):
+        raw = directory if directory is not None else os.environ.get("HIVEMIND_TOKENIZER_DIR", "")
+        self.directory = Path(raw) if raw else None
+        self._cache: dict[str, Any] = {}
+
+    def _tokenizer(self, model_id: str) -> Any:
+        if self.directory is None or not model_id:
+            return None
+        if model_id not in self._cache:
+            path = self.directory / (model_id.replace("/", "__") + ".json")
+            tok = None
+            if path.is_file():
+                try:
+                    from tokenizers import Tokenizer
+
+                    tok = Tokenizer.from_file(str(path))
+                except Exception:  # noqa: BLE001 - a broken file must not break billing; fall back to bytes
+                    tok = None
+            self._cache[model_id] = tok
+        return self._cache[model_id]
+
+    def count(self, model_id: str, text: str) -> int | None:
+        tok = self._tokenizer(model_id)
+        if tok is None:
+            return None
+        return len(tok.encode(text or "", add_special_tokens=False).ids)
+
+
 def meter_usage(
-    reported_prompt: int, reported_completion: int, prompt_bytes: int, completion_bytes: int, max_tokens: int | None
+    reported_prompt: int, reported_completion: int, prompt_bytes: int, completion_bytes: int, max_tokens: int | None,
+    counted_completion: int | None = None,
 ) -> tuple[int, int, int]:
     """Anti-inflation metering: returns ``(prompt_tokens, completion_tokens, billed_tokens)``.
 
@@ -166,11 +207,17 @@ def meter_usage(
     estimate (and never more than the prompt bytes) and the completion part by the completion bytes and by
     ``max_tokens`` (``DEFAULT_MAX_TOKENS`` when the consumer set none, so billing stays inside the checked reserve).
     Hence ``billed <= min(reported_prompt + reported_completion, prompt_bytes + completion_bytes)``.
+
+    With ``counted_completion`` (the gateway's own count with the model's tokenizer), the completion part is also capped
+    at ``ceil(RECOUNT_SLACK * counted_completion)``: the byte cap alone lets a producer overstate by the bytes-per-token
+    ratio (about 4x for English, MVP criterion E2).
     """
     prompt_cap = min(int(prompt_bytes), estimate_tokens(int(prompt_bytes)) * PROMPT_TOKEN_FACTOR)
     prompt = max(0, min(int(reported_prompt), prompt_cap))
     completion = max(0, min(int(reported_completion), int(completion_bytes)))
     completion = min(completion, max(0, DEFAULT_MAX_TOKENS if max_tokens is None else int(max_tokens)))
+    if counted_completion is not None:
+        completion = min(completion, math.ceil(RECOUNT_SLACK * max(0, int(counted_completion))))
     return prompt, completion, prompt + completion
 
 
@@ -238,6 +285,19 @@ def _message_text(message: object) -> str:
                     if isinstance(value, str):
                         pieces.append(value)
     return "".join(pieces)
+
+
+def completion_text(payload: Mapping[str, Any], *, delta: bool) -> str:
+    """Text generated in a chat completion (``delta=False``) or one stream chunk (``delta=True``), as metered in bytes."""
+    parts: list[str] = []
+    choices = payload.get("choices")
+    if isinstance(choices, list):
+        for choice in choices:
+            if isinstance(choice, dict):
+                parts.append(_message_text(choice.get("delta" if delta else "message")))
+                if not delta and isinstance(choice.get("text"), str):
+                    parts.append(choice["text"])
+    return "".join(parts)
 
 
 def completion_byte_count(payload: Mapping[str, Any], *, delta: bool) -> int:
@@ -993,6 +1053,7 @@ def create_router_app(
     """
     client = http_client if http_client is not None else httpx.Client(timeout=PRODUCER_TIMEOUT_S, follow_redirects=False)
     resolve: Resolver = resolver if resolver is not None else _default_resolver
+    token_counter = TokenCounter()  # gateway-side completion recount for billing (HIVEMIND_TOKENIZER_DIR)
     app = FastAPI(title="HiveMind OpenRouter (proof of concept)", version="1.0.0", description=POC_API_DESCRIPTION)
     rotation = WeightedRoundRobin()
     register_limiter = SlidingWindowLimiter(REGISTER_LIMIT, REGISTER_WINDOW_S)
@@ -1428,9 +1489,12 @@ def create_router_app(
         completion_bytes: int,
         *,
         ttft_ms: float | None = None,
+        completion_txt: str | None = None,
     ) -> dict[str, Any]:
         """Settle against the escrow taken at plan time: the metered charge can never exceed it, so it is never free."""
-        prompt, completion, billed = meter_usage(reported[0], reported[1], plan.prompt_bytes, completion_bytes, plan.max_tokens)
+        counted = token_counter.count(plan.model_id, completion_txt) if completion_txt is not None else None
+        prompt, completion, billed = meter_usage(reported[0], reported[1], plan.prompt_bytes, completion_bytes, plan.max_tokens,
+                                                 counted_completion=counted)
         receipt = store.settle(plan.request_id, account.account_id, producer_id, plan.model_id, prompt, completion, billed, plan.price_per_1k, fee)
         billed = receipt.billed_tokens
         prompt = min(prompt, billed)
@@ -1570,7 +1634,8 @@ def create_router_app(
             if reported is None:
                 reported = (estimate_tokens(plan.prompt_bytes), estimate_tokens(cbytes))
             try:
-                info = settle(plan, account, record.account_id, reported, cbytes)
+                info = settle(plan, account, record.account_id, reported, cbytes,
+                              completion_txt=completion_text(payload, delta=False))
             except (InsufficientBalance, DuplicateRequest, UnknownAccount):
                 raise RouterError(402, "Balance changed while the request was running.", "insufficient_quota", "insufficient_balance") from None
             payload["model"] = _public_model(plan.model_id)
@@ -1619,6 +1684,7 @@ def create_router_app(
     def _stream_body(plan: _Plan, account: Account, producer_id: str, upstream: httpx.Response) -> Iterator[bytes]:
         public = _public_model(plan.model_id)
         completion_bytes = 0
+        stream_text: list[str] = []
         reported: tuple[int, int] | None = None
         completion_id = "chatcmpl-" + plan.request_id
         settled = False
@@ -1638,7 +1704,8 @@ def create_router_app(
                 else None
             )
             try:
-                return settle(plan, account, producer_id, usage, completion_bytes, ttft_ms=stream_ttft_ms)
+                return settle(plan, account, producer_id, usage, completion_bytes, ttft_ms=stream_ttft_ms,
+                              completion_txt="".join(stream_text))
             except (InsufficientBalance, DuplicateRequest, UnknownAccount):
                 LOGGER.warning("settlement failed for %s", plan.request_id)
                 return None
@@ -1664,6 +1731,7 @@ def create_router_app(
                         produced = True
                     completion_id = str(chunk.get("id", completion_id))
                     completion_bytes += completion_byte_count(chunk, delta=True)
+                    stream_text.append(completion_text(chunk, delta=True))
                     pair = _usage_pair(chunk)
                     if pair is not None:
                         reported = pair

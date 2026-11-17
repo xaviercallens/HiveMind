@@ -21,8 +21,9 @@ def test_multikrum_rejects_scaled_and_sign_flipped_deltas_and_keeps_the_honest_o
 
 def test_metering_inflation_is_bounded_by_the_bytes_but_loose() -> None:
     m = e2.metering_eval()
-    assert m["max_billable_tokens_for_these_bytes"] <= m["completion_bytes"]  # a token is at least one byte
-    assert m["max_inflation_factor"] > 1.5  # honest about the slack: about 4x for text at 4 bytes/token
+    assert m["bytes_cap_only"]["max_billable_tokens"] <= m["completion_bytes"]  # a token is at least one byte
+    assert m["bytes_cap_only"]["max_inflation_factor"] > 1.5  # honest about the slack: about 4x for text at 4 bytes/token
+    assert m["tokenizer_recount"]["max_inflation_factor"] <= 1.5  # the recount closes it, once deployed
 
 
 def test_the_ledger_reader_reports_a_missing_ledger_instead_of_inventing_evidence(tmp_path: Path) -> None:

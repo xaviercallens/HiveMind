@@ -128,7 +128,35 @@ def _submit_opentrainer_receipt(
         return {"accepted": False, "http_status": exc.code, "detail": err_body}
 
 
-def _stream_safetensors_no_mmap(model: CrowdV1WithEngram, safetensors_path: Path) -> str:
+def _safetensors_key_count(path: Path) -> int:
+    """Return number of non-metadata tensor keys in a safetensors header, or 0 if invalid."""
+    import struct
+
+    try:
+        size = path.stat().st_size
+        if size < 10:
+            return 0
+        with path.open("rb") as fh:
+            raw_n = fh.read(8)
+            if len(raw_n) != 8:
+                return 0
+            (header_len,) = struct.unpack("<Q", raw_n)
+            if header_len <= 0 or header_len > 32 * 1024 * 1024 or 8 + header_len > size:
+                return 0
+            header = json.loads(fh.read(header_len).decode("utf-8"))
+        if not isinstance(header, dict):
+            return 0
+        return sum(1 for k in header if k != "__metadata__")
+    except (OSError, struct.error, UnicodeDecodeError, ValueError, TypeError):
+        return 0
+
+
+def _stream_safetensors_no_mmap(
+    model: CrowdV1WithEngram,
+    safetensors_path: Path,
+    *,
+    require_match: bool = True,
+) -> tuple[str, set[str]]:
     """Stream `model.safetensors` tensor-by-tensor via `seek`/`read` (zero 2 GB `MapViewOfFile` commit spike)."""
     import struct
 
@@ -139,6 +167,7 @@ def _stream_safetensors_no_mmap(model: CrowdV1WithEngram, safetensors_path: Path
     }
     h_hash = hashlib.sha256()
     param_map = dict(model.named_parameters())
+    matched_keys: set[str] = set()
     with safetensors_path.open("rb") as fh, torch.no_grad():
         raw_n = fh.read(8)
         h_hash.update(raw_n)
@@ -154,6 +183,7 @@ def _stream_safetensors_no_mmap(model: CrowdV1WithEngram, safetensors_path: Path
             target = param_map.get(key)
             if target is None:
                 continue
+            matched_keys.add(key)
             lo, hi = int(meta["data_offsets"][0]), int(meta["data_offsets"][1])
             nbytes = hi - lo
             src_dt = dt_map[str(meta["dtype"])]
@@ -177,7 +207,11 @@ def _stream_safetensors_no_mmap(model: CrowdV1WithEngram, safetensors_path: Path
                 src_t = torch.frombuffer(buf, dtype=src_dt).reshape(shape)
                 target.copy_(src_t.to(device=target.device, dtype=target.dtype))
                 del src_t, buf
-    return h_hash.hexdigest()
+    if require_match and not matched_keys:
+        raise RuntimeError(
+            f"Refusing uninitialized Crowd-v1 load: 0/{len(param_map)} parameter keys matched in {safetensors_path}"
+        )
+    return h_hash.hexdigest(), matched_keys
 
 
 def _load_or_build_model(
@@ -208,7 +242,9 @@ def _load_or_build_model(
         return model, {"source": "synthetic_small_arch", "hf_revision": "local-smoke", "global_step": 0}
 
     sync = CrowdGPTHuggingFaceSync(cache_dir=cache_dir)
-    cached_candidates = sorted(sync.cache_dir.glob("model_*.safetensors")) if sync.cache_dir.exists() else []
+    all_cached = sorted(sync.cache_dir.glob("model_*.safetensors")) if sync.cache_dir.exists() else []
+    named_cached = [p for p in all_cached if _safetensors_key_count(p) >= 2]
+    cached_candidates = named_cached or all_cached
     if cached_candidates:
         weights_path = cached_candidates[-1]
         rev = weights_path.stem.replace("model_", "")
@@ -245,12 +281,14 @@ def _load_or_build_model(
     model.register_buffer("cos_cached", emb.cos()[None, None].to(device=direct_trunk_device), persistent=False)
     model.register_buffer("sin_cached", emb.sin()[None, None].to(device=direct_trunk_device), persistent=False)
 
-    sha = _stream_safetensors_no_mmap(model, weights_path)
+    sha, matched_keys = _stream_safetensors_no_mmap(model, weights_path, require_match=True)
     return model, {
         "source": str(weights_path),
         "hf_revision": rev,
         "global_step": step,
         "weights_sha256": sha,
+        "weights_matched_keys": len(matched_keys),
+        "weights_total_keys": len(dict(model.named_parameters())),
     }
 
 

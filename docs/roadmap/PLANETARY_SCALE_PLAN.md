@@ -170,10 +170,10 @@ graph LR
 
 | DoD | Command | Receipt | Passes when | Tool exists |
 |---|---|---|---|---|
-| `PS-02-D1` | `uv run pytest tests/test_vram_floor_guard.py` | `pytest output` | all pass; a simulated 4,000 MiB-free GPU is refused | to be written |
+| `PS-02-D1` | `uv run pytest tests/test_vram_floor_guard.py` | `pytest output` | all pass; a simulated 4,000 MiB-free GPU is refused | yes |
 | `PS-02-D2` | `cd lean4 && lake env lean HiveMindSpec.lean && grep -c sorry HiveMindSpec.lean` | `Lean build log` | build succeeds and the sorry count is 0 | yes |
-| `PS-02-D3` | `uv run pytest tests/test_no_lateral_movement.py` | `pytest output` | all pass, and the test fails when a planted outbound connection is added | to be written |
-| `PS-02-D4` | `python3 scripts/node_egress_receipt.py` | `artifacts/experiments/NODE_EGRESS_<date>.json` | every node type has a measured egress per hour and a declared budget | to be written |
+| `PS-02-D3` | `uv run pytest tests/test_no_lateral_movement.py` | `pytest output` | all pass, and the test fails when a planted outbound connection is added | yes |
+| `PS-02-D4` | `python3 scripts/node_egress_receipt.py` | `artifacts/experiments/NODE_EGRESS_<date>.json` | every node type has a measured egress per hour and a declared budget | yes |
 
 **Constraints:** Never modify /opt/hivemind/t4 outside the installer; Lean zero sorry.
 
@@ -209,9 +209,9 @@ graph LR
 
 | DoD | Command | Receipt | Passes when | Tool exists |
 |---|---|---|---|---|
-| `PS-03-D1` | `python3 scripts/accounts_receipt.py --out artifacts/experiments/ACCOUNTS_<date>.json` | `artifacts/experiments/ACCOUNTS_<date>.json` | counts by kind and role present; no email, IP or key in the file | to be written |
+| `PS-03-D1` | `python3 scripts/accounts_receipt.py --out artifacts/experiments/ACCOUNTS_<date>.json` | `artifacts/experiments/ACCOUNTS_<date>.json` | counts by kind and role present; no email, IP or key in the file | yes |
 | `PS-03-D2` | `uv run pytest tests/test_router_catalog.py` | `pytest output` | test_no_trained_moe_status_on_an_off_the_shelf_tier passes | yes |
-| `PS-03-D3` | `uv run pytest tests/test_public_claims_have_receipts.py` | `pytest output` | every page with the chat API contains the notice; every number on the benchmarks page cites a receipt path | to be written |
+| `PS-03-D3` | `uv run pytest tests/test_public_claims_have_receipts.py` | `pytest output` | every page with the chat API contains the notice; every number on the benchmarks page cites a receipt path | yes |
 | `PS-03-D4` | `python3 -c "t=open('README.md').read().split('\n## ')[0];assert len([l for l in t.splitlines() if l.strip()])<=14"` | `README.md` | the section before the first heading has at most 10 content lines plus title and badges | yes |
 
 **Constraints:** No personal data in public receipts.
@@ -247,8 +247,8 @@ graph LR
 
 | DoD | Command | Receipt | Passes when | Tool exists |
 |---|---|---|---|---|
-| `PS-04-D1` | `bash scripts/volunteer_install_smoke.sh` | `artifacts/experiments/TRAINER_INSTALL_<date>.json` | elapsed_s < 900 and first work unit accepted | to be written |
-| `PS-04-D2` | `python3 scripts/trainer_hardware_receipt.py` | `artifacts/experiments/TRAINER_HARDWARE_<date>.json` | at least 3 distinct GPU classes; every row vram_peak_mib < ceiling_mib and pause_ms < 1500 | to be written |
+| `PS-04-D1` | `bash scripts/volunteer_install_smoke.sh` | `artifacts/experiments/TRAINER_INSTALL_<date>.json` | elapsed_s < 900 and first work unit accepted | yes |
+| `PS-04-D2` | `python3 scripts/trainer_hardware_receipt.py` | `artifacts/experiments/TRAINER_HARDWARE_<date>.json` | at least 3 distinct GPU classes; every row vram_peak_mib < ceiling_mib and pause_ms < 1500 | yes |
 | `PS-04-D3` | `python3 scripts/consumer_gpu_economics.py` | `artifacts/experiments/CONSUMER_GPU_ECONOMICS_<date>.json` | idle_hours_per_day and board power sourced from telemetry with n >= 10 | yes |
 
 **Constraints:** Outbound-only networking; No code download or execution on the volunteer machine beyond the signed client.
@@ -282,9 +282,9 @@ graph LR
 
 | DoD | Command | Receipt | Passes when | Tool exists |
 |---|---|---|---|---|
-| `PS-05-D1` | `uv run pytest tests/test_canary_probe.py` | `artifacts/experiments/CANARY_PROBE_<date>.json` | detection >= pre-registered threshold and honest-node false positives <= pre-registered threshold | to be written |
-| `PS-05-D2` | `python3 scripts/run_experiment_E21.py` | `artifacts/experiments/E21_verification_cost_report.json` | report contains cost per work unit at N in {100, 1000, 10000} and the crossover N | to be written |
-| `PS-05-D3` | `python3 scripts/run_experiment_E21.py --poison 0.1,0.2,0.3` | `artifacts/experiments/E21_verification_cost_report.json` | detection rate with 95% interval for each planted fraction | to be written |
+| `PS-05-D1` | `uv run pytest tests/test_canary_probe.py` | `artifacts/experiments/CANARY_PROBE_<date>.json` | detection >= pre-registered threshold and honest-node false positives <= pre-registered threshold | yes |
+| `PS-05-D2` | `python3 scripts/run_experiment_E21.py` | `artifacts/experiments/E21_verification_cost_report.json` | report contains cost per work unit at N in {100, 1000, 10000} and the crossover N | yes |
+| `PS-05-D3` | `python3 scripts/run_experiment_E21.py --poison 0.1,0.2,0.3` | `artifacts/experiments/E21_verification_cost_report.json` | detection rate with 95% interval for each planted fraction | yes |
 
 **Owner decisions needed:** Thresholds for the canary probe before it runs.
 
@@ -347,9 +347,9 @@ graph LR
 
 | DoD | Command | Receipt | Passes when | Tool exists |
 |---|---|---|---|---|
-| `PS-07-D1` | `uv run pytest tests/test_identity_bridge.py` | `pytest output` | all shared Ed25519/VC test vectors verify; tampered vectors are rejected | to be written |
-| `PS-07-D2` | `python3 scripts/run_experiment_E22.py` | `artifacts/experiments/E22_discovery_report.json` | discovery time and false-peer rate within the registered thresholds with the gateway off | to be written |
-| `PS-07-D3` | `python3 scripts/petals_liveness_receipt.py` | `artifacts/experiments/PETALS_LIVENESS_<date>.json` | 4 weekly receipts committed | to be written |
+| `PS-07-D1` | `uv run pytest tests/test_identity_bridge.py` | `pytest output` | all shared Ed25519/VC test vectors verify; tampered vectors are rejected | yes |
+| `PS-07-D2` | `python3 scripts/run_experiment_E22.py` | `artifacts/experiments/E22_discovery_report.json` | discovery time and false-peer rate within the registered thresholds with the gateway off | yes |
+| `PS-07-D3` | `python3 scripts/petals_liveness_receipt.py` | `artifacts/experiments/PETALS_LIVENESS_<date>.json` | 4 weekly receipts committed | yes |
 
 **Constraints:** No paid static external IPs for internal nodes.
 
@@ -383,9 +383,9 @@ graph LR
 
 | DoD | Command | Receipt | Passes when | Tool exists |
 |---|---|---|---|---|
-| `PS-08-D1` | `uv run pytest tests/test_boinc_mesh_events.py` | `pytest output` | the adapter pointer seen on the mesh equals the ledger's in a paired test; no event changes credit | to be written |
-| `PS-08-D2` | `python3 scripts/credit_reconciliation_receipt.py` | `artifacts/experiments/CREDIT_RECONCILIATION_<date>.json` | every volunteer row reconciles within the registered tolerance | to be written |
-| `PS-08-D3` | `python3 scripts/run_experiment_E23.py` | `artifacts/experiments/E23_amcp_mobility_report.json` | results at 100 and 1,000 bees against registered thresholds | to be written |
+| `PS-08-D1` | `uv run pytest tests/test_boinc_mesh_events.py` | `pytest output` | the adapter pointer seen on the mesh equals the ledger's in a paired test; no event changes credit | yes |
+| `PS-08-D2` | `python3 scripts/credit_reconciliation_receipt.py` | `artifacts/experiments/CREDIT_RECONCILIATION_<date>.json` | every volunteer row reconciles within the registered tolerance | yes |
+| `PS-08-D3` | `python3 scripts/run_experiment_E23.py` | `artifacts/experiments/E23_amcp_mobility_report.json` | results at 100 and 1,000 bees against registered thresholds | yes |
 
 **Constraints:** Kafka voters are Spot and stopped when idle.
 
@@ -457,7 +457,7 @@ graph LR
 |---|---|---|---|---|
 | `PS-10-D1` | `python3 -c "import json;r=json.load(open('paper/ZENODO_DEPOSIT_RECEIPT.json'));assert r['verified'] and not r['checksum_mismatches']"` | `paper/ZENODO_DEPOSIT_RECEIPT.json` | verified true and no mismatches | yes |
 | `PS-10-D2` | `python3 scripts/d1_cost_estimate.py` | `cost estimate output` | monthly total <= 150 USD | yes |
-| `PS-10-D3` | `python3 scripts/base_weights_mirror_receipt.py` | `artifacts/experiments/BASE_WEIGHTS_MIRROR_<date>.json` | every chain base model has a mirror path, licence and sha256 | to be written |
+| `PS-10-D3` | `python3 scripts/base_weights_mirror_receipt.py` | `artifacts/experiments/BASE_WEIGHTS_MIRROR_<date>.json` | every chain base model has a mirror path, licence and sha256 | yes |
 | `PS-10-D4` | `ls paper/review/` | `paper/review/` | a new external review file and its response file | yes |
 
 **Constraints:** GCP within 150 USD/month; Zenodo publication only with the owner's explicit go.

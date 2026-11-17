@@ -127,10 +127,10 @@
         {"id": "PS-02-D4", "item": "Egress receipt per node type, with the budget documented on the join page."}
       ],
       "validation": [
-        {"dod": "PS-02-D1", "command": "uv run pytest tests/test_vram_floor_guard.py", "receipt": "pytest output", "pass": "all pass; a simulated 4,000 MiB-free GPU is refused", "exists": false},
+        {"dod": "PS-02-D1", "command": "uv run pytest tests/test_vram_floor_guard.py", "receipt": "pytest output", "pass": "all pass; a simulated 4,000 MiB-free GPU is refused", "exists": true},
         {"dod": "PS-02-D2", "command": "cd lean4 && lake env lean HiveMindSpec.lean && grep -c sorry HiveMindSpec.lean", "receipt": "Lean build log", "pass": "build succeeds and the sorry count is 0", "exists": true},
-        {"dod": "PS-02-D3", "command": "uv run pytest tests/test_no_lateral_movement.py", "receipt": "pytest output", "pass": "all pass, and the test fails when a planted outbound connection is added", "exists": false},
-        {"dod": "PS-02-D4", "command": "python3 scripts/node_egress_receipt.py", "receipt": "artifacts/experiments/NODE_EGRESS_<date>.json", "pass": "every node type has a measured egress per hour and a declared budget", "exists": false}
+        {"dod": "PS-02-D3", "command": "uv run pytest tests/test_no_lateral_movement.py", "receipt": "pytest output", "pass": "all pass, and the test fails when a planted outbound connection is added", "exists": true},
+        {"dod": "PS-02-D4", "command": "python3 scripts/node_egress_receipt.py", "receipt": "artifacts/experiments/NODE_EGRESS_<date>.json", "pass": "every node type has a measured egress per hour and a declared budget", "exists": true}
       ],
       "owner_decisions": ["Approve the floor fix as a blocker on further night runs."],
       "constraints": ["Never modify /opt/hivemind/t4 outside the installer", "Lean zero sorry"],
@@ -159,9 +159,9 @@
         {"id": "PS-03-D4", "item": "README starts with a TL;DR of at most 10 lines."}
       ],
       "validation": [
-        {"dod": "PS-03-D1", "command": "python3 scripts/accounts_receipt.py --out artifacts/experiments/ACCOUNTS_<date>.json", "receipt": "artifacts/experiments/ACCOUNTS_<date>.json", "pass": "counts by kind and role present; no email, IP or key in the file", "exists": false},
+        {"dod": "PS-03-D1", "command": "python3 scripts/accounts_receipt.py --out artifacts/experiments/ACCOUNTS_<date>.json", "receipt": "artifacts/experiments/ACCOUNTS_<date>.json", "pass": "counts by kind and role present; no email, IP or key in the file", "exists": true},
         {"dod": "PS-03-D2", "command": "uv run pytest tests/test_router_catalog.py", "receipt": "pytest output", "pass": "test_no_trained_moe_status_on_an_off_the_shelf_tier passes", "exists": true},
-        {"dod": "PS-03-D3", "command": "uv run pytest tests/test_public_claims_have_receipts.py", "receipt": "pytest output", "pass": "every page with the chat API contains the notice; every number on the benchmarks page cites a receipt path", "exists": false},
+        {"dod": "PS-03-D3", "command": "uv run pytest tests/test_public_claims_have_receipts.py", "receipt": "pytest output", "pass": "every page with the chat API contains the notice; every number on the benchmarks page cites a receipt path", "exists": true},
         {"dod": "PS-03-D4", "command": "python3 -c \"t=open('README.md').read().split('\\n## ')[0];assert len([l for l in t.splitlines() if l.strip()])<=14\"", "receipt": "README.md", "pass": "the section before the first heading has at most 10 content lines plus title and badges", "exists": true}
       ],
       "owner_decisions": ["Which personal fields may never appear in a receipt (default: none)."],
@@ -190,8 +190,8 @@
         {"id": "PS-04-D3", "item": "Idle-hours and power telemetry from at least 10 enrolled trainers feeds the economics receipt."}
       ],
       "validation": [
-        {"dod": "PS-04-D1", "command": "bash scripts/volunteer_install_smoke.sh", "receipt": "artifacts/experiments/TRAINER_INSTALL_<date>.json", "pass": "elapsed_s < 900 and first work unit accepted", "exists": false},
-        {"dod": "PS-04-D2", "command": "python3 scripts/trainer_hardware_receipt.py", "receipt": "artifacts/experiments/TRAINER_HARDWARE_<date>.json", "pass": "at least 3 distinct GPU classes; every row vram_peak_mib < ceiling_mib and pause_ms < 1500", "exists": false},
+        {"dod": "PS-04-D1", "command": "bash scripts/volunteer_install_smoke.sh", "receipt": "artifacts/experiments/TRAINER_INSTALL_<date>.json", "pass": "elapsed_s < 900 and first work unit accepted", "exists": true},
+        {"dod": "PS-04-D2", "command": "python3 scripts/trainer_hardware_receipt.py", "receipt": "artifacts/experiments/TRAINER_HARDWARE_<date>.json", "pass": "at least 3 distinct GPU classes; every row vram_peak_mib < ceiling_mib and pause_ms < 1500", "exists": true},
         {"dod": "PS-04-D3", "command": "python3 scripts/consumer_gpu_economics.py", "receipt": "artifacts/experiments/CONSUMER_GPU_ECONOMICS_<date>.json", "pass": "idle_hours_per_day and board power sourced from telemetry with n >= 10", "exists": true}
       ],
       "owner_decisions": [],
@@ -220,9 +220,9 @@
         {"id": "PS-05-D3", "item": "Poisoner detection at 10%, 20% and 30% planted fractions reported with confidence intervals."}
       ],
       "validation": [
-        {"dod": "PS-05-D1", "command": "uv run pytest tests/test_canary_probe.py", "receipt": "artifacts/experiments/CANARY_PROBE_<date>.json", "pass": "detection >= pre-registered threshold and honest-node false positives <= pre-registered threshold", "exists": false},
-        {"dod": "PS-05-D2", "command": "python3 scripts/run_experiment_E21.py", "receipt": "artifacts/experiments/E21_verification_cost_report.json", "pass": "report contains cost per work unit at N in {100, 1000, 10000} and the crossover N", "exists": false},
-        {"dod": "PS-05-D3", "command": "python3 scripts/run_experiment_E21.py --poison 0.1,0.2,0.3", "receipt": "artifacts/experiments/E21_verification_cost_report.json", "pass": "detection rate with 95% interval for each planted fraction", "exists": false}
+        {"dod": "PS-05-D1", "command": "uv run pytest tests/test_canary_probe.py", "receipt": "artifacts/experiments/CANARY_PROBE_<date>.json", "pass": "detection >= pre-registered threshold and honest-node false positives <= pre-registered threshold", "exists": true},
+        {"dod": "PS-05-D2", "command": "python3 scripts/run_experiment_E21.py", "receipt": "artifacts/experiments/E21_verification_cost_report.json", "pass": "report contains cost per work unit at N in {100, 1000, 10000} and the crossover N", "exists": true},
+        {"dod": "PS-05-D3", "command": "python3 scripts/run_experiment_E21.py --poison 0.1,0.2,0.3", "receipt": "artifacts/experiments/E21_verification_cost_report.json", "pass": "detection rate with 95% interval for each planted fraction", "exists": true}
       ],
       "owner_decisions": ["Thresholds for the canary probe before it runs."],
       "constraints": [],
@@ -277,9 +277,9 @@
         {"id": "PS-07-D3", "item": "Petals liveness receipt produced weekly for 4 weeks."}
       ],
       "validation": [
-        {"dod": "PS-07-D1", "command": "uv run pytest tests/test_identity_bridge.py", "receipt": "pytest output", "pass": "all shared Ed25519/VC test vectors verify; tampered vectors are rejected", "exists": false},
-        {"dod": "PS-07-D2", "command": "python3 scripts/run_experiment_E22.py", "receipt": "artifacts/experiments/E22_discovery_report.json", "pass": "discovery time and false-peer rate within the registered thresholds with the gateway off", "exists": false},
-        {"dod": "PS-07-D3", "command": "python3 scripts/petals_liveness_receipt.py", "receipt": "artifacts/experiments/PETALS_LIVENESS_<date>.json", "pass": "4 weekly receipts committed", "exists": false}
+        {"dod": "PS-07-D1", "command": "uv run pytest tests/test_identity_bridge.py", "receipt": "pytest output", "pass": "all shared Ed25519/VC test vectors verify; tampered vectors are rejected", "exists": true},
+        {"dod": "PS-07-D2", "command": "python3 scripts/run_experiment_E22.py", "receipt": "artifacts/experiments/E22_discovery_report.json", "pass": "discovery time and false-peer rate within the registered thresholds with the gateway off", "exists": true},
+        {"dod": "PS-07-D3", "command": "python3 scripts/petals_liveness_receipt.py", "receipt": "artifacts/experiments/PETALS_LIVENESS_<date>.json", "pass": "4 weekly receipts committed", "exists": true}
       ],
       "owner_decisions": ["Which bee is advertised in E22 (its prompts are visible to any peer)."],
       "constraints": ["No paid static external IPs for internal nodes"],
@@ -306,9 +306,9 @@
         {"id": "PS-08-D3", "item": "E23 report on migration time, state loss and duplicate delivery."}
       ],
       "validation": [
-        {"dod": "PS-08-D1", "command": "uv run pytest tests/test_boinc_mesh_events.py", "receipt": "pytest output", "pass": "the adapter pointer seen on the mesh equals the ledger's in a paired test; no event changes credit", "exists": false},
-        {"dod": "PS-08-D2", "command": "python3 scripts/credit_reconciliation_receipt.py", "receipt": "artifacts/experiments/CREDIT_RECONCILIATION_<date>.json", "pass": "every volunteer row reconciles within the registered tolerance", "exists": false},
-        {"dod": "PS-08-D3", "command": "python3 scripts/run_experiment_E23.py", "receipt": "artifacts/experiments/E23_amcp_mobility_report.json", "pass": "results at 100 and 1,000 bees against registered thresholds", "exists": false}
+        {"dod": "PS-08-D1", "command": "uv run pytest tests/test_boinc_mesh_events.py", "receipt": "pytest output", "pass": "the adapter pointer seen on the mesh equals the ledger's in a paired test; no event changes credit", "exists": true},
+        {"dod": "PS-08-D2", "command": "python3 scripts/credit_reconciliation_receipt.py", "receipt": "artifacts/experiments/CREDIT_RECONCILIATION_<date>.json", "pass": "every volunteer row reconciles within the registered tolerance", "exists": true},
+        {"dod": "PS-08-D3", "command": "python3 scripts/run_experiment_E23.py", "receipt": "artifacts/experiments/E23_amcp_mobility_report.json", "pass": "results at 100 and 1,000 bees against registered thresholds", "exists": true}
       ],
       "owner_decisions": ["Resolution of the BOINC credit versus verified_credit mismatch."],
       "constraints": ["Kafka voters are Spot and stopped when idle"],
@@ -366,7 +366,7 @@
       "validation": [
         {"dod": "PS-10-D1", "command": "python3 -c \"import json;r=json.load(open('paper/ZENODO_DEPOSIT_RECEIPT.json'));assert r['verified'] and not r['checksum_mismatches']\"", "receipt": "paper/ZENODO_DEPOSIT_RECEIPT.json", "pass": "verified true and no mismatches", "exists": true},
         {"dod": "PS-10-D2", "command": "python3 scripts/d1_cost_estimate.py", "receipt": "cost estimate output", "pass": "monthly total <= 150 USD", "exists": true},
-        {"dod": "PS-10-D3", "command": "python3 scripts/base_weights_mirror_receipt.py", "receipt": "artifacts/experiments/BASE_WEIGHTS_MIRROR_<date>.json", "pass": "every chain base model has a mirror path, licence and sha256", "exists": false},
+        {"dod": "PS-10-D3", "command": "python3 scripts/base_weights_mirror_receipt.py", "receipt": "artifacts/experiments/BASE_WEIGHTS_MIRROR_<date>.json", "pass": "every chain base model has a mirror path, licence and sha256", "exists": true},
         {"dod": "PS-10-D4", "command": "ls paper/review/", "receipt": "paper/review/", "pass": "a new external review file and its response file", "exists": true}
       ],
       "owner_decisions": ["Who is asked for the external review."],

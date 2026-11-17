@@ -1,0 +1,424 @@
+{
+  "schema_version": 1,
+  "experiment_id": "E8-stage2-amcp-night",
+  "run_id": "night-001",
+  "completed": false,
+  "final": true,
+  "coordinator_host": "socreateai-agora-hermes-node1",
+  "code_pin": "6d50b7222508e63acba25a4b9129aabc0f43a479de0cc2de22253af7df79c9a9",
+  "base_sha256": "7e3bf9e2252e988135b35209e7a3fd9a06a2c2efe3976de7a0d5c0024adf4c96",
+  "config": {
+    "learners": [
+      "l0",
+      "l1"
+    ],
+    "quorum": 1,
+    "rounds": 540,
+    "seed": 1,
+    "inner_steps": 40,
+    "inner_lr": 0.01,
+    "batch": 16,
+    "outer_lr": 0.5,
+    "outer_mu": 0.5,
+    "round_deadline_s": 90.0
+  },
+  "initial_eval_loss": 4.170938968658447,
+  "rounds": [
+    {
+      "round": 0,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 4.172107696533203,
+      "eval_loss_after": 2.7139573097229004,
+      "delta_l2": {
+        "l0": 11.191492179554029,
+        "l1": 11.160609945408961
+      },
+      "vram_peak_mib": {
+        "l0": 22.8798828125,
+        "l1": 22.8798828125
+      },
+      "latency_s": 17.392958402633667,
+      "wall_s": 17.419188976287842
+    },
+    {
+      "round": 1,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 2.7116048336029053,
+      "eval_loss_after": 1.7244819402694702,
+      "delta_l2": {
+        "l0": 8.926130560920017,
+        "l1": 8.819833918208543
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 4.260679006576538,
+      "wall_s": 34.36066913604736
+    },
+    {
+      "round": 2,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.7212269306182861,
+      "eval_loss_after": 1.5415633916854858,
+      "delta_l2": {
+        "l0": 7.02199498682256,
+        "l1": 6.914016949778369
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 4.0277488231658936,
+      "wall_s": 64.24138188362122
+    },
+    {
+      "round": 3,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.5371161699295044,
+      "eval_loss_after": 1.4935470819473267,
+      "delta_l2": {
+        "l0": 6.475717611387901,
+        "l1": 6.605233989674371
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 2.8357467651367188,
+      "wall_s": 93.15854692459106
+    },
+    {
+      "round": 4,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4899147748947144,
+      "eval_loss_after": 1.4661815166473389,
+      "delta_l2": {
+        "l0": 6.226569392297393,
+        "l1": 6.320474250053417
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 2.9603121280670166,
+      "wall_s": 123.3804759979248
+    },
+    {
+      "round": 5,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4620574712753296,
+      "eval_loss_after": 1.4692528247833252,
+      "delta_l2": {
+        "l0": 6.08041129959376,
+        "l1": 6.067018813274465
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 2.9256832599639893,
+      "wall_s": 153.4530861377716
+    },
+    {
+      "round": 6,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4627553224563599,
+      "eval_loss_after": 1.4841901063919067,
+      "delta_l2": {
+        "l0": 6.0224085249274015,
+        "l1": 6.021303857800449
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 3.643718957901001,
+      "wall_s": 184.28147339820862
+    },
+    {
+      "round": 7,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4766061305999756,
+      "eval_loss_after": 1.4687385559082031,
+      "delta_l2": {
+        "l0": 5.947747652911601,
+        "l1": 6.050195060986366
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 3.0004467964172363,
+      "wall_s": 213.74941611289978
+    },
+    {
+      "round": 8,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4603381156921387,
+      "eval_loss_after": 1.4506607055664062,
+      "delta_l2": {
+        "l0": 5.942284463336585,
+        "l1": 5.954789835006232
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 2.9290850162506104,
+      "wall_s": 243.78829193115234
+    },
+    {
+      "round": 9,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4430809020996094,
+      "eval_loss_after": 1.4372892379760742,
+      "delta_l2": {
+        "l0": 5.913967600455369,
+        "l1": 5.792187085600582
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 2.8712003231048584,
+      "wall_s": 273.8431372642517
+    },
+    {
+      "round": 10,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4275529384613037,
+      "eval_loss_after": 1.4295430183410645,
+      "delta_l2": {
+        "l0": 5.887954764408128,
+        "l1": 5.795134105595324
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 2.8009986877441406,
+      "wall_s": 303.8731207847595
+    },
+    {
+      "round": 11,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4217402935028076,
+      "eval_loss_after": 1.4211493730545044,
+      "delta_l2": {
+        "l0": 5.684899516387692,
+        "l1": 5.799452306419445
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 2.735954761505127,
+      "wall_s": 333.8993182182312
+    },
+    {
+      "round": 12,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0",
+        "l1": "t4-l1"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4117207527160645,
+      "eval_loss_after": 1.41847562789917,
+      "delta_l2": {
+        "l0": 5.772605890303998,
+        "l1": 5.831718911700725
+      },
+      "vram_peak_mib": {
+        "l0": 27.7548828125,
+        "l1": 27.7548828125
+      },
+      "latency_s": 3.1474242210388184,
+      "wall_s": 364.4191699028015
+    }
+  ],
+  "final_eval_loss": 1.41847562789917,
+  "hosts_seen": [
+    "t4-l0",
+    "t4-l1"
+  ],
+  "receipt_sha256": "12f1ab2361d292f25a0814de6443971fd610513009f9e1ae0d6916d8896aa38a"
+}

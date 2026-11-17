@@ -182,6 +182,22 @@ class PromptIntent:
     language: str
     preferred_tier: str | None
 
+    def __post_init__(self) -> None:
+        for field_name in ("task_domain", "language"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip() or any(c in val for c in ("\r", "\n", "\x00")):
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if self.task_domain not in TASK_DOMAINS:
+            raise ValueError(f"task_domain must be one of {TASK_DOMAINS}")
+        if self.language not in LANGUAGE_CODES:
+            raise ValueError(f"language must be one of {LANGUAGE_CODES}")
+        if self.preferred_tier is not None and (
+            not isinstance(self.preferred_tier, str)
+            or not self.preferred_tier.strip()
+            or any(c in self.preferred_tier for c in ("\r", "\n", "\x00"))
+        ):
+            raise ValueError("preferred_tier must be a non-empty string or None without control characters")
+
 
 @dataclass(frozen=True)
 class ClientAttribution:
@@ -189,6 +205,14 @@ class ClientAttribution:
 
     client_sdk: str
     app_title: str
+
+    def __post_init__(self) -> None:
+        for field_name in ("client_sdk", "app_title"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip() or any(c in val for c in ("\r", "\n", "\x00")):
+                raise ValueError(f"{field_name} must be a non-empty string without control characters")
+        if self.client_sdk not in CLIENT_SDKS:
+            raise ValueError(f"client_sdk must be one of {CLIENT_SDKS}")
 
 
 def _extract_messages_text(messages: Sequence[Mapping[str, Any]]) -> str:
@@ -218,6 +242,8 @@ def _count_keyword_hits(lower_text: str, keywords: Sequence[str]) -> int:
 
 def classify_prompt_intent_and_language(messages: Sequence[Mapping[str, Any]]) -> PromptIntent:
     """Classify the task domain, natural language (`fr`/`en`/`code_heavy`), and specialist tier without storing the prompt."""
+    if isinstance(messages, (str, bytes)) or not isinstance(messages, Sequence):
+        raise ValueError("messages must be a sequence of message mappings")
     text = _extract_messages_text(messages).strip()
     if not text:
         return PromptIntent(task_domain="general_chat", language="en", preferred_tier=None)
@@ -263,6 +289,8 @@ def classify_prompt_intent_and_language(messages: Sequence[Mapping[str, Any]]) -
 
 def detect_client_sdk(headers: Mapping[str, str]) -> ClientAttribution:
     """Identify the calling IDE, agent framework, or SDK from `User-Agent`, `X-Title`, and `HTTP-Referer`."""
+    if not isinstance(headers, Mapping):
+        raise ValueError("headers must be a mapping")
     ua = str(headers.get("user-agent", "") or "").lower()
     raw_title = str(headers.get("x-title", "") or headers.get("x-app-title", "") or "").strip()
     referer = str(headers.get("http-referer", "") or headers.get("referer", "") or "").lower()
@@ -301,6 +329,13 @@ def detect_client_sdk(headers: Mapping[str, str]) -> ClientAttribution:
 
 def compute_nocturnal_moe_workunit_weights(domain_token_totals: Mapping[str, int]) -> dict[str, float]:
     """Translate observed daytime domain token demand into nocturnal BOINC / QLoRA workunit weights."""
+    if not isinstance(domain_token_totals, Mapping):
+        raise ValueError("domain_token_totals must be a mapping")
+    for k, v in domain_token_totals.items():
+        if not isinstance(k, str) or not k.strip() or any(c in k for c in ("\r", "\n", "\x00")):
+            raise ValueError("domain_token_totals keys must be non-empty strings without control characters")
+        if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+            raise ValueError(f"domain token count for {k!r} must be a non-negative integer")
     coder_tokens = sum(
         int(domain_token_totals.get(d, 0))
         for d in ("coding_python", "coding_rust", "coding_web_ts", "coding_general")

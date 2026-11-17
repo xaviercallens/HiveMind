@@ -17,7 +17,7 @@ import hashlib
 import json
 import math
 from dataclasses import asdict, dataclass
-from typing import Any, Sequence
+from typing import Any, Optional, Sequence
 
 MAX_ANCHOR_PERPLEXITY_DRIFT_RATIO = 0.005
 
@@ -32,6 +32,16 @@ class AnchorEvalSample:
     candidate_nll: float
     weight: float = 1.0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.sample_id, str) or not self.sample_id.strip():
+            raise ValueError("sample_id must be a non-empty string")
+        if not isinstance(self.domain, str) or not self.domain.strip():
+            raise ValueError("domain must be a non-empty string")
+        for field_name in ("baseline_nll", "candidate_nll", "weight"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise ValueError(f"{field_name} must be a number")
+
 
 @dataclass(frozen=True)
 class DailyCorpusIngestionBatch:
@@ -42,6 +52,18 @@ class DailyCorpusIngestionBatch:
     document_count: int
     baseline_domain_nll: float
     candidate_domain_nll: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.batch_id, str) or not self.batch_id.strip():
+            raise ValueError("batch_id must be a non-empty string")
+        if not isinstance(self.source, str) or not self.source.strip():
+            raise ValueError("source must be a non-empty string")
+        if isinstance(self.document_count, bool) or not isinstance(self.document_count, int) or self.document_count < 1:
+            raise ValueError("document_count must be a positive integer")
+        for field_name in ("baseline_domain_nll", "candidate_domain_nll"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise ValueError(f"{field_name} must be a number")
 
 
 @dataclass(frozen=True)
@@ -56,8 +78,44 @@ class LifelongRatchetVerdict:
     relative_anchor_perplexity_drift: float
     max_allowed_anchor_drift: float
     domain_nll_delta: float
-    ewc_fisher_penalty: float
+    ewc_fisher_penalty: Optional[float]
     ratchet_certificate_sha256: str
+
+    def __post_init__(self) -> None:
+        for s_field in ("checkpoint_id", "reason"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if not isinstance(self.promoted, bool):
+            raise ValueError("promoted must be a boolean")
+        for pos_field in ("baseline_anchor_perplexity", "candidate_anchor_perplexity"):
+            val = getattr(self, pos_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{pos_field} must be a finite positive number")
+        for fin_field in ("relative_anchor_perplexity_drift", "domain_nll_delta"):
+            val = getattr(self, fin_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{fin_field} must be a finite number")
+        if (
+            isinstance(self.max_allowed_anchor_drift, bool)
+            or not isinstance(self.max_allowed_anchor_drift, (int, float))
+            or not math.isfinite(float(self.max_allowed_anchor_drift))
+            or float(self.max_allowed_anchor_drift) < 0.0
+        ):
+            raise ValueError("max_allowed_anchor_drift must be a finite non-negative number")
+        if self.ewc_fisher_penalty is not None and (
+            isinstance(self.ewc_fisher_penalty, bool)
+            or not isinstance(self.ewc_fisher_penalty, (int, float))
+            or not math.isfinite(float(self.ewc_fisher_penalty))
+            or float(self.ewc_fisher_penalty) < 0.0
+        ):
+            raise ValueError("ewc_fisher_penalty must be None or a finite non-negative number")
+        if (
+            not isinstance(self.ratchet_certificate_sha256, str)
+            or len(self.ratchet_certificate_sha256) != 64
+            or any(c not in "0123456789abcdefABCDEF" for c in self.ratchet_certificate_sha256)
+        ):
+            raise ValueError("ratchet_certificate_sha256 must be a 64-character hex string")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -72,17 +130,35 @@ class LifelongDecentralizedRatchet:
         max_anchor_drift_ratio: float = MAX_ANCHOR_PERPLEXITY_DRIFT_RATIO,
         ewc_lambda: float = 0.15,
     ) -> None:
-        if max_anchor_drift_ratio < 0.0 or not math.isfinite(max_anchor_drift_ratio):
+        if (
+            isinstance(max_anchor_drift_ratio, bool)
+            or not isinstance(max_anchor_drift_ratio, (int, float))
+            or max_anchor_drift_ratio < 0.0
+            or not math.isfinite(max_anchor_drift_ratio)
+        ):
             raise ValueError("max_anchor_drift_ratio must be finite and non-negative")
-        if ewc_lambda < 0.0 or not math.isfinite(ewc_lambda):
+        if (
+            isinstance(ewc_lambda, bool)
+            or not isinstance(ewc_lambda, (int, float))
+            or ewc_lambda < 0.0
+            or not math.isfinite(ewc_lambda)
+        ):
             raise ValueError("ewc_lambda must be finite and non-negative")
         self.max_anchor_drift_ratio = float(max_anchor_drift_ratio)
         self.ewc_lambda = float(ewc_lambda)
 
     @staticmethod
     def weighted_perplexity(samples: Sequence[AnchorEvalSample], *, use_candidate: bool) -> float:
-        if not samples:
+        if isinstance(samples, (str, bytes)) or not isinstance(samples, Sequence) or not samples:
             raise ValueError("samples must be non-empty")
+        for s in samples:
+            if not isinstance(s, AnchorEvalSample):
+                raise TypeError("each sample must be an AnchorEvalSample")
+            if not math.isfinite(float(s.weight)):
+                raise ValueError(f"non-finite weight for anchor sample {s.sample_id!r}: {s.weight!r}")
+            value = s.candidate_nll if use_candidate else s.baseline_nll
+            if not math.isfinite(value):
+                raise ValueError(f"non-finite NLL for anchor sample {s.sample_id!r}: {value!r}")
         total_w = sum(max(0.0, s.weight) for s in samples)
         if total_w <= 0.0:
             raise ValueError("sum of sample weights must be positive")
@@ -101,6 +177,13 @@ class LifelongDecentralizedRatchet:
         """Compute Elastic Weight Consolidation (EWC) quadratic penalty ``(lambda/2) * sum(F_i * (theta_i - theta*_i)^2)``."""
         if not (len(fisher_diag) == len(anchor_params) == len(candidate_params)):
             raise ValueError("fisher_diag, anchor_params, and candidate_params must have equal length")
+        for seq_name, seq in (
+            ("fisher_diag", fisher_diag),
+            ("anchor_params", anchor_params),
+            ("candidate_params", candidate_params),
+        ):
+            if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in seq):
+                raise ValueError(f"{seq_name} must contain only finite numbers")
         quad = sum(
             max(0.0, float(f)) * ((float(c) - float(a)) ** 2)
             for f, a, c in zip(fisher_diag, anchor_params, candidate_params)
@@ -113,16 +196,38 @@ class LifelongDecentralizedRatchet:
         anchor_samples: Sequence[AnchorEvalSample],
         daily_batch: DailyCorpusIngestionBatch,
         *,
-        fisher_diag: Sequence[float] = (1.0, 1.0, 1.0, 1.0),
-        anchor_params: Sequence[float] = (0.0, 0.0, 0.0, 0.0),
-        candidate_params: Sequence[float] = (0.01, -0.01, 0.005, 0.0),
+        fisher_diag: Optional[Sequence[float]] = None,
+        anchor_params: Optional[Sequence[float]] = None,
+        candidate_params: Optional[Sequence[float]] = None,
     ) -> LifelongRatchetVerdict:
-        """Evaluate whether ``checkpoint_id`` passes the anti-forgetting anchor gate and improves on ``daily_batch``."""
+        """Evaluate whether ``checkpoint_id`` passes the anti-forgetting anchor gate and improves on ``daily_batch``.
+
+        The EWC penalty is computed only when ``fisher_diag``, ``anchor_params`` and ``candidate_params`` are all
+        supplied; when all three are absent it is ``None`` and the domain delta is the raw NLL change. No parameter
+        vector is invented. Supplying only some of them raises ``ValueError``.
+        """
+        if not isinstance(checkpoint_id, str) or not checkpoint_id.strip():
+            raise ValueError("checkpoint_id must be a non-empty string")
+        if not isinstance(daily_batch, DailyCorpusIngestionBatch):
+            raise ValueError("daily_batch must be a DailyCorpusIngestionBatch")
+        for name, value in (
+            ("candidate_domain_nll", daily_batch.candidate_domain_nll),
+            ("baseline_domain_nll", daily_batch.baseline_domain_nll),
+        ):
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must be finite, got {value!r}")
+        ewc_inputs = (fisher_diag, anchor_params, candidate_params)
+        ewc_pen: Optional[float]
+        if all(v is None for v in ewc_inputs):
+            ewc_pen = None
+        elif any(v is None for v in ewc_inputs):
+            raise ValueError("fisher_diag, anchor_params and candidate_params must be supplied together")
+        else:
+            ewc_pen = self.compute_ewc_penalty(fisher_diag, anchor_params, candidate_params)  # type: ignore[arg-type]
         base_ppl = self.weighted_perplexity(anchor_samples, use_candidate=False)
         cand_ppl = self.weighted_perplexity(anchor_samples, use_candidate=True)
         rel_drift = (cand_ppl - base_ppl) / max(base_ppl, 1e-12)
-        ewc_pen = self.compute_ewc_penalty(fisher_diag, anchor_params, candidate_params)
-        domain_delta = daily_batch.candidate_domain_nll + ewc_pen - daily_batch.baseline_domain_nll
+        domain_delta = daily_batch.candidate_domain_nll + (ewc_pen or 0.0) - daily_batch.baseline_domain_nll
 
         if rel_drift > self.max_anchor_drift_ratio:
             promoted = False

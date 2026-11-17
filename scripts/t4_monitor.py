@@ -76,6 +76,8 @@ def nginx_counts() -> dict:
     if code != 200:
         return {"ok": False}
     nums = [int(x) for x in txt.replace(":", " ").split() if x.isdigit()]
+    if len(nums) < 6:
+        return {"ok": False}
     # layout: Active connections N / server accepts handled requests / A H R / Reading R Writing W Waiting K
     return {"ok": True, "active": nums[0], "requests_total": nums[3], "writing": nums[5], "in_flight": max(nums[5] - 1, 0)}
 
@@ -168,16 +170,40 @@ class ChatLog:
         return {"ok": True, "n": sum(by.values()), "by": dict(by)}
 
 
+def _label_workunit_progress(row: dict, tolerance: float = 1e-6, baseline_nll: float = 2.12) -> str:
+    """Label a training workunit record: units with eval_loss_after > eval_loss_before + tolerance are 'assimilated, no held-out gain'."""
+    if row.get("progress_label"):
+        return str(row["progress_label"])
+    before, after = row.get("eval_loss_before"), row.get("eval_loss_after")
+    if isinstance(before, (int, float)) and isinstance(after, (int, float)):
+        if float(after) > float(before) + float(tolerance) or float(after) >= float(baseline_nll):
+            return "assimilated, no held-out gain"
+        if float(after) < float(before) - float(tolerance):
+            return "assimilated, held-out gain"
+    return "assimilated, no held-out gain"
+
+
 def progress(ledger: Path) -> dict:
     out = {"assimilated": 0, "last": None}
     f = ledger / "assimilated.jsonl"
     if f.exists():
         rows = [json.loads(x) for x in f.read_text().splitlines() if x.strip()]
         out["assimilated"] = len(rows)
-        keys = ("wu_id", "app", "domain", "adapter_sha256", "eval_loss_before", "eval_loss_after", "eval_by_domain_after")
-        out["last"] = {k: rows[-1].get(k) for k in keys} if rows else None
+        keys = ("wu_id", "app", "domain", "adapter_sha256", "eval_loss_before", "eval_loss_after", "eval_by_domain_after", "eval_basis")
+        if rows:
+            last_row = {k: rows[-1].get(k) for k in keys if k in rows[-1] or k != "eval_basis"}
+            last_row["progress_label"] = _label_workunit_progress(rows[-1])
+            out["last"] = last_row
         train = [r for r in rows if r.get("app") == "hivemind_qlora_moe"]
         out["train_rounds"] = len(train)
+        with_gain = sum(1 for r in train if _label_workunit_progress(r) == "assimilated, held-out gain")
+        out["assimilated_with_held_out_gain"] = with_gain
+        out["assimilated_no_held_out_gain"] = len(train) - with_gain
+        out["counter_label"] = (
+            "assimilated, no held-out gain"
+            if (train and _label_workunit_progress(train[-1]) == "assimilated, no held-out gain")
+            else ("assimilated, held-out gain" if with_gain > 0 else "assimilated, no held-out gain")
+        )
         out["mean_eval_loss_trend"] = [round(r["eval_loss_after"], 4) for r in train[-10:] if r.get("eval_loss_after") is not None]
     return out
 
@@ -190,18 +216,57 @@ def rotate(path: Path, limit: int = 20_000_000, keep: int = 5) -> None:
         os.replace(path, path.parent / f"{path.name}.1")
 
 
-def main() -> int:
+def reconcile_inactive_units(
+    units: dict[str, dict],
+    restarts: dict[str, deque],
+    *,
+    now: float,
+    can_restart: bool,
+    dry_run: bool = False,
+    manage_legacy: bool = False,
+    sh_fn=sh,
+    event_fn=None,
+) -> list[str]:
+    """Restart enabled but inactive units only when ``can_restart`` is True (opt-in ``--restart``)."""
+    restarted_units: list[str] = []
+    for u, s in units.items():
+        if u in LEGACY and not manage_legacy:
+            continue
+        if s.get("enabled") == "enabled" and s.get("active") not in ("active", "activating"):
+            if dry_run:
+                if event_fn is not None:
+                    event_fn("unit_restart_dry_run", unit=u, was=s.get("active"))
+                continue
+            if not can_restart:
+                continue
+            q = restarts[u]
+            while q and now - q[0] > 600:
+                q.popleft()
+            if len(q) < 3:
+                q.append(now)
+                sh_fn(["systemctl", "restart", u], 60)
+                restarted_units.append(u)
+                if event_fn is not None:
+                    event_fn("unit_restart", unit=u, was=s.get("active"), after=sh_fn(["systemctl", "is-active", u]))
+            elif event_fn is not None:
+                event_fn("unit_restart_suppressed", unit=u, reason="3 restarts in 10 min")
+    return restarted_units
+
+
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out-dir", type=Path, default=Path("/mnt/disks/disk-socrateai-local-1/hivemind_telemetry"))
     ap.add_argument("--governor-state", type=Path, default=Path("/mnt/disks/disk-socrateai-local-1/hivemind_telemetry/governor_state.json"))
     ap.add_argument("--ledger", type=Path, default=Path("/mnt/disks/disk-socrateai-local-1/boinc/stack/project/hmproj/hivemind_ledger"))
     ap.add_argument("--interval-s", type=float, default=15.0)
-    ap.add_argument("--no-restart", action="store_true")
+    ap.add_argument("--restart", action="store_true", help="opt-in: restart enabled managed units that are not active (requires root)")
+    ap.add_argument("--no-restart", action="store_true", help="explicitly disable restarting units (default)")
+    ap.add_argument("--dry-run", action="store_true", help="record unit_restart_dry_run events without running systemctl restart")
     ap.add_argument("--manage-legacy", action="store_true", help="also restart the bee/coder units (only after cutting the session-started processes over)")
     ap.add_argument("--once", action="store_true")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     a.out_dir.mkdir(parents=True, exist_ok=True)
-    can_restart = os.geteuid() == 0 and not a.no_restart
+    can_restart = bool(a.restart and not a.no_restart and not a.dry_run and os.geteuid() == 0)
     restarts: dict[str, deque] = defaultdict(deque)
     last_full, preempt_logged, prev_req, prev_t = 0.0, False, None, None
     chat_log = ChatLog()
@@ -211,7 +276,9 @@ def main() -> int:
         with open(a.out_dir / "events.jsonl", "a") as f:
             f.write(json.dumps({"t": round(time.time(), 2), "event": kind, **kw}) + "\n")
 
-    event("monitor_start", restart_enabled=can_restart, boot_id=Path("/proc/sys/kernel/random/boot_id").read_text().strip())
+    boot_id_path = Path("/proc/sys/kernel/random/boot_id")
+    boot_id = boot_id_path.read_text().strip() if boot_id_path.exists() else "unknown"
+    event("monitor_start", restart_enabled=can_restart, dry_run=bool(a.dry_run), boot_id=boot_id)
     while True:
         now = time.time()
         pre = metadata("instance/preempted") == "TRUE" or metadata("instance/maintenance-event") not in ("", "NONE")
@@ -228,7 +295,7 @@ def main() -> int:
             if ng.get("ok"):
                 prev_req, prev_t = ng["requests_total"], now
             snap = {"t": round(now, 2), "uptime_s": float(Path("/proc/uptime").read_text().split()[0]), "loadavg": os.getloadavg(),
-                    "disk_free_gb": {p: round(os.statvfs(p).f_bavail * os.statvfs(p).f_frsize / 1e9, 1) for p in ("/", "/mnt/disks/disk-socrateai-local-1")},
+                    "disk_free_gb": {p: round(os.statvfs(p).f_bavail * os.statvfs(p).f_frsize / 1e9, 1) for p in ("/", "/mnt/disks/disk-socrateai-local-1") if Path(p).exists()},
                     "gpu": gpu(), "nginx": {**ng, "req_per_s": rate}, "chat_completions_since_last": chat_log.poll(), "governor_policy": (pol := governor_policy()), "units": units, "gateway": gateway_view(),
                     "governor": json.loads(a.governor_state.read_text()) if a.governor_state.exists() else None,
                     "qlora_progress": progress(a.ledger), "preemption_notice": pre}
@@ -239,19 +306,16 @@ def main() -> int:
             with open(a.out_dir / "t4_node.jsonl", "a") as f:
                 f.write(json.dumps(snap) + "\n")
             (a.out_dir / "latest.json").write_text(json.dumps(snap, indent=1))
-            for u, s in units.items():
-                if u in LEGACY and not a.manage_legacy:
-                    continue
-                if s["enabled"] == "enabled" and s["active"] not in ("active", "activating") and can_restart:
-                    q = restarts[u]
-                    while q and now - q[0] > 600:
-                        q.popleft()
-                    if len(q) < 3:
-                        q.append(now)
-                        sh(["systemctl", "restart", u], 60)
-                        event("unit_restart", unit=u, was=s["active"], after=sh(["systemctl", "is-active", u]))
-                    else:
-                        event("unit_restart_suppressed", unit=u, reason="3 restarts in 10 min")
+            reconcile_inactive_units(
+                units,
+                restarts,
+                now=now,
+                can_restart=can_restart,
+                dry_run=bool(a.dry_run),
+                manage_legacy=bool(a.manage_legacy),
+                sh_fn=sh,
+                event_fn=event,
+            )
             if a.once:
                 return 0
         time.sleep(5)

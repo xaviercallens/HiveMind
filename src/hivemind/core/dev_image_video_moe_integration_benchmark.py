@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import hashlib
 import math
-from typing import Any
+from typing import Any, Sequence
 
 
 @dataclass(frozen=True)
@@ -34,6 +34,38 @@ class EndUserPostAttribution:
     attribution_signals: tuple[str, ...]
     observed_behavior: str
     conversion_lesson: str
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("user_handle", self.user_handle),
+            ("role", self.role),
+            ("registered_utc", self.registered_utc),
+            ("hardware_profile", self.hardware_profile),
+            ("attributed_post_id", self.attributed_post_id),
+            ("subreddit", self.subreddit),
+            ("post_archetype", self.post_archetype),
+            ("observed_behavior", self.observed_behavior),
+            ("conversion_lesson", self.conversion_lesson),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (("declared_capacity_1k", self.declared_capacity_1k), ("hmt_balance", self.hmt_balance)):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a non-negative finite number")
+        if (
+            isinstance(self.attribution_confidence, bool)
+            or not isinstance(self.attribution_confidence, (int, float))
+            or not math.isfinite(float(self.attribution_confidence))
+            or not (0.0 <= float(self.attribution_confidence) <= 1.0)
+        ):
+            raise ValueError("attribution_confidence must be in [0.0, 1.0]")
+        if (
+            not isinstance(self.attribution_signals, Sequence)
+            or isinstance(self.attribution_signals, (str, bytes))
+            or len(self.attribution_signals) == 0
+            or not all(isinstance(s, str) and s.strip() for s in self.attribution_signals)
+        ):
+            raise ValueError("attribution_signals must be a non-empty sequence of non-empty strings")
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -61,6 +93,46 @@ class RedditPostCohortFunnel:
     primary_friction_point: str
     remediation_applied: str
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("post_id", self.post_id),
+            ("subreddit", self.subreddit),
+            ("language", self.language),
+            ("title_summary", self.title_summary),
+            ("top_converting_hook", self.top_converting_hook),
+            ("primary_friction_point", self.primary_friction_point),
+            ("remediation_applied", self.remediation_applied),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (
+            ("unique_browser_visitors", self.unique_browser_visitors),
+            ("join_page_views", self.join_page_views),
+            ("life_as_a_bee_views", self.life_as_a_bee_views),
+            ("registered_accounts", self.registered_accounts),
+            ("active_api_or_gpu_users", self.active_api_or_gpu_users),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for rate_name, rate_val in (
+            ("visitor_to_signup_rate_pct", self.visitor_to_signup_rate_pct),
+            ("signup_to_active_rate_pct", self.signup_to_active_rate_pct),
+        ):
+            if (
+                isinstance(rate_val, bool)
+                or not isinstance(rate_val, (int, float))
+                or not math.isfinite(float(rate_val))
+                or not (0.0 <= float(rate_val) <= 100.0)
+            ):
+                raise ValueError(f"{rate_name} must be a finite number in [0.0, 100.0]")
+        if (
+            isinstance(self.total_vram_contributed_gb, bool)
+            or not isinstance(self.total_vram_contributed_gb, (int, float))
+            or not math.isfinite(float(self.total_vram_contributed_gb))
+            or float(self.total_vram_contributed_gb) < 0.0
+        ):
+            raise ValueError("total_vram_contributed_gb must be a non-negative finite number")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -87,6 +159,41 @@ class ModalityGainBenchmarkScenario:
     active_vram_mib: float
     citizen_node_compatible: bool
     key_artifact_or_output: str
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("scenario_id", self.scenario_id),
+            ("modality", self.modality),
+            ("model_id", self.model_id),
+            ("title", self.title),
+            ("target_persona", self.target_persona),
+            ("baseline_model", self.baseline_model),
+            ("key_artifact_or_output", self.key_artifact_or_output),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            not isinstance(self.active_experts, Sequence)
+            or isinstance(self.active_experts, (str, bytes))
+            or len(self.active_experts) == 0
+            or not all(isinstance(e, str) and e.strip() for e in self.active_experts)
+        ):
+            raise ValueError("active_experts must be a non-empty sequence of non-empty strings")
+        for field_name, val in (
+            ("baseline_quality_score", self.baseline_quality_score),
+            ("moe_quality_score", self.moe_quality_score),
+            ("quality_gain_pct", self.quality_gain_pct),
+            ("baseline_latency_ms", self.baseline_latency_ms),
+            ("moe_latency_ms", self.moe_latency_ms),
+            ("speedup_x", self.speedup_x),
+            ("baseline_tokens_per_sec", self.baseline_tokens_per_sec),
+            ("moe_tokens_per_sec", self.moe_tokens_per_sec),
+            ("active_vram_mib", self.active_vram_mib),
+        ):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a positive finite number")
+        if not isinstance(self.citizen_node_compatible, bool):
+            raise ValueError("citizen_node_compatible must be a bool")
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -778,6 +885,8 @@ def attribute_end_users_to_posts_and_learn_conversion() -> dict[str, Any]:
 
     return {
         "campaign_id": "HM-S30-END-USER-ATTRIBUTION-AND-CONVERSION-LEARNING",
+        "declared_constant": True,
+        "simulated": True,
         "snapshot_timestamp_utc": "2026-10-31T08:55:00Z",
         "global_community_totals": {
             "registered_accounts_total": 55,
@@ -810,12 +919,23 @@ def attribute_end_users_to_posts_and_learn_conversion() -> dict[str, Any]:
     }
 
 
-def _simulate_concurrent_modality_stress(
+def _model_concurrent_modality_stress(
     modality: str,
     scenarios: list[ModalityGainBenchmarkScenario],
     num_requests: int = 120,
 ) -> dict[str, Any]:
-    """Run a deterministic 120-request concurrent stress simulation for a modality track."""
+    """Run a deterministic 120-request concurrent stress model for a modality track."""
+    if not isinstance(modality, str) or not modality.strip() or any(ord(c) < 32 for c in modality):
+        raise ValueError("modality must be a non-empty printable string")
+    if (
+        not isinstance(scenarios, Sequence)
+        or isinstance(scenarios, (str, bytes))
+        or len(scenarios) == 0
+        or not all(isinstance(s, ModalityGainBenchmarkScenario) for s in scenarios)
+    ):
+        raise ValueError("scenarios must be a non-empty sequence")
+    if isinstance(num_requests, bool) or not isinstance(num_requests, int) or num_requests < 1:
+        raise ValueError("num_requests must be a positive integer")
     latencies: list[float] = []
     throughputs: list[float] = []
     vram_peaks: list[float] = []
@@ -841,6 +961,9 @@ def _simulate_concurrent_modality_stress(
 
     return {
         "modality": modality,
+        "simulated": True,
+        "declared_constant": True,
+        "real_requests_executed": 0,
         "requests_executed": num_requests,
         "http_200_ok": num_requests,
         "success_rate_pct": 100.0,
@@ -853,17 +976,39 @@ def _simulate_concurrent_modality_stress(
     }
 
 
-def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
+def run_intense_dev_image_video_moe_benchmark(
+    scenarios: Sequence[ModalityGainBenchmarkScenario] | None = None,
+    *,
+    real_requests_executed: int = 0,
+) -> dict[str, Any]:
     """Execute intensive testing and gain benchmarking across Coding-MoE, Image-MoE, and Video-MoE."""
-    dev_scenarios = [s for s in DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS if s.modality == "developer_coding_moe"]
-    img_scenarios = [s for s in DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS if s.modality == "image_generation_moe"]
-    vid_scenarios = [s for s in DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS if s.modality == "video_generation_moe"]
+    if (
+        isinstance(real_requests_executed, bool)
+        or not isinstance(real_requests_executed, int)
+        or real_requests_executed < 0
+    ):
+        raise ValueError("real_requests_executed must be a non-negative integer")
+    if scenarios is not None and (not isinstance(scenarios, Sequence) or isinstance(scenarios, (str, bytes))):
+        raise ValueError("scenarios must be a sequence of ModalityGainBenchmarkScenario")
+    active_scenarios = list(scenarios) if scenarios is not None else list(DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS)
+    if not active_scenarios or not all(isinstance(s, ModalityGainBenchmarkScenario) for s in active_scenarios):
+        raise ValueError("scenarios must be non-empty")
+    dev_scenarios = [s for s in active_scenarios if s.modality == "developer_coding_moe"]
+    img_scenarios = [s for s in active_scenarios if s.modality == "image_generation_moe"]
+    vid_scenarios = [s for s in active_scenarios if s.modality == "video_generation_moe"]
+    if not dev_scenarios or not img_scenarios or not vid_scenarios:
+        raise ValueError(
+            "scenarios must include developer_coding_moe, image_generation_moe, and video_generation_moe"
+        )
 
-    dev_stress = _simulate_concurrent_modality_stress("developer_coding_moe", dev_scenarios, num_requests=120)
-    img_stress = _simulate_concurrent_modality_stress("image_generation_moe", img_scenarios, num_requests=120)
-    vid_stress = _simulate_concurrent_modality_stress("video_generation_moe", vid_scenarios, num_requests=120)
+    dev_stress = _model_concurrent_modality_stress("developer_coding_moe", dev_scenarios, num_requests=120)
+    img_stress = _model_concurrent_modality_stress("image_generation_moe", img_scenarios, num_requests=120)
+    vid_stress = _model_concurrent_modality_stress("video_generation_moe", vid_scenarios, num_requests=120)
 
-    def _summarize_track(track_scenarios: list[ModalityGainBenchmarkScenario]) -> dict[str, Any]:
+    def _summarize_track(
+        track_scenarios: list[ModalityGainBenchmarkScenario],
+        stress: dict[str, Any],
+    ) -> dict[str, Any]:
         mean_base_q = sum(s.baseline_quality_score for s in track_scenarios) / len(track_scenarios)
         mean_moe_q = sum(s.moe_quality_score for s in track_scenarios) / len(track_scenarios)
         mean_gain_pct = sum(s.quality_gain_pct for s in track_scenarios) / len(track_scenarios)
@@ -871,6 +1016,8 @@ def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
         mean_tps = sum(s.moe_tokens_per_sec for s in track_scenarios) / len(track_scenarios)
         max_vram = max(s.active_vram_mib for s in track_scenarios)
         return {
+            "simulated": real_requests_executed == 0,
+            "declared_constant": real_requests_executed == 0,
             "scenario_count": len(track_scenarios),
             "mean_baseline_quality_score": round(mean_base_q, 2),
             "mean_moe_quality_score": round(mean_moe_q, 2),
@@ -878,13 +1025,18 @@ def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
             "mean_quality_gain_pct": round(mean_gain_pct, 2),
             "mean_speedup_x": round(mean_speedup, 2),
             "mean_moe_tokens_per_sec": round(mean_tps, 2),
+            "p95_latency_ms": stress["p95_latency_ms"],
             "max_active_vram_mib": round(max_vram, 1),
             "all_citizen_node_compatible": all(s.citizen_node_compatible for s in track_scenarios),
         }
 
-    dev_summary = _summarize_track(dev_scenarios)
-    img_summary = _summarize_track(img_scenarios)
-    vid_summary = _summarize_track(vid_scenarios)
+    dev_summary = _summarize_track(dev_scenarios, dev_stress)
+    img_summary = _summarize_track(img_scenarios, img_stress)
+    vid_summary = _summarize_track(vid_scenarios, vid_stress)
+    overall_p95_ms = round(
+        max(dev_stress["p95_latency_ms"], img_stress["p95_latency_ms"], vid_stress["p95_latency_ms"]),
+        2,
+    )
 
     # Energy function verification (ANSE physical invariant E < baseline_E)
     baseline_energy = 1.4820
@@ -892,10 +1044,14 @@ def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
     assert math.isfinite(integrated_moe_energy) and integrated_moe_energy < baseline_energy
 
     attribution_report = attribute_end_users_to_posts_and_learn_conversion()
+    is_simulated = int(real_requests_executed) <= 0
 
     return {
         "campaign_id": "HM-S30-DEV-IMAGE-VIDEO-MOE-INTEGRATION-BENCHMARK",
-        "status": "COMPLETED_ALL_GATES_PASSED",
+        "status": "SIMULATED_BENCHMARK_NO_LIVE_REQUESTS" if is_simulated else "COMPLETED_ALL_GATES_PASSED",
+        "simulated": is_simulated,
+        "declared_constant": is_simulated,
+        "real_requests_executed": int(real_requests_executed),
         "executed_at_utc": "2026-10-31T08:56:00Z",
         "models_integrated_and_verified": [
             "hivemind/moe-coder-polyglot-3tome",
@@ -903,9 +1059,13 @@ def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
             "hivemind/video-moe",
         ],
         "overall_summary": {
-            "total_scenarios": len(DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS),
+            "simulated": is_simulated,
+            "declared_constant": is_simulated,
+            "real_requests_executed": int(real_requests_executed),
+            "total_scenarios": len(active_scenarios),
             "total_stress_requests": 360,
             "stress_http_200_rate_pct": 100.0,
+            "p95_latency_ms": overall_p95_ms,
             "developer_coding_3tome_gain": {
                 **dev_summary,
                 "tome1_to_tome3_hard_loss_reduction_pct": 99.07,
@@ -934,12 +1094,13 @@ def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
                 "stress_test": vid_stress,
             },
             "anse_energy_verification": {
+                "declared_constant": True,
                 "baseline_energy": baseline_energy,
                 "integrated_moe_energy": integrated_moe_energy,
                 "delta_energy": round(integrated_moe_energy - baseline_energy, 4),
                 "monotonic_improvement_verified": True,
             },
         },
-        "scenarios": [s.to_dict() for s in DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS],
+        "scenarios": [s.to_dict() for s in active_scenarios],
         "end_user_attribution_and_conversion": attribution_report,
     }

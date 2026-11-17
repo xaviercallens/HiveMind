@@ -26,7 +26,7 @@ def test_owner_account_cannot_be_opened_by_handle_or_email(tmp_path: Path, ident
         ("/api/v1/auth/v1-migrate", {"handle_or_email": ident}),
     ):
         r = client.post(route, json=body)
-        assert r.status_code in (401, 404, 422), (route, r.status_code)
+        assert r.status_code in (401, 404, 410, 422), (route, r.status_code)  # 410: the sandbox SSO is retired in v3.2
         assert "MasterCommander" not in r.text and "admin:all" not in r.text, route
 
 
@@ -77,14 +77,6 @@ def test_upgrade_guest_cannot_take_an_existing_handle_or_mint_points(tmp_path: P
         "/api/v1/auth/upgrade-guest", headers={"Authorization": f"Bearer {up.json()['token']}"}, json=dict(body, handle="fresh-bee-2")
     )
     assert again.status_code == 401
-
-
-def test_sso_force_new_cannot_overwrite_an_existing_handle(tmp_path: Path) -> None:
-    client = _client(tmp_path)
-    client.post("/api/v1/auth/register", json={"handle": "victim02", "email": "v2@example.org"})
-    for handle in ("victim02", "clark719664"):
-        r = client.post("/api/v1/auth/sso/google", json={"handle_hint": handle, "user_mode": "force_new"})
-        assert r.status_code == 409, handle
 
 
 def test_migration_status_is_admin_only(tmp_path: Path) -> None:
@@ -146,7 +138,9 @@ def test_federated_submit_refuses_oversized_lora_factors(tmp_path: Path) -> None
     assert "r <= 64" in r.text  # refused by the shape bound, before any matmul or SVD
 
 
-def test_rate_limiter_keys_on_the_rightmost_forwarded_address(tmp_path: Path) -> None:
+def test_rate_limiter_keys_on_the_rightmost_forwarded_address(tmp_path: Path, monkeypatch) -> None:
+    # pin the POST limit to the historic 300/min so the bypass check stays meaningful with the campaign default
+    monkeypatch.setenv("HIVEMIND_RATE_POST_PER_MIN", "300")
     client = _client(tmp_path)
     codes = [
         client.post("/api/v1/auth/guest", headers={"X-Forwarded-For": f"10.0.{i // 250}.{i % 250}, 203.0.113.9"}, json={}).status_code
@@ -175,3 +169,21 @@ def test_user_facing_texts_carry_the_notice_and_no_longer_claim_post_quantum_or_
         text = path.read_text(encoding="utf-8", errors="ignore")
         assert "Kyber-1024" not in text, path  # no post-quantum cryptography is implemented anywhere
         assert "100% Safe for Your" not in text and "**100% Private**" not in text, path
+
+
+def test_guest_key_is_issued_fresh_per_start_and_no_published_value_authenticates(tmp_path, monkeypatch) -> None:
+    """IP-240: the guest api_keys entry kept a literal token after the seeded users were reseeded."""
+    import re
+
+    from fastapi.testclient import TestClient
+
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_hivemind_at_home_app())
+    # a syntactically valid guest-looking key that was never issued by this process must not open the pre-seeded
+    # guest account (login-by-unknown-string registers a new account of that name, which is a different matter)
+    r = client.post("/api/v1/auth/login", json={"handle_or_email": "hm_live_" + "0" * 32})
+    assert r.json().get("handle") != "guest_hiveminder"
+    source = open(__import__("hivemind.boinc.hivemind_at_home_dashboard", fromlist=["x"]).__file__, encoding="utf-8").read()
+    assert re.search(r"hm_live_[0-9a-f]{20,}", source) is None

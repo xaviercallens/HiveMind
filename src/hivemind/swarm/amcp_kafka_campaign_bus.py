@@ -23,6 +23,7 @@ Implements `HM-S19-CAMPAIGNS`:
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import time
@@ -37,6 +38,7 @@ KAFKA_TOPICS: dict[str, str] = {
     "human_agent": "hivemind.amcp.human_agent.v1",
     "bee_coord": "hivemind.amcp.bee_coord.v1",
     "bee_trading": "hivemind.amcp.bee_trading.v1",
+    "federation": "hivemind.amcp.federation.v1",  # signed task offers, claims, results and aborts for co-training rounds (see docs/FEDERATION_V2_AMCP_AGLETS.md)
 }
 
 ParticipantKind = Literal["human_researcher", "gpu_producer", "ai_agent", "bee_specialist"]
@@ -61,6 +63,37 @@ class SubjectCampaign:
     quantitative_gate: str
     dataset_ref: str
     base_nocturnal_weight: float
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("subject_id", self.subject_id),
+            ("title", self.title),
+            ("domain_key", self.domain_key),
+            ("lead_bee", self.lead_bee),
+            ("dtstart_utc", self.dtstart_utc),
+            ("dtend_utc", self.dtend_utc),
+            ("human_window", self.human_window),
+            ("objective", self.objective),
+            ("quantitative_gate", self.quantitative_gate),
+            ("dataset_ref", self.dataset_ref),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.order_index, bool) or not isinstance(self.order_index, int) or self.order_index < 1:
+            raise ValueError("order_index must be a positive integer")
+        if (
+            not isinstance(self.co_bees, tuple)
+            or not self.co_bees
+            or any(not isinstance(b, str) or not b.strip() for b in self.co_bees)
+        ):
+            raise ValueError("co_bees must be a non-empty tuple of non-empty strings")
+        if (
+            isinstance(self.base_nocturnal_weight, bool)
+            or not isinstance(self.base_nocturnal_weight, (int, float))
+            or not math.isfinite(float(self.base_nocturnal_weight))
+            or not (0.0 < float(self.base_nocturnal_weight) <= 1.0)
+        ):
+            raise ValueError("base_nocturnal_weight must be a finite number in (0.0, 1.0]")
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -181,6 +214,63 @@ JOINT_SUBJECT_CAMPAIGNS: tuple[SubjectCampaign, ...] = (
 
 SUBJECT_BY_ID: dict[str, SubjectCampaign] = {c.subject_id: c for c in JOINT_SUBJECT_CAMPAIGNS}
 
+CANONICAL_BEE_IDS: frozenset[str] = frozenset(
+    {
+        *(c.lead_bee for c in JOINT_SUBJECT_CAMPAIGNS),
+        *(b for c in JOINT_SUBJECT_CAMPAIGNS for b in c.co_bees),
+        "hivemind/granite-1b-base",
+        "hivemind/crowd-v1",
+        "hivemind/crowd-moe-v1",
+        "hivemind/granite-moe",
+        "hivemind/coder-lite",
+        "hivemind/gemma-core",
+        "hivemind/bee-stars",
+        "hivemind/mistral-core",
+        "hivemind/qwen35-core",
+        "hivemind/bee-rusty-sundials",
+        "hivemind/coder",
+        "hivemind/bee-lean-prover",
+        "hivemind/bee-ruche-moe",
+        "hivemind/coder-plus",
+        "hivemind/moe-qwen35-bee",
+        "hivemind/moe-general",
+        "hivemind/moe-coder",
+        "hivemind/moe-science",
+        "hivemind/moe-science-bee-v2",
+        "hivemind/moe-vision",
+        "hivemind/math-prover",
+        "hivemind/fast",
+        "hivemind/general",
+        "hivemind/reasoning",
+        "hivemind/french",
+        "hivemind/auto",
+        "bee-math-01",
+    }
+)
+
+
+def is_allowed_bee_id(bee_id: str, account_handle: str, account_id: str = "") -> bool:
+    """Return True iff ``bee_id`` is in the canonical HiveMind bee allow-list or owned by ``account_handle`` (IP-260)."""
+    if not isinstance(bee_id, str) or not isinstance(account_handle, str) or not isinstance(account_id, str):
+        raise ValueError("bee_id, account_handle, and account_id must be strings")
+    candidate = bee_id.strip()
+    if not candidate:
+        return False
+    if candidate in CANONICAL_BEE_IDS:
+        return True
+    handle = account_handle.strip().lower()
+    if handle and candidate.lower() in {
+        handle,
+        f"hivemind/{handle}",
+        f"bee-{handle}",
+        f"hivemind/bee-{handle}",
+    }:
+        return True
+    if account_id and candidate == account_id.strip():
+        return True
+    return False
+
+
 
 @dataclass(frozen=True)
 class AMCPKafkaEvent:
@@ -199,6 +289,26 @@ class AMCPKafkaEvent:
     specversion: str = "1.0"
     protocol: str = "AMCP/1.5+Kafka"
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("event_id", self.event_id),
+            ("topic", self.topic),
+            ("event_type", self.event_type),
+            ("sender_id", self.sender_id),
+            ("sender_kind", self.sender_kind),
+            ("recipient_id", self.recipient_id),
+            ("subject_id", self.subject_id),
+            ("correlation_id", self.correlation_id),
+            ("specversion", self.specversion),
+            ("protocol", self.protocol),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.payload, dict):
+            raise TypeError("payload must be a dict")
+        if isinstance(self.utc, bool) or not isinstance(self.utc, (int, float)) or not math.isfinite(float(self.utc)) or float(self.utc) <= 0.0:
+            raise ValueError("utc must be a positive finite timestamp")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -215,8 +325,27 @@ def build_amcp_kafka_event(
     payload: Mapping[str, Any] | None = None,
     now_utc: float | None = None,
 ) -> AMCPKafkaEvent:
+    for name, val in (
+        ("topic_key", topic_key),
+        ("event_type", event_type),
+        ("sender_id", sender_id),
+        ("sender_kind", sender_kind),
+        ("recipient_id", recipient_id),
+        ("subject_id", subject_id),
+    ):
+        if not isinstance(val, str) or not val.strip():
+            raise ValueError(f"{name} must be a non-empty string")
+    if correlation_id is not None and (not isinstance(correlation_id, str) or not correlation_id.strip()):
+        raise ValueError("correlation_id must be a non-empty string when provided")
+    if payload is not None and not isinstance(payload, Mapping):
+        raise TypeError("payload must be a Mapping or None")
+    if now_utc is not None:
+        if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)) or now_utc <= 0.0:
+            raise ValueError("now_utc must be a positive finite timestamp")
+        stamp = float(now_utc)
+    else:
+        stamp = time.time()
     topic = KAFKA_TOPICS.get(topic_key, topic_key)
-    stamp = time.time() if now_utc is None else float(now_utc)
     ev_id = "amcp-" + uuid.uuid4().hex[:16]
     corr = correlation_id or ("corr-" + uuid.uuid4().hex[:12])
     return AMCPKafkaEvent(
@@ -237,6 +366,8 @@ def compute_campaign_poll_summary(
     votes: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Aggregate community poll registrations per subject and compute dynamic nocturnal BOINC/QLoRA weights."""
+    if not isinstance(votes, (list, tuple)):
+        raise ValueError("votes must be a sequence of vote mappings")
     counts_by_subject: dict[str, dict[str, Any]] = {}
     for camp in JOINT_SUBJECT_CAMPAIGNS:
         counts_by_subject[camp.subject_id] = {
@@ -257,6 +388,8 @@ def compute_campaign_poll_summary(
         }
 
     for v in votes:
+        if not isinstance(v, Mapping):
+            raise ValueError("each vote must be a mapping")
         sid = str(v.get("subject_id", ""))
         if sid not in counts_by_subject:
             continue
@@ -271,8 +404,14 @@ def compute_campaign_poll_summary(
             entry["agent_votes"] += 1
         elif kind == "bee_specialist":
             entry["bee_votes"] += 1
-        vram = float(v.get("pledged_vram_gb", 0.0) or 0.0)
-        entry["pledged_vram_gb"] = round(entry["pledged_vram_gb"] + max(0.0, vram), 2)
+        raw_vram = v.get("pledged_vram_gb", 0.0)
+        if raw_vram is not None:
+            if isinstance(raw_vram, bool) or not isinstance(raw_vram, (int, float)) or not math.isfinite(float(raw_vram)) or raw_vram < 0.0:
+                raise ValueError("pledged_vram_gb must be a finite non-negative number")
+            vram = float(raw_vram)
+        else:
+            vram = 0.0
+        entry["pledged_vram_gb"] = round(entry["pledged_vram_gb"] + vram, 2)
         slot = str(v.get("availability_slot", "eu_evening_cet"))
         slots = entry["availability_slots"]
         slots[slot] = slots.get(slot, 0) + 1
@@ -331,6 +470,14 @@ def coordinate_inter_bee_inference(
         rescue_numeric_calculation,
     )
 
+    if not isinstance(primary_bee, str) or not primary_bee.strip():
+        raise ValueError("primary_bee must be a non-empty string")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string")
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps <= 0:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or dt <= 0.0:
+        raise ValueError("dt must be a positive finite number")
     intent = classify_prompt_intent_and_language([{"role": "user", "content": prompt}])
     specialist_bee = intent.preferred_tier or "bee-rusty-sundials"
     if not specialist_bee.startswith("hivemind/"):
@@ -432,6 +579,16 @@ def clear_bee_capacity_market(
     Allows a high-demand Bee (e.g. `hivemind/coder` during Subject 1) to bid for idle GPU capacity or nocturnal
     QLoRA slots offered by another Bee/Producer (`hivemind/bee-stars` or `rtx-2070-producer`), maximizing utilization.
     """
+    if not isinstance(orders, (list, tuple)):
+        raise ValueError("orders must be a sequence of order mappings")
+    for o in orders:
+        if not isinstance(o, Mapping):
+            raise ValueError("each order must be a mapping")
+        for key in ("capacity_1k", "price_per_1k"):
+            if key in o and o[key] is not None:
+                val = o[key]
+                if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or val < 0.0:
+                    raise ValueError(f"{key} must be a finite non-negative number")
     offers = [
         dict(o)
         for o in orders
@@ -447,39 +604,40 @@ def clear_bee_capacity_market(
     offers.sort(key=lambda o: (float(o.get("price_per_1k", 0.0)), float(o.get("utc", 0.0))))
     bids.sort(key=lambda b: (-float(b.get("price_per_1k", 0.0)), float(b.get("utc", 0.0))))
 
+    # Best bid first against the cheapest offers. An order never trades with another order of the same account: one account
+    # posting both sides would otherwise print a "settled" price against itself (wash trade) with no counterparty.
     matches: list[dict[str, Any]] = []
-    i, j = 0, 0
-    rem_offer = float(offers[0]["capacity_1k"]) if offers else 0.0
-    rem_bid = float(bids[0]["capacity_1k"]) if bids else 0.0
-
-    while i < len(offers) and j < len(bids):
-        ask = float(offers[i]["price_per_1k"])
-        bid = float(bids[j]["price_per_1k"])
-        if bid < ask:
-            break
-        traded_cap = min(rem_offer, rem_bid)
-        clearing_price = round(0.5 * (ask + bid), 6)
-        if traded_cap > 0.0:
+    remaining = [float(o["capacity_1k"]) for o in offers]
+    for j, bid_order in enumerate(bids):
+        rem_bid = float(bid_order["capacity_1k"])
+        bid = float(bid_order["price_per_1k"])
+        for i, offer_order in enumerate(offers):
+            if rem_bid <= 1e-9:
+                break
+            ask = float(offer_order["price_per_1k"])
+            if bid < ask:
+                break  # offers are ascending: no later offer is cheaper
+            if remaining[i] <= 1e-9:
+                continue
+            owner = str(offer_order.get("account_id") or "")
+            if owner and owner == str(bid_order.get("account_id") or ""):
+                continue
+            traded_cap = min(remaining[i], rem_bid)
+            clearing_price = round(0.5 * (ask + bid), 6)
             matches.append(
                 {
-                    "offer_id": str(offers[i].get("order_id", f"off-{i}")),
-                    "bid_id": str(bids[j].get("order_id", f"bid-{j}")),
-                    "seller_bee": str(offers[i].get("bee_id", "hivemind/bee-stars")),
-                    "buyer_bee": str(bids[j].get("bee_id", "hivemind/coder")),
-                    "subject_id": str(bids[j].get("subject_id", offers[i].get("subject_id", "SUBJ-01-PYTHON-RUST-CODER"))),
+                    "offer_id": str(offer_order.get("order_id", f"off-{i}")),
+                    "bid_id": str(bid_order.get("order_id", f"bid-{j}")),
+                    "seller_bee": str(offer_order.get("bee_id", "hivemind/bee-stars")),
+                    "buyer_bee": str(bid_order.get("bee_id", "hivemind/coder")),
+                    "subject_id": str(bid_order.get("subject_id", offer_order.get("subject_id", "SUBJ-01-PYTHON-RUST-CODER"))),
                     "traded_capacity_1k": round(traded_cap, 4),
                     "clearing_price_per_1k": clearing_price,
                     "settled_hmt_per_1k_window": round(traded_cap * clearing_price, 6),
                 }
             )
-        rem_offer -= traded_cap
-        rem_bid -= traded_cap
-        if rem_offer <= 1e-9:
-            i += 1
-            rem_offer = float(offers[i]["capacity_1k"]) if i < len(offers) else 0.0
-        if rem_bid <= 1e-9:
-            j += 1
-            rem_bid = float(bids[j]["capacity_1k"]) if j < len(bids) else 0.0
+            remaining[i] -= traded_cap
+            rem_bid -= traded_cap
 
     total_traded = round(sum(m["traded_capacity_1k"] for m in matches), 4)
     mean_price = (
@@ -501,6 +659,8 @@ def clear_bee_capacity_market(
 
 def render_joint_campaign_ics(poll_summary: Mapping[str, Any] | None = None) -> str:
     """Render an RFC 5545 iCalendar (`.ics`) feed for all 6 Subject-by-Subject Improvement Campaigns."""
+    if poll_summary is not None and not isinstance(poll_summary, Mapping):
+        raise TypeError("poll_summary must be a Mapping or None")
     by_sid: dict[str, Mapping[str, Any]] = {}
     if poll_summary and isinstance(poll_summary.get("subjects"), list):
         for item in poll_summary["subjects"]:
@@ -551,6 +711,8 @@ class InMemoryKafkaBridge:
     """Thread-safe Kafka topic ring buffer with optional `KAFKA_BOOTSTRAP_SERVERS` metadata export."""
 
     def __init__(self, maxlen_per_topic: int = 256) -> None:
+        if isinstance(maxlen_per_topic, bool) or not isinstance(maxlen_per_topic, int) or maxlen_per_topic <= 0:
+            raise ValueError("maxlen_per_topic must be a positive integer")
         self._lock = threading.Lock()
         self._maxlen = maxlen_per_topic
         self._topics: dict[str, deque[dict[str, Any]]] = {
@@ -559,6 +721,8 @@ class InMemoryKafkaBridge:
         self.bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "in-memory-amcp-broker:9092")
 
     def publish(self, event: AMCPKafkaEvent) -> dict[str, Any]:
+        if not isinstance(event, AMCPKafkaEvent):
+            raise TypeError("event must be an AMCPKafkaEvent instance")
         record = event.to_dict()
         with self._lock:
             bucket = self._topics.setdefault(event.topic, deque(maxlen=self._maxlen))
@@ -567,6 +731,10 @@ class InMemoryKafkaBridge:
         return {"topic": event.topic, "partition": 0, "offset": offset, "event_id": event.event_id}
 
     def recent(self, topic: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        if topic is not None and (not isinstance(topic, str) or not topic.strip()):
+            raise ValueError("topic must be a non-empty string or None")
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+            raise ValueError("limit must be a positive integer")
         with self._lock:
             if topic:
                 resolved = KAFKA_TOPICS.get(topic, topic)

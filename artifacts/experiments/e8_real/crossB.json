@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "experiment_id": "E8-stage2-amcp-night",
+  "run_id": "crossB",
+  "completed": false,
+  "final": true,
+  "coordinator_host": "socreateai-agora-hermes-node1",
+  "code_pin": "d980e290213af9c49f54720e6a6ed263a44b9f25f68a1901446488a93514b4dd",
+  "base_sha256": "7e3bf9e2252e988135b35209e7a3fd9a06a2c2efe3976de7a0d5c0024adf4c96",
+  "config": {
+    "learners": [
+      "l0",
+      "l1"
+    ],
+    "quorum": 2,
+    "rounds": 6,
+    "seed": 1,
+    "inner_steps": 40,
+    "inner_lr": 0.01,
+    "batch": 16,
+    "outer_lr": 0.5,
+    "outer_mu": 0.5,
+    "round_deadline_s": 180.0
+  },
+  "initial_eval_loss": 4.170938968658447,
+  "rounds": [],
+  "final_eval_loss": null,
+  "hosts_seen": [],
+  "receipt_sha256": "a5143ba1e933b8add1b671c000e417e335a64117ebede072aeecc7e4528b8320"
+}

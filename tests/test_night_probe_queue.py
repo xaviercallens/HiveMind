@@ -365,24 +365,28 @@ def test_nginx_unreadable_fails_closed(world):
     assert arm_json(world)["status"] == "BLOCKED"
 
 
-def test_cap_is_min_of_max_cap_and_free_minus_margin_by_default(world):
-    world.used = 5000  # free 10360
+def test_cap_keeps_the_4300_mib_floor_by_default(world):
+    """AGENTS.md: >= 4,300 MiB free on the T4 at all times. Since 2026-11-08 the floor is the default, not an option
+    (on 2026-10-28 arm A2 left 3,557 MiB free because the floor was off)."""
+    world.used = 5000  # free 10360 -> cap = min(9500, 10360 - 600, 10360 - 4300) = 6060
     run(world, arms=["A2"], max_cap_mib=9500)
     r = arm_json(world, "A2")
-    assert r["cap_mib"] == 9500 and r["cap_basis"]["free_vram_mib"] == 10360 and r["cap_basis"]["tier_cap_applied"] is False
-    world.used = 12000  # free 3360 - 600 = 2760
+    assert r["cap_mib"] == 6060 and r["cap_basis"]["free_vram_mib"] == 10360 and r["cap_basis"]["vram_floor_mib"] == 4300
+    assert r["cap_basis"]["tier_cap_applied"] is False
+    world.used = 12000  # free 3360 < 4300 floor
     run(world, arms=["A2"], out_dir=world.out / "b")
-    assert json.loads((world.out / "b" / "arm_A2.json").read_text())["cap_mib"] == 2760
-    world.used = 14500  # free 860 - 600 = 260 < min cap
+    b = json.loads((world.out / "b" / "arm_A2.json").read_text())
+    assert b["status"] == "BLOCKED" and "below floor 4300" in b["reason"]
+    world.used = 14500  # free 860
     run(world, arms=["A2"], out_dir=world.out / "c")
     assert json.loads((world.out / "c" / "arm_A2.json").read_text())["status"] == "BLOCKED"
 
 
 def test_n0_arm_uses_the_lead_formula_by_default_and_the_tier_cap_only_when_asked(world):
     run(world, arms=["A0"])
-    assert arm_json(world)["cap_mib"] == 9500  # min(9500, 10360 - 600): no silent tier override
+    assert arm_json(world)["cap_mib"] == 6060  # min(9500, 10360 - 600, 10360 - 4300 floor): no silent tier override
     i = world.cmds[0].index("--cap-mib")
-    assert world.cmds[0][i + 1] == "9500"
+    assert world.cmds[0][i + 1] == "6060"
     run(world, arms=["A0"], tier_cap=True, out_dir=world.out / "t")
     assert json.loads((world.out / "t" / "arm_A0.json").read_text())["cap_mib"] == 3950
 
@@ -794,3 +798,14 @@ def test_source_has_no_dynamic_code_execution():
     src = (ROOT / "scripts" / "night_probe_queue.py").read_text()
     for bad in ("ev" + "al(", "ex" + "ec(", "shell" + "=True", "pick" + "le", "os." + "system"):
         assert bad not in src, bad
+
+
+def test_command_line_floor_defaults_to_4300_and_cannot_be_lowered():
+    import pytest as _pytest
+
+    parser = q.build_parser()
+    assert parser.parse_args([]).vram_floor_mib == 4300
+    assert parser.parse_args(["--vram-floor-mib", "5000"]).vram_floor_mib == 5000
+    with _pytest.raises(SystemExit):
+        parser.parse_args(["--vram-floor-mib", "3000"])
+    assert q.Options.__dataclass_fields__["vram_floor_mib"].default == 4300

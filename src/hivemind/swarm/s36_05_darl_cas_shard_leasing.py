@@ -11,6 +11,7 @@ Implements Dynamic Asynchronous Lease-Backed Data Sharding (``arXiv:2610.03457``
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 
 
@@ -24,6 +25,18 @@ class ShardLeaseRecord:
     granted_at_s: float
     expires_at_s: float
     status: str = "ACTIVE"  # ACTIVE | COMMITTED | RECLAIMED
+
+    def __post_init__(self) -> None:
+        if isinstance(self.lease_id, bool) or not isinstance(self.lease_id, int) or self.lease_id < 1:
+            raise ValueError("lease_id must be a positive integer")
+        _validate_darl_id(self.shard_id, "shard_id")
+        _validate_darl_id(self.worker_id, "worker_id")
+        g_s = _finite("granted_at_s", self.granted_at_s)
+        e_s = _finite("expires_at_s", self.expires_at_s)
+        if e_s < g_s:
+            raise ValueError("expires_at_s must be >= granted_at_s")
+        if self.status not in ("ACTIVE", "COMMITTED", "RECLAIMED"):
+            raise ValueError("status must be 'ACTIVE', 'COMMITTED', or 'RECLAIMED'")
 
 
 @dataclass(frozen=True)
@@ -39,16 +52,64 @@ class DARLLedgerSnapshot:
     duplicate_commits_blocked: int
     conservation_holds: bool
 
+    def __post_init__(self) -> None:
+        if isinstance(self.total_shards, bool) or not isinstance(self.total_shards, int) or self.total_shards < 1:
+            raise ValueError("total_shards must be an integer >= 1")
+        for i_field in (
+            "granted",
+            "reclaimed",
+            "committed",
+            "active",
+            "unique_committed_shards",
+            "duplicate_commits_blocked",
+        ):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if not isinstance(self.conservation_holds, bool):
+            raise ValueError("conservation_holds must be a boolean")
+
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
+
+
+def _finite(name: str, value: float) -> float:
+    """Every lease decision compares times; with NaN each comparison is False, so a lease would never expire or be reclaimed."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a finite real number, got {value!r}")
+    v = float(value)
+    if not math.isfinite(v):
+        raise ValueError(f"{name} must be finite, got {value!r}")
+    return v
+
+
+def _validate_darl_id(val: object, name: str) -> str:
+    if not isinstance(val, str) or not val.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    if any(ord(c) < 32 or ord(c) == 127 for c in val):
+        raise ValueError(f"{name} contains forbidden control characters")
+    return val
 
 
 class DARLShardLeaseCoordinator:
     """Heartbeat-backed CAS shard lease manager guaranteeing zero duplicate training under churn."""
 
     def __init__(self, shard_ids: list[str], *, alpha: float = 4.0) -> None:
-        if not shard_ids or len(set(shard_ids)) != len(shard_ids):
+        if (
+            isinstance(shard_ids, (str, bytes))
+            or not isinstance(shard_ids, (list, tuple))
+            or not shard_ids
+            or any(not isinstance(s, str) or not s.strip() or any(ord(c) < 32 or ord(c) == 127 for c in s) for s in shard_ids)
+            or len(set(shard_ids)) != len(shard_ids)
+        ):
             raise ValueError("shard_ids must be a non-empty list of unique shard identifiers")
+        # alpha=inf would make every lease immortal; NaN or a non-positive alpha was silently clamped to a 1 s TTL.
+        if (
+            isinstance(alpha, bool)
+            or not isinstance(alpha, (int, float))
+            or not (math.isfinite(float(alpha)) and float(alpha) > 0.0)
+        ):
+            raise ValueError(f"alpha must be finite and > 0, got {alpha!r}")
         self.alpha = float(alpha)
         self._pending_shards: list[str] = list(shard_ids)
         self._total_shards = len(shard_ids)
@@ -62,7 +123,13 @@ class DARLShardLeaseCoordinator:
         self.duplicate_commits_blocked = 0
 
     def compute_ttl_s(self, *, t_step_s: float, rtt_s: float) -> float:
-        return max(1.0, self.alpha * float(t_step_s) + float(rtt_s))
+        t_step = _finite("t_step_s", t_step_s)
+        rtt = _finite("rtt_s", rtt_s)
+        if t_step <= 0.0:
+            raise ValueError("t_step_s must be positive")
+        if rtt < 0.0:
+            raise ValueError("rtt_s must be non-negative")
+        return max(1.0, self.alpha * t_step + rtt)
 
     def grant_lease(
         self,
@@ -73,6 +140,8 @@ class DARLShardLeaseCoordinator:
         rtt_s: float = 0.08,
     ) -> ShardLeaseRecord | None:
         """Grant the next available unassigned shard to ``worker_id``."""
+        _validate_darl_id(worker_id, "worker_id")
+        now_s = _finite("now_s", now_s)
         self.reclaim_expired(now_s=now_s)
         while self._pending_shards:
             shard_id = self._pending_shards.pop(0)
@@ -104,6 +173,10 @@ class DARLShardLeaseCoordinator:
         t_step_s: float = 2.0,
         rtt_s: float = 0.08,
     ) -> bool:
+        if isinstance(lease_id, bool) or not isinstance(lease_id, int) or lease_id < 1:
+            raise ValueError("lease_id must be a positive integer")
+        _validate_darl_id(worker_id, "worker_id")
+        now_s = _finite("now_s", now_s)
         rec = self._leases.get(lease_id)
         if rec is None or rec.status != "ACTIVE" or rec.worker_id != worker_id:
             return False
@@ -115,6 +188,7 @@ class DARLShardLeaseCoordinator:
 
     def reclaim_expired(self, *, now_s: float) -> int:
         """Reclaim all active leases whose TTL has expired at ``now_s``."""
+        now_s = _finite("now_s", now_s)
         reclaimed_now = 0
         for rec in list(self._leases.values()):
             if rec.status == "ACTIVE" and now_s > rec.expires_at_s:
@@ -128,6 +202,10 @@ class DARLShardLeaseCoordinator:
 
     def commit_lease(self, lease_id: int, worker_id: str, *, now_s: float) -> bool:
         """Commit a completed shard lease; rejects expired or stale/duplicate commits."""
+        if isinstance(lease_id, bool) or not isinstance(lease_id, int) or lease_id < 1:
+            raise ValueError("lease_id must be a positive integer")
+        _validate_darl_id(worker_id, "worker_id")
+        now_s = _finite("now_s", now_s)
         self.reclaim_expired(now_s=now_s)
         rec = self._leases.get(lease_id)
         if rec is None or rec.worker_id != worker_id or rec.status != "ACTIVE":

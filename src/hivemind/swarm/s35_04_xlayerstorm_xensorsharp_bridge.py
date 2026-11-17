@@ -8,13 +8,14 @@ Integrates:
 2. xensorSharp Fork Bridge (https://github.com/xaviercallens/xensorSharp):
    - Cross-platform native .NET / Windows / macOS / iOS / Linux GGUF worker manifest with zero WSL2
      or Python dependency overhead for gamer/homelab onboarding.
-3. runux-ai-runtime (/home/xavkal/xdev/runux-ai-runtime):
+3. runux-ai-runtime (xaviercallens/runux-ai-runtime):
    - TurboQuant polar/radial KV-cache compression reducing resident KV memory by 4.8x.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 CITIZEN_VRAM_CAP_MIB: float = 1536.0
 
@@ -38,6 +39,32 @@ class PCIeMoEStreamingPlan:
     overlap_efficiency_pct: float
     within_citizen_vram_cap: bool
 
+    def __post_init__(self) -> None:
+        if isinstance(self.total_experts, bool) or not isinstance(self.total_experts, int) or self.total_experts < 1:
+            raise ValueError("total_experts must be an integer >= 1")
+        if (
+            isinstance(self.active_top_k_experts, bool)
+            or not isinstance(self.active_top_k_experts, int)
+            or not (1 <= self.active_top_k_experts <= self.total_experts)
+        ):
+            raise ValueError("active_top_k_experts must satisfy 1 <= active_top_k_experts <= total_experts")
+        for pos_field in ("single_expert_mib", "pcie_bandwidth_gbps", "raw_pcie_transfer_ms"):
+            _validate_positive_float(getattr(self, pos_field), pos_field, allow_zero=False)
+        for nn_field in (
+            "shared_prelude_mib",
+            "turboquant_kv_cache_mib",
+            "double_buffer_staging_mib",
+            "peak_active_vram_mib",
+            "overlapped_compute_ms",
+            "effective_stall_ms",
+            "overlap_efficiency_pct",
+        ):
+            _validate_positive_float(getattr(self, nn_field), nn_field, allow_zero=True)
+        if isinstance(self.vram_headroom_mib, bool) or not isinstance(self.vram_headroom_mib, (int, float)) or not math.isfinite(float(self.vram_headroom_mib)):
+            raise ValueError("vram_headroom_mib must be a finite real number")
+        if not isinstance(self.within_citizen_vram_cap, bool):
+            raise ValueError("within_citizen_vram_cap must be a boolean")
+
 
 @dataclass(frozen=True)
 class NativeCrossPlatformWorkerSpec:
@@ -49,6 +76,33 @@ class NativeCrossPlatformWorkerSpec:
     active_vram_cap_mib: float
     steam_preemption_ms: float
     openai_compatible_endpoint: str
+    basis: str = "planning_targets"
+
+    def __post_init__(self) -> None:
+        for s_field in ("os_family", "runtime_engine", "openai_compatible_endpoint", "basis"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if not self.openai_compatible_endpoint.startswith(("http://", "https://")):
+            raise ValueError("openai_compatible_endpoint must start with http:// or https://")
+        if not isinstance(self.requires_python_or_wsl, bool):
+            raise ValueError("requires_python_or_wsl must be a boolean")
+        _validate_positive_float(self.active_vram_cap_mib, "active_vram_cap_mib", allow_zero=False)
+        _validate_positive_float(self.steam_preemption_ms, "steam_preemption_ms", allow_zero=False)
+
+
+def _validate_positive_float(val: object, name: str, *, allow_zero: bool = False) -> float:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ValueError(f"{name} must be a finite real number")
+    fval = float(val)
+    if not math.isfinite(fval):
+        raise ValueError(f"{name} must be a finite real number")
+    if allow_zero:
+        if fval < 0.0:
+            raise ValueError(f"{name} must be non-negative")
+    elif fval <= 0.0:
+        raise ValueError(f"{name} must be positive")
+    return fval
 
 
 def compute_xlayerstorm_turboquant_schedule(
@@ -63,35 +117,50 @@ def compute_xlayerstorm_turboquant_schedule(
     layer_compute_ms: float = 11.5,
 ) -> PCIeMoEStreamingPlan:
     """Compute resident VRAM and overlapped PCIe streaming latency for a sparse MoE on a citizen GPU."""
-    if active_top_k_experts < 1 or active_top_k_experts > total_experts:
+    if isinstance(total_experts, bool) or not isinstance(total_experts, int) or total_experts < 1 or total_experts > 10_000:
+        raise ValueError("Invalid total_experts")
+    if (
+        isinstance(active_top_k_experts, bool)
+        or not isinstance(active_top_k_experts, int)
+        or active_top_k_experts < 1
+        or active_top_k_experts > total_experts
+    ):
         raise ValueError("Invalid active_top_k_experts")
 
-    quant_expert_mib = single_expert_fp16_mib / e8_quant_compression
+    single_fp16 = _validate_positive_float(single_expert_fp16_mib, "single_expert_fp16_mib")
+    e8_comp = _validate_positive_float(e8_quant_compression, "e8_quant_compression")
+    prelude = _validate_positive_float(shared_prelude_mib, "shared_prelude_mib", allow_zero=True)
+    raw_kv = _validate_positive_float(raw_kv_cache_mib, "raw_kv_cache_mib", allow_zero=True)
+    tq_ratio = _validate_positive_float(turboquant_ratio, "turboquant_ratio")
+    pcie_bw = _validate_positive_float(pcie_bandwidth_gbps, "pcie_bandwidth_gbps")
+    compute_ms = _validate_positive_float(layer_compute_ms, "layer_compute_ms", allow_zero=True)
+
+    quant_expert_mib = single_fp16 / e8_comp
     active_experts_mib = active_top_k_experts * quant_expert_mib
     # Double-buffer staging slot holds the next layer's Top-K experts in pinned VRAM ring
     staging_mib = active_experts_mib
-    turboquant_kv_mib = raw_kv_cache_mib / turboquant_ratio
+    turboquant_kv_mib = raw_kv / tq_ratio
 
-    peak_vram = shared_prelude_mib + active_experts_mib + staging_mib + turboquant_kv_mib
+    peak_vram = prelude + active_experts_mib + staging_mib + turboquant_kv_mib
     headroom = CITIZEN_VRAM_CAP_MIB - peak_vram
 
     transfer_mib = active_experts_mib
-    raw_transfer_ms = (transfer_mib / 1024.0) / max(0.1, pcie_bandwidth_gbps) * 1000.0
-    effective_stall_ms = max(0.0, raw_transfer_ms - layer_compute_ms)
-    hidden_ms = min(raw_transfer_ms, layer_compute_ms)
+    raw_transfer_ms = (transfer_mib / 1024.0) / max(0.1, pcie_bw) * 1000.0
+    effective_stall_ms = max(0.0, raw_transfer_ms - compute_ms)
+    hidden_ms = min(raw_transfer_ms, compute_ms)
     overlap_pct = 100.0 * (hidden_ms / max(1e-9, raw_transfer_ms))
 
     return PCIeMoEStreamingPlan(
         total_experts=total_experts,
         active_top_k_experts=active_top_k_experts,
         single_expert_mib=round(quant_expert_mib, 2),
-        shared_prelude_mib=round(shared_prelude_mib, 2),
+        shared_prelude_mib=round(prelude, 2),
         turboquant_kv_cache_mib=round(turboquant_kv_mib, 2),
         double_buffer_staging_mib=round(staging_mib, 2),
         peak_active_vram_mib=round(peak_vram, 2),
         vram_headroom_mib=round(headroom, 2),
-        pcie_bandwidth_gbps=pcie_bandwidth_gbps,
-        overlapped_compute_ms=layer_compute_ms,
+        pcie_bandwidth_gbps=pcie_bw,
+        overlapped_compute_ms=compute_ms,
         raw_pcie_transfer_ms=round(raw_transfer_ms, 4),
         effective_stall_ms=round(effective_stall_ms, 4),
         overlap_efficiency_pct=round(overlap_pct, 2),

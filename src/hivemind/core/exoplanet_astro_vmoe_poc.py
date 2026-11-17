@@ -184,10 +184,20 @@ def compute_physical_transit_depth_ppm(
     Formula:
         Delta F / F (ppm) = 84.0 * (R_p / R_earth)^2 / (R_* / R_sun)^2
     """
-    if planet_radius_earth <= 0.0:
-        raise ValueError("planet_radius_earth must be strictly positive")
-    if star_radius_solar <= 0.0:
-        raise ValueError("star_radius_solar must be strictly positive")
+    if (
+        isinstance(planet_radius_earth, bool)
+        or not isinstance(planet_radius_earth, (int, float))
+        or not math.isfinite(float(planet_radius_earth))
+        or float(planet_radius_earth) <= 0.0
+    ):
+        raise ValueError("planet_radius_earth must be a finite positive number")
+    if (
+        isinstance(star_radius_solar, bool)
+        or not isinstance(star_radius_solar, (int, float))
+        or not math.isfinite(float(star_radius_solar))
+        or float(star_radius_solar) <= 0.0
+    ):
+        raise ValueError("star_radius_solar must be a finite positive number")
     ratio_p = float(planet_radius_earth)
     ratio_s = float(star_radius_solar)
     return float(EARTH_SUN_TRANSIT_DEPTH_PPM * (ratio_p * ratio_p) / (ratio_s * ratio_s))
@@ -206,6 +216,24 @@ def generate_phase_folded_cwt_scalogram(
     Uses a Ricker (Mexican Hat) continuous wavelet family across `num_scales` scales to
     transform the 1D phase-folded light curve into a 2D visual tensor suitable for ViT patch encoding.
     """
+    for name, val in (
+        ("transit_depth_ppm", transit_depth_ppm),
+        ("instrumental_noise_ppm", instrumental_noise_ppm),
+        ("odd_even_asymmetry_ratio", odd_even_asymmetry_ratio),
+    ):
+        if (
+            isinstance(val, bool)
+            or not isinstance(val, (int, float))
+            or not math.isfinite(float(val))
+            or float(val) < 0.0
+        ):
+            raise ValueError(f"{name} must be a finite non-negative number")
+    if isinstance(num_phase_bins, bool) or not isinstance(num_phase_bins, int) or num_phase_bins < 1:
+        raise ValueError("num_phase_bins must be a positive integer")
+    if isinstance(num_scales, bool) or not isinstance(num_scales, int) or num_scales < 1:
+        raise ValueError("num_scales must be a positive integer")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     rng = np.random.default_rng(seed)
     phase = np.linspace(-0.5, 0.5, num_phase_bins, dtype=np.float32)
 
@@ -244,6 +272,29 @@ def asymmetric_focal_loss(
 
     L_Focal = - alpha_t * (1 - p_t)^gamma * log(p_t)
     """
+    if not isinstance(logits, torch.Tensor) or logits.numel() == 0 or logits.dtype == torch.bool:
+        raise ValueError("logits must be a non-empty torch.Tensor")
+    if not bool(torch.isfinite(logits).all()):
+        raise ValueError("logits must contain finite values")
+    if not isinstance(targets, torch.Tensor) or targets.numel() == 0 or targets.dtype == torch.bool:
+        raise ValueError("targets must be a non-empty torch.Tensor")
+    if isinstance(gamma, bool) or not isinstance(gamma, (int, float)) or not math.isfinite(float(gamma)) or float(gamma) < 0.0:
+        raise ValueError("gamma must be a finite non-negative number")
+    if (
+        isinstance(rare_transit_weight, bool)
+        or not isinstance(rare_transit_weight, (int, float))
+        or not math.isfinite(float(rare_transit_weight))
+        or float(rare_transit_weight) <= 0.0
+    ):
+        raise ValueError("rare_transit_weight must be a finite positive number")
+    if sample_weights is not None:
+        if (
+            not isinstance(sample_weights, torch.Tensor)
+            or sample_weights.numel() == 0
+            or sample_weights.dtype == torch.bool
+            or not bool(torch.isfinite(sample_weights).all())
+        ):
+            raise ValueError("sample_weights must be a non-empty finite numeric torch.Tensor when provided")
     log_probs = F.log_softmax(logits, dim=-1)
     probs = torch.exp(log_probs)
     target_log_p = log_probs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
@@ -270,6 +321,24 @@ def compute_citizen_science_entropy_weights(
       - `ambiguous_indices`: indices of maximum-entropy light curves surfaced to the UI.
       - `mean_entropy_nats`: average prediction entropy across the batch.
     """
+    if not isinstance(logits, torch.Tensor) or logits.ndim < 2 or logits.numel() == 0 or logits.dtype == torch.bool:
+        raise ValueError("logits must be a non-empty 2D+ torch.Tensor")
+    if not bool(torch.isfinite(logits).all()):
+        raise ValueError("logits must contain finite values")
+    if (
+        isinstance(top_ambiguous_fraction, bool)
+        or not isinstance(top_ambiguous_fraction, (int, float))
+        or not math.isfinite(float(top_ambiguous_fraction))
+        or not (0.0 < float(top_ambiguous_fraction) <= 1.0)
+    ):
+        raise ValueError("top_ambiguous_fraction must be in (0.0, 1.0]")
+    if (
+        isinstance(citizen_boost, bool)
+        or not isinstance(citizen_boost, (int, float))
+        or not math.isfinite(float(citizen_boost))
+        or float(citizen_boost) <= 0.0
+    ):
+        raise ValueError("citizen_boost must be a finite positive number")
     with torch.no_grad():
         probs = F.softmax(logits, dim=-1)
         log_probs = torch.log(torch.clamp(probs, min=1e-8))
@@ -293,11 +362,18 @@ class SwarmFFNAdapter(nn.Module):
         seed: int = 42,
     ) -> None:
         super().__init__()
+        for name, val in (("hidden_dim", hidden_dim), ("intermediate_dim", intermediate_dim), ("rank", rank)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(float(alpha)) or float(alpha) <= 0.0:
+            raise ValueError("alpha must be a finite positive number")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         self.hidden_dim = hidden_dim
         self.intermediate_dim = intermediate_dim
         self.rank = rank
-        self.alpha = alpha
-        self.scaling = alpha / float(rank)
+        self.alpha = float(alpha)
+        self.scaling = float(alpha) / float(rank)
 
         gen = torch.Generator()
         gen.manual_seed(seed)
@@ -308,6 +384,14 @@ class SwarmFFNAdapter(nn.Module):
         self.lora_B = nn.Parameter(torch.zeros((hidden_dim, rank), dtype=torch.float32))
 
     def forward(self, h: torch.Tensor) -> torch.Tensor:
+        if (
+            not isinstance(h, torch.Tensor)
+            or h.numel() == 0
+            or h.dtype == torch.bool
+            or h.shape[-1] != self.hidden_dim
+            or not bool(torch.isfinite(h).all())
+        ):
+            raise ValueError(f"h must be a non-empty finite numeric torch.Tensor with last dim {self.hidden_dim}")
         return F.linear(F.silu(F.linear(h, self.lora_A)), self.lora_B) * self.scaling
 
     def get_effective_delta(self) -> np.ndarray:
@@ -316,14 +400,25 @@ class SwarmFFNAdapter(nn.Module):
             return delta.detach().cpu().numpy().astype(np.float32)
 
     def set_effective_delta(self, delta: np.ndarray) -> None:
+        if (
+            not isinstance(delta, np.ndarray)
+            or delta.dtype == np.bool_
+            or delta.shape != (self.hidden_dim, self.hidden_dim)
+            or not bool(np.isfinite(delta).all())
+        ):
+            raise ValueError(
+                f"delta must be a finite numeric numpy.ndarray of shape ({self.hidden_dim}, {self.hidden_dim})"
+            )
         u, s, vt = np.linalg.svd(delta.astype(np.float32) / self.scaling, full_matrices=False)
-        r = self.rank
+        r = min(self.rank, self.hidden_dim)
         sqrt_s = np.sqrt(np.maximum(s[:r], 0.0)).astype(np.float32)
         b_new = u[:, :r] * sqrt_s[None, :]
         a_new = sqrt_s[:, None] * vt[:r, :]
         with torch.no_grad():
-            self.lora_B.copy_(torch.from_numpy(b_new))
-            self.lora_A.copy_(torch.from_numpy(a_new))
+            self.lora_B.zero_()
+            self.lora_A.zero_()
+            self.lora_B[:, :r].copy_(torch.from_numpy(b_new))
+            self.lora_A[:r, :].copy_(torch.from_numpy(a_new))
 
 
 class FrozenAstroVisionBackbone(nn.Module):
@@ -342,6 +437,16 @@ class FrozenAstroVisionBackbone(nn.Module):
         seed: int = 101,
     ) -> None:
         super().__init__()
+        for name, val in (
+            ("patch_dim", patch_dim),
+            ("hidden_dim", hidden_dim),
+            ("intermediate_dim", intermediate_dim),
+            ("num_classes", num_classes),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         torch.manual_seed(seed)
         self.patch_dim = patch_dim
         self.hidden_dim = hidden_dim
@@ -376,6 +481,17 @@ class FrozenAstroVisionBackbone(nn.Module):
         return all(not p.requires_grad for p in self.parameters())
 
     def encode_patches(self, visual_patches: torch.Tensor) -> torch.Tensor:
+        if (
+            not isinstance(visual_patches, torch.Tensor)
+            or visual_patches.ndim < 2
+            or visual_patches.numel() == 0
+            or visual_patches.dtype == torch.bool
+            or visual_patches.shape[-1] != self.patch_dim
+            or not bool(torch.isfinite(visual_patches).all())
+        ):
+            raise ValueError(
+                f"visual_patches must be a non-empty finite numeric torch.Tensor with last dim {self.patch_dim}"
+            )
         x = self.attn_norm(self.patch_embed(visual_patches))
         q = self.w_q(x)
         k = self.w_k(x)
@@ -385,6 +501,14 @@ class FrozenAstroVisionBackbone(nn.Module):
         return x + self.w_o(torch.matmul(attn, v))
 
     def base_swiglu_ffn(self, h: torch.Tensor) -> torch.Tensor:
+        if (
+            not isinstance(h, torch.Tensor)
+            or h.numel() == 0
+            or h.dtype == torch.bool
+            or h.shape[-1] != self.hidden_dim
+            or not bool(torch.isfinite(h).all())
+        ):
+            raise ValueError(f"h must be a non-empty finite numeric torch.Tensor with last dim {self.hidden_dim}")
         gate = F.silu(F.linear(h, self.nf4_w_gate))
         up = F.linear(h, self.nf4_w_up)
         return F.linear(gate * up, self.nf4_w_down)
@@ -398,6 +522,13 @@ def build_astrophysics_visual_shard(
     seed: int = 2026,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Generate standardized visual patch tensors for one of the 4 astrophysics branches."""
+    if not isinstance(branch_id, str) or branch_id not in EXOPLANET_ASTRO_EXPERT_BRANCHES:
+        raise ValueError(f"branch_id must be one of {sorted(EXOPLANET_ASTRO_EXPERT_BRANCHES)}")
+    for name, val in (("num_samples", num_samples), ("num_patches", num_patches), ("patch_dim", patch_dim)):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            raise ValueError(f"{name} must be a positive integer")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     rng = np.random.default_rng(seed)
     meta = EXOPLANET_ASTRO_EXPERT_BRANCHES[branch_id]
     b_idx = int(meta["expert_index"])
@@ -430,6 +561,29 @@ def apply_nesterov_outer_momentum(
     outer_lr: float = DEFAULT_NESTEROV_OUTER_LR,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Stage 3: Outer Nesterov Momentum update on the branch master weights."""
+    for name, arr in (
+        ("master_delta", master_delta),
+        ("velocity", velocity),
+        ("krum_pseudo_gradient", krum_pseudo_gradient),
+    ):
+        if not isinstance(arr, np.ndarray) or arr.size == 0 or not bool(np.isfinite(arr).all()):
+            raise ValueError(f"{name} must be a non-empty finite numpy.ndarray")
+    if master_delta.shape != velocity.shape or master_delta.shape != krum_pseudo_gradient.shape:
+        raise ValueError("master_delta, velocity, and krum_pseudo_gradient must have identical shapes")
+    if (
+        isinstance(momentum, bool)
+        or not isinstance(momentum, (int, float))
+        or not math.isfinite(float(momentum))
+        or not (0.0 <= float(momentum) < 1.0)
+    ):
+        raise ValueError("momentum must be finite in [0.0, 1.0)")
+    if (
+        isinstance(outer_lr, bool)
+        or not isinstance(outer_lr, (int, float))
+        or not math.isfinite(float(outer_lr))
+        or float(outer_lr) <= 0.0
+    ):
+        raise ValueError("outer_lr must be a finite positive number")
     new_velocity = (momentum * velocity + krum_pseudo_gradient).astype(np.float32)
     updated_master = (
         master_delta - outer_lr * (momentum * new_velocity + krum_pseudo_gradient)
@@ -453,11 +607,27 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
         load_balance_alpha: float = DEFAULT_LOAD_BALANCE_ALPHA,
     ) -> None:
         super().__init__()
+        if not isinstance(backbone, FrozenAstroVisionBackbone):
+            raise ValueError("backbone must be a FrozenAstroVisionBackbone")
+        if not isinstance(branch_deltas, Mapping) or len(branch_deltas) == 0:
+            raise ValueError("branch_deltas must be a non-empty Mapping")
+        for b_id in branch_deltas:
+            if not isinstance(b_id, str) or not b_id.strip():
+                raise ValueError("branch_deltas keys must be non-empty strings")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be a positive integer")
+        if (
+            isinstance(load_balance_alpha, bool)
+            or not isinstance(load_balance_alpha, (int, float))
+            or not math.isfinite(float(load_balance_alpha))
+            or float(load_balance_alpha) < 0.0
+        ):
+            raise ValueError("load_balance_alpha must be a finite non-negative number")
         self.backbone = backbone
         self.branch_ids = list(branch_deltas.keys())
         self.num_experts = len(self.branch_ids)
         self.top_k = min(top_k, self.num_experts)
-        self.load_balance_alpha = load_balance_alpha
+        self.load_balance_alpha = float(load_balance_alpha)
 
         self.experts = nn.ModuleList()
         for idx, b_id in enumerate(self.branch_ids):
@@ -490,6 +660,17 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
                     self.router.weight[idx].copy_(h_unit * 4.5)
 
     def forward(self, visual_patches: torch.Tensor) -> Dict[str, Any]:
+        if (
+            not isinstance(visual_patches, torch.Tensor)
+            or visual_patches.ndim != 3
+            or visual_patches.numel() == 0
+            or visual_patches.dtype == torch.bool
+            or visual_patches.shape[-1] != self.backbone.patch_dim
+            or not bool(torch.isfinite(visual_patches).all())
+        ):
+            raise ValueError(
+                f"visual_patches must be a non-empty 3D finite numeric torch.Tensor with last dim {self.backbone.patch_dim}"
+            )
         h = self.backbone.encode_patches(visual_patches)
         base_ffn = self.backbone.base_swiglu_ffn(h)
 
@@ -507,14 +688,11 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
         logits = self.backbone.classifier(pooled)
 
         # Switch Transformer load-balancing auxiliary loss L_aux (alpha = 0.01)
-        # Retains router_probs gradient graph so total_loss.backward() regularizes router logits.
+        # Pure Switch Transformers formulation: N * sum(f_i * P_i) with detached dispatch_fraction f_i.
         mean_prob = router_probs.mean(dim=(0, 1))
         one_hot_topk = F.one_hot(topk_indices, num_classes=self.num_experts).to(router_probs.dtype)
         dispatch_fraction = one_hot_topk.mean(dim=(0, 1, 2)).detach()
-        l_aux_raw_tensor = self.num_experts * (
-            0.5 * torch.sum(dispatch_fraction * mean_prob)
-            + 0.5 * torch.sum(mean_prob * mean_prob)
-        )
+        l_aux_raw_tensor = self.num_experts * torch.sum(dispatch_fraction * mean_prob)
         l_aux_weighted_tensor = self.load_balance_alpha * l_aux_raw_tensor
 
         return {
@@ -564,6 +742,21 @@ def project_cwt_scalogram_to_visual_patches(
     patch_dim: int = 48,
 ) -> torch.Tensor:
     """Project a 2D CWT scalogram and photometric observables into a ViT patch tensor `(1, P, D)`."""
+    if not isinstance(scalogram, np.ndarray) or scalogram.ndim != 2 or scalogram.size == 0 or not np.all(np.isfinite(scalogram)):
+        raise ValueError("scalogram must be a non-empty finite 2D numpy ndarray")
+    if not isinstance(flux_ppm, np.ndarray) or flux_ppm.ndim != 1 or flux_ppm.size == 0 or not np.all(np.isfinite(flux_ppm)):
+        raise ValueError("flux_ppm must be a non-empty finite 1D numpy ndarray")
+    for field_name, val in (
+        ("snr_single_transit", snr_single_transit),
+        ("odd_even_asymmetry_ratio", odd_even_asymmetry_ratio),
+        ("centroid_shift_arcsec", centroid_shift_arcsec),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+            raise ValueError(f"{field_name} must be a finite non-negative number")
+    if isinstance(num_patches, bool) or not isinstance(num_patches, int) or num_patches < 1:
+        raise ValueError("num_patches must be an integer >= 1")
+    if isinstance(patch_dim, bool) or not isinstance(patch_dim, int) or patch_dim < 40:
+        raise ValueError("patch_dim must be an integer >= 40")
     branch_protos: List[np.ndarray] = []
     for b_id, meta in EXOPLANET_ASTRO_EXPERT_BRANCHES.items():
         b_idx = int(meta["expert_index"])
@@ -632,6 +825,13 @@ def synthesize_exoplanet_transit_and_router_response(
     - Eclipsing binary (odd_even_asymmetry_ratio > 0.25 or centroid_shift_arcsec > 0.5):
       triggers immediate activation of Expert 2 (False Positives & Eclipsing Binaries).
     """
+    if (
+        isinstance(centroid_shift_arcsec, bool)
+        or not isinstance(centroid_shift_arcsec, (int, float))
+        or not math.isfinite(float(centroid_shift_arcsec))
+        or float(centroid_shift_arcsec) < 0.0
+    ):
+        raise ValueError("centroid_shift_arcsec must be a finite non-negative number")
     depth_ppm = compute_physical_transit_depth_ppm(planet_radius_earth, star_radius_solar)
     snr_single_transit = depth_ppm / max(instrumental_noise_ppm, 1e-6)
     flux_ppm, scalogram = generate_phase_folded_cwt_scalogram(
@@ -713,6 +913,12 @@ def run_exoplanet_astro_vmoe_poc(
     seed: int = 20261029,
 ) -> Dict[str, Any]:
     """Execute the full 4-Stage Exoplanet & Astrophysics Vision-MoE PoC + Physical Simulator."""
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
+    if isinstance(focal_gamma, bool) or not isinstance(focal_gamma, (int, float)) or not math.isfinite(float(focal_gamma)) or float(focal_gamma) < 0.0:
+        raise ValueError("focal_gamma must be a finite non-negative number")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     backbone = FrozenAstroVisionBackbone(
         patch_dim=48,
         hidden_dim=64,
@@ -870,9 +1076,13 @@ def run_exoplanet_astro_vmoe_poc(
         load_balance_alpha=DEFAULT_LOAD_BALANCE_ALPHA,
     )
 
-    eval_patches_list: List[torch.Tensor] = []
-    eval_labels_list: List[torch.Tensor] = []
+    cal_patches_list: List[torch.Tensor] = []
+    cal_labels_list: List[torch.Tensor] = []
+    cal_expected_branch_idx: List[int] = []
+    holdout_patches_list: List[torch.Tensor] = []
+    holdout_labels_list: List[torch.Tensor] = []
     expected_branch_idx: List[int] = []
+    holdout_seed_base = int(seed) + 99991
     for b_id, meta in EXOPLANET_ASTRO_EXPERT_BRANCHES.items():
         b_idx = int(meta["expert_index"])
         p_t, y_t = build_astrophysics_visual_shard(
@@ -881,12 +1091,24 @@ def run_exoplanet_astro_vmoe_poc(
             patch_dim=backbone.patch_dim,
             seed=9200 + b_idx,
         )
-        eval_patches_list.append(p_t)
-        eval_labels_list.append(y_t)
-        expected_branch_idx.extend([b_idx] * p_t.shape[0])
+        cal_patches_list.append(p_t)
+        cal_labels_list.append(y_t)
+        cal_expected_branch_idx.extend([b_idx] * p_t.shape[0])
 
-    eval_x = torch.cat(eval_patches_list, dim=0)
-    eval_y = torch.cat(eval_labels_list, dim=0)
+        hp_t, hy_t = build_astrophysics_visual_shard(
+            branch_id=b_id,
+            num_samples=20,
+            patch_dim=backbone.patch_dim,
+            seed=holdout_seed_base + b_idx,
+        )
+        holdout_patches_list.append(hp_t)
+        holdout_labels_list.append(hy_t)
+        expected_branch_idx.extend([b_idx] * hp_t.shape[0])
+
+    cal_x = torch.cat(cal_patches_list, dim=0)
+    cal_y = torch.cat(cal_labels_list, dim=0)
+    eval_x = torch.cat(holdout_patches_list, dim=0)
+    eval_y = torch.cat(holdout_labels_list, dim=0)
 
     with torch.no_grad():
         h_base = backbone.encode_patches(eval_x)
@@ -896,7 +1118,7 @@ def run_exoplanet_astro_vmoe_poc(
             asymmetric_focal_loss(base_logits, eval_y, gamma=focal_gamma).item()
         )
 
-    # Calibrate Linear Top-2 Softmax Router + classifier head with L_aux (alpha=0.01)
+    # Calibrate Linear Top-2 Softmax Router + classifier head with L_aux (alpha=0.01) on calibration shard only
     for p in backbone.classifier.parameters():
         p.requires_grad = True
     cal_opt = torch.optim.AdamW(
@@ -905,15 +1127,25 @@ def run_exoplanet_astro_vmoe_poc(
     )
     for _ in range(45):
         cal_opt.zero_grad()
-        out = vmoe(eval_x)
-        f_loss = asymmetric_focal_loss(out["logits"], eval_y, gamma=focal_gamma)
+        out = vmoe(cal_x)
+        f_loss = asymmetric_focal_loss(out["logits"], cal_y, gamma=focal_gamma)
         total_loss = f_loss + out["load_balance_loss_weighted"]
         total_loss.backward()
         cal_opt.step()
     for p in backbone.classifier.parameters():
         p.requires_grad = False
 
+    # Evaluate routing accuracy and focal loss strictly on the held-out shard (IP-36)
     with torch.no_grad():
+        cal_out = vmoe(cal_x)
+        cal_top2 = cal_out["topk_indices"][:, 0, :].cpu().numpy()
+        cal_hits = sum(
+            1
+            for i, exp_b in enumerate(cal_expected_branch_idx)
+            if exp_b in cal_top2[i]
+        )
+        cal_routing_acc = float(cal_hits) / float(len(cal_expected_branch_idx))
+
         final_out = vmoe(eval_x)
         vmoe_focal_loss = float(
             asymmetric_focal_loss(final_out["logits"], eval_y, gamma=focal_gamma).item()
@@ -973,6 +1205,10 @@ def run_exoplanet_astro_vmoe_poc(
         "stage3_all_zk_opoi_verified": all(b["zk_opoi_verified"] for b in branch_reports),
         "stage4_router_type": "Linear Top-2 Softmax with Load-Balancing Auxiliary Loss (alpha=0.01)",
         "stage4_routing_accuracy": round(routing_acc, 4),
+        "stage4_holdout_routing_accuracy": round(routing_acc, 4),
+        "stage4_calibration_routing_accuracy": round(cal_routing_acc, 4),
+        "stage4_calibration_seed_base": 9200,
+        "stage4_holdout_seed_base": holdout_seed_base,
         "stage4_single_baseline_focal_loss": round(single_baseline_focal_loss, 5),
         "stage4_upcycled_vmoe_focal_loss": round(vmoe_focal_loss, 5),
         "stage4_vmoe_gain_pct": round(moe_gain_pct, 2),

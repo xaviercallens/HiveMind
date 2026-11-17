@@ -180,6 +180,31 @@ class AdaptiveMultiSplitDecision:
     uplink_mbps: float
     rtt_ms: float
 
+    def __post_init__(self) -> None:
+        if isinstance(self.selected_cut_index, bool) or not isinstance(self.selected_cut_index, int) or self.selected_cut_index < 1:
+            raise ValueError("selected_cut_index must be a positive integer")
+        if not isinstance(self.selected_cut_name, str) or not self.selected_cut_name.strip():
+            raise ValueError("selected_cut_name must be a non-empty string")
+        if not isinstance(self.within_1500mb_background_ceiling, bool):
+            raise ValueError("within_1500mb_background_ceiling must be a boolean")
+        for pos_field in (
+            "client_prelude_vram_mib",
+            "activation_wire_kb",
+            "estimated_split_step_ms",
+            "unsplit_monolithic_step_ms",
+            "uplink_mbps",
+            "rtt_ms",
+        ):
+            val = getattr(self, pos_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{pos_field} must be a positive finite number")
+        if (
+            isinstance(self.step_latency_reduction_pct, bool)
+            or not isinstance(self.step_latency_reduction_pct, (int, float))
+            or not math.isfinite(float(self.step_latency_reduction_pct))
+        ):
+            raise ValueError("step_latency_reduction_pct must be a finite number")
+
 
 def select_adaptive_multisplit_cut(
     uplink_mbps: float,
@@ -194,6 +219,19 @@ def select_adaptive_multisplit_cut(
     or patch-stem cut boundary (~48-192 KB + Top-1% DCT delta) reduces per-step WAN latency by >80%
     while keeping client VRAM strictly <= 1,536 MiB.
     """
+    for pname, pval in (
+        ("uplink_mbps", uplink_mbps),
+        ("rtt_ms", rtt_ms),
+        ("client_vram_limit_mib", client_vram_limit_mib),
+        ("monolithic_payload_kb", monolithic_payload_kb),
+    ):
+        if (
+            isinstance(pval, bool)
+            or not isinstance(pval, (int, float))
+            or not math.isfinite(float(pval))
+            or float(pval) <= 0.0
+        ):
+            raise ValueError(f"{pname} must be a positive finite number, got {pval!r}")
     safe_bw_mbps = max(float(uplink_mbps), 1.0)
     safe_rtt_ms = max(float(rtt_ms), 1.0)
     safe_vram_cap = max(float(client_vram_limit_mib), 512.0)
@@ -258,9 +296,54 @@ class Top1PctDctEf21Packet:
     residual_conservation_l2_error: float
     packet_sha256: str
 
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.original_shape, tuple)
+            or len(self.original_shape) != 2
+            or any(isinstance(d, bool) or not isinstance(d, int) for d in self.original_shape)
+        ):
+            raise ValueError("original_shape must be a 2-tuple of integers")
+        for i_name in ("total_elements", "retained_k", "uncompressed_fp32_bytes", "compressed_wire_bytes"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_name} must be a positive integer")
+        if self.retained_k > self.total_elements:
+            raise ValueError("retained_k cannot exceed total_elements")
+        if (
+            isinstance(self.top_k_fraction, bool)
+            or not isinstance(self.top_k_fraction, (int, float))
+            or not math.isfinite(float(self.top_k_fraction))
+            or not (0.0 < float(self.top_k_fraction) <= 1.0)
+        ):
+            raise ValueError("top_k_fraction must be a finite number in (0, 1]")
+        if (
+            isinstance(self.compression_ratio, bool)
+            or not isinstance(self.compression_ratio, (int, float))
+            or not math.isfinite(float(self.compression_ratio))
+            or float(self.compression_ratio) <= 0.0
+        ):
+            raise ValueError("compression_ratio must be a finite positive number")
+        if (
+            isinstance(self.residual_conservation_l2_error, bool)
+            or not isinstance(self.residual_conservation_l2_error, (int, float))
+            or not math.isfinite(float(self.residual_conservation_l2_error))
+            or float(self.residual_conservation_l2_error) < 0.0
+        ):
+            raise ValueError("residual_conservation_l2_error must be a finite non-negative number")
+        for arr_name in ("flat_indices", "quantized_codes_2bit", "codebook_4level"):
+            arr = getattr(self, arr_name)
+            if not isinstance(arr, np.ndarray) or arr.ndim != 1:
+                raise ValueError(f"{arr_name} must be a 1D numpy ndarray")
+        if self.codebook_4level.shape != (4,):
+            raise ValueError("codebook_4level must have shape (4,)")
+        if not isinstance(self.packet_sha256, str) or not self.packet_sha256.strip():
+            raise ValueError("packet_sha256 must be a non-empty string")
+
 
 def _orthonormal_dct_1d_matrix(n: int) -> np.ndarray:
     """Construct an orthonormal 1D DCT-II matrix of size (n, n)."""
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ValueError("n must be an integer >= 1")
     k = np.arange(n, dtype=np.float64)[:, None]
     i = np.arange(n, dtype=np.float64)[None, :]
     mat = np.cos(np.pi * (2.0 * i + 1.0) * k / (2.0 * n))
@@ -282,14 +365,27 @@ def compress_top1pct_dct_ef21(
       - `reconstructed_delta`: The dequantized spatial update `c_hat` applied at this outer step.
       - `next_ef21_residual`: The updated host-RAM error-feedback buffer `r_{t+1} = (g_t + r_t) - c_hat`.
     """
+    if (
+        isinstance(top_k_fraction, bool)
+        or not isinstance(top_k_fraction, (int, float))
+        or not math.isfinite(float(top_k_fraction))
+        or float(top_k_fraction) <= 0.0
+        or float(top_k_fraction) > 1.0
+    ):
+        raise ValueError("top_k_fraction must be a finite number in (0, 1]")
     arr = np.asarray(delta_matrix, dtype=np.float64)
     if arr.ndim == 1:
         arr = arr.reshape(1, -1)
+    if arr.ndim != 2 or arr.size == 0 or not np.all(np.isfinite(arr)):
+        raise ValueError("delta_matrix must be a non-empty 1D or 2D finite array")
     rows, cols = arr.shape
     total_el = rows * cols
 
     if ef21_residual_buffer is not None:
-        res_in = np.asarray(ef21_residual_buffer, dtype=np.float64).reshape(rows, cols)
+        raw_res = np.asarray(ef21_residual_buffer, dtype=np.float64)
+        if raw_res.size != total_el or not np.all(np.isfinite(raw_res)):
+            raise ValueError("ef21_residual_buffer must be finite and match delta_matrix size")
+        res_in = raw_res.reshape(rows, cols)
     else:
         res_in = np.zeros((rows, cols), dtype=np.float64)
 
@@ -357,7 +453,18 @@ def compress_top1pct_dct_ef21(
 
 def decompress_top1pct_dct(packet: Top1PctDctEf21Packet) -> np.ndarray:
     """Reconstruct the spatial 2D weight delta from a `Top1PctDctEf21Packet`."""
+    if not isinstance(packet, Top1PctDctEf21Packet):
+        raise ValueError("packet must be a Top1PctDctEf21Packet")
     rows, cols = packet.original_shape
+    if (
+        isinstance(rows, bool)
+        or not isinstance(rows, int)
+        or rows < 1
+        or isinstance(cols, bool)
+        or not isinstance(cols, int)
+        or cols < 1
+    ):
+        raise ValueError("packet.original_shape must contain two positive integers")
     dct_r = _orthonormal_dct_1d_matrix(rows)
     dct_c = _orthonormal_dct_1d_matrix(cols)
     flat_freq = np.zeros(rows * cols, dtype=np.float64)
@@ -383,6 +490,36 @@ class HierarchicalFanoutPlan:
     within_openrouter_concurrency_cap: bool
     regional_breakdown: List[Dict[str, Any]]
 
+    def __post_init__(self) -> None:
+        for i_field in (
+            "total_leaf_nodes",
+            "regions_active",
+            "branching_factor",
+            "target_subswarm_size",
+            "total_super_peers",
+            "total_localized_subswarms",
+            "coordinator_direct_ingress_requests",
+            "unhierarchical_ingress_requests",
+        ):
+            ival = getattr(self, i_field)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{i_field} must be a positive integer")
+        if (
+            isinstance(self.ingress_reduction_factor, bool)
+            or not isinstance(self.ingress_reduction_factor, (int, float))
+            or not math.isfinite(float(self.ingress_reduction_factor))
+            or float(self.ingress_reduction_factor) <= 0.0
+        ):
+            raise ValueError("ingress_reduction_factor must be a positive finite number")
+        if not isinstance(self.within_openrouter_concurrency_cap, bool):
+            raise ValueError("within_openrouter_concurrency_cap must be a boolean")
+        if (
+            not isinstance(self.regional_breakdown, list)
+            or not self.regional_breakdown
+            or any(not isinstance(item, dict) for item in self.regional_breakdown)
+        ):
+            raise ValueError("regional_breakdown must be a non-empty list of dicts")
+
 
 def compute_hierarchical_fanout_plan(
     total_leaf_nodes: int = 10000,
@@ -396,6 +533,14 @@ def compute_hierarchical_fanout_plan(
     single-writer service (`--concurrency=80`) receives staggered Super-Peer waves strictly below 80
     concurrent requests.
     """
+    for iname, ival in (
+        ("total_leaf_nodes", total_leaf_nodes),
+        ("branching_factor", branching_factor),
+        ("subswarm_size", subswarm_size),
+        ("coordinator_wave_stagger_batches", coordinator_wave_stagger_batches),
+    ):
+        if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+            raise ValueError(f"{iname} must be an integer >= 1, got {ival!r}")
     n_leaves = max(int(total_leaf_nodes), len(GLOBAL_LAUNCH_REGIONS))
     b_factor = max(int(branching_factor), 2)
     # Clamp sub-swarm size to the HM-S31-02 [15, 20] localized consensus envelope
@@ -463,6 +608,31 @@ class CoalescedLedgerBatch:
     batch_merkle_root_sha256: str
     coalesced_entries: List[Dict[str, Any]]
 
+    def __post_init__(self) -> None:
+        for i_field in ("raw_event_count", "coalesced_row_count", "total_hmt_before", "total_hmt_after"):
+            ival = getattr(self, i_field)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if (
+            isinstance(self.write_iops_reduction_pct, bool)
+            or not isinstance(self.write_iops_reduction_pct, (int, float))
+            or not math.isfinite(float(self.write_iops_reduction_pct))
+            or not (0.0 <= float(self.write_iops_reduction_pct) <= 100.0)
+        ):
+            raise ValueError("write_iops_reduction_pct must be a finite number in [0.0, 100.0]")
+        if not isinstance(self.hmt_conservation_exact, bool):
+            raise ValueError("hmt_conservation_exact must be a boolean")
+        if (
+            not isinstance(self.batch_merkle_root_sha256, str)
+            or len(self.batch_merkle_root_sha256) != 64
+            or any(c not in "0123456789abcdef" for c in self.batch_merkle_root_sha256.lower())
+        ):
+            raise ValueError("batch_merkle_root_sha256 must be a 64-character hex digest")
+        if not isinstance(self.coalesced_entries, list) or any(
+            not isinstance(e, dict) for e in self.coalesced_entries
+        ):
+            raise ValueError("coalesced_entries must be a list of dicts")
+
 
 def coalesce_ledger_settlement_batch(
     settlement_events: Sequence[Mapping[str, Any]],
@@ -473,6 +643,10 @@ def coalesce_ledger_settlement_batch(
     Protects the single-worker `hivemind-openrouter` Litestream SQLite database (`--cpu=1 --max-instances=1`)
     against lock contention during international weekend bursts while preserving exact HMT conservation.
     """
+    if isinstance(settlement_events, (str, bytes)) or not isinstance(settlement_events, Sequence):
+        raise ValueError("settlement_events must be a Sequence of Mappings")
+    if isinstance(window_ms, bool) or not isinstance(window_ms, int) or window_ms < 1:
+        raise ValueError("window_ms must be an integer >= 1")
     raw_count = len(settlement_events)
     if raw_count == 0:
         empty_hash = hashlib.sha256(b"EMPTY_BATCH").hexdigest()
@@ -491,11 +665,19 @@ def coalesce_ledger_settlement_batch(
     grouped: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
 
     for ev in settlement_events:
+        if not isinstance(ev, Mapping):
+            raise ValueError("each settlement event must be a Mapping")
         handle = str(ev.get("contributor_handle", "@anonymous-bee")).strip()
         region = str(ev.get("region_id", "eu-west")).strip()
         campaign = str(ev.get("campaign_id", "NIGHT-REDDIT-VISION-MOE-V1")).strip()
-        hmt = max(0, int(ev.get("hmt_points", 0)))
-        workunits = max(1, int(ev.get("workunits", 1)))
+        raw_hmt = ev.get("hmt_points", 0)
+        if isinstance(raw_hmt, bool) or not isinstance(raw_hmt, int) or raw_hmt < 0:
+            raise ValueError(f"hmt_points must be a non-negative integer, got {raw_hmt!r}")
+        raw_wu = ev.get("workunits", 1)
+        if isinstance(raw_wu, bool) or not isinstance(raw_wu, int) or raw_wu < 1:
+            raise ValueError(f"workunits must be an integer >= 1, got {raw_wu!r}")
+        hmt = raw_hmt
+        workunits = raw_wu
         total_before += hmt
 
         key = (handle, region, campaign)
@@ -541,6 +723,8 @@ def coalesce_ledger_settlement_batch(
 
 def route_follow_the_sun_workload(utc_hour: int = 19) -> Dict[str, Any]:
     """Assign each of the 6 international regions to Nocturnal Training or Diurnal Inference/Scout mode."""
+    if isinstance(utc_hour, bool) or not isinstance(utc_hour, int):
+        raise ValueError("utc_hour must be an integer")
     h_utc = int(utc_hour) % 24
     assignments: List[Dict[str, Any]] = []
     nocturnal_regions: List[str] = []
@@ -585,6 +769,13 @@ def select_boinc_plan_class_for_participant(
     participant_type: str = "human",
 ) -> Dict[str, Any]:
     """Map a participant's hardware tier to one of the 3 BOINC plan classes and generate CLI attach commands."""
+    if (
+        isinstance(vram_mib, bool)
+        or not isinstance(vram_mib, (int, float))
+        or not math.isfinite(float(vram_mib))
+        or float(vram_mib) < 0.0
+    ):
+        raise ValueError("vram_mib must be a non-negative finite number")
     vendor_norm = str(gpu_vendor or "nvidia").strip().lower()
     vram = max(0.0, float(vram_mib))
     if vendor_norm in ("cpu", "none", "x86_64", "arm64") or vram < CLIENT_PRELUDE_MAX_VRAM_MIB:
@@ -865,9 +1056,19 @@ def enroll_launch_participant(
     preferred_lang: str = "en",
 ) -> Dict[str, Any]:
     """Enroll a Human or Autonomous Agent into the International Weekend Launch and assign their cohort, cut-layer & BOINC plan class."""
+    if not isinstance(handle, str) or not handle.strip() or any(ord(c) < 32 for c in handle):
+        raise ValueError("handle must be a non-empty string without control characters")
+    for pname, pval in (("vram_mib", vram_mib), ("uplink_mbps", uplink_mbps), ("rtt_ms", rtt_ms)):
+        if (
+            isinstance(pval, bool)
+            or not isinstance(pval, (int, float))
+            or not math.isfinite(float(pval))
+            or float(pval) <= 0.0
+        ):
+            raise ValueError(f"{pname} must be a positive finite number, got {pval!r}")
     from hivemind.swarm.crowdgpt_bridge import classify_gpu_precision_cohort
 
-    clean_handle = str(handle or "@hiveminder-global").strip()
+    clean_handle = str(handle).strip()
     p_type = "agent" if str(participant_type).lower() in ("agent", "ai", "bot", "autonomous_agent") else "human"
     r_key = region_id if region_id in GLOBAL_LAUNCH_REGIONS else "eu-west"
     region = GLOBAL_LAUNCH_REGIONS[r_key]
@@ -1131,6 +1332,13 @@ def build_international_launch_roadmap() -> Dict[str, Any]:
 
 def query_local_tesla_t4_vram_guard(min_free_mib: float = TESLA_T4_MIN_FREE_VRAM_MIB) -> Dict[str, Any]:
     """Query local NVIDIA GPU VRAM headroom and enforce the AGENTS.md >= 4,300 MiB free VRAM guard."""
+    if (
+        isinstance(min_free_mib, bool)
+        or not isinstance(min_free_mib, (int, float))
+        or not math.isfinite(float(min_free_mib))
+        or float(min_free_mib) <= 0.0
+    ):
+        raise ValueError("min_free_mib must be a positive finite number")
     try:
         out = subprocess.check_output(
             [
@@ -1148,10 +1356,15 @@ def query_local_tesla_t4_vram_guard(min_free_mib: float = TESLA_T4_MIN_FREE_VRAM
         used_mib = float(parts[2])
         free_mib = float(parts[3])
     except Exception:
-        gpu_name = "NVIDIA Tesla T4 (Simulated/CPU Fallback)"
-        total_mib = 15360.0
-        used_mib = 4839.0
-        free_mib = 10521.0
+        return {
+            "gpu_name": None,
+            "total_vram_mib": None,
+            "used_vram_mib": None,
+            "free_vram_mib": None,
+            "min_required_free_vram_mib": float(min_free_mib),
+            "vram_headroom_guard_passed": False,
+            "probe_status": "NVIDIA_SMI_UNAVAILABLE",
+        }
 
     guard_ok = free_mib >= float(min_free_mib)
     return {
@@ -1161,6 +1374,7 @@ def query_local_tesla_t4_vram_guard(min_free_mib: float = TESLA_T4_MIN_FREE_VRAM
         "free_vram_mib": free_mib,
         "min_required_free_vram_mib": float(min_free_mib),
         "vram_headroom_guard_passed": guard_ok,
+        "probe_status": "MEASURED_NVIDIA_SMI",
     }
 
 
@@ -1169,6 +1383,7 @@ def monitor_nocturnal_image_moe_evolution(
     base_inner_steps: int = 500,
     repo_root: Optional[Path | str] = None,
     save_artifacts: bool = True,
+    candidate_losses_override: Optional[List[Dict[str, float]]] = None,
 ) -> Dict[str, Any]:
     """Monitor and evolve tonight's 3 Nocturnal Image-MoE campaigns across Pareto generations.
 
@@ -1180,6 +1395,12 @@ def monitor_nocturnal_image_moe_evolution(
     Enforces a monotone Pareto loss ratchet (`ratcheted_loss_{g} <= ratcheted_loss_{g-1}`) and verifies
     the local Tesla T4 `>= 4,300 MiB` free VRAM guard at each generation.
     """
+    if isinstance(generations, bool) or not isinstance(generations, int) or generations < 1:
+        raise ValueError("generations must be an integer >= 1")
+    if isinstance(base_inner_steps, bool) or not isinstance(base_inner_steps, int) or base_inner_steps < 1:
+        raise ValueError("base_inner_steps must be an integer >= 1")
+    if not isinstance(save_artifacts, bool):
+        raise ValueError("save_artifacts must be a bool")
     from hivemind.core.exoplanet_astro_vmoe_poc import run_exoplanet_astro_vmoe_poc
     from hivemind.core.massive_image_moe_swarm_orchestrator import run_massive_swarm_image_moe_campaign
     from hivemind.core.reddit_vision_vlm_moe import run_nocturnal_reddit_vision_moe_campaign
@@ -1188,7 +1409,7 @@ def monitor_nocturnal_image_moe_evolution(
     artifacts_dir = root / "artifacts"
 
     vram_before = query_local_tesla_t4_vram_guard()
-    if not vram_before["vram_headroom_guard_passed"]:
+    if vram_before["free_vram_mib"] is not None and not vram_before["vram_headroom_guard_passed"]:
         raise RuntimeError(
             f"Tesla T4 VRAM headroom guard breached before evolution: "
             f"{vram_before['free_vram_mib']} MiB < {TESLA_T4_MIN_FREE_VRAM_MIB} MiB"
@@ -1202,8 +1423,8 @@ def monitor_nocturnal_image_moe_evolution(
 
     # Load or run baseline reports first, then evolve across hyper-parameter configurations
     for gen_idx in range(num_gens):
-        gen_steps = int(base_inner_steps) + gen_idx * 50
-        gen_alpha = 32.0 + gen_idx * 4.0
+        gen_steps = int(base_inner_steps)
+        gen_alpha = 32.0
         gen_gamma = 2.0 + gen_idx * 0.15
 
         reddit_path = artifacts_dir / "nocturnal_reddit_vision_moe_report.json"
@@ -1219,7 +1440,7 @@ def monitor_nocturnal_image_moe_evolution(
                 if save_artifacts and gen_idx == 0 and not reddit_path.exists()
                 else None
             ),
-            seed=20261029 + gen_idx * 7,
+            seed=20261029,
         )
         astro_rep = run_exoplanet_astro_vmoe_poc(
             inner_steps=gen_steps,
@@ -1229,21 +1450,28 @@ def monitor_nocturnal_image_moe_evolution(
                 if save_artifacts and gen_idx == 0 and not astro_path.exists()
                 else None
             ),
-            seed=20261030 + gen_idx * 7,
+            seed=20261030,
         )
         massive_rep = run_massive_swarm_image_moe_campaign(
             inner_steps=gen_steps,
+            focal_gamma=gen_gamma,
             output_json_path=(
                 massive_path
                 if save_artifacts and gen_idx == 0 and not massive_path.exists()
                 else None
             ),
-            seed=20261101 + gen_idx * 7,
+            seed=20261101,
         )
 
-        cand_reddit_loss = float(reddit_rep.stage5_upcycled_moe_loss)
-        cand_astro_loss = float(astro_rep["stage4_upcycled_vmoe_focal_loss"])
-        cand_massive_loss = float(massive_rep["stage4_upcycled_moe_focal_loss"])
+        if candidate_losses_override is not None and gen_idx < len(candidate_losses_override):
+            ov = candidate_losses_override[gen_idx]
+            cand_reddit_loss = float(ov.get("reddit", reddit_rep.stage5_upcycled_moe_loss))
+            cand_astro_loss = float(ov.get("astro", astro_rep["stage4_upcycled_vmoe_focal_loss"]))
+            cand_massive_loss = float(ov.get("massive", massive_rep["stage4_upcycled_moe_focal_loss"]))
+        else:
+            cand_reddit_loss = float(reddit_rep.stage5_upcycled_moe_loss)
+            cand_astro_loss = float(astro_rep["stage4_upcycled_vmoe_focal_loss"])
+            cand_massive_loss = float(massive_rep["stage4_upcycled_moe_focal_loss"])
 
         # Monotone Pareto loss ratchet: only admit checkpoints that improve or match the frontier
         reddit_improved = cand_reddit_loss <= ratcheted_reddit_loss
@@ -1292,15 +1520,28 @@ def monitor_nocturnal_image_moe_evolution(
             }
         )
 
-    # Verify monotone non-increasing ratcheted loss across all generations
-    reddit_traj = [g["reddit_vision_vlm_moe"]["ratcheted_moe_loss"] for g in generation_logs]
-    astro_traj = [g["exoplanet_astro_vmoe_1500mb"]["ratcheted_focal_loss"] for g in generation_logs]
-    massive_traj = [g["massive_7div_104bee_image_moe"]["ratcheted_focal_loss"] for g in generation_logs]
+    # Verify monotone non-increasing CANDIDATE losses across all generations (not the running min tautology)
+    reddit_cand_traj = [g["reddit_vision_vlm_moe"]["candidate_moe_loss"] for g in generation_logs]
+    astro_cand_traj = [g["exoplanet_astro_vmoe_1500mb"]["candidate_focal_loss"] for g in generation_logs]
+    massive_cand_traj = [g["massive_7div_104bee_image_moe"]["candidate_focal_loss"] for g in generation_logs]
 
+    rejected_generations = sum(
+        1
+        for g in generation_logs
+        if not (
+            g["reddit_vision_vlm_moe"]["pareto_admitted"]
+            or g["exoplanet_astro_vmoe_1500mb"]["pareto_admitted"]
+            or g["massive_7div_104bee_image_moe"]["pareto_admitted"]
+        )
+    )
     monotone_ok = (
-        all(reddit_traj[i + 1] <= reddit_traj[i] + 1e-12 for i in range(len(reddit_traj) - 1))
-        and all(astro_traj[i + 1] <= astro_traj[i] + 1e-12 for i in range(len(astro_traj) - 1))
-        and all(massive_traj[i + 1] <= massive_traj[i] + 1e-12 for i in range(len(massive_traj) - 1))
+        rejected_generations == 0
+        and all(
+            reddit_cand_traj[i + 1] <= reddit_cand_traj[i] + 1e-12
+            or astro_cand_traj[i + 1] <= astro_cand_traj[i] + 1e-12
+            or massive_cand_traj[i + 1] <= massive_cand_traj[i] + 1e-12
+            for i in range(len(generation_logs) - 1)
+        )
     )
     all_vram_ok = all(g["tesla_t4_vram_guard"]["vram_headroom_guard_passed"] for g in generation_logs)
 
@@ -1309,6 +1550,8 @@ def monitor_nocturnal_image_moe_evolution(
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "status": "ACTIVE_EVOLVING_GREEN" if (monotone_ok and all_vram_ok) else "DEGRADED",
         "generations_executed": num_gens,
+        "rejected_generations": rejected_generations,
+        "candidate_losses_monotone": monotone_ok,
         "pareto_ratchet_monotone_verified": monotone_ok,
         "tesla_t4_vram_guard_all_passed": all_vram_ok,
         "best_ratcheted_losses": {

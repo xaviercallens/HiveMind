@@ -6,6 +6,8 @@ After=ollama.service
 Requires=ollama.service
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 User=callensxavier_gmail_com
 WorkingDirectory=/home/callensxavier_gmail_com/hivemind-producer
 EnvironmentFile=/etc/hivemind/t4-coder.env

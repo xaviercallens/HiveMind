@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HiveMind producer agent: heartbeats a local OpenAI-compatible server into the OpenRouter gateway.
 
 The agent does not run inference. It advertises an endpoint you already run (Ollama, vLLM or llama.cpp server), the
@@ -29,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -41,6 +43,7 @@ import httpx
 
 HEARTBEAT_PATH: str = "/v1/hivemind/producer/heartbeat"
 CATALOG_PATH: str = "/v1/hivemind/catalog"
+REMOTE_CONFIG_PATH: str = "/v1/hivemind/remote/config"
 API_KEY_ENV: str = "HIVEMIND_API_KEY"
 ENDPOINT_TOKEN_ENV: str = "HIVEMIND_ENDPOINT_TOKEN"
 DEFAULT_EXECUTION_CLASS: str = "gpu"
@@ -55,6 +58,8 @@ Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 def parse_model_spec(raw: str) -> dict[str, str]:
     """Parse one ``--model id=local_name`` argument into a heartbeat model entry."""
+    if not isinstance(raw, str):
+        raise argparse.ArgumentTypeError(f"--model expects id=local_name, got {raw!r}")
     model_id, separator, local_name = raw.partition("=")
     model_id = model_id.strip()
     local_name = local_name.strip()
@@ -70,6 +75,10 @@ def probe_residency(
 
     Read-only and best effort: any failure (server down, timeout, odd JSON) returns ``None`` so that the heartbeat simply reports nothing.
     """
+    if not isinstance(local_endpoint, str) or not local_endpoint.strip():
+        raise ValueError("local_endpoint must be a non-empty string")
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+        raise ValueError("timeout_s must be a positive finite number")
     try:
         with httpx.Client(timeout=timeout_s, transport=transport, follow_redirects=False) as client:
             response = client.get(local_endpoint.rstrip("/") + "/api/ps")
@@ -96,6 +105,10 @@ def probe_model_sizes_mib(
     local_endpoint: str, *, transport: httpx.BaseTransport | None = None, timeout_s: float = RESIDENCY_TIMEOUT_S
 ) -> dict[str, int] | None:
     """Return ``{model_name: disk_weight_mib}`` from Ollama ``GET /api/tags``, or ``None`` if unavailable."""
+    if not isinstance(local_endpoint, str) or not local_endpoint.strip():
+        raise ValueError("local_endpoint must be a non-empty string")
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+        raise ValueError("timeout_s must be a positive finite number")
     try:
         with httpx.Client(timeout=timeout_s, transport=transport, follow_redirects=False) as client:
             response = client.get(local_endpoint.rstrip("/") + "/api/tags")
@@ -131,6 +144,10 @@ def filter_models_by_vram_budget(
     Returns ``(kept_models, dropped_descriptions)``. If ``model_sizes_mib`` or ``gpu_vram_mib`` is ``None``, all models
     are kept unchanged.
     """
+    if not isinstance(models, Sequence) or isinstance(models, (str, bytes)):
+        raise TypeError("models must be a Sequence of model dicts")
+    if model_sizes_mib is not None and not isinstance(model_sizes_mib, Mapping):
+        raise TypeError("model_sizes_mib must be a Mapping or None")
     if model_sizes_mib is None or gpu_vram_mib is None or gpu_vram_mib <= 0:
         return [dict(m) for m in models], []
     budget_mib = max(0, int(gpu_vram_mib) - max(0, int(pinned_vram_mib)) - max(0, int(min_free_vram_mib)))
@@ -152,6 +169,12 @@ def apply_residency(
     payload: dict[str, Any], resident: dict[str, int] | None, *, cold_start_s: float, gpu_vram_mib: int | None
 ) -> dict[str, Any]:
     """Add the optional residency fields to ``payload`` (in place and returned). ``resident=None`` (probe failed) adds nothing per model."""
+    if not isinstance(payload, dict):
+        raise TypeError("payload must be a dict")
+    if resident is not None and not isinstance(resident, Mapping):
+        raise TypeError("resident must be a Mapping or None")
+    if isinstance(cold_start_s, bool) or not isinstance(cold_start_s, (int, float)) or not math.isfinite(float(cold_start_s)) or float(cold_start_s) < 0.0:
+        raise ValueError("cold_start_s must be a non-negative finite number")
     if gpu_vram_mib is not None and gpu_vram_mib > 0:
         payload["gpu_vram_mib"] = int(gpu_vram_mib)
     if resident is None:
@@ -190,6 +213,10 @@ def parse_control(raw: object) -> dict[str, Any]:
 
 def write_control_state(path: str, control: dict[str, Any]) -> None:
     """Atomically publish the control state for the local shield (owner-only file, mode 0600). Raises ``OSError`` on failure."""
+    if not isinstance(path, (str, os.PathLike)) or not str(path).strip():
+        raise ValueError("path must be a non-empty path")
+    if not isinstance(control, Mapping):
+        raise TypeError("control must be a Mapping")
     body = json.dumps({"paused": control["paused"], "vram_cap_mib": control["vram_cap_mib"], "version": control.get("version")}, sort_keys=True)
     tmp = f"{path}.tmp.{os.getpid()}"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -221,6 +248,10 @@ def apply_control(payload: dict[str, Any], control: dict[str, Any] | None) -> di
     Paused: advertise zero capacity and mark ``paused``. VRAM cap: models reported loaded whose ``vram_mib`` would not fit (kept in order while the sum
     fits) are left out of the heartbeat, and the cap is reported back as ``vram_cap_mib``; if none is left the capacity is zero.
     """
+    if not isinstance(payload, dict):
+        raise TypeError("payload must be a dict")
+    if control is not None and not isinstance(control, Mapping):
+        raise TypeError("control must be a Mapping or None")
     if control is None:
         return payload
     if control["paused"]:
@@ -255,6 +286,16 @@ def build_heartbeat_payload(
     endpoint_token: str | None = None,
 ) -> dict[str, Any]:
     """Build the JSON body for POST /v1/hivemind/producer/heartbeat."""
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        raise ValueError("endpoint must be a non-empty string")
+    if not isinstance(models, list) or not models:
+        raise ValueError("models must be a non-empty list")
+    if isinstance(cost_per_1k, bool) or not isinstance(cost_per_1k, (int, float)) or not math.isfinite(float(cost_per_1k)) or float(cost_per_1k) < 0.0:
+        raise ValueError("cost_per_1k must be a finite non-negative number")
+    if isinstance(capacity_1k, bool) or not isinstance(capacity_1k, (int, float)) or not math.isfinite(float(capacity_1k)) or float(capacity_1k) < 0.0:
+        raise ValueError("capacity_1k must be a finite non-negative number")
+    if not isinstance(execution_class, str) or not execution_class.strip():
+        raise ValueError("execution_class must be a non-empty string")
     payload: dict[str, Any] = {
         "endpoint_url": endpoint,
         "models": [dict(model) for model in models],
@@ -271,6 +312,14 @@ def send_heartbeat(
     client: httpx.Client, gateway: str, api_key: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
     """POST one heartbeat and return the gateway's JSON object. Raises on HTTP or JSON errors."""
+    if not callable(getattr(client, "post", None)):
+        raise TypeError("client must expose a callable post method")
+    if not isinstance(gateway, str) or not gateway.strip():
+        raise ValueError("gateway must be a non-empty string")
+    if not isinstance(api_key, str) or not api_key.strip():
+        raise ValueError("api_key must be a non-empty string")
+    if not isinstance(payload, Mapping):
+        raise TypeError("payload must be a Mapping")
     response = client.post(
         gateway.rstrip("/") + HEARTBEAT_PATH,
         json=payload,
@@ -285,6 +334,10 @@ def send_heartbeat(
 
 def fetch_catalog(client: httpx.Client, gateway: str) -> list[dict[str, Any]]:
     """The gateway's public capability tiers (smallest GPU requirement first)."""
+    if not callable(getattr(client, "get", None)):
+        raise TypeError("client must expose a callable get method")
+    if not isinstance(gateway, str) or not gateway.strip():
+        raise ValueError("gateway must be a non-empty string")
     response = client.get(gateway.rstrip("/") + CATALOG_PATH)
     response.raise_for_status()
     tiers = response.json().get("tiers")
@@ -293,8 +346,29 @@ def fetch_catalog(client: httpx.Client, gateway: str) -> list[dict[str, Any]]:
     return [tier for tier in tiers if isinstance(tier, dict)]
 
 
+def fetch_remote_config(client: httpx.Client, gateway: str, api_key: str) -> dict[str, Any]:
+    """Fetch the producer's remote control configuration from GET /v1/hivemind/remote/config."""
+    if not callable(getattr(client, "get", None)):
+        raise TypeError("client must expose a callable get method")
+    if not isinstance(gateway, str) or not gateway.strip():
+        raise ValueError("gateway must be a non-empty string")
+    if not isinstance(api_key, str) or not api_key.strip():
+        raise ValueError("api_key must be a non-empty string")
+    response = client.get(
+        gateway.rstrip("/") + REMOTE_CONFIG_PATH,
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    response.raise_for_status()
+    rc = response.json().get("remote_config")
+    if not isinstance(rc, dict) or not rc:
+        raise ValueError("remote config response has no remote_config object")
+    return dict(rc)
+
+
 def recommend(tiers: Sequence[dict[str, Any]], vram_gb: float) -> dict[str, Any] | None:
     """The biggest tier whose recommended minimum memory fits ``vram_gb``, or ``None``."""
+    if isinstance(vram_gb, bool) or not isinstance(vram_gb, (int, float)) or not math.isfinite(float(vram_gb)) or float(vram_gb) < 0.0:
+        raise ValueError("vram_gb must be a finite non-negative number")
     fitting = [tier for tier in tiers if float(tier["min_vram_gb"]) <= vram_gb]
     return max(fitting, key=lambda tier: float(tier["min_vram_gb"])) if fitting else None
 
@@ -305,6 +379,8 @@ def detect_vram_gb(run: Runner = subprocess.run) -> float | None:
     ``nvidia-smi`` can fail even on a working card when the driver is unreachable from the current user; pass
     ``--vram-gb`` in that case.
     """
+    if not callable(run):
+        raise TypeError("run must be callable")
     try:
         result = run(
             ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
@@ -328,6 +404,12 @@ def preflight(client: httpx.Client, endpoint: str, token: str | None, local_name
 
     Raises ``httpx.HTTPError`` or ``ValueError`` when the endpoint cannot be read at all.
     """
+    if not callable(getattr(client, "get", None)):
+        raise TypeError("client must expose a callable get method")
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        raise ValueError("endpoint must be a non-empty string")
+    if not isinstance(local_names, Sequence) or isinstance(local_names, (str, bytes)):
+        raise TypeError("local_names must be a Sequence of strings")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     response = client.get(endpoint.rstrip("/") + "/v1/models", headers=headers)
     response.raise_for_status()
@@ -366,13 +448,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--suggest", action="store_true", help="Print the best tier for --vram-gb / --detect-vram and exit (no key needed)")
     parser.add_argument("--vram-gb", type=float, help="Your GPU memory in GB (for --suggest)")
     parser.add_argument("--detect-vram", action="store_true", help="Read GPU memory from nvidia-smi (for --suggest)")
+    parser.add_argument("--residency", action="store_true", help="Report live GPU VRAM residency on each heartbeat (enabled by default unless --no-residency)")
     parser.add_argument("--no-residency", action="store_true", help="Do not ask the local model server which models are loaded; heartbeats then carry no residency data")
     parser.add_argument("--local-endpoint", default=DEFAULT_LOCAL_ENDPOINT, help=f"Local Ollama base URL for the read-only GET /api/ps residency probe (default {DEFAULT_LOCAL_ENDPOINT})")
+    parser.add_argument("--routed-upstream", action="append", default=[], metavar="LOCAL_NAME=URL", help="Mark a non-Ollama routed model (e.g. hf.co/Vxtzq/Crowd-v1=http://127.0.0.1:8791) as loaded while its local /healthz or /v1/models answers 200")
     parser.add_argument("--cold-start-s", type=float, default=DEFAULT_COLD_START_S, help=f"Your estimate of the seconds needed to load a model that is not resident (default {DEFAULT_COLD_START_S:g}, max 600)")
     parser.add_argument("--gpu-vram-mib", type=int, help="Card memory in MiB to report with residency (default: read from nvidia-smi when possible)")
     parser.add_argument("--pinned-vram-mib", type=int, default=0, help="VRAM in MiB reserved by pinned daemons such as llama-server (default 0)")
     parser.add_argument("--min-free-vram-mib", type=int, default=0, help="Minimum free VRAM headroom in MiB to preserve when filtering models (e.g. 4300 on Tesla T4)")
     parser.add_argument("--control-state-file", metavar="PATH", help="Where to publish the remote pause/VRAM-cap state (owner-only file, mode 0600) for the producer shield's --control-state-file; omit to not write it")
+    parser.add_argument("--sync-remote-config", action="store_true", help="Sync node_state and min_price_per_1k from /v1/hivemind/remote/config before each heartbeat")
     parser.add_argument("--skip-preflight", action="store_true", help="Do not check that your endpoint lists the model before the first heartbeat")
     return parser
 
@@ -498,6 +583,12 @@ def main(
                     return 1
                 models = kept_models
 
+        routed_upstreams: dict[str, str] = {}
+        for item in getattr(args, "routed_upstream", ()):
+            r_name, sep, r_url = str(item).partition("=")
+            if sep and r_name.strip() and r_url.strip().startswith(("http://127.0.0.1", "http://localhost")):
+                routed_upstreams[r_name.strip()] = r_url.strip().rstrip("/")
+
         def make_payload() -> dict[str, Any]:
             built = build_heartbeat_payload(
                 endpoint=args.endpoint, models=models, cost_per_1k=cost, capacity_1k=capacity,
@@ -506,6 +597,24 @@ def main(
             if args.no_residency:
                 return built
             resident = probe_residency(args.local_endpoint, transport=residency_transport)
+            if routed_upstreams:
+                merged_res = dict(resident or {})
+                with httpx.Client(timeout=RESIDENCY_TIMEOUT_S, transport=residency_transport, follow_redirects=False) as rclient:
+                    for r_name, r_url in routed_upstreams.items():
+                        try:
+                            hr = rclient.get(r_url + "/healthz")
+                            if hr.status_code == 200:
+                                hjson = hr.json() if hr.content else {}
+                                dev_info = hjson.get("device") if isinstance(hjson, dict) else {}
+                                est_vram = dev_info.get("estimated_model_vram_mib", 0) if isinstance(dev_info, dict) else 0
+                                merged_res[r_name] = int(est_vram) if isinstance(est_vram, int) and est_vram >= 0 else 0
+                                continue
+                            mr = rclient.get(r_url + "/v1/models")
+                            if mr.status_code == 200:
+                                merged_res[r_name] = 0
+                        except (httpx.HTTPError, ValueError):
+                            pass
+                resident = merged_res if merged_res or resident is not None else None
             return apply_residency(built, resident, cold_start_s=args.cold_start_s, gpu_vram_mib=gpu_mib)
 
         # Remote control (HM-S16-05): the gateway's heartbeat ack may carry {"paused", "vram_cap_mib"}; the next heartbeat obeys it and the state is
@@ -515,7 +624,13 @@ def main(
 
         def beat() -> dict[str, Any]:
             nonlocal control, warned
-            body = send_heartbeat(client, args.gateway, api_key, apply_control(make_payload(), control))
+            current_payload = make_payload()
+            if args.sync_remote_config:
+                rc = fetch_remote_config(client, args.gateway, api_key)
+                if rc.get("node_state") == "paused":
+                    return {"status": "paused_by_remote_control", "remote_config": rc}
+                current_payload["cost_per_1k"] = max(float(current_payload["cost_per_1k"]), float(rc.get("min_price_per_1k", current_payload["cost_per_1k"])))
+            body = send_heartbeat(client, args.gateway, api_key, apply_control(current_payload, control))
             if "control" in body:
                 try:
                     received = parse_control(body["control"])
@@ -545,7 +660,10 @@ def main(
             while True:
                 try:
                     body = beat()
-                    print(f"heartbeat ok: {json.dumps(body, sort_keys=True)}", flush=True)
+                    if body.get("status") == "paused_by_remote_control":
+                        print("remote control: node_state is paused, skipping heartbeat", flush=True)
+                    else:
+                        print(f"heartbeat ok: {json.dumps(body, sort_keys=True)}", flush=True)
                 except (httpx.HTTPError, ValueError) as exc:
                     print(f"heartbeat failed, retrying: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
                 time.sleep(args.interval_s)

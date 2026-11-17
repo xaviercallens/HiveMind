@@ -1,6 +1,8 @@
 # HiveMind Improvement Plan (2026-11-02 update)
 
 > Successor to [`IMPROVEMENT_PLAN_2026-11-01.md`](IMPROVEMENT_PLAN_2026-11-01.md) (merged in #420). Daily read-only audit of `main` at `36da030`: five parallel area audits for **new findings only** (IP-72 to IP-138 excluded by brief), then the author re-checked seven of them in the code. **No code was changed by this audit**; every item names a test that must fail on current `main` before the fix. Numbering continues at IP-139. Key-like literals are referred to by file and line only, never quoted.
+>
+> **Status on `main` (2026-11-07):** Every non-protected item in this plan (`IP-139..IP-161`, `IP-163..IP-171`, `IP-173..IP-182`, `IP-184..IP-191`, `IP-194..IP-195`) is closed on `main` through PRs `#472`–`#708` (only `IP-162`, `IP-172`, `IP-183`, `IP-192`, `IP-193` touch `.github/workflows/*`, `pyproject.toml`, or `src/hivemind/security/*`, which are owner-only protected paths; `IP-162` is enforced in `scripts/pr_gatekeeper.py`).
 
 ## 1. Closed or narrowed since the previous plan
 

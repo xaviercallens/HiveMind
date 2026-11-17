@@ -1,0 +1,457 @@
+{
+  "HM_S14_01": {
+    "experiment": "HM-S14-01-RESCORE",
+    "source_experiment": "NIGHT-MOE-1",
+    "subjects": {
+      "cyber": {
+        "adapter_correct": 330,
+        "adapter_vs_control_delta": 0.002,
+        "b_adapter_only_aligned": 9,
+        "c_control_only_aligned": 8,
+        "control_correct": 329,
+        "control_kind": "matched_shuffled_label",
+        "legacy_reason": "own-pack change +0.0100, p=0.38331",
+        "legacy_verdict": "NO_GAIN",
+        "mcnemar_p_aligned": 1.0,
+        "mcnemar_p_worst_case": 1.0,
+        "net_items_over_control": 1,
+        "reason": "own-pack change vs base +0.0100 (p=0.38331)",
+        "verdict": "NO_GAIN"
+      },
+      "exoplanet": {
+        "adapter_correct": 524,
+        "adapter_vs_control_delta": 0.4867,
+        "b_adapter_only_aligned": 309,
+        "c_control_only_aligned": 17,
+        "control_correct": 232,
+        "control_kind": "matched_shuffled_label",
+        "legacy_reason": "shuffled-label control gained significantly over base (p=0.0237)",
+        "legacy_verdict": "VOID",
+        "mcnemar_p_aligned": 1.5099828050408798e-70,
+        "mcnemar_p_worst_case": 5.10975490905103e-47,
+        "net_items_over_control": 292,
+        "reason": "adapter beats matched control 309 to 17 (delta +0.4867, p_aligned=1.510e-70, p_worst=5.110e-47) and base (+0.5117)",
+        "verdict": "VALID"
+      },
+      "maths": {
+        "adapter_correct": 143,
+        "adapter_vs_control_delta": 0.715,
+        "control_correct": 0,
+        "control_kind": "cross_domain_generative",
+        "legacy_reason": "own-pack change -0.0700, p=0.07039",
+        "legacy_verdict": "NO_GAIN",
+        "mcnemar_p_aligned": 0.07039,
+        "mcnemar_p_worst_case": 0.07039,
+        "reason": "generative task: own-pack vs base -0.0700 (p=0.07039); delta vs cross-domain control +0.7150",
+        "verdict": "NO_GAIN"
+      },
+      "stars": {
+        "adapter_correct": 283,
+        "adapter_vs_control_delta": 0.5868,
+        "b_adapter_only_aligned": 206,
+        "c_control_only_aligned": 20,
+        "control_correct": 97,
+        "control_kind": "matched_shuffled_label",
+        "legacy_reason": "own-pack gain +0.4038 (p=0.0); control HARM",
+        "legacy_verdict": "VALID",
+        "mcnemar_p_aligned": 4.2861074810132236e-40,
+        "mcnemar_p_worst_case": 1.5895176042818048e-34,
+        "net_items_over_control": 186,
+        "reason": "adapter beats matched control 206 to 20 (delta +0.5868, p_aligned=4.286e-40, p_worst=1.590e-34) and base (+0.4038)",
+        "verdict": "VALID"
+      }
+    },
+    "supported": true
+  },
+  "HM_S14_08": {
+    "adapter": "stars",
+    "combined_all_evaluated_receipt": {
+      "b": 23,
+      "baseline_pass": 425,
+      "both_fail": 191,
+      "both_pass": 402,
+      "c": 153,
+      "candidate_pass": 555,
+      "decision": "ACCEPT",
+      "n": 769,
+      "p_improvement": 4.675986988935909e-25,
+      "p_regression": 1.0,
+      "p_two_sided": 9.351973977871818e-25,
+      "policy": {
+        "alpha": 0.05,
+        "max_unverified_fraction": 0.05,
+        "min_n": 30,
+        "require_improvement": true,
+        "tolerated_net_loss": 0
+      },
+      "reasons": [
+        "candidate did not lose on net"
+      ],
+      "receipt_sha256": "e511e20cd826c276d6689502062e335ef03a7258d3950b6614d0e32dbd52c7e2",
+      "unverified_baseline": 0,
+      "unverified_candidate": 0,
+      "unverified_fraction": 0.0
+    },
+    "g_r2_complete_grid_ready": false,
+    "may_serve_on_own_and_pooled_gate": true,
+    "missing_cells": [
+      "maths"
+    ],
+    "own_pack_receipt": {
+      "b": 20,
+      "baseline_pass": 155,
+      "both_fail": 14,
+      "both_pass": 135,
+      "c": 148,
+      "candidate_pass": 283,
+      "decision": "ACCEPT",
+      "n": 317,
+      "p_improvement": 1.2522412284852241e-25,
+      "p_regression": 1.0,
+      "p_two_sided": 2.5044824569704483e-25,
+      "policy": {
+        "alpha": 0.05,
+        "max_unverified_fraction": 0.05,
+        "min_n": 30,
+        "require_improvement": true,
+        "tolerated_net_loss": 0
+      },
+      "reasons": [
+        "candidate did not lose on net"
+      ],
+      "receipt_sha256": "e4b4a0913521d398175958c50721806a055529e523f3d133721b25d247dde05c",
+      "unverified_baseline": 0,
+      "unverified_candidate": 0,
+      "unverified_fraction": 0.0
+    },
+    "pooled_regression_receipt": {
+      "b": 3,
+      "baseline_pass": 270,
+      "both_fail": 177,
+      "both_pass": 267,
+      "c": 5,
+      "candidate_pass": 272,
+      "decision": "ACCEPT",
+      "n": 452,
+      "p_improvement": 0.36328125,
+      "p_regression": 0.85546875,
+      "p_two_sided": 0.7265625,
+      "policy": {
+        "alpha": 0.05,
+        "max_unverified_fraction": 0.05,
+        "min_n": 30,
+        "require_improvement": false,
+        "tolerated_net_loss": 0
+      },
+      "reasons": [
+        "candidate did not lose on net"
+      ],
+      "receipt_sha256": "d2f428c83e54b972532ec482b6f82e312cf52f5bd1b8a0218a2b282849fef868",
+      "unverified_baseline": 0,
+      "unverified_candidate": 0,
+      "unverified_fraction": 0.0
+    },
+    "regression_packs": {
+      "astro_transfer": {
+        "statistical_non_regression": {
+          "b": 0,
+          "baseline_pass": 108,
+          "both_fail": 41,
+          "both_pass": 108,
+          "c": 3,
+          "candidate_pass": 111,
+          "decision": "ACCEPT",
+          "n": 152,
+          "p_improvement": 0.125,
+          "p_regression": 1.0,
+          "p_two_sided": 0.25,
+          "policy": {
+            "alpha": 0.05,
+            "max_unverified_fraction": 0.05,
+            "min_n": 30,
+            "require_improvement": false,
+            "tolerated_net_loss": 152
+          },
+          "reasons": [
+            "candidate did not lose on net"
+          ],
+          "receipt_sha256": "def2213f447a7c80faa2f0c0060db0bbeab7f2c46787a9f8e0d91962d92d8d36",
+          "unverified_baseline": 0,
+          "unverified_candidate": 0,
+          "unverified_fraction": 0.0
+        },
+        "strict_zero_net_loss": {
+          "b": 0,
+          "baseline_pass": 108,
+          "both_fail": 41,
+          "both_pass": 108,
+          "c": 3,
+          "candidate_pass": 111,
+          "decision": "ACCEPT",
+          "n": 152,
+          "p_improvement": 0.125,
+          "p_regression": 1.0,
+          "p_two_sided": 0.25,
+          "policy": {
+            "alpha": 0.05,
+            "max_unverified_fraction": 0.05,
+            "min_n": 30,
+            "require_improvement": false,
+            "tolerated_net_loss": 0
+          },
+          "reasons": [
+            "candidate did not lose on net"
+          ],
+          "receipt_sha256": "49e0ef30ea7f996bc224b96663bb511a2e4374fbc4004b127fd1c89ef0562ee2",
+          "unverified_baseline": 0,
+          "unverified_candidate": 0,
+          "unverified_fraction": 0.0
+        }
+      },
+      "cyber": {
+        "statistical_non_regression": {
+          "b": 0,
+          "baseline_pass": 79,
+          "both_fail": 21,
+          "both_pass": 79,
+          "c": 0,
+          "candidate_pass": 79,
+          "decision": "ACCEPT",
+          "n": 100,
+          "p_improvement": 1.0,
+          "p_regression": 1.0,
+          "p_two_sided": 1.0,
+          "policy": {
+            "alpha": 0.05,
+            "max_unverified_fraction": 0.05,
+            "min_n": 30,
+            "require_improvement": false,
+            "tolerated_net_loss": 100
+          },
+          "reasons": [
+            "no regression on the held-out tasks"
+          ],
+          "receipt_sha256": "007eec7b72b97cba94e007d2e4c4722dffe3da436d932be7f3c5a1d49f45ac73",
+          "unverified_baseline": 0,
+          "unverified_candidate": 0,
+          "unverified_fraction": 0.0
+        },
+        "strict_zero_net_loss": {
+          "b": 0,
+          "baseline_pass": 79,
+          "both_fail": 21,
+          "both_pass": 79,
+          "c": 0,
+          "candidate_pass": 79,
+          "decision": "ACCEPT",
+          "n": 100,
+          "p_improvement": 1.0,
+          "p_regression": 1.0,
+          "p_two_sided": 1.0,
+          "policy": {
+            "alpha": 0.05,
+            "max_unverified_fraction": 0.05,
+            "min_n": 30,
+            "require_improvement": false,
+            "tolerated_net_loss": 0
+          },
+          "reasons": [
+            "no regression on the held-out tasks"
+          ],
+          "receipt_sha256": "d857af9aa29fbb80d45618a6e9acab5872d62b413de6c42cdd160410467b5cc7",
+          "unverified_baseline": 0,
+          "unverified_candidate": 0,
+          "unverified_fraction": 0.0
+        }
+      },
+      "exoplanet": {
+        "statistical_non_regression": {
+          "b": 0,
+          "baseline_pass": 38,
+          "both_fail": 62,
+          "both_pass": 38,
+          "c": 0,
+          "candidate_pass": 38,
+          "decision": "ACCEPT",
+          "n": 100,
+          "p_improvement": 1.0,
+          "p_regression": 1.0,
+          "p_two_sided": 1.0,
+          "policy": {
+            "alpha": 0.05,
+            "max_unverified_fraction": 0.05,
+            "min_n": 30,
+            "require_improvement": false,
+            "tolerated_net_loss": 100
+          },
+          "reasons": [
+            "no regression on the held-out tasks"
+          ],
+          "receipt_sha256": "a2f51a2cc91ee48289969858c2fd66330ccc81ddd7a5f6b5427698d46bbce714",
+          "unverified_baseline": 0,
+          "unverified_candidate": 0,
+          "unverified_fraction": 0.0
+        },
+        "strict_zero_net_loss": {
+          "b": 0,
+          "baseline_pass": 38,
+          "both_fail": 62,
+          "both_pass": 38,
+          "c": 0,
+          "candidate_pass": 38,
+          "decision": "ACCEPT",
+          "n": 100,
+          "p_improvement": 1.0,
+          "p_regression": 1.0,
+          "p_two_sided": 1.0,
+          "policy": {
+            "alpha": 0.05,
+            "max_unverified_fraction": 0.05,
+            "min_n": 30,
+            "require_improvement": false,
+            "tolerated_net_loss": 0
+          },
+          "reasons": [
+            "no regression on the held-out tasks"
+          ],
+          "receipt_sha256": "dc603b9861a445e4f745475308e5d7b539bb32bded3379caac973077ed77fb1e",
+          "unverified_baseline": 0,
+          "unverified_candidate": 0,
+          "unverified_fraction": 0.0
+        }
+      },
+      "physics_transfer": {
+        "statistical_non_regression": {
+          "b": 3,
+          "baseline_pass": 45,
+          "both_fail": 53,
+          "both_pass": 42,
+          "c": 2,
+          "candidate_pass": 44,
+          "decision": "ACCEPT",
+          "n": 100,
+          "p_improvement": 0.8125,
+          "p_regression": 0.5,
+          "p_two_sided": 1.0,
+          "policy": {
+            "alpha": 0.05,
+            "max_unverified_fraction": 0.05,
+            "min_n": 30,
+            "require_improvement": false,
+            "tolerated_net_loss": 100
+          },
+          "reasons": [
+            "no regression on the held-out tasks"
+          ],
+          "receipt_sha256": "596760e6a98d2bd82c050eb78fb3d2a33c4afe3bb62dfecc47df1a40cbc0eabe",
+          "unverified_baseline": 0,
+          "unverified_candidate": 0,
+          "unverified_fraction": 0.0
+        },
+        "strict_zero_net_loss": {
+          "b": 3,
+          "baseline_pass": 45,
+          "both_fail": 53,
+          "both_pass": 42,
+          "c": 2,
+          "candidate_pass": 44,
+          "decision": "REJECT",
+          "n": 100,
+          "p_improvement": 0.8125,
+          "p_regression": 0.5,
+          "p_two_sided": 1.0,
+          "policy": {
+            "alpha": 0.05,
+            "max_unverified_fraction": 0.05,
+            "min_n": 30,
+            "require_improvement": false,
+            "tolerated_net_loss": 0
+          },
+          "reasons": [
+            "net loss 1 tasks (b=3, c=2) exceeds tolerated 0"
+          ],
+          "receipt_sha256": "c9a9bb4099ff634a3b6822499d77d5d8b1d0ad5b55e305efcd6e584fd976a216",
+          "unverified_baseline": 0,
+          "unverified_candidate": 0,
+          "unverified_fraction": 0.0
+        }
+      }
+    },
+    "supported": true
+  },
+  "HM_S15_01": {
+    "early_regret_signer_budget_20": 24.06,
+    "early_regret_uncapped_trials": 82.58,
+    "gap_signer_budget_20": -0.00194,
+    "gap_uncapped_trials": 0.26427,
+    "supported": true
+  },
+  "HM_S15_02": {
+    "dual_scout_wins_seeds": 20,
+    "early_regret_dual_scout_1_corrupted": 5.02,
+    "early_regret_honest_reference": 21.62,
+    "early_regret_no_scout_check": 49.45,
+    "h4_gain_survival_ratio": 1.5963,
+    "supported": true
+  },
+  "HM_S15_04": {
+    "decomposed_composite_success": {
+      "hi": 0.6609932510229727,
+      "lo": 0.6425067489770274,
+      "mean": 0.65175,
+      "n": 20,
+      "sd": 0.021090344510674725
+    },
+    "decomposed_wins_seeds": 20,
+    "supported": true,
+    "whole_task_router_success": {
+      "hi": 0.10048043506639759,
+      "lo": 0.08501956493360241,
+      "mean": 0.09275,
+      "n": 20,
+      "sd": 0.017638549289911334
+    }
+  },
+  "HM_S15_05": {
+    "bad_candidate_gate_accepted": false,
+    "good_candidate_run": {
+      "admissible_mix": true,
+      "dpo_loss_after": 0.31326168751822286,
+      "dpo_loss_before": 0.6931471805599453,
+      "gate_accepted": true,
+      "gate_decision": "ACCEPT",
+      "unverified_rows": 3,
+      "verified_rows": 7
+    },
+    "recorded_when_opted_out": false,
+    "supported": true,
+    "unverified_correction_recorded": false
+  },
+  "HM_S15_06": {
+    "accepted_by_krum": [
+      "host_0",
+      "host_1",
+      "host_2",
+      "host_3",
+      "host_4"
+    ],
+    "exact_product_space_frobenius_error": 1.4e-07,
+    "naive_factor_product_frobenius_error": 19.322546,
+    "privacy_budget_ceiling_blocked_excess_step": true,
+    "privacy_epsilon_after_3_steps": 4.5526,
+    "rejected_by_krum": [
+      "byzantine_host"
+    ],
+    "supported": true
+  },
+  "controls": {
+    "negative_corrupted_both_scouts_fails_defence": true,
+    "positive_oracle_wiring": true
+  },
+  "experiment_id": "S14_S15_QUEENBEE_NIGHT_MOE",
+  "prereg_file": "S14_S15_queenbee_night_moe_prereg.json",
+  "prereg_sha256": "95f5ac04d26774a1f60c746c16f9130798377adad705183e1f037d4924e3acb8",
+  "run_utc": "2026-11-06T15:58:02Z",
+  "valid": true,
+  "wall_s": 8.18
+}

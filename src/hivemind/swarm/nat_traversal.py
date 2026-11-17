@@ -22,6 +22,7 @@ Only IPv4 transport is used for sockets; IPv6 addresses are still encoded and de
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import heapq
 import hmac
@@ -104,6 +105,10 @@ class StunError(Exception):
 
 def message_type(method: int, cls: int) -> int:
     """Interleave the 12-bit method and 2-bit class into the 14-bit STUN message type."""
+    if isinstance(method, bool) or not isinstance(method, int) or not (0 <= method <= 0x0FFF):
+        raise ValueError("method must be an integer in 0..0x0FFF")
+    if isinstance(cls, bool) or not isinstance(cls, int) or not (0 <= cls <= 0b11):
+        raise ValueError("cls must be an integer in 0..3")
     return (
         ((method & 0x0F80) << 2)
         | ((method & 0x0070) << 1)
@@ -114,6 +119,8 @@ def message_type(method: int, cls: int) -> int:
 
 
 def split_message_type(msg_type: int) -> Tuple[int, int]:
+    if isinstance(msg_type, bool) or not isinstance(msg_type, int) or not (0 <= msg_type <= 0x3FFF):
+        raise ValueError("msg_type must be an integer in 0..0x3FFF")
     method = (msg_type & 0x000F) | ((msg_type & 0x00E0) >> 1) | ((msg_type & 0x3E00) >> 2)
     cls = ((msg_type & 0x0100) >> 7) | ((msg_type & 0x0010) >> 4)
     return method, cls
@@ -121,15 +128,30 @@ def split_message_type(msg_type: int) -> Tuple[int, int]:
 
 def long_term_key(username: str, realm: str, password: str) -> bytes:
     """RFC 5389 §15.4 long-term credential key: MD5(username ":" realm ":" password)."""
+    if not isinstance(username, str) or not isinstance(realm, str) or not isinstance(password, str):
+        raise TypeError("username, realm, and password must be strings")
     return hashlib.md5(f"{username}:{realm}:{password}".encode("utf-8")).digest()
 
 
 def short_term_key(password: str) -> bytes:
     """RFC 5389 §15.4 short-term credential key: the password itself."""
+    if not isinstance(password, str):
+        raise TypeError("password must be a string")
     return password.encode("utf-8")
 
 
 def encode_xor_address(addr: Address, transaction_id: bytes) -> bytes:
+    if (
+        not isinstance(addr, tuple)
+        or len(addr) != 2
+        or not isinstance(addr[0], str)
+        or isinstance(addr[1], bool)
+        or not isinstance(addr[1], int)
+        or not (0 <= addr[1] <= 65535)
+    ):
+        raise ValueError("addr must be a (host, port) tuple with port in 0..65535")
+    if not isinstance(transaction_id, (bytes, bytearray)) or len(transaction_id) != 12:
+        raise ValueError("transaction_id must be 12 bytes")
     ip = ipaddress.ip_address(addr[0])
     port = addr[1] ^ (MAGIC_COOKIE >> 16)
     if ip.version == 4:
@@ -139,6 +161,8 @@ def encode_xor_address(addr: Address, transaction_id: bytes) -> bytes:
 
 
 def decode_xor_address(value: bytes, transaction_id: bytes) -> Address:
+    if not isinstance(value, (bytes, bytearray)) or not isinstance(transaction_id, (bytes, bytearray)):
+        raise TypeError("value and transaction_id must be bytes")
     family = _address_family(value)
     if len(transaction_id) != 12:
         raise StunError("invalid STUN transaction ID length")
@@ -156,6 +180,8 @@ def decode_xor_address(value: bytes, transaction_id: bytes) -> Address:
 
 
 def decode_plain_address(value: bytes) -> Address:
+    if not isinstance(value, (bytes, bytearray)):
+        raise TypeError("value must be bytes")
     family = _address_family(value)
     port = struct.unpack("!H", value[2:4])[0]
     if family == 0x01:
@@ -166,6 +192,8 @@ def decode_plain_address(value: bytes) -> Address:
 
 
 def _address_family(value: bytes) -> int:
+    if not isinstance(value, (bytes, bytearray)):
+        raise TypeError("value must be bytes")
     if len(value) < 4:
         raise StunError("truncated STUN address")
     family = value[1]
@@ -177,6 +205,8 @@ def _address_family(value: bytes) -> int:
 
 def is_channel_data(data: bytes) -> bool:
     """True when `data` is a ChannelData message rather than a STUN message (RFC 5766 §11.4)."""
+    if not isinstance(data, (bytes, bytearray)):
+        raise TypeError("data must be bytes")
     return len(data) >= CHANNEL_HEADER.size and bool(data[0] & CHANNEL_DATA_FLAG) and not data[0] & 0x80
 
 
@@ -202,6 +232,8 @@ def encode_channel_number(number: int) -> bytes:
 
 def decode_channel_number(value: bytes) -> int:
     """Decode a CHANNEL-NUMBER attribute; the RFFU field is ignored on reception (§14.1)."""
+    if not isinstance(value, (bytes, bytearray)):
+        raise TypeError("value must be bytes")
     if len(value) != 4:
         raise StunError("CHANNEL-NUMBER must be 4 bytes long")
     number = struct.unpack("!H", value[:2])[0]
@@ -212,6 +244,8 @@ def decode_channel_number(value: bytes) -> int:
 
 def decode_channel_data(data: bytes) -> Tuple[int, bytes]:
     """Parse a ChannelData message into `(channel_number, payload)`."""
+    if not isinstance(data, (bytes, bytearray)):
+        raise TypeError("data must be bytes")
     if not is_channel_data(data):
         raise StunError("not a ChannelData message")
     channel_number, length = CHANNEL_HEADER.unpack_from(data, 0)
@@ -222,6 +256,10 @@ def decode_channel_data(data: bytes) -> Tuple[int, bytes]:
 
 
 def encode_error_code(code: int, reason: str) -> bytes:
+    if isinstance(code, bool) or not isinstance(code, int) or not (300 <= code <= 699):
+        raise ValueError("STUN error code must be an integer in 300..699")
+    if not isinstance(reason, str):
+        raise TypeError("STUN error reason must be a string")
     return struct.pack("!HBB", 0, code // 100, code % 100) + reason.encode("utf-8")
 
 
@@ -278,6 +316,23 @@ class StunMessage:
     cls: int
     transaction_id: bytes = field(default_factory=lambda: secrets.token_bytes(12))
     attributes: List[Tuple[int, bytes]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.method, bool) or not isinstance(self.method, int) or not (0 <= self.method <= 0x0FFF):
+            raise ValueError("method must be an integer in 0..0x0FFF")
+        if isinstance(self.cls, bool) or not isinstance(self.cls, int) or not (0 <= self.cls <= 3):
+            raise ValueError("cls must be an integer in 0..3")
+        if not isinstance(self.transaction_id, (bytes, bytearray)) or len(self.transaction_id) != 12:
+            raise ValueError("transaction_id must be 12 bytes")
+        if not isinstance(self.attributes, list) or any(
+            not isinstance(item, tuple)
+            or len(item) != 2
+            or isinstance(item[0], bool)
+            or not isinstance(item[0], int)
+            or not isinstance(item[1], (bytes, bytearray))
+            for item in self.attributes
+        ):
+            raise ValueError("attributes must be a list of (int, bytes) tuples")
 
     def add(self, attr_type: int, value: bytes) -> "StunMessage":
         self.attributes.append((attr_type, value))
@@ -340,6 +395,8 @@ class StunMessage:
 
 def verify_message_integrity(raw: bytes, key: bytes) -> bool:
     """Check MESSAGE-INTEGRITY per RFC 5389 §15.4 (length field covers up to the MAC)."""
+    if not isinstance(raw, (bytes, bytearray)) or not isinstance(key, (bytes, bytearray)) or len(key) == 0:
+        raise ValueError("raw must be bytes and key must be non-empty bytes")
     try:
         StunMessage.decode(raw)
         entries = _wire_attributes(raw)
@@ -356,6 +413,8 @@ def verify_message_integrity(raw: bytes, key: bytes) -> bool:
 
 def verify_fingerprint(raw: bytes) -> bool:
     """Check the trailing FINGERPRINT attribute (CRC-32 XOR 0x5354554E, RFC 5389 §15.5)."""
+    if not isinstance(raw, (bytes, bytearray)):
+        raise ValueError("raw must be bytes")
     try:
         entries = _wire_attributes(raw)
     except StunError:
@@ -367,6 +426,7 @@ def verify_fingerprint(raw: bytes) -> bool:
 
 
 def udp_socket(bind: Address = ("0.0.0.0", 0)) -> socket.socket:
+    _validate_address_tuple(bind, "bind")
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     if hasattr(socket, "SIO_UDP_CONNRESET"):
         # Windows otherwise turns an ICMP port-unreachable into an error on the next recvfrom.
@@ -378,16 +438,36 @@ def udp_socket(bind: Address = ("0.0.0.0", 0)) -> socket.socket:
 def resolve(server: ServerSpec) -> Address:
     """Resolve `"host:port"` (or a `(host, port)` tuple) to an IPv4 transport address."""
     if isinstance(server, tuple):
-        host, port = server[0], int(server[1])
-    else:
+        if (
+            len(server) != 2
+            or not isinstance(server[0], str)
+            or not server[0].strip()
+            or isinstance(server[1], bool)
+            or not isinstance(server[1], int)
+            or not (1 <= server[1] <= 65535)
+        ):
+            raise ValueError("server tuple must be (non-empty host, port in 1..65535)")
+        host, port = server[0].strip(), int(server[1])
+    elif isinstance(server, str):
+        if ":" not in server:
+            raise ValueError("server string must be 'host:port'")
         host, _, port_text = server.rpartition(":")
-        host, port = host.strip("[]"), int(port_text)
+        host = host.strip("[]").strip()
+        try:
+            port = int(port_text)
+        except ValueError as exc:
+            raise ValueError("server port must be an integer") from exc
+        if not host or not (1 <= port <= 65535):
+            raise ValueError("server string must have non-empty host and port in 1..65535")
+    else:
+        raise TypeError("server must be a (host, port) tuple or 'host:port' string")
     info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_DGRAM)
     return info[0][4][0], info[0][4][1]
 
 
 def outbound_interface_ip(target: Address) -> str:
     """Local IP the OS would use to reach `target` (UDP connect sends no packets)."""
+    _validate_address_tuple(target, "target")
     probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         probe.connect(target)
@@ -416,7 +496,16 @@ def stun_transaction(
     sent = StunMessage.decode(request)
     if sent.cls != REQUEST or sent.transaction_id != transaction_id:
         raise StunError("transaction does not match its STUN request")
-    if timeout <= 0 or initial_rto <= 0:
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or isinstance(initial_rto, bool)
+        or not isinstance(initial_rto, (int, float))
+        or not math.isfinite(timeout)
+        or not math.isfinite(initial_rto)
+        or timeout <= 0
+        or initial_rto <= 0
+    ):
         raise ValueError("STUN timeout and initial RTO must be positive")
     deadline = time.monotonic() + timeout
     rto = initial_rto
@@ -457,6 +546,19 @@ def stun_transaction(
         return message, data, (time.perf_counter() - t0) * 1000.0
 
 
+def _validate_address_tuple(addr: object, field_name: str) -> None:
+    if (
+        not isinstance(addr, tuple)
+        or len(addr) != 2
+        or not isinstance(addr[0], str)
+        or not addr[0].strip()
+        or isinstance(addr[1], bool)
+        or not isinstance(addr[1], int)
+        or not (0 <= addr[1] <= 65535)
+    ):
+        raise ValueError(f"{field_name} must be a (non-empty host, port in 0..65535) tuple")
+
+
 @dataclass
 class StunBindingResult:
     server: Address
@@ -464,9 +566,34 @@ class StunBindingResult:
     mapped: Address
     rtt_ms: float
 
+    def __post_init__(self) -> None:
+        _validate_address_tuple(self.server, "server")
+        _validate_address_tuple(self.local, "local")
+        _validate_address_tuple(self.mapped, "mapped")
+        if (
+            isinstance(self.rtt_ms, bool)
+            or not isinstance(self.rtt_ms, (int, float))
+            or not math.isfinite(float(self.rtt_ms))
+            or float(self.rtt_ms) < 0.0
+        ):
+            raise ValueError("rtt_ms must be a finite non-negative number")
+
 
 def stun_binding(sock: socket.socket, server: ServerSpec, timeout: float = 3.0) -> StunBindingResult:
     """Send an RFC 5389 Binding request and return the server-reflexive address it reports."""
+    if not (
+        callable(getattr(sock, "sendto", None))
+        and callable(getattr(sock, "recvfrom", None))
+        and callable(getattr(sock, "getsockname", None))
+    ):
+        raise TypeError("sock must be a UDP socket with sendto, recvfrom, and getsockname")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+    ):
+        raise ValueError("timeout must be a positive finite number")
     server_addr = resolve(server)
     request = StunMessage(BINDING, REQUEST).add(SOFTWARE, SOFTWARE_NAME.encode("utf-8"))
     message, _, rtt_ms = stun_transaction(
@@ -497,6 +624,26 @@ class NatMapping:
     servers: List[Address]
     rtt_ms: List[float] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        if self.behaviour not in ("no_nat", "endpoint_independent", "address_dependent", "unknown"):
+            raise ValueError(
+                "behaviour must be one of ('no_nat', 'endpoint_independent', 'address_dependent', 'unknown')"
+            )
+        _validate_address_tuple(self.local, "local")
+        if not isinstance(self.mapped, list) or not self.mapped:
+            raise ValueError("mapped must be a non-empty list of Address tuples")
+        for m in self.mapped:
+            _validate_address_tuple(m, "mapped item")
+        if not isinstance(self.servers, list) or not self.servers:
+            raise ValueError("servers must be a non-empty list of Address tuples")
+        for s in self.servers:
+            _validate_address_tuple(s, "servers item")
+        if not isinstance(self.rtt_ms, list) or any(
+            isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)) or float(x) < 0.0
+            for x in self.rtt_ms
+        ):
+            raise ValueError("rtt_ms must be a list of finite non-negative numbers")
+
     @property
     def nat_type(self) -> str:
         return {
@@ -514,6 +661,21 @@ def classify_nat_mapping(
     sock: socket.socket, servers: Sequence[ServerSpec], timeout: float = 2.0
 ) -> NatMapping:
     """Compare the mappings two STUN servers report for the same local socket."""
+    if not (
+        callable(getattr(sock, "sendto", None))
+        and callable(getattr(sock, "recvfrom", None))
+        and callable(getattr(sock, "getsockname", None))
+    ):
+        raise TypeError("sock must be a UDP socket with sendto, recvfrom, and getsockname")
+    if isinstance(servers, (str, bytes)) or not isinstance(servers, Sequence) or len(servers) == 0:
+        raise ValueError("servers must be a non-empty sequence of ServerSpec")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+    ):
+        raise ValueError("timeout must be a positive finite number")
     results: List[StunBindingResult] = []
     for server in servers:
         try:
@@ -551,6 +713,26 @@ class PunchResult:
     rtt_ms: Optional[float]
     probes_sent: int
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.succeeded, bool):
+            raise ValueError("succeeded must be a boolean")
+        if self.peer is not None:
+            _validate_address_tuple(self.peer, "peer")
+        elif self.succeeded:
+            raise ValueError("peer cannot be None when succeeded is True")
+        if self.rtt_ms is not None:
+            if (
+                isinstance(self.rtt_ms, bool)
+                or not isinstance(self.rtt_ms, (int, float))
+                or not math.isfinite(float(self.rtt_ms))
+                or float(self.rtt_ms) < 0.0
+            ):
+                raise ValueError("rtt_ms must be None or a finite non-negative number")
+        elif self.succeeded:
+            raise ValueError("rtt_ms cannot be None when succeeded is True")
+        if isinstance(self.probes_sent, bool) or not isinstance(self.probes_sent, int) or self.probes_sent < 0:
+            raise ValueError("probes_sent must be a non-negative integer")
+
 
 def udp_hole_punch(
     sock: socket.socket,
@@ -567,6 +749,35 @@ def udp_hole_punch(
     answered from the address it arrived on, which is the hole the peer's NAT just opened. A
     side succeeds when it receives that answer, then lingers briefly to answer late probes.
     """
+    if not (callable(getattr(sock, "sendto", None)) and callable(getattr(sock, "recvfrom", None))):
+        raise TypeError("sock must provide callable sendto and recvfrom methods")
+    if isinstance(candidates, (str, bytes)) or not isinstance(candidates, Sequence):
+        raise TypeError("candidates must be a Sequence of Address tuples")
+    for cand in candidates:
+        _validate_address_tuple(cand, "candidates item")
+    if not isinstance(session, (bytes, bytearray)) or len(session) == 0:
+        raise ValueError("session must be non-empty bytes")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+    ):
+        raise ValueError("timeout must be a positive finite number")
+    if (
+        isinstance(interval, bool)
+        or not isinstance(interval, (int, float))
+        or not math.isfinite(float(interval))
+        or float(interval) < 0.0
+    ):
+        raise ValueError("interval must be a non-negative finite number")
+    if (
+        isinstance(linger, bool)
+        or not isinstance(linger, (int, float))
+        or not math.isfinite(float(linger))
+        or float(linger) < 0.0
+    ):
+        raise ValueError("linger must be a non-negative finite number")
     syn = PUNCH_MAGIC + b"S" + session
     ack = PUNCH_MAGIC + b"A" + session
     deadline = time.monotonic() + timeout
@@ -623,12 +834,19 @@ class TurnClient:
         sock: Optional[socket.socket] = None,
         timeout: float = 3.0,
     ) -> None:
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not math.isfinite(timeout)
+            or timeout <= 0
+        ):
+            raise ValueError("TURN timeout must be a positive finite number")
         self.server = resolve(server)
         self.username = username
         self.password = password
         self.sock = sock if sock is not None else udp_socket()
         self._owns_socket = sock is None
-        self.timeout = timeout
+        self.timeout = float(timeout)
         self.realm: Optional[str] = None
         self.nonce: Optional[bytes] = None
         self.key: Optional[bytes] = None
@@ -741,6 +959,8 @@ class TurnClient:
             raise StunError(f"TURN request {method:#05x} failed: {code} {reason}", code)
 
     def allocate(self, lifetime: int = 600) -> Address:
+        if isinstance(lifetime, bool) or not isinstance(lifetime, int) or not (0 <= lifetime <= 0xFFFFFFFF):
+            raise ValueError("TURN lifetime must be an integer in 0..4294967295")
         message = self._request(
             ALLOCATE,
             [
@@ -760,12 +980,17 @@ class TurnClient:
         return self.relayed
 
     def create_permission(self, peer_ip: str) -> None:
+        if not isinstance(peer_ip, str) or not peer_ip.strip():
+            raise ValueError("peer_ip must be a non-empty IP address string")
+        ipaddress.ip_address(peer_ip.strip())
         self._request(
             CREATE_PERMISSION,
-            [(XOR_PEER_ADDRESS, lambda txid: encode_xor_address((peer_ip, 0), txid))],
+            [(XOR_PEER_ADDRESS, lambda txid: encode_xor_address((peer_ip.strip(), 0), txid))],
         )
 
     def refresh(self, lifetime: int = 600) -> int:
+        if isinstance(lifetime, bool) or not isinstance(lifetime, int) or not (0 <= lifetime <= 0xFFFFFFFF):
+            raise ValueError("TURN lifetime must be an integer in 0..4294967295")
         message = self._request(REFRESH, [(LIFETIME, lambda _t: struct.pack("!I", lifetime))])
         granted = message.get(LIFETIME)
         self.lifetime = struct.unpack("!I", granted)[0] if granted else lifetime
@@ -773,6 +998,9 @@ class TurnClient:
 
     def send_to(self, peer: Address, payload: bytes) -> None:
         """Relay `payload` to `peer` through the allocation (Send indication, RFC 5766 §10.1)."""
+        _validate_address_tuple(peer, "peer")
+        if not isinstance(payload, (bytes, bytearray)):
+            raise TypeError("payload must be bytes")
         indication = StunMessage(SEND, INDICATION)
         indication.add(XOR_PEER_ADDRESS, encode_xor_address(peer, indication.transaction_id))
         indication.add(DATA_ATTR, payload)
@@ -786,6 +1014,7 @@ class TurnClient:
         already bound to `peer` (a refresh, §11.2) or the lowest free one. Binding also
         installs the peer permission, so no separate CreatePermission is needed.
         """
+        _validate_address_tuple(peer, "peer")
         if channel_number is None:
             channel_number = self.channels.get(peer)
             if channel_number is None:
@@ -810,6 +1039,9 @@ class TurnClient:
 
     def send_channel(self, peer: Address, payload: bytes) -> None:
         """Send `payload` to `peer` over the channel bound to it (RFC 5766 §11.4)."""
+        _validate_address_tuple(peer, "peer")
+        if not isinstance(payload, (bytes, bytearray)):
+            raise TypeError("payload must be bytes")
         channel_number = self.channels.get(peer)
         if channel_number is None:
             raise StunError("no TURN channel is bound to that peer")
@@ -817,6 +1049,13 @@ class TurnClient:
 
     def recv_from(self, timeout: float = 2.0) -> Tuple[Address, bytes]:
         """Wait for the next relayed payload and return `(peer, payload)`."""
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not math.isfinite(float(timeout))
+            or float(timeout) < 0.0
+        ):
+            raise ValueError("timeout must be a non-negative finite number")
         deadline = time.monotonic() + timeout
         while not self._inbox:
             remaining = deadline - time.monotonic()
@@ -919,7 +1158,8 @@ class StunServer:
                 encode_xor_address(self.mapped_address_for(addr), message.transaction_id),
             )
             response.add(SOFTWARE, SOFTWARE_NAME.encode("utf-8"))
-            self.sock.sendto(response.encode(fingerprint=True), addr)
+            with contextlib.suppress(OSError):
+                self.sock.sendto(response.encode(fingerprint=True), addr)
 
 
 @dataclass
@@ -947,6 +1187,14 @@ class _Channel:
     expires: float
 
 
+_RFC1918_AND_CGNAT_NETS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+)
+
+
 class TurnRelayServer(StunServer):
     """Minimal RFC 5766 TURN relay (UDP allocations, permissions, Send/Data indications).
 
@@ -967,6 +1215,10 @@ class TurnRelayServer(StunServer):
         max_lifetime: int = 3600,
         advertised_ip: Optional[str] = None,
         channel_lifetime: int = 600,
+        max_allocations_per_user: int = 4,
+        max_allocations: int = 64,
+        allow_private_peers: bool = False,
+        allow_loopback_peers: Optional[bool] = None,
     ) -> None:
         if advertised_ip is not None:
             advertised_ip = self._validate_relay_ip(advertised_ip)
@@ -975,6 +1227,14 @@ class TurnRelayServer(StunServer):
         self.realm = realm
         self.max_lifetime = max_lifetime
         self.channel_lifetime = int(channel_lifetime)
+        self.max_allocations_per_user = int(max_allocations_per_user)
+        self.max_allocations = int(max_allocations)
+        self.allow_private_peers = bool(allow_private_peers)
+        self.allow_loopback_peers = (
+            (self.address[0] in ("127.0.0.1", "0.0.0.0") and advertised_ip is None)
+            if allow_loopback_peers is None
+            else bool(allow_loopback_peers)
+        )
         self.nonce = secrets.token_hex(16).encode("ascii")
         self.allocations: Dict[Address, _Allocation] = {}
         self._by_relay: Dict[socket.socket, _Allocation] = {}
@@ -989,6 +1249,16 @@ class TurnRelayServer(StunServer):
         self._responses: OrderedDict[
             Tuple[Address, int, bytes], Tuple[float, bytes, bytes]
         ] = OrderedDict()
+
+    def _is_permitted_peer_ip(self, peer_ip: str) -> bool:
+        ip = ipaddress.ip_address(peer_ip)
+        if ip.version != 4 or ip.is_unspecified or ip.is_multicast or ip.is_link_local or str(ip) == "255.255.255.255":
+            return False
+        if ip.is_loopback:
+            return bool(self.allow_loopback_peers and str(ip) == "127.0.0.1")
+        if any(ip in net for net in _RFC1918_AND_CGNAT_NETS):
+            return bool(self.allow_private_peers)
+        return True
 
     @staticmethod
     def _validate_relay_ip(value: str) -> str:
@@ -1047,6 +1317,16 @@ class TurnRelayServer(StunServer):
     def _on_readable(self, sock: socket.socket) -> None:
         if sock is self.sock:
             super()._on_readable(sock)
+            # If a SEND/ChannelData frame forwarded to a local relay socket on this server,
+            # drain any immediately-readable relay sockets in the same timeslice.
+            relay_socks = list(self._by_relay)
+            if relay_socks:
+                try:
+                    ready_relays, _, _ = select.select(relay_socks, [], [], 0.0)
+                except (OSError, ValueError):
+                    ready_relays = []
+                for r_sock in ready_relays:
+                    self._on_readable(r_sock)
             return
         allocation = self._by_relay.get(sock)
         try:
@@ -1095,7 +1375,8 @@ class TurnRelayServer(StunServer):
                     # A transaction ID cannot authorize a different request. Replay only
                     # the exact original datagram, including its authentication bytes.
                     if hmac.compare_digest(digest, hashlib.sha256(data).digest()):
-                        self.sock.sendto(response, addr)
+                        with contextlib.suppress(OSError):
+                            self.sock.sendto(response, addr)
                     return
                 del self._responses[cache_key]
             self._on_authenticated_request(message, data, addr)
@@ -1113,7 +1394,8 @@ class TurnRelayServer(StunServer):
         if challenge:
             response.add(REALM, self.realm.encode("utf-8"))
             response.add(NONCE, self.nonce)
-        self.sock.sendto(response.encode(fingerprint=True), addr)
+        with contextlib.suppress(OSError):
+            self.sock.sendto(response.encode(fingerprint=True), addr)
 
     def _on_authenticated_request(self, request: StunMessage, raw: bytes, addr: Address) -> None:
         username = request.get(USERNAME)
@@ -1154,7 +1436,8 @@ class TurnRelayServer(StunServer):
             )
             while len(self._responses) > TRANSACTION_CACHE_LIMIT:
                 self._responses.popitem(last=False)
-            self.sock.sendto(encoded, addr)
+            with contextlib.suppress(OSError):
+                self.sock.sendto(encoded, addr)
 
     def _requested_lifetime(self, request: StunMessage) -> int:
         value = request.get(LIFETIME)
@@ -1164,6 +1447,9 @@ class TurnRelayServer(StunServer):
     def _allocate(self, request: StunMessage, addr: Address, user: str) -> Optional[StunMessage]:
         if addr in self.allocations:
             return self._error_response(request, 437, "Allocation Mismatch")
+        user_allocs = sum(1 for a in self.allocations.values() if a.username == user)
+        if len(self.allocations) >= self.max_allocations or user_allocs >= self.max_allocations_per_user:
+            return self._error_response(request, 486, "Allocation Quota Reached")
         transport = request.get(REQUESTED_TRANSPORT)
         if transport is None or transport[0] != UDP_PROTOCOL_NUMBER:
             return self._error_response(request, 442, "Unsupported Transport Protocol")
@@ -1217,6 +1503,8 @@ class TurnRelayServer(StunServer):
         peer_ip = decode_xor_address(peer, request.transaction_id)[0]
         if ipaddress.ip_address(peer_ip).version != 4:
             return self._error_response(request, 443, "Peer Address Family Mismatch")
+        if not self._is_permitted_peer_ip(peer_ip):
+            return self._error_response(request, 403, "Forbidden")
         allocation.permit(peer_ip)
         return StunMessage(CREATE_PERMISSION, SUCCESS, request.transaction_id)
 
@@ -1245,6 +1533,8 @@ class TurnRelayServer(StunServer):
         peer_addr = decode_xor_address(peer, request.transaction_id)
         if ipaddress.ip_address(peer_addr[0]).version != 4:
             return self._error_response(request, 443, "Peer Address Family Mismatch")
+        if not self._is_permitted_peer_ip(peer_addr[0]):
+            return self._error_response(request, 403, "Forbidden")
         by_number = self._live_channel(addr, number)
         if by_number is not None and by_number.peer != peer_addr:
             return self._error_response(request, 400, "Bad Request")
@@ -1373,6 +1663,11 @@ class DeterministicFaultProxy:
         profile: Optional[FaultProfile] = None,
         host: str = "127.0.0.1",
     ) -> None:
+        _validate_address_tuple(upstream, "upstream")
+        if profile is not None and not isinstance(profile, FaultProfile):
+            raise TypeError("profile must be None or a FaultProfile")
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("host must be a non-empty string")
         self.upstream = upstream
         self.profile = profile if profile is not None else FaultProfile()
         self.host = host

@@ -237,3 +237,24 @@ def test_coordinator_failed_spot_check_still_consumes_workunit(tiny_bundle, tmp_
         coordinator.validate_and_record_submission(
             validator_model=bundle.model, workunit=wu, submission=sub_clean, steam_id64=OWNER_SID
         )
+
+
+def test_coordinator_reuses_parquet_shards_and_caps_active_workunits_per_node(
+    tiny_bundle, tmp_path: Path
+) -> None:
+    """IP-249: 1,000 workunit requests from one worker must reuse shards per (branch, outer_step)
+    and cap active_workunits per node rather than writing 1,000 Parquet files."""
+    coordinator = _coordinator(tiny_bundle, tmp_path)
+    for _ in range(1000):
+        coordinator.assign_workunit(
+            worker_id=OWNER_WID,
+            steam_id64=OWNER_SID,
+            branch_name=None,
+            inner_steps_H=2,
+            spot_check_interval_s=1,
+            num_sequences=4,
+            seq_len=8,
+        )
+    parquet_files = list(coordinator.shards_dir.glob("*.parquet"))
+    assert len(parquet_files) <= len(coordinator.branches)
+    assert len(coordinator.active_workunits) <= coordinator.max_active_workunits_per_node

@@ -1,6 +1,8 @@
 # HiveMind Improvement Plan (2026-10-31)
 
 > Scope: a read-only audit of `main` at `b69a9cc` across six areas (swarm, router/client/CLI, game/economy/lab, core/data/QueenBee/compress, BOINC/security/deploy, tests/CI/scripts/Lean). **No code was changed to produce this plan.** Each work item becomes its own pull request, assigned to a contributor or agent, following the Definition of Done (DoD) and the test described here.
+>
+> **Status on `main` (2026-11-07):** Every non-protected item in this plan (`IP-01..IP-71`) is closed on `main` (note: `LEGACY_KNOWN_USERS` in `IP-03` is intentionally preserved with PBKDF2-SHA256 password verification so legacy pioneer accounts retain their previous password sign-in, while passwordless takeover and re-registration key exposure are blocked).
 
 ## How to read the status column
 

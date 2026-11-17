@@ -1,6 +1,8 @@
 # HiveMind Improvement Plan (2026-11-01 update)
 
 > Successor to [`IMPROVEMENT_PLAN_2026-10-31.md`](IMPROVEMENT_PLAN_2026-10-31.md) (merged in #372). Daily read-only audit of `main` at `df65e71`: five parallel area audits for **new findings only**, then the author re-checked six of them in the code. **No code was changed to produce this update.** New ids continue the numbering (IP-72 onward). Status marks: **R** re-checked by the author in the code on `df65e71`; **A** reported by an audit agent with file:line evidence, not independently re-run. Severity is the audit agent's rating; most agents rated generously, so treat P1 as "needs a look before merge", not as proven exploitable.
+>
+> **Status on `main` (2026-11-07):** Every non-protected item in this plan (`IP-73..IP-84`, `IP-87..IP-138`) is closed on `main` through PRs `#377`–`#708` (only `IP-72` in `src/hivemind/cli/community_orchestrator.py` and `IP-85..IP-86` in `src/hivemind/security/*` sit in owner-only protected paths under `scripts/pr_gatekeeper.py`).
 
 ## 1. Closed or narrowed since the previous plan
 

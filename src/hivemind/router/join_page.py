@@ -39,6 +39,12 @@ _URL_OK = re.compile(r"^https://[a-z0-9.-]+(?::\d+)?(?:/[A-Za-z0-9._~%/-]*)?$")
 
 def pick_language(query_lang: str | None, accept_language: str | None, default: str = "fr") -> str:
     """``?lang=fr|en|es|de|zh`` wins; otherwise the first supported language in ``Accept-Language`` by quality; otherwise ``default`` (``fr``)."""
+    if query_lang is not None and (isinstance(query_lang, bool) or not isinstance(query_lang, str)):
+        raise ValueError("query_lang must be a string or None")
+    if accept_language is not None and (isinstance(accept_language, bool) or not isinstance(accept_language, str)):
+        raise ValueError("accept_language must be a string or None")
+    if isinstance(default, bool) or not isinstance(default, str) or default not in LANGS:
+        raise ValueError("default must be one of 'fr', 'en', 'es', 'de', 'zh'")
     if query_lang in LANGS:
         return str(query_lang)
     best: tuple[float, int, str] | None = None
@@ -57,6 +63,8 @@ def pick_language(query_lang: str | None, accept_language: str | None, default: 
 
 
 def join_content_security_policy(nonce: str) -> str:
+    if not isinstance(nonce, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):
+        raise ValueError("nonce must be 8-64 URL-safe characters")
     return "; ".join([
         "default-src 'none'", f"style-src 'nonce-{nonce}'", "img-src 'self' data:", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'",
     ])
@@ -104,6 +112,10 @@ class Flags:
 
     google: bool = False  # "Sign in with Google" (or another provider) is enabled
     handles: bool = True  # registering with a handle through the API is open
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.google, bool) or not isinstance(self.handles, bool):
+            raise ValueError("google and handles flags must be booleans")
 
 
 _HANDLE_RULE: Pair = (
@@ -285,8 +297,8 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
                "Avec ces réglages, le client BOINC ne fait aucun calcul GPU pendant que vous utilisez l'ordinateur, rend la mémoire vidéo d'une tâche en "
                "pause, et arrête le calcul GPU aussitôt qu'un programme que vous nommez avec `--game` tourne. Testé avec le vrai client BOINC sous Linux. "
                "Non testé sous Windows. Un jeu que vous ne nommez pas, joué à la manette seulement, n'est pas détecté : nommez vos jeux.")),
-        ("note", ("Night training for end-users and HiveMind nodes (22:00–07:00 Paris time): End-users (volunteers, developers and gamers) leave their PC or laptop running overnight to fold exoplanet transits and compute rank-4 QLoRA inner-loop updates, earning 250 HMT and 45 Cobblestones per workunit to spend the next day on all models. Dedicated HiveMind nodes (GPU producers, HiveMiners and the owner fleet) switch from daytime OpenRouter inference (07:00–22:00) to nocturnal DiLoCo outer-step aggregation, Multi-Krum verification and SVD teacher-to-student distillation (live node telemetry at [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
-                  "Entraînement nocturne pour les utilisateurs finaux et les nœuds HiveMind (22 h – 7 h, heure de Paris) : Les utilisateurs finaux (bénévoles, développeurs et joueurs) laissent leur PC ou portable calculer la nuit des transits d'exoplanètes et des mises à jour QLoRA de rang 4, gagnant 250 HMT et 45 Cobblestones par unité pour interroger tous les modèles le lendemain. Les nœuds dédiés HiveMind (producteurs GPU, HiveMiners et flotte principale) passent de l'inférence OpenRouter diurne (7 h – 22 h) à l'agrégation nocturne DiLoCo, la vérification Multi-Krum et la distillation SVD enseignant-étudiant (télémétrie des nœuds en direct sur [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).")),
+        ("note", ("Night training for end-users and HiveMind nodes (22:00–07:00 Paris time): End-users (volunteers, developers and gamers) leave their PC or laptop running overnight to fold exoplanet transits and compute rank-4 QLoRA inner-loop updates, earning verified HMT points and BOINC Cobblestones for server-validated workunits to spend the next day on all models. Dedicated HiveMind nodes (GPU producers, HiveMiners and the owner fleet) switch from daytime OpenRouter inference (07:00–22:00) to nocturnal DiLoCo outer-step aggregation, Multi-Krum verification and SVD teacher-to-student distillation (live node telemetry at [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
+                  "Entraînement nocturne pour les utilisateurs finaux et les nœuds HiveMind (22 h – 7 h, heure de Paris) : Les utilisateurs finaux (bénévoles, développeurs et joueurs) laissent leur PC ou portable calculer la nuit des transits d'exoplanètes et des mises à jour QLoRA de rang 4, gagnant des points HMT vérifiés et des Cobblestones BOINC pour les unités validées côté serveur afin d'interroger tous les modèles le lendemain. Les nœuds dédiés HiveMind (producteurs GPU, HiveMiners et flotte principale) passent de l'inférence OpenRouter diurne (7 h – 22 h) à l'agrégation nocturne DiLoCo, la vérification Multi-Krum et la distillation SVD enseignant-étudiant (télémétrie des nœuds en direct sur [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).")),
     )),
     ("opentrainer", ("3b. OpenTrainer — Intense GPU Co-Training (BOINC + AMCP + Kafka + Aglets, Firewall-Friendly)", "3b. OpenTrainer — Co-entraînement GPU intensif (BOINC + AMCP + Kafka + Aglets, compatible pare-feu)"), (
         ("p", ("Registering with the `\"trainer\"` role on [/signup](/signup) connects your GPU to `OpenTrainer` ([/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)), the central coordinator integrating BOINC, AMCP v1.5, Kafka (`hivemind.amcp.federation.v1`), and Signed Task Agents (IBM Aglet life cycle without mobile code) built between the RTX 2070 (`XAVGAMSRV`, 8 GB, Windows 11) and the GCP Tesla T4 (`socreateai-agora-hermes-node1`, 16 GB, Linux) across PRs `#366`, `#399`, `#401`, `#407`, `#408`, `#409`, and `#410` (see the [OpenTrainer architecture guide]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)).",
@@ -304,9 +316,9 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
              "Vérifiez la traversée sortante du pare-feu, enregistrez votre GPU entraîneur sur `OpenTrainer` et soumettez un reçu de ronde Aglet vérifié (retirez `--once` pour tourner en continu) :"),
         ]),
         ("code", "export HIVEMIND_API_KEY=hm-YOUR_TRAINER_KEY\n"
-                 "python scripts/hivemind_opentrainer_agent.py --gateway {API} --network-mode outbound-https-relay --check-firewall --submit-delta --once"),
-        ("p", ('Newcomers are welcome at the co-training nights. Night 3 runs Monday 2 November 22:00 to Tuesday 07:00 Paris. You need no account to ask for a slot, and producers need no migration: producer, prosumer and trainer keys share the training role. Short guide: [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).',
-               "Les nouveaux venus sont bienvenus aux nuits de co-entraînement. La nuit 3 va du lundi 2 novembre 22 h au mardi 7 h, heure de Paris. Aucun compte n'est nécessaire pour demander une place, et les producteurs n'ont rien à migrer : les clés producteur, prosumer et entraîneur partagent le rôle d'entraînement. Guide court : [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).")),
+                 "python scripts/hivemind_opentrainer_agent.py --gateway {API} --network-mode outbound-https-relay --check-firewall --max-vram-gb 5.5 --train --once"),
+        ("p", ('Newcomers can join OpenTrainer immediately over outbound HTTPS (`TCP/443`, zero open ports, zero manual ticket wait) with a `trainer`, `prosumer` or `producer` key (`--train` trains your assigned Sparse-MoE LoRA shard on pinned `Vxtzq/Crowd-v1` and submits a measured round report). A `consumer` account can self-upgrade via `/v1/hivemind/auth/upgrade-role`. Optional WireGuard pilot guide: [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).',
+               "Les nouveaux arrivants peuvent rejoindre OpenTrainer immédiatement en HTTPS sortant (`TCP/443`, zéro port ouvert, sans attente de ticket manuel) avec une clé `trainer`, `prosumer` ou `producer` (`--train` entraîne votre fragment LoRA Sparse-MoE assigné sur la révision figée de `Vxtzq/Crowd-v1` et soumet un rapport mesuré). Un compte `consumer` peut se mettre à niveau via `/v1/hivemind/auth/upgrade-role`. Guide optionnel WireGuard : [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).")),
         ("ol", [
             ('Create a WireGuard key pair and keep the private key to yourself; only the public key is ever shared:',
              'Créez une paire de clés WireGuard et gardez la clé privée pour vous ; seule la clé publique est partagée :'),
@@ -317,6 +329,18 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
              "Affichez le plan de fédération de cette machine (lecture seule : il n'installe rien et ne contacte rien ; le code de sortie 2 signifie qu'aucun GPU n'a été lu) :"),
         ]),
         ("code", "PYTHONPATH=src python3 scripts/hivemind_federate_node.py --handle your-handle --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --json"),
+        ("ul", [
+            ("Federation plan stage `preflight` (status `READY`, or `BLOCKED` if GPU free memory is below 3500 MB): runs `scripts/hivemind_volunteer_preflight.py --json`.",
+             "Phase du plan de fédération `preflight` (état `READY`, ou `BLOCKED` si la mémoire GPU libre est sous 3500 Mo) : exécute `scripts/hivemind_volunteer_preflight.py --json`."),
+            ("Federation plan stage `register` (status `READY`): creates a `trainer` handle (`api_key` shown once, as in section 1).",
+             "Phase du plan de fédération `register` (état `READY`) : crée un identifiant `trainer` (`api_key` affichée une seule fois, comme en section 1)."),
+            ("Federation plan stage `idle_gate_dry_run` (status `READY`, or `BLOCKED` without a ready GPU): verifies the idle-GPU gate with `scripts/hivemind_boinc_idle_worker.py --once --dry-run`.",
+             "Phase du plan de fédération `idle_gate_dry_run` (état `READY`, ou `BLOCKED` sans GPU prêt) : vérifie la barrière d'inactivité GPU avec `scripts/hivemind_boinc_idle_worker.py --once --dry-run`."),
+            ("Federation plan stage `qlora_training` (status `READY`, or `BLOCKED` without 3500 MB free VRAM): trains one rank-4 QLoRA round in `hivemind.boinc.real_client.worker`.",
+             "Phase du plan de fédération `qlora_training` (état `READY`, ou `BLOCKED` sans 3500 Mo de VRAM libre) : entraîne une ronde QLoRA de rang 4 dans `hivemind.boinc.real_client.worker`."),
+            ("Federation plan stage `cross_host_pilot` (status `MANUAL`): replies on issue #431 with the WireGuard public key and JSON plan so the operator assigns the learner id, overlay IP, pinned commit and signing secret.",
+             "Phase du plan de fédération `cross_host_pilot` (état `MANUAL`) : répond sur le billet #431 avec la clé publique WireGuard et le plan JSON pour que l'opérateur attribue l'identifiant d'apprenant, l'adresse privée, le commit épinglé et le secret de signature."),
+        ]),
         ("ol", [
             ('Reply on [issue #431]({REPO}/issues/431) before 18:00 Paris on the day of the night with your public key, GPU model, free video memory and operating system (attach the JSON plan; it holds no key). The operator answers with a learner id, an overlay address, the commit to check out and the shared signing key, out of band. Points: submissions are recorded as unverified and credit 0 until server-side verification exists.',
              "Répondez sur le [billet #431]({REPO}/issues/431) avant 18 h, heure de Paris, le jour de la nuit, avec votre clé publique, le modèle de GPU, la mémoire vidéo libre et le système d'exploitation (joignez le plan JSON ; il ne contient aucune clé). L'opérateur répond avec un identifiant d'apprenant, une adresse de réseau privé, le commit à utiliser et la clé de signature partagée, hors ligne. Points : les soumissions sont enregistrées comme non vérifiées et créditent 0 tant qu'une vérification côté serveur n'existe pas."),
@@ -366,6 +390,8 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
             ("Producers see the questions sent to them. Do not run a producer on a machine that holds secrets, and do not send confidential text to the network.",
              "Les producteurs voient les questions qui leur sont envoyées. N'exploitez pas un producteur sur une machine qui contient des secrets, et "
              "n'envoyez pas de texte confidentiel au réseau."),
+            ("What you upload per hour, at most (declared budgets in the `NODE_EGRESS` receipt): sharing a GPU 10 MiB, night training with BOINC 16 MiB, the OpenTrainer agent 0.5 MiB. Training Crowd-v1 with CrowdGPT's client uploads about 0.9 GB per finished round, about 1.5 GB per hour (measured), within a 2 GiB budget: check your data plan.",
+             'Ce que vous envoyez par heure, au maximum (budgets déclarés dans le reçu `NODE_EGRESS`) : partage de GPU 10 Mio, entraînement de nuit avec BOINC 16 Mio, agent OpenTrainer 0,5 Mio. Entraîner Crowd-v1 avec le client de CrowdGPT envoie environ 0,9 Go par round terminé, environ 1,5 Go par heure (mesuré), dans un budget de 2 Gio : vérifiez votre forfait.'),
             ("Points have no cash value and are not a payment.", "Les points n'ont aucune valeur monétaire et ne sont pas un paiement."),
             ("Sharing uses electricity while your GPU answers. Measure your card with `nvidia-smi --query-gpu=power.draw --format=csv` and multiply by "
              "the hours it works.",
@@ -615,10 +641,35 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "de": "Oder verbinden Sie einen Standard-BOINC-Client (`boinccmd`) direkt mit der öffentlichen Projekt-URL und prüfen Sie verifizierte Quittungen unter [/api/v1/federated/ledger](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger):",
         "zh": "或者使用标准 BOINC 客户端（`boinccmd`）直接挂载公共项目 URL，并在 [/api/v1/federated/ledger](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger) 查看经验证的计算回执：",
     },
-    "Night training for end-users and HiveMind nodes (22:00–07:00 Paris time): End-users (volunteers, developers and gamers) leave their PC or laptop running overnight to fold exoplanet transits and compute rank-4 QLoRA inner-loop updates, earning 250 HMT and 45 Cobblestones per workunit to spend the next day on all models. Dedicated HiveMind nodes (GPU producers, HiveMiners and the owner fleet) switch from daytime OpenRouter inference (07:00–22:00) to nocturnal DiLoCo outer-step aggregation, Multi-Krum verification and SVD teacher-to-student distillation (live node telemetry at [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).": {
-        "es": "Entrenamiento nocturno para usuarios finales y nodos de HiveMind (22:00–07:00, hora de París): Los usuarios finales (voluntarios, desarrolladores y jugadores) dejan su PC o portátil calculando por la noche tránsitos de exoplanetas y actualizaciones QLoRA de rango 4, ganando 250 HMT y 45 Cobblestones por unidad para usar todos los modelos al día siguiente. Los nodos dedicados de HiveMind (productores GPU, HiveMiners y la flota principal) pasan de la inferencia diurna de OpenRouter (07:00–22:00) a la agregación nocturna DiLoCo, la verificación Multi-Krum y la destilación SVD profesor-estudiante (telemetría de nodos en vivo en [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
-        "de": "Nachttraining für Endnutzer und HiveMind-Knoten (22:00–07:00 Uhr Pariser Zeit): Endnutzer (Frewillige, Entwickler und Gamer) lassen ihren PC oder Laptop über Nacht Exoplaneten-Transits und Rang-4-QLoRA-Updates berechnen und erhalten 250 HMT sowie 45 Cobblestones pro Aufgabe, um am nächsten Tag alle Modelle zu nutzen. Dedizierte HiveMind-Knoten (GPU-Produzenten, HiveMiners und die Hauptflotte) wechseln von der OpenRouter-Tagesinferenz (07:00–22:00 Uhr) zur nächtlichen DiLoCo-Aggregation, Multi-Krum-Prüfung und SVD-Lehrer-Schüler-Destillation (Live-Knotentelemetrie unter [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
-        "zh": "终端用户与 HiveMind 节点的夜间协同训练（巴黎时间 22:00–07:00）：终端用户（志愿者、开发者与游戏玩家）在夜间让个人电脑或笔记本自动折叠系外行星凌星光变曲线并计算 4 秩 QLoRA 内层更新，每完成一个任务即可获得 250 HMT 与 45 Cobblestones，次日可用于调用全部模型。专用 HiveMind 节点（GPU 生产者、HiveMiners 与核心集群节点）则从日间 OpenRouter 低延迟推理（07:00–22:00）自动切换至夜间 DiLoCo 外层聚合、Multi-Krum 拜占庭校验与 SVD 师生蒸馏（节点实时遥测见 [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)）。",
+    "Night training for end-users and HiveMind nodes (22:00–07:00 Paris time): End-users (volunteers, developers and gamers) leave their PC or laptop running overnight to fold exoplanet transits and compute rank-4 QLoRA inner-loop updates, earning verified HMT points and BOINC Cobblestones for server-validated workunits to spend the next day on all models. Dedicated HiveMind nodes (GPU producers, HiveMiners and the owner fleet) switch from daytime OpenRouter inference (07:00–22:00) to nocturnal DiLoCo outer-step aggregation, Multi-Krum verification and SVD teacher-to-student distillation (live node telemetry at [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).": {
+        "es": "Entrenamiento nocturno para usuarios finales y nodos de HiveMind (22:00–07:00, hora de París): Los usuarios finales (voluntarios, desarrolladores y jugadores) dejan su PC o portátil calculando por la noche tránsitos de exoplanetas y actualizaciones QLoRA de rango 4, ganando puntos HMT verificados y Cobblestones de BOINC por unidades validadas en el servidor para usar todos los modelos al día siguiente. Los nodos dedicados de HiveMind (productores GPU, HiveMiners y la flota principal) pasan de la inferencia diurna de OpenRouter (07:00–22:00) a la agregación nocturna DiLoCo, la verificación Multi-Krum y la destilación SVD profesor-estudiante (telemetría de nodos en vivo en [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
+        "de": "Nachttraining für Endnutzer und HiveMind-Knoten (22:00–07:00 Uhr Pariser Zeit): Endnutzer (Freiwillige, Entwickler und Gamer) lassen ihren PC oder Laptop über Nacht Exoplaneten-Transits und Rang-4-QLoRA-Updates berechnen und erhalten verifizierte HMT-Punkte sowie BOINC-Cobblestones für serverseitig validierte Aufgaben, um am nächsten Tag alle Modelle zu nutzen. Dedizierte HiveMind-Knoten (GPU-Produzenten, HiveMiners und die Hauptflotte) wechseln von der OpenRouter-Tagesinferenz (07:00–22:00 Uhr) zur nächtlichen DiLoCo-Aggregation, Multi-Krum-Prüfung und SVD-Lehrer-Schüler-Destillation (Live-Knotentelemetrie unter [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
+        "zh": "终端用户与 HiveMind 节点的夜间协同训练（巴黎时间 22:00–07:00）：终端用户（志愿者、开发者与游戏玩家）在夜间让个人电脑或笔记本自动折叠系外行星凌星光变曲线并计算 4 秩 QLoRA 内层更新，按服务端验证通过的任务获得经过校验的 HMT 积分与 BOINC Cobblestones，次日可用于调用全部模型。专用 HiveMind 节点（GPU 生产者、HiveMiners 与核心集群节点）则从日间 OpenRouter 低延迟推理（07:00–22:00）自动切换至夜间 DiLoCo 外层聚合、Multi-Krum 拜占庭校验与 SVD 师生蒸馏（节点实时遥测见 [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)）。",
+    },
+    "Federation plan stage `preflight` (status `READY`, or `BLOCKED` if GPU free memory is below 3500 MB): runs `scripts/hivemind_volunteer_preflight.py --json`.": {
+        "es": "Fase del plan de federación `preflight` (estado `READY`, o `BLOCKED` si la memoria libre de GPU es inferior a 3500 MB): ejecuta `scripts/hivemind_volunteer_preflight.py --json`.",
+        "de": "Föderationsplan-Phase `preflight` (Status `READY`, oder `BLOCKED`, wenn der freie GPU-Speicher unter 3500 MB liegt): führt `scripts/hivemind_volunteer_preflight.py --json` aus.",
+        "zh": "联邦计划阶段 `preflight`（状态 `READY`，若 GPU 空闲显存低于 3500 MB 则为 `BLOCKED`）：运行 `scripts/hivemind_volunteer_preflight.py --json`。",
+    },
+    "Federation plan stage `register` (status `READY`): creates a `trainer` handle (`api_key` shown once, as in section 1).": {
+        "es": "Fase del plan de federación `register` (estado `READY`): crea un identificador `trainer` (`api_key` mostrada una vez, como en la sección 1).",
+        "de": "Föderationsplan-Phase `register` (Status `READY`): erstellt eine `trainer`-Kennung (`api_key` einmalig angezeigt, wie in Abschnitt 1).",
+        "zh": "联邦计划阶段 `register`（状态 `READY`）：创建 `trainer` 标识（`api_key` 仅显示一次，见第 1 节）。",
+    },
+    "Federation plan stage `idle_gate_dry_run` (status `READY`, or `BLOCKED` without a ready GPU): verifies the idle-GPU gate with `scripts/hivemind_boinc_idle_worker.py --once --dry-run`.": {
+        "es": "Fase del plan de federación `idle_gate_dry_run` (estado `READY`, o `BLOCKED` sin GPU lista): verifica la barrera de inactividad con `scripts/hivemind_boinc_idle_worker.py --once --dry-run`.",
+        "de": "Föderationsplan-Phase `idle_gate_dry_run` (Status `READY`, oder `BLOCKED` ohne bereite GPU): prüft die Idle-GPU-Schranke mit `scripts/hivemind_boinc_idle_worker.py --once --dry-run`.",
+        "zh": "联邦计划阶段 `idle_gate_dry_run`（状态 `READY`，无就绪 GPU 时为 `BLOCKED`）：使用 `scripts/hivemind_boinc_idle_worker.py --once --dry-run` 验证空闲 GPU 门控。",
+    },
+    "Federation plan stage `qlora_training` (status `READY`, or `BLOCKED` without 3500 MB free VRAM): trains one rank-4 QLoRA round in `hivemind.boinc.real_client.worker`.": {
+        "es": "Fase del plan de federación `qlora_training` (estado `READY`, o `BLOCKED` sin 3500 MB de VRAM libre): entrena una ronda QLoRA de rango 4 en `hivemind.boinc.real_client.worker`.",
+        "de": "Föderationsplan-Phase `qlora_training` (Status `READY`, oder `BLOCKED` ohne 3500 MB freien VRAM): trainiert eine Rang-4-QLoRA-Runde in `hivemind.boinc.real_client.worker`.",
+        "zh": "联邦计划阶段 `qlora_training`（状态 `READY`，不足 3500 MB 空闲显存时为 `BLOCKED`）：在 `hivemind.boinc.real_client.worker` 中训练一轮 4 秩 QLoRA。",
+    },
+    "Federation plan stage `cross_host_pilot` (status `MANUAL`): replies on issue #431 with the WireGuard public key and JSON plan so the operator assigns the learner id, overlay IP, pinned commit and signing secret.": {
+        "es": "Fase del plan de federación `cross_host_pilot` (estado `MANUAL`): responde en la incidencia #431 con la clave pública WireGuard y el plan JSON para que el operador asigne el id de aprendiz, la IP privada, el commit fijado y el secreto de firma.",
+        "de": "Föderationsplan-Phase `cross_host_pilot` (Status `MANUAL`): antwortet in Issue #431 mit dem öffentlichen WireGuard-Schlüssel und dem JSON-Plan, damit der Betreiber Lerner-Id, Overlay-IP, Commit und Signaturgeheimnis zuweist.",
+        "zh": "联邦计划阶段 `cross_host_pilot`（状态 `MANUAL`）：在 issue #431 回复 WireGuard 公钥与 JSON 计划，由运营者分配学习者编号、内网地址、固定提交与签名密钥。",
     },
     "3b. OpenTrainer — Intense GPU Co-Training (BOINC + AMCP + Kafka + Aglets, Firewall-Friendly)": {
         "es": "3b. OpenTrainer — Co-entrenamiento GPU intensivo (BOINC + AMCP + Kafka + Aglets, compatible con cortafuegos)",
@@ -690,6 +741,11 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "es": "Los productores ven las preguntas que se les envían. No ejecutes un productor en una máquina con secretos ni envíes texto confidencial a la red.",
         "de": "Produzenten sehen die an sie gesendeten Fragen. Betreiben Sie keinen Produzenten auf einem Rechner mit geheimen Daten und senden Sie keine vertraulichen Texte an das Netzwerk.",
         "zh": "生产者节点可以看到发送给它们的问题。请勿在存有机密数据的机器上运行生产者节点，也不要向网络发送机密文本。",
+    },
+    "What you upload per hour, at most (declared budgets in the `NODE_EGRESS` receipt): sharing a GPU 10 MiB, night training with BOINC 16 MiB, the OpenTrainer agent 0.5 MiB. Training Crowd-v1 with CrowdGPT's client uploads about 0.9 GB per finished round, about 1.5 GB per hour (measured), within a 2 GiB budget: check your data plan.": {
+        "es": 'Lo que envía por hora, como máximo (presupuestos declarados en el recibo `NODE_EGRESS`): compartir una GPU 10 MiB, entrenamiento nocturno con BOINC 16 MiB, el agente OpenTrainer 0,5 MiB. Entrenar Crowd-v1 con el cliente de CrowdGPT envía unos 0,9 GB por ronda terminada, unos 1,5 GB por hora (medido), dentro de un presupuesto de 2 GiB: revise su plan de datos.',
+        "de": 'Was Sie pro Stunde höchstens hochladen (deklarierte Budgets im Beleg `NODE_EGRESS`): GPU teilen 10 MiB, nächtliches Training mit BOINC 16 MiB, der OpenTrainer-Agent 0,5 MiB. Crowd-v1 mit dem CrowdGPT-Client zu trainieren lädt etwa 0,9 GB pro abgeschlossener Runde hoch, etwa 1,5 GB pro Stunde (gemessen), innerhalb eines Budgets von 2 GiB: prüfen Sie Ihren Datentarif.',
+        "zh": '您每小时最多上传的数据（`NODE_EGRESS` 回执中声明的预算）：共享 GPU 10 MiB，夜间 BOINC 训练 16 MiB，OpenTrainer 代理 0.5 MiB。使用 CrowdGPT 客户端训练 Crowd-v1，每完成一轮约上传 0.9 GB，约每小时 1.5 GB（实测），在 2 GiB 预算之内：请检查您的流量套餐。',
     },
     "Points have no cash value and are not a payment.": {
         "es": "Los puntos no tienen valor monetario y no constituyen un pago.",
@@ -868,11 +924,22 @@ def render_join_page(lang: str = "fr", nonce: str = "abcdefgh12345678", *, tiers
                      live_telemetry: Mapping[str, Any] | None = None) -> str:
     """The complete multilingual page (FR default, EN, ES, DE, ZH). ``tiers`` is the ``tiers`` list of ``/v1/hivemind/catalog``."""
     flags = Flags(google=google_enabled, handles=handle_registration)
+    if tiers is not None and (isinstance(tiers, (str, bytes)) or not isinstance(tiers, Sequence)):
+        raise ValueError("tiers must be a sequence of mappings or None")
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     if lang not in LANGS:
         raise ValueError("lang must be one of 'fr', 'en', 'es', 'de', 'zh'")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):
+    if not isinstance(nonce, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):
         raise ValueError("nonce must be 8-64 URL-safe characters")
-    if not _URL_OK.match(api_url) or not _URL_OK.match(repo_url) or not re.fullmatch(r"/[a-z-]*", path):
+    if (
+        not isinstance(api_url, str)
+        or not isinstance(repo_url, str)
+        or not isinstance(path, str)
+        or not _URL_OK.match(api_url)
+        or not _URL_OK.match(repo_url)
+        or not re.fullmatch(r"/[a-z-]*", path)
+    ):
         raise ValueError("api_url and repo_url must be plain https URLs and path a simple absolute path")
     subs = {"API": api_url.rstrip("/"), "REPO": repo_url.rstrip("/")}
     esc = html.escape

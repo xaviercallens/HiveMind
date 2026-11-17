@@ -52,6 +52,35 @@ class ByzantineFilterReport:
     median_cosine: float
     cosine_threshold_lower: float
     quarantined_pre_krum: dict[str, str] = field(default_factory=dict)
+    krum_guarantee: bool = False
+
+    def __post_init__(self) -> None:
+        if isinstance(self.total_submissions, bool) or not isinstance(self.total_submissions, int) or self.total_submissions < 1:
+            raise ValueError("total_submissions must be a positive integer")
+        if isinstance(self.max_byzantine_f, bool) or not isinstance(self.max_byzantine_f, int) or self.max_byzantine_f < 0:
+            raise ValueError("max_byzantine_f must be a non-negative integer")
+        for l_name in ("accepted_workers", "rejected_workers"):
+            lst = getattr(self, l_name)
+            if not isinstance(lst, list) or any(not isinstance(w, str) or not w.strip() for w in lst):
+                raise ValueError(f"{l_name} must be a list of non-empty strings")
+        for d_name in ("krum_scores", "mean_cosine_similarities", "quarantined_pre_krum"):
+            if not isinstance(getattr(self, d_name), dict):
+                raise ValueError(f"{d_name} must be a dict")
+        for score_dict_name in ("krum_scores", "mean_cosine_similarities"):
+            for k_id, s_val in getattr(self, score_dict_name).items():
+                if not isinstance(k_id, str) or not k_id.strip():
+                    raise ValueError(f"{score_dict_name} keys must be non-empty strings")
+                if isinstance(s_val, bool) or not isinstance(s_val, (int, float)) or not math.isfinite(float(s_val)):
+                    raise ValueError(f"{score_dict_name} values must be finite numbers")
+        for q_id, q_reason in self.quarantined_pre_krum.items():
+            if not isinstance(q_id, str) or not q_id.strip() or not isinstance(q_reason, str) or not q_reason.strip():
+                raise ValueError("quarantined_pre_krum keys and values must be non-empty strings")
+        for f_name in ("median_cosine", "cosine_threshold_lower"):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        if not isinstance(self.krum_guarantee, bool):
+            raise ValueError("krum_guarantee must be a boolean")
 
 
 @dataclass
@@ -72,9 +101,53 @@ class OuterStepResult:
     quorum_telemetry: dict[str, SyncerRoundTelemetry] = field(default_factory=dict, repr=False)
     momentum_restarted: bool = False
 
+    def __post_init__(self) -> None:
+        for s_name in ("branch_name", "outer_optimizer_mode"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for i_name in ("outer_step", "extra_gpu_vram_bytes"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        if not isinstance(self.theta_updated, dict) or not self.theta_updated:
+            raise ValueError("theta_updated must be a non-empty dict")
+        if not isinstance(self.velocity_updated, dict):
+            raise ValueError("velocity_updated must be a dict")
+        if (
+            isinstance(self.aggregated_delta_norm, bool)
+            or not isinstance(self.aggregated_delta_norm, (int, float))
+            or not math.isfinite(float(self.aggregated_delta_norm))
+            or float(self.aggregated_delta_norm) < 0.0
+        ):
+            raise ValueError("aggregated_delta_norm must be a finite non-negative number")
+        if not isinstance(self.filter_report, ByzantineFilterReport):
+            raise ValueError("filter_report must be a ByzantineFilterReport")
+        if self.mean_cosine_gate is not None and (
+            isinstance(self.mean_cosine_gate, bool)
+            or not isinstance(self.mean_cosine_gate, (int, float))
+            or not math.isfinite(float(self.mean_cosine_gate))
+        ):
+            raise ValueError("mean_cosine_gate must be None or a finite number")
+        if not isinstance(self.momentum_restarted, bool):
+            raise ValueError("momentum_restarted must be a boolean")
+        if not isinstance(self.cgad_telemetry, list):
+            raise ValueError("cgad_telemetry must be a list")
+        if not isinstance(self.quorum_telemetry, dict):
+            raise ValueError("quorum_telemetry must be a dict")
+
 
 def flatten_delta_dict(delta_dict: dict[str, torch.Tensor]) -> torch.Tensor:
     """Flatten a dictionary of LoRA tensors in deterministic key order into a 1D FP32 vector."""
+    if not isinstance(delta_dict, dict) or not delta_dict:
+        raise ValueError("delta_dict must not be empty")
+    for k, v in delta_dict.items():
+        if not isinstance(k, str) or not k.strip():
+            raise ValueError("delta_dict keys must be non-empty strings")
+        if not isinstance(v, torch.Tensor) or v.dtype == torch.bool or v.numel() == 0:
+            raise ValueError(f"delta_dict[{k!r}] must be a non-empty torch.Tensor")
+        if not bool(torch.isfinite(v).all().item()):
+            raise ValueError(f"delta_dict[{k!r}] must contain only finite values")
     parts = [
         delta_dict[k].detach().to(torch.float32).cpu().reshape(-1)
         for k in sorted(delta_dict.keys())
@@ -82,19 +155,54 @@ def flatten_delta_dict(delta_dict: dict[str, torch.Tensor]) -> torch.Tensor:
     return torch.cat(parts, dim=0)
 
 
+def _infer_plurality_reference_schema(
+    worker_deltas: dict[str, dict[str, torch.Tensor]],
+) -> dict[str, torch.Size] | None:
+    schema_counts: dict[tuple[tuple[str, torch.Size], ...], int] = {}
+    first_schema_map: dict[tuple[tuple[str, torch.Size], ...], dict[str, torch.Size]] = {}
+    for delta_dict in worker_deltas.values():
+        if not isinstance(delta_dict, dict) or not delta_dict:
+            continue
+        if not all(isinstance(v, torch.Tensor) for v in delta_dict.values()):
+            continue
+        sig = tuple((k, delta_dict[k].shape) for k in sorted(delta_dict.keys()))
+        schema_counts[sig] = schema_counts.get(sig, 0) + 1
+        if sig not in first_schema_map:
+            first_schema_map[sig] = {k: delta_dict[k].shape for k in delta_dict}
+    if not schema_counts:
+        return None
+    best_sig = max(schema_counts.keys(), key=lambda s: schema_counts[s])
+    return first_schema_map[best_sig]
+
+
 def filter_byzantine_deltas_multikrum(
     worker_deltas: dict[str, dict[str, torch.Tensor]],
     max_byzantine_f: int = 1,
     cosine_sigma: float = 2.0,
+    reference_keys_and_shapes: dict[str, torch.Size] | None = None,
 ) -> ByzantineFilterReport:
     """Filter worker pseudo-gradients using Pre-Krum Sanitization, Multi-Krum, and a 2-sigma pairwise cosine filter."""
+    if not isinstance(worker_deltas, dict):
+        raise ValueError("worker_deltas must be a dict")
+    if isinstance(max_byzantine_f, bool) or not isinstance(max_byzantine_f, int) or max_byzantine_f < 0:
+        raise ValueError(f"max_byzantine_f must be an integer >= 0, got {max_byzantine_f!r}")
+    if isinstance(cosine_sigma, bool) or not isinstance(cosine_sigma, (int, float)) or not math.isfinite(float(cosine_sigma)) or cosine_sigma < 0.0:
+        raise ValueError(f"cosine_sigma must be finite and >= 0, got {cosine_sigma!r}")
     all_worker_ids = list(worker_deltas.keys())
     total_K = len(all_worker_ids)
     if total_K == 0:
         raise ValueError("Cannot run Multi-Krum on empty worker_deltas.")
 
+    eff_ref_schema = (
+        reference_keys_and_shapes
+        if reference_keys_and_shapes is not None
+        else _infer_plurality_reference_schema(worker_deltas)
+    )
     fl_guard = FederatedLearningSecurityGuard()
-    clean_deltas, quarantined = fl_guard.sanitize_worker_deltas_pre_krum(worker_deltas)
+    clean_deltas, quarantined = fl_guard.sanitize_worker_deltas_pre_krum(
+        worker_deltas,
+        reference_keys_and_shapes=eff_ref_schema,
+    )
     worker_ids = list(clean_deltas.keys())
     K = len(worker_ids)
 
@@ -103,7 +211,7 @@ def filter_byzantine_deltas_multikrum(
             f"All {total_K} worker deltas were quarantined during pre-Krum security sanitization: {quarantined}"
         )
 
-    if K <= 2:
+    if K == 1:
         return ByzantineFilterReport(
             total_submissions=total_K,
             max_byzantine_f=0,
@@ -116,8 +224,9 @@ def filter_byzantine_deltas_multikrum(
             quarantined_pre_krum=quarantined,
         )
 
-    # Clamp f so K - f - 2 >= 1
-    f = min(max_byzantine_f, max(0, K - 3))
+    # Clamp f so K >= 2*f + 3 (Multi-Krum validity condition, IP-34)
+    f = min(max_byzantine_f, max(0, (K - 3) // 2))
+    krum_guarantee = bool(max_byzantine_f > 0 and K >= 2 * max_byzantine_f + 3 and f >= max_byzantine_f)
     num_neighbors = max(1, K - f - 2)
 
     # Accumulate exact [K, K] inner-product Gram matrix parameter-by-parameter (<1 MB peak RAM)
@@ -137,6 +246,36 @@ def filter_byzantine_deltas_multikrum(
     diag = torch.diag(gram).clamp_min(0.0)
     # Pairwise squared Euclidean distances: ||u - v||^2 = ||u||^2 + ||v||^2 - 2 <u, v>
     dist_matrix = (diag.unsqueeze(1) + diag.unsqueeze(0) - 2.0 * gram).clamp_min(0.0).to(torch.float32)
+    norms = torch.sqrt(diag).clamp_min(1e-12)
+    cos_matrix = (gram / (norms.unsqueeze(1) * norms.unsqueeze(0))).clamp(-1.0, 1.0).to(torch.float32)
+
+    if K == 2:
+        w0, w1 = worker_ids[0], worker_ids[1]
+        pair_cos = round(float(cos_matrix[0, 1].item()), 6)
+        pair_dist = round(float(dist_matrix[0, 1].item()), 6)
+        n0 = float(norms[0].item())
+        n1 = float(norms[1].item())
+        if pair_cos < 0.0:
+            survivor = w0 if n0 <= n1 else w1
+            outlier = w1 if survivor == w0 else w0
+            accepted_k2 = [survivor]
+            rejected_k2 = list(quarantined.keys()) + [outlier]
+            eff_f = min(max_byzantine_f, 1)
+        else:
+            accepted_k2 = [w0, w1]
+            rejected_k2 = list(quarantined.keys())
+            eff_f = 0
+        return ByzantineFilterReport(
+            total_submissions=total_K,
+            max_byzantine_f=eff_f,
+            accepted_workers=accepted_k2,
+            rejected_workers=rejected_k2,
+            krum_scores={w0: pair_dist, w1: pair_dist},
+            mean_cosine_similarities={w0: pair_cos, w1: pair_cos},
+            median_cosine=pair_cos,
+            cosine_threshold_lower=0.0,
+            quarantined_pre_krum=quarantined,
+        )
 
     krum_scores: dict[str, float] = {}
     for i, wid in enumerate(worker_ids):
@@ -167,11 +306,14 @@ def filter_byzantine_deltas_multikrum(
     # Multi-Krum selects the top (K - f) workers with smallest Krum distance score
     sorted_by_krum = sorted(worker_ids, key=lambda w: krum_scores[w])
     krum_survivors = set(sorted_by_krum[: max(1, K - f)])
+    median_norm = float(norms.median().item())
+    norm_by_worker = {wid: float(norms[idx].item()) for idx, wid in enumerate(worker_ids)}
 
     accepted: list[str] = []
     rejected: list[str] = list(quarantined.keys())
     for wid in worker_ids:
-        if wid in krum_survivors and mean_cos_per_worker[wid] >= cos_lower_bound:
+        norm_ok = max_byzantine_f <= 0 or norm_by_worker[wid] <= 5.0 * median_norm
+        if wid in krum_survivors and mean_cos_per_worker[wid] >= cos_lower_bound and norm_ok:
             accepted.append(wid)
         else:
             rejected.append(wid)
@@ -192,6 +334,7 @@ def filter_byzantine_deltas_multikrum(
         median_cosine=round(median_cos, 6),
         cosine_threshold_lower=round(cos_lower_bound, 6),
         quarantined_pre_krum=quarantined,
+        krum_guarantee=krum_guarantee,
     )
 
 
@@ -243,17 +386,36 @@ class DiLoCoOuterOptimizer:
             or momentum_restart_period < 1
         ):
             raise ValueError("momentum_restart_period must be an integer >= 1 or None")
+        if not isinstance(use_cpu_flat_bucket, bool):
+            raise ValueError("use_cpu_flat_bucket must be a bool")
         eff_betas = cgad_betas if cgad_betas is not None else (beta1, beta2)
-        if not (0.0 <= eff_betas[0] < 1.0 and 0.0 <= eff_betas[1] < 1.0):
+        if (
+            not isinstance(eff_betas, tuple)
+            or len(eff_betas) != 2
+            or any(isinstance(b, bool) or not isinstance(b, (int, float)) or not math.isfinite(float(b)) for b in eff_betas)
+            or not (0.0 <= float(eff_betas[0]) < 1.0 and 0.0 <= float(eff_betas[1]) < 1.0)
+        ):
             raise ValueError("beta1 and beta2 must be in [0, 1)")
         eff_wd = cgad_weight_decay if cgad_weight_decay is not None else weight_decay
-        if not math.isfinite(eff_wd) or eff_wd < 0.0:
+        if isinstance(eff_wd, bool) or not isinstance(eff_wd, (int, float)) or not math.isfinite(float(eff_wd)) or eff_wd < 0.0:
             raise ValueError("weight_decay must be finite and non-negative")
         eff_cgad_lr = cgad_lr if cgad_lr is not None else outer_lr_eta
-        if (outer_optimizer_mode != "nesterov" or use_cpu_flat_bucket) and (
-            not math.isfinite(outer_lr_eta) or outer_lr_eta <= 0.0
-        ):
+        if isinstance(outer_lr_eta, bool) or not isinstance(outer_lr_eta, (int, float)) or not math.isfinite(float(outer_lr_eta)) or outer_lr_eta <= 0.0:
             raise ValueError("outer_lr_eta must be finite and positive")
+        if isinstance(eff_cgad_lr, bool) or not isinstance(eff_cgad_lr, (int, float)) or not math.isfinite(float(eff_cgad_lr)) or eff_cgad_lr <= 0.0:
+            raise ValueError("cgad_lr must be finite and positive")
+        if isinstance(outer_momentum_mu, bool) or not isinstance(outer_momentum_mu, (int, float)) or not math.isfinite(float(outer_momentum_mu)) or not (0.0 <= outer_momentum_mu < 1.0):
+            raise ValueError("outer_momentum_mu must be finite in [0, 1)")
+        if isinstance(max_byzantine_f, bool) or not isinstance(max_byzantine_f, int) or max_byzantine_f < 0:
+            raise ValueError("max_byzantine_f must be an integer >= 0")
+        if isinstance(cosine_sigma, bool) or not isinstance(cosine_sigma, (int, float)) or not math.isfinite(float(cosine_sigma)) or cosine_sigma < 0.0:
+            raise ValueError("cosine_sigma must be finite and >= 0")
+        if isinstance(cgad_alpha, bool) or not isinstance(cgad_alpha, (int, float)) or not math.isfinite(float(cgad_alpha)) or float(cgad_alpha) < 0.0:
+            raise ValueError("cgad_alpha must be a finite non-negative number")
+        if isinstance(cgad_tau_cut, bool) or not isinstance(cgad_tau_cut, (int, float)) or not math.isfinite(float(cgad_tau_cut)) or float(cgad_tau_cut) <= 0.0:
+            raise ValueError("cgad_tau_cut must be a finite positive number")
+        if isinstance(cgad_eps, bool) or not isinstance(cgad_eps, (int, float)) or not math.isfinite(float(cgad_eps)) or float(cgad_eps) <= 0.0:
+            raise ValueError("cgad_eps must be a finite positive number")
         self.outer_lr_eta = outer_lr_eta
         self.outer_momentum_mu = outer_momentum_mu
         self.max_byzantine_f = max_byzantine_f
@@ -337,14 +499,57 @@ class DiLoCoOuterOptimizer:
             isinstance(eff_restart, bool) or not isinstance(eff_restart, int) or eff_restart < 1
         ):
             raise ValueError("momentum_restart_period must be an integer >= 1 or None")
+        if not isinstance(branch_name, str) or not branch_name.strip():
+            raise ValueError("branch_name must be a non-empty string")
+        if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
+            raise ValueError("outer_step must be an integer >= 0")
+        if not isinstance(theta_prev, dict) or not theta_prev:
+            raise ValueError("theta_prev must be a non-empty dict")
+        if not isinstance(worker_deltas, dict) or not worker_deltas:
+            raise ValueError("worker_deltas must be a non-empty dict")
+        if isinstance(grace_window_s, bool) or not isinstance(grace_window_s, (int, float)) or not math.isfinite(float(grace_window_s)) or float(grace_window_s) < 0.0:
+            raise ValueError("grace_window_s must be a non-negative finite number")
+        if min_quorum_k is not None and (isinstance(min_quorum_k, bool) or not isinstance(min_quorum_k, int) or min_quorum_k < 1):
+            raise ValueError("min_quorum_k must be a positive integer or None")
+        if not isinstance(quorum_merge_mode, str) or not quorum_merge_mode.strip():
+            raise ValueError("quorum_merge_mode must be a non-empty string")
         should_restart = bool(
             eff_restart is not None and outer_step > 0 and (outer_step % eff_restart == 0)
         )
+
+        parameter_keys = set(theta_prev)
+        full_schema = {k: v.shape for k, v in theta_prev.items()}
+        if self.outer_optimizer_mode == "cosine_gated_adam_decay" and synced_fragments is not None:
+            declared_keys = set(synced_fragments)
+            if not declared_keys <= parameter_keys:
+                raise ValueError("synced_fragments must name existing branch parameters")
+            if declared_keys and declared_keys != parameter_keys:
+                subset_schema = {k: theta_prev[k].shape for k in declared_keys}
+                full_matches = sum(
+                    1
+                    for d in worker_deltas.values()
+                    if isinstance(d, dict)
+                    and set(d.keys()) == parameter_keys
+                    and all(isinstance(d[k], torch.Tensor) and d[k].shape == full_schema[k] for k in parameter_keys)
+                )
+                subset_matches = sum(
+                    1
+                    for d in worker_deltas.values()
+                    if isinstance(d, dict)
+                    and set(d.keys()) == declared_keys
+                    and all(isinstance(d[k], torch.Tensor) and d[k].shape == subset_schema[k] for k in declared_keys)
+                )
+                round_reference_schema = full_schema if full_matches > subset_matches else subset_schema
+            else:
+                round_reference_schema = full_schema
+        else:
+            round_reference_schema = full_schema
 
         filter_report = filter_byzantine_deltas_multikrum(
             worker_deltas=worker_deltas,
             max_byzantine_f=self.max_byzantine_f,
             cosine_sigma=self.cosine_sigma,
+            reference_keys_and_shapes=round_reference_schema,
         )
         valid_ids = filter_report.accepted_workers
         surviving_deltas = {wid: worker_deltas[wid] for wid in valid_ids}

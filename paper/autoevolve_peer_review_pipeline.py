@@ -27,6 +27,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if Path('D:/.elan').exists():
     os.environ.setdefault('ELAN_HOME', 'D:/.elan')
 LEAN4_SPEC_PATH = PROJECT_ROOT / "lean4" / "HiveMindSpec.lean"
+LEAN4_RDA_MULTIPLIER_PATH = PROJECT_ROOT / "lean4" / "mathlib" / "RDAMultiplier.lean"
+LEAN4_RDA_RECEIPT_PATH = PROJECT_ROOT / "artifacts" / "lean_rda_multiplier_check.json"
 PAPER_DIR = PROJECT_ROOT / "paper"
 
 
@@ -139,6 +141,104 @@ def _find_lean_compiler() -> str | None:
     return None
 
 
+def verify_rda_multiplier_lean_receipt(
+    rda_lean_path: Path | None = None,
+    receipt_path: Path | None = None,
+    receipt_data: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Verify `lean4/mathlib/RDAMultiplier.lean` source integrity and axiom receipt (`IP-161`)."""
+    lean_file = rda_lean_path or LEAN4_RDA_MULTIPLIER_PATH
+    rec_file = receipt_path or LEAN4_RDA_RECEIPT_PATH
+    failures: list[str] = []
+    if not lean_file.exists():
+        return {
+            "verified": False,
+            "file_sha256": None,
+            "theorem_count": 0,
+            "qualified_theorems": [],
+            "sorry_count": 0,
+            "user_axiom_count": 0,
+            "failures": [f"Missing Lean source file: {lean_file}"],
+        }
+    raw_bytes = lean_file.read_bytes()
+    actual_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+    code = raw_bytes.decode("utf-8")
+    source = _lean_source_without_comments_or_strings(code)
+    qualified_names, inv_errors = _lean_theorem_inventory(source)
+    failures.extend(inv_errors)
+    sorry_hits = len(re.findall(r"\b(?:sorry|admit)\b", source))
+    axiom_hits = len(re.findall(r"\baxiom\s+", source))
+    if sorry_hits or axiom_hits:
+        failures.append("RDAMultiplier.lean contains proof placeholders (sorry/admit) or user axioms")
+    if not qualified_names:
+        failures.append("No theorem declarations found in RDAMultiplier.lean")
+
+    if receipt_data is not None:
+        receipt = receipt_data
+    elif rec_file.exists():
+        try:
+            receipt = json.loads(rec_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            receipt = {}
+            failures.append(f"Invalid JSON in {rec_file}: {exc}")
+    else:
+        receipt = {}
+        failures.append(f"Missing RDA multiplier verification receipt: {rec_file}")
+
+    if receipt:
+        rec_sha = str(receipt.get("file_sha256") or "")
+        if rec_sha != actual_sha256:
+            failures.append(
+                f"RDAMultiplier.lean SHA-256 mismatch: receipt has {rec_sha!r}, file has {actual_sha256!r}"
+            )
+        if receipt.get("theorems") != len(qualified_names) or receipt.get("compiled") != len(qualified_names):
+            failures.append(
+                f"Theorem count mismatch: source has {len(qualified_names)}, receipt has compiled={receipt.get('compiled')}/theorems={receipt.get('theorems')}"
+            )
+        if (
+            receipt.get("sorry_tokens", 0) != 0
+            or receipt.get("axiom_tokens", 0) != 0
+            or receipt.get("sorry_ax_references", 0) != 0
+            or receipt.get("has_sorry", 0) != 0
+            or receipt.get("untrusted_axioms", 0) != 0
+            or receipt.get("passed") is False
+        ):
+            failures.append("Receipt reports non-zero sorry/axiom/untrusted counts or passed=False")
+        records = receipt.get("results") if isinstance(receipt.get("results"), list) else receipt.get("records")
+        if not isinstance(records, list):
+            failures.append("Receipt missing theorem axiom results/records list")
+        else:
+            rec_map: dict[str, set[str]] = {}
+            for r in records:
+                if not isinstance(r, dict) or not r.get("theorem"):
+                    continue
+                if r.get("compiled") is False or r.get("has_sorry") or r.get("untrusted"):
+                    failures.append(f"Theorem record {r.get('theorem')!r} failed compilation or has sorry/untrusted axioms")
+                tname = str(r["theorem"])
+                axs = set(r.get("axioms") or [])
+                rec_map[tname] = axs
+                rec_map[tname.rsplit(".", 1)[-1]] = axs
+            short_names = [q.rsplit(".", 1)[-1] for q in qualified_names]
+            missing_rec = sorted(set(short_names) - rec_map.keys())
+            if missing_rec:
+                failures.append(f"Receipt missing axiom records for theorem(s): {missing_rec}")
+            unapproved = sorted(
+                {ax for axs in rec_map.values() for ax in axs} - ALLOWED_LEAN_AXIOMS
+            )
+            if unapproved:
+                failures.append(f"Receipt contains unapproved axioms: {unapproved}")
+
+    return {
+        "verified": len(failures) == 0,
+        "file_sha256": actual_sha256,
+        "theorem_count": len(qualified_names),
+        "qualified_theorems": qualified_names,
+        "sorry_count": sorry_hits,
+        "user_axiom_count": axiom_hits,
+        "failures": failures,
+    }
+
+
 def verify_lean4_specification() -> Dict[str, Any]:
     """Compile the current source and inspect every theorem's axiom dependencies.
 
@@ -202,6 +302,9 @@ def verify_lean4_specification() -> Dict[str, Any]:
         failures.append("Expected at least 14 theorem declarations")
     if not output:
         failures.append("No compiler axiom output was captured")
+    rda_audit = verify_rda_multiplier_lean_receipt()
+    if not rda_audit["verified"]:
+        failures.extend(f"RDAMultiplier.lean: {msg}" for msg in rda_audit["failures"])
     verified = compiler_executed and compiler_rc == 0 and not failures
     return {
         "spec_file": _rel(LEAN4_SPEC_PATH),
@@ -211,6 +314,7 @@ def verify_lean4_specification() -> Dict[str, Any]:
         "qualified_theorems": qualified_names,
         "sorry_count": sorry_hits,
         "user_axiom_count": axiom_hits,
+        "rda_multiplier_audit": rda_audit,
         "compiler_binary": Path(compiler).name if compiler else None,
         "compiler_executed": compiler_executed,
         "compiler_return_code": compiler_rc,
@@ -970,7 +1074,18 @@ def verify_manuscript_data_consistency(
         _add_check("PROV-27", "independent Lean kernel gate: theorems verified / declared", [f"{lean_ind['compiled']}/{lean_ind['theorems']}", f"{lean_ind['compiled']} of {lean_ind['theorems']}"], "artifacts/lean_independent_runner_check.json")
     lean_rda = exp_v3_data.get("__lean_rda__", {})
     if lean_rda:
-        _add_check("PROV-31", "Mathlib RDA proposition theorems verified (lean4/mathlib/RDAMultiplier.lean)", [f"{lean_rda['compiled']} theorems", f"({lean_rda['compiled']} theorems over real inner-product spaces"], "artifacts/lean_rda_multiplier_check.json")
+        rda_audit = verify_rda_multiplier_lean_receipt(receipt_data=lean_rda)
+        if rda_audit["verified"]:
+            rda_n = rda_audit["theorem_count"]
+            rda_patterns = [f"{rda_n} theorems", f"({rda_n} theorems over real inner-product spaces"]
+        else:
+            rda_patterns = ["__UNVERIFIED_RDA_MULTIPLIER_RECEIPT_OR_SOURCE_MISMATCH__"]
+        _add_check(
+            "PROV-31",
+            "Mathlib RDA proposition theorems verified (lean4/mathlib/RDAMultiplier.lean)",
+            rda_patterns,
+            "artifacts/lean_rda_multiplier_check.json",
+        )
     e10 = exp_v3_data.get("__e10__", {})
     if e10:
         e10_ratio = float(e10["analysis"]["P10a"]["cells"]["R=1.0|EF=off"]["ratio_mean"])
@@ -1380,6 +1495,44 @@ def verify_manuscript_data_consistency(
     else:
         checks.append({"check_id": "PROV-85", "metric_name": "massive_swarm_image_moe_report.json missing", "expected_tokens": [], "source_artifact": src_ms, "passed": False})
 
+    # v4.3.0 Live Two-Host E8/A1 Verification, B3/E24 Chain Attribution & Planetary-Scale Readiness PS-01..PS-11 (PROV-86)
+    e8_v430_path = PROJECT_ROOT / "artifacts" / "experiments" / "e8_real" / "E8_two_host_live_verification.json"
+    ps_v430_path = PROJECT_ROOT / "artifacts" / "experiments" / "PLANETARY_SCALE_READINESS_2026-11-08.json"
+    src_v430 = "artifacts/experiments/e8_real/E8_two_host_live_verification.json"
+    if e8_v430_path.exists() and ps_v430_path.exists():
+        e8v = json.loads(e8_v430_path.read_text(encoding="utf-8"))
+        s1 = e8v["stage1_two_host_rda"]
+        s2 = e8v["stage2_qlora_moe_and_amcp"]
+        a1 = e8v["live_a1_serving_and_failover"]
+        toks86 = [
+            f"{s1['post_join_p50_s']:.2f}",
+            f"{s1['post_join_p95_s']:.2f}",
+            f"{s2['two_host_amcp_crossA']['final_eval_loss']:.4f}",
+            f"{s2['nocturnal_211_round_amcp_night002']['final_eval_loss']:.4f}",
+            f"{s2['live_rtx2070_cuda_nf4_qlora']['final_eval_loss_mean']:.4f}",
+            f"{s2['live_rtx2070_cuda_nf4_qlora']['vram_peak_mib']:.2f}",
+            f"{a1['production_gateway_rtx2070_over_wireguard']['balance_delta_hmt']:.6f}",
+            f"{a1['production_gateway_wrr_and_pause_failover']['balance_delta_hmt']:.6f}",
+            "-0.00403",
+            "-0.01275",
+            "0.2667",
+            "0.0977",
+            "4.18",
+            "1.48",
+            "186.18",
+            "120.62",
+            "166",
+        ]
+        checks.append({
+            "check_id": "PROV-86",
+            "metric_name": "v4.3.0 Live Two-Host E8/A1 Verification, B3/E24 Chain Attribution and PS-01..PS-11 Planetary-Scale Readiness",
+            "expected_tokens": toks86,
+            "source_artifact": src_v430,
+            "passed": all(tok in tex_text for tok in toks86),
+        })
+    else:
+        checks.append({"check_id": "PROV-86", "metric_name": "E8_two_host_live_verification.json or PLANETARY_SCALE_READINESS missing", "expected_tokens": [], "source_artifact": src_v430, "passed": False})
+
     failed = [c["check_id"] for c in checks if not c["passed"]]
     return {
         "total_checks": len(checks),
@@ -1630,7 +1783,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     peer_review_report = {
         "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-        "version": "4.1.0",
+        "version": "4.3.0",
         "is_peer_review": False,
         "disclosure": AUDIT_DISCLOSURE,
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
@@ -1670,7 +1823,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     autoevolve_manifest = {
         "pipeline_name": "Project HiveMind x AutoevolveAI Cross-Session Research Pipeline",
-        "version": "4.1.0",
+        "version": "4.3.0",
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
         "workspace_root": ".",
         "artifacts_and_entrypoints": {

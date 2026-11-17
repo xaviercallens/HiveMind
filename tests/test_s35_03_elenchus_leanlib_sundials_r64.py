@@ -30,14 +30,26 @@ def test_elenchus_comment_stripped_lean_audit_ignores_docstring_vacuity() -> Non
 
 def test_robertson_sundials_tier_x_r64_provenance_and_stub_refusal() -> None:
     args = {"problem": "robertson", "rtol": 1e-9, "atol": 1e-12}
-    ok_receipt = verify_robertson_sundials_tier_x(sent_arguments=args, received_arguments=args)
+    ok_receipt = verify_robertson_sundials_tier_x(
+        sent_arguments=args,
+        received_arguments=args,
+        y_final=(0.2083340149701255, 0.0000008333360770, 0.7916651516937975),
+    )
     assert ok_receipt.accepted_by_elenchus_bridge is True
     assert ok_receipt.evidentiary_value == "tier_x_measured"
     assert ok_receipt.mass_conservation_drift < 1e-12
 
+    unattached_receipt = verify_robertson_sundials_tier_x(
+        sent_arguments=args,
+        received_arguments=args,
+    )
+    assert unattached_receipt.accepted_by_elenchus_bridge is False
+    assert unattached_receipt.evidentiary_value == "none"
+
     stub_receipt = verify_robertson_sundials_tier_x(
         sent_arguments=args,
         received_arguments=args,
+        y_final=(0.2083340149701255, 0.0000008333360770, 0.7916651516937975),
         stub=True,
     )
     assert stub_receipt.accepted_by_elenchus_bridge is False

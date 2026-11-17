@@ -51,11 +51,57 @@ class LossCheckJob:
     heldout_range: str = ""  # "start-end" byte range of heldout_url, inclusive, empty for the whole file
     schema: str = JOB_SCHEMA
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("job_id", self.job_id),
+            ("base_url", self.base_url),
+            ("base_sha256", self.base_sha256),
+            ("candidate_url", self.candidate_url),
+            ("candidate_sha256", self.candidate_sha256),
+            ("heldout_url", self.heldout_url),
+            ("heldout_sha256", self.heldout_sha256),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+            if any(ord(c) < 32 or ord(c) == 127 for c in val):
+                raise ValueError(f"{field_name} must not contain control characters")
+        for sha_name, sha_val in (
+            ("base_sha256", self.base_sha256),
+            ("candidate_sha256", self.candidate_sha256),
+            ("heldout_sha256", self.heldout_sha256),
+        ):
+            if len(sha_val) != 64 or any(c not in "0123456789abcdefABCDEF" for c in sha_val):
+                raise ValueError(f"{sha_name} must be a 64-character hex string")
+        if isinstance(self.window, bool) or not isinstance(self.window, int) or self.window < 2:
+            raise ValueError("window must be an integer >= 2")
+        if isinstance(self.n, bool) or not isinstance(self.n, int) or self.n < 1:
+            raise ValueError("n must be an integer >= 1")
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int) or self.seed < 0:
+            raise ValueError("seed must be a non-negative integer")
+        if (
+            isinstance(self.created_at, bool)
+            or not isinstance(self.created_at, (int, float))
+            or not math.isfinite(float(self.created_at))
+            or isinstance(self.expires_at, bool)
+            or not isinstance(self.expires_at, (int, float))
+            or not math.isfinite(float(self.expires_at))
+            or float(self.expires_at) < float(self.created_at)
+        ):
+            raise ValueError("created_at and expires_at must be finite numbers with expires_at >= created_at")
+        if not isinstance(self.heldout_range, str) or any(
+            ord(c) < 32 or ord(c) == 127 for c in self.heldout_range
+        ):
+            raise ValueError("heldout_range must be a string without control characters")
+        if self.schema != JOB_SCHEMA:
+            raise ValueError(f"unknown job schema {self.schema!r}")
+
     def to_wire(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_wire(cls, d: Mapping[str, Any]) -> "LossCheckJob":
+        if not isinstance(d, Mapping):
+            raise TypeError("wire payload must be a mapping")
         if d.get("schema") != JOB_SCHEMA:
             raise ValueError(f"unknown job schema {d.get('schema')!r}")
         return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
@@ -82,10 +128,68 @@ class LossCheckCoordinator:
                  model_factory: Callable[[], Any] | None = None, k: int = 2, tol: float = 2e-3, max_regression_tolerance: float = 0.0,
                  min_windows: int = 8, required_receipts: int = 1, agreement_tol: float = 2e-3, job_ttl_s: float = 3600.0,
                  clock: Callable[[], float] = time.time) -> None:
-        if required_receipts < 1 or not evaluator_keys:
+        if (
+            isinstance(required_receipts, bool)
+            or not isinstance(required_receipts, int)
+            or required_receipts < 1
+            or not isinstance(evaluator_keys, Mapping)
+            or not evaluator_keys
+        ):
             raise ValueError("need at least one evaluator key and required_receipts >= 1")
+        for ek, ev in evaluator_keys.items():
+            if (
+                not isinstance(ek, str)
+                or not ek.strip()
+                or any(ord(c) < 32 or ord(c) == 127 for c in ek)
+                or not isinstance(ev, (bytes, bytearray))
+                or len(ev) == 0
+            ):
+                raise ValueError(
+                    "evaluator_keys must map non-empty evaluator IDs (without control characters) to non-empty bytes"
+                )
+        if not callable(loader):
+            raise TypeError("loader must be callable")
+        if not callable(clock):
+            raise TypeError("clock must be callable")
+        if model_factory is not None and not callable(model_factory):
+            raise TypeError("model_factory must be callable or None")
         if required_receipts > len(evaluator_keys):
             raise ValueError("required_receipts cannot exceed the number of known evaluators")
+        if not isinstance(server_secret, (bytes, bytearray)) or not server_secret:
+            raise ValueError("server_secret must be non-empty bytes")
+        if (
+            isinstance(k, bool)
+            or not isinstance(k, int)
+            or k < 1
+            or isinstance(min_windows, bool)
+            or not isinstance(min_windows, int)
+            or min_windows < 1
+        ):
+            raise ValueError("k and min_windows must be integers >= 1")
+        if (
+            isinstance(tol, bool)
+            or not isinstance(tol, (int, float))
+            or not math.isfinite(float(tol))
+            or float(tol) < 0.0
+            or isinstance(agreement_tol, bool)
+            or not isinstance(agreement_tol, (int, float))
+            or not math.isfinite(float(agreement_tol))
+            or float(agreement_tol) < 0.0
+        ):
+            raise ValueError("tol and agreement_tol must be finite non-negative numbers")
+        if (
+            isinstance(max_regression_tolerance, bool)
+            or not isinstance(max_regression_tolerance, (int, float))
+            or not math.isfinite(float(max_regression_tolerance))
+        ):
+            raise ValueError("max_regression_tolerance must be a finite number")
+        if (
+            isinstance(job_ttl_s, bool)
+            or not isinstance(job_ttl_s, (int, float))
+            or not math.isfinite(float(job_ttl_s))
+            or float(job_ttl_s) <= 0.0
+        ):
+            raise ValueError("job_ttl_s must be a finite number > 0")
         self.keys, self.secret, self.loader = dict(evaluator_keys), server_secret, loader
         self.model_factory = model_factory or lc.CrowdV1
         self.k, self.tol, self.max_regression, self.min_windows = k, tol, max_regression_tolerance, min_windows
@@ -114,7 +218,19 @@ class LossCheckCoordinator:
     def open_job(self, *, base_url: str, base_sha256: str, candidate_url: str, candidate_sha256: str, heldout_url: str,
                  heldout_sha256: str, window: int = 2048, n: int = 32, heldout_range: str = "", job_id: str | None = None) -> LossCheckJob:
         """One job per candidate. The seed is drawn here, after the candidate is fixed."""
-        if n < self.min_windows:
+        for field_name, val in (
+            ("base_url", base_url),
+            ("base_sha256", base_sha256),
+            ("candidate_url", candidate_url),
+            ("candidate_sha256", candidate_sha256),
+            ("heldout_url", heldout_url),
+            ("heldout_sha256", heldout_sha256),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(window, bool) or not isinstance(window, int) or window < 2:
+            raise ValueError("window must be an integer >= 2")
+        if isinstance(n, bool) or not isinstance(n, int) or n < self.min_windows:
             raise ValueError(f"n={n} is below min_windows={self.min_windows}: every receipt would be rejected")
         now = self.clock()
         job = LossCheckJob(job_id=job_id or secrets.token_hex(8), base_url=base_url, base_sha256=base_sha256, candidate_url=candidate_url,
@@ -128,10 +244,14 @@ class LossCheckCoordinator:
         return job
 
     def decision(self, job_id: str) -> dict | None:
+        if not isinstance(job_id, str) or not job_id.strip():
+            raise ValueError("job_id must be a non-empty string")
         return self.state.decisions.get(job_id)
 
     def next_job(self, evaluator_id: str) -> LossCheckJob | None:
         """The oldest open, unexpired, undecided job this evaluator has not answered yet."""
+        if not isinstance(evaluator_id, str) or not evaluator_id.strip():
+            raise ValueError("evaluator_id must be a non-empty string")
         if evaluator_id not in self.keys:
             return None
         now = self.clock()
@@ -204,11 +324,17 @@ class LossCheckCoordinator:
         return (204, None) if job is None else (200, job.to_wire())
 
     def handle_post_receipt(self, body: bytes | str) -> tuple[int, dict]:
-        return self.submit(body.decode() if isinstance(body, bytes) else body)
+        if not isinstance(body, (bytes, bytearray, str)):
+            raise TypeError("body must be bytes or str")
+        return self.submit(bytes(body).decode() if isinstance(body, (bytes, bytearray)) else body)
 
 
 def fastapi_router(coord: LossCheckCoordinator, prefix: str = "/fl/loss_check") -> Any:
     """Optional FastAPI wiring of the two handlers (the receipt's HMAC is the authentication)."""
+    if not isinstance(coord, LossCheckCoordinator):
+        raise TypeError("coord must be a LossCheckCoordinator")
+    if not isinstance(prefix, str) or not prefix.strip() or not prefix.startswith("/"):
+        raise ValueError("prefix must be a non-empty string starting with '/'")
     from fastapi import APIRouter, Request, Response
     from fastapi.responses import JSONResponse
 

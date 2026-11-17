@@ -1,0 +1,257 @@
+{
+  "timestamp_utc": "2026-10-30T17:14:46Z",
+  "tensorsharp_release": "v2026.10.23",
+  "tensorsharp_commit": "a37448127f2fcd70079889c7050bdafb6b4bbfc7",
+  "artifact": "tensorsharp-server-2026.10.23-linux-x64-cuda.tar.gz",
+  "cells": [
+    {
+      "model_id": "Qwen3.5-9B-Q4_K_M",
+      "backend": "ggml_cuda",
+      "n_cpu_moe": null,
+      "max_context": 4096,
+      "startup_s": 23.28,
+      "idle_vram_mib": 5420,
+      "peak_vram_mib": 6062,
+      "api_models_meta": {
+        "backend": null,
+        "supportedBackends": [
+          {
+            "value": "cuda",
+            "label": "CUDA (cuBLAS GPU)"
+          },
+          {
+            "value": "ggml_cuda",
+            "label": "GGML CUDA (GPU)"
+          },
+          {
+            "value": "ggml_cpu",
+            "label": "GGML CPU"
+          },
+          {
+            "value": "cpu",
+            "label": "CPU (Pure C#)"
+          }
+        ],
+        "architecture": "qwen35",
+        "contextTokens": 4096
+      },
+      "auth_checks": {
+        "missing_token_status": 401,
+        "missing_token_body": {
+          "error": {
+            "message": "Missing or wrong endpoint token.",
+            "type": "shield_error",
+            "code": "unauthorized"
+          }
+        },
+        "wrong_token_status": 401,
+        "wrong_token_body": {
+          "error": {
+            "message": "Missing or wrong endpoint token.",
+            "type": "shield_error",
+            "code": "unauthorized"
+          }
+        },
+        "valid_token_models_status": 200,
+        "returned_model_ids": [
+          "Qwen3.5-9B-Q4_K_M"
+        ],
+        "disallowed_alias_status": 403,
+        "disallowed_alias_body": {
+          "error": {
+            "message": "This model is not offered by this producer.",
+            "type": "shield_error",
+            "code": "model_not_allowed"
+          }
+        }
+      },
+      "non_streaming": {
+        "status": 200,
+        "elapsed_s": 6.597,
+        "prompt_tokens": 3289,
+        "completion_tokens": 96,
+        "end_to_end_tok_s": 14.55
+      },
+      "streaming": {
+        "status": 200,
+        "sse_chunks": 97,
+        "done_seen": true,
+        "ttft_ms": 3451.8,
+        "total_s": 6.383,
+        "prefill_tok_s_from_ttft": 952.84,
+        "decode_tok_s": 32.75,
+        "output_preview": "Here's a simple iterative implementation of the Fibonacci function in Python:\n\n```python\ndef fibonacci(n):\n    \"\"\"Return the n-th Fibonacci number iteratively.\""
+      },
+      "gguf_file": "Qwen3.5-9B-Q4_K_M.gguf",
+      "gguf_size_bytes": 5680522464,
+      "gguf_sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+      "gguf_source": "unsloth/Qwen3.5-9B-GGUF (Q4_K_M, 5.29 GiB)"
+    },
+    {
+      "model_id": "gpt-oss-20b-MXFP4",
+      "backend": "ggml_cuda",
+      "n_cpu_moe": 18,
+      "max_context": 4096,
+      "startup_s": 57.49,
+      "idle_vram_mib": 6104,
+      "peak_vram_mib": 7042,
+      "api_models_meta": {
+        "backend": null,
+        "supportedBackends": [
+          {
+            "value": "cuda",
+            "label": "CUDA (cuBLAS GPU)"
+          },
+          {
+            "value": "ggml_cuda",
+            "label": "GGML CUDA (GPU)"
+          },
+          {
+            "value": "ggml_cpu",
+            "label": "GGML CPU"
+          },
+          {
+            "value": "cpu",
+            "label": "CPU (Pure C#)"
+          }
+        ],
+        "architecture": "gpt-oss",
+        "contextTokens": 4096
+      },
+      "auth_checks": {
+        "missing_token_status": 401,
+        "missing_token_body": {
+          "error": {
+            "message": "Missing or wrong endpoint token.",
+            "type": "shield_error",
+            "code": "unauthorized"
+          }
+        },
+        "wrong_token_status": 401,
+        "wrong_token_body": {
+          "error": {
+            "message": "Missing or wrong endpoint token.",
+            "type": "shield_error",
+            "code": "unauthorized"
+          }
+        },
+        "valid_token_models_status": 200,
+        "returned_model_ids": [
+          "gpt-oss-20b-MXFP4"
+        ],
+        "disallowed_alias_status": 403,
+        "disallowed_alias_body": {
+          "error": {
+            "message": "This model is not offered by this producer.",
+            "type": "shield_error",
+            "code": "model_not_allowed"
+          }
+        }
+      },
+      "non_streaming": {
+        "status": 200,
+        "elapsed_s": 11.843,
+        "prompt_tokens": 2677,
+        "completion_tokens": 96,
+        "end_to_end_tok_s": 8.11
+      },
+      "streaming": {
+        "status": 200,
+        "sse_chunks": 88,
+        "done_seen": true,
+        "ttft_ms": 4283.7,
+        "total_s": 11.646,
+        "prefill_tok_s_from_ttft": 624.92,
+        "decode_tok_s": 13.04,
+        "output_preview": "The user wants a short Python function fibonacci(n) that returns the n-th Fibonacci number iteratively in O(n) time and O(1) space. This is straightforward: def"
+      },
+      "gguf_file": "gpt-oss-20b-MXFP4.gguf",
+      "gguf_size_bytes": 13793422816,
+      "gguf_sha256": "8ecb5d4ad6172c63f9cbf1a07a04e525985a8a11a6e516da02b674c4010de716",
+      "gguf_source": "dhiltgen/gpt-oss:20b-llamacpp (MXFP4, 24 MoE layers, 12.85 GiB)"
+    },
+    {
+      "model_id": "gpt-oss-20b-MXFP4",
+      "backend": "ggml_cuda",
+      "n_cpu_moe": 24,
+      "max_context": 4096,
+      "startup_s": 20.52,
+      "idle_vram_mib": 3662,
+      "peak_vram_mib": 4610,
+      "api_models_meta": {
+        "backend": null,
+        "supportedBackends": [
+          {
+            "value": "cuda",
+            "label": "CUDA (cuBLAS GPU)"
+          },
+          {
+            "value": "ggml_cuda",
+            "label": "GGML CUDA (GPU)"
+          },
+          {
+            "value": "ggml_cpu",
+            "label": "GGML CPU"
+          },
+          {
+            "value": "cpu",
+            "label": "CPU (Pure C#)"
+          }
+        ],
+        "architecture": "gpt-oss",
+        "contextTokens": 4096
+      },
+      "auth_checks": {
+        "missing_token_status": 401,
+        "missing_token_body": {
+          "error": {
+            "message": "Missing or wrong endpoint token.",
+            "type": "shield_error",
+            "code": "unauthorized"
+          }
+        },
+        "wrong_token_status": 401,
+        "wrong_token_body": {
+          "error": {
+            "message": "Missing or wrong endpoint token.",
+            "type": "shield_error",
+            "code": "unauthorized"
+          }
+        },
+        "valid_token_models_status": 200,
+        "returned_model_ids": [
+          "gpt-oss-20b-MXFP4"
+        ],
+        "disallowed_alias_status": 403,
+        "disallowed_alias_body": {
+          "error": {
+            "message": "This model is not offered by this producer.",
+            "type": "shield_error",
+            "code": "model_not_allowed"
+          }
+        }
+      },
+      "non_streaming": {
+        "status": 200,
+        "elapsed_s": 13.964,
+        "prompt_tokens": 2677,
+        "completion_tokens": 96,
+        "end_to_end_tok_s": 6.88
+      },
+      "streaming": {
+        "status": 200,
+        "sse_chunks": 88,
+        "done_seen": true,
+        "ttft_ms": 4730.0,
+        "total_s": 13.655,
+        "prefill_tok_s_from_ttft": 565.96,
+        "decode_tok_s": 10.76,
+        "output_preview": "The user wants a short Python function fibonacci(n) that returns the n-th Fibonacci number iteratively in O(n) time and O(1) space. This is straightforward: def"
+      },
+      "gguf_file": "gpt-oss-20b-MXFP4.gguf",
+      "gguf_size_bytes": 13793422816,
+      "gguf_sha256": "8ecb5d4ad6172c63f9cbf1a07a04e525985a8a11a6e516da02b674c4010de716",
+      "gguf_source": "dhiltgen/gpt-oss:20b-llamacpp (MXFP4, 24 MoE layers, 12.85 GiB)"
+    }
+  ]
+}

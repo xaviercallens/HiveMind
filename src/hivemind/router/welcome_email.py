@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import math
 import os
 import smtplib
 import time
@@ -53,6 +54,8 @@ GITHUB_REPO_URL: str = "https://github.com/xaviercallens/HiveMind"
 
 def build_install_producer_shell_script(gateway_url: str = PUBLIC_RUCHE_URL) -> str:
     """Return a standalone 1-command bash onboarding script for GPU Producers."""
+    if not isinstance(gateway_url, str) or not gateway_url.strip() or not gateway_url.startswith(("https://", "http://")):
+        raise ValueError("gateway_url must be a non-empty http(s) URL")
     gw = gateway_url.rstrip("/")
     return f"""#!/usr/bin/env bash
 # ==============================================================================
@@ -133,6 +136,18 @@ def build_welcome_email_content(
     is_pioneer_first_user: bool = False,
 ) -> dict[str, Any]:
     """Generate the bilingual (EN + FR) subject, plain-text body, and HTML body for a user."""
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ValueError("account_id must be a non-empty string")
+    if not isinstance(handle, str):
+        raise ValueError("handle must be a string")
+    if not isinstance(role, str) or not role.strip():
+        raise ValueError("role must be a non-empty string")
+    if isinstance(balance_hmt, bool) or not isinstance(balance_hmt, (int, float)) or not math.isfinite(float(balance_hmt)) or float(balance_hmt) < 0.0:
+        raise ValueError("balance_hmt must be a finite non-negative float")
+    if recipient_email is not None and not isinstance(recipient_email, str):
+        raise ValueError("recipient_email must be a string or None")
+    if not isinstance(is_pioneer_first_user, bool):
+        raise ValueError("is_pioneer_first_user must be a boolean")
     safe_handle = html.escape(handle or account_id[:12])
     safe_account = html.escape(account_id)
     safe_role = html.escape(role)
@@ -267,7 +282,7 @@ def build_welcome_email_content(
         Across the world, millions of gamers, students, and researchers own capable consumer GPUs (4 GB to 24 GB VRAM) that sit idle 80% of the day. Like neighborhood rooftop solar panels feeding a shared smart grid:
       </p>
       <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:#cbd5e1;">
-        <li><strong>When your PC is idle:</strong> Your Worker Bee serves coding/scientific prompts or trains compact QLoRA adapters compressed <strong>30.89&times;</strong> via 8D Gosset $E_8$ lattice geometry.</li>
+        <li><strong>When your PC is idle:</strong> Your Worker Bee serves coding/scientific prompts or trains compact QLoRA adapters compressed via 8D Gosset $E_8$ lattice geometry (<strong>16&times;</strong> dense at 2 bits/dim; <strong>30.89&times;</strong> with top-k sparsity, ref: <code>artifacts/experiments/E10_lattice_diloco.json</code>).</li>
         <li><strong>Instant &lt;1.5s Game Preemption:</strong> Launch any game (Steam, Cyberpunk, Blender) and the hardware circuit-breaker frees 100% of your GPU in under 1.5 seconds.</li>
         <li><strong>Kelly-Tullock Nash Equilibrium:</strong> Producers earn <strong>85%</strong> of settled HMT points directly to their hash-chained ledger; Consumers get instant access to 5 capability tiers and 8 specialist Honeycomb Bees.</li>
       </ul>
@@ -321,6 +336,8 @@ def build_welcome_email_content(
 
 def _mask_email(email: str) -> str:
     """Mask an email address for safe telemetry display (e.g. ``x***@example.org``)."""
+    if not isinstance(email, str):
+        raise ValueError("email must be a string")
     clean = email.strip()
     if "@" not in clean:
         return "***"

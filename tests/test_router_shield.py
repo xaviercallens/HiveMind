@@ -11,8 +11,16 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-_PATH = Path(__file__).resolve().parents[1] / "scripts" / "hivemind_producer_shield.py"
-_spec = importlib.util.spec_from_file_location("hivemind_producer_shield", _PATH)
+_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "hivemind"
+    / "router"
+    / "hivemind_producer_shield.py"
+)
+_spec = importlib.util.spec_from_file_location(
+    "hivemind.router.hivemind_producer_shield", _PATH
+)
 assert _spec is not None and _spec.loader is not None
 shield: ModuleType = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(shield)

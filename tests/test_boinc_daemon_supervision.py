@@ -23,6 +23,7 @@ SCRIPT = ROOT / "deploy" / "t4_node" / "node" / "bin" / "boinc_ensure_daemons.sh
 DAEMONS = [  # argv as `ps` shows the real ones
     "feeder -d 3", "transitioner -d 3", "file_deleter -d 3",
     "script_validator -d 3 --app hivemind_qlora_moe --init_script x", "script_assimilator -d 3 --app hivemind_qlora_moe --script x",
+    "script_validator -d 3 --app hivemind_qlora_moe_big --init_script x", "script_assimilator -d 3 --app hivemind_qlora_moe_big --script x",
     "script_validator -d 3 --app hivemind_moe_infer --init_script x", "script_assimilator -d 3 --app hivemind_moe_infer --script x",
 ]
 

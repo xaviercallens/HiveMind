@@ -41,15 +41,40 @@ def wait_acknowledged(ring: object, run: str, acked: list[str], failed: list[str
     return None
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", required=True)
     ap.add_argument("--voters", nargs=3, required=True, metavar="NAME:ZONE")
     ap.add_argument("--bootstrap", default="10.77.0.1:9092,10.77.0.2:9092,10.77.0.3:9092")
     ap.add_argument("--count", type=int, default=10)
-    args = ap.parse_args()
-    proof.BOOTSTRAP = args.bootstrap
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the planned VM stop/start and AMCP publish phases without calling gcloud or publishing.",
+    )
+    args = ap.parse_args(argv)
+    for raw_voter in args.voters:
+        if ":" not in raw_voter:
+            ap.error(f"Voter must be NAME:ZONE, got {raw_voter!r}")
     vms = [v.split(":", 1) for v in args.voters]
+    if args.dry_run:
+        plan = {
+            "dry_run": True,
+            "project": args.project,
+            "bootstrap": args.bootstrap,
+            "count": args.count,
+            "voters": [{"name": name, "zone": zone} for name, zone in vms],
+            "phases": [
+                {"phase": 1, "action": "publish", "tag": "all3", "count": args.count},
+                {"phase": 2, "action": "gcloud_stop", "vm": vms[2][0], "zone": vms[2][1], "then_publish_count": args.count},
+                {"phase": 3, "action": "gcloud_stop", "vm": vms[1][0], "zone": vms[1][1], "then_publish_count": 3},
+                {"phase": 4, "action": "gcloud_start", "vms": [{"name": vms[2][0], "zone": vms[2][1]}, {"name": vms[1][0], "zone": vms[1][1]}]},
+                {"phase": 5, "action": "read_back"},
+            ],
+        }
+        print(json.dumps(plan, indent=2))
+        return 0
+    proof.BOOTSTRAP = args.bootstrap
     ring = proof.HMACKeyring(keys={"proof": os.urandom(32)}, active_kid="proof")
     run = f"real-{uuid.uuid4().hex[:8]}"
     acked: list[str] = []

@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import random
 import sys
 import time
 from pathlib import Path
@@ -35,11 +37,99 @@ LORA_TARGETS = ("q_proj", "k_proj", "v_proj", "o_proj")
 
 
 def tokens_sha(tokens: list[list[int]]) -> str:
+    if isinstance(tokens, (str, bytes)) or not isinstance(tokens, list):
+        raise ValueError("tokens must be a list of token-id lists")
     return hashlib.sha256(json.dumps(tokens, separators=(",", ":")).encode()).hexdigest()
+
+
+def build_mixed_domain_train_tokens(
+    target_tokens: list[list[int]],
+    replay_pools_by_domain: dict[str, list[list[int]]] | None,
+    *,
+    target_domain: str = "general",
+    replay_ratio: float = 0.2,
+    rng_seed: int = 42,
+) -> list[list[int]]:
+    """Construct an 80/20 mixed-domain token batch schedule to prevent cross-domain forgetting on shared attention LoRAs.
+
+    Replaces ``round(len(target_tokens) * replay_ratio)`` sequences at deterministic indices with sequences sampled
+    uniformly across non-target domains in ``replay_pools_by_domain``.
+    """
+    if isinstance(target_tokens, (str, bytes)) or not isinstance(target_tokens, list):
+        raise ValueError("target_tokens must be a list of token-id sequences")
+    if not isinstance(target_domain, str) or not target_domain.strip():
+        raise ValueError("target_domain must be a non-empty string")
+    if isinstance(replay_ratio, bool) or not isinstance(replay_ratio, (int, float)) or not math.isfinite(float(replay_ratio)):
+        raise ValueError("replay_ratio must be a finite number")
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int):
+        raise ValueError("rng_seed must be an integer")
+    if not target_tokens or not replay_pools_by_domain or replay_ratio <= 0.0:
+        return [list(seq) for seq in target_tokens]
+    other_domains = sorted(d for d, pool in replay_pools_by_domain.items() if d != target_domain and pool)
+    if not other_domains:
+        return [list(seq) for seq in target_tokens]
+    clamped_ratio = min(0.5, max(0.0, float(replay_ratio)))
+    n_total = len(target_tokens)
+    n_replay = max(1, int(round(n_total * clamped_ratio))) if n_total >= 2 else 0
+    rng = random.Random(int(rng_seed))
+    mixed = [list(seq) for seq in target_tokens]
+    replay_positions = sorted(rng.sample(range(n_total), k=min(n_replay, n_total)))
+    for idx, pos in enumerate(replay_positions):
+        dom = other_domains[idx % len(other_domains)]
+        pool = replay_pools_by_domain[dom]
+        chosen = pool[rng.randrange(len(pool))]
+        mixed[pos] = list(chosen)
+    return mixed
+
+
+def cosine_segment_lr(
+    base_lr: float,
+    segment_idx: int,
+    total_segments: int,
+    *,
+    round_idx: int = 0,
+    total_rounds: int = 100,
+    min_lr_scale: float = 0.2,
+) -> float:
+    """Cosine learning-rate schedule across chained BOINC QLoRA rounds and inner segments."""
+    if isinstance(base_lr, bool) or not isinstance(base_lr, (int, float)) or not math.isfinite(float(base_lr)) or float(base_lr) <= 0.0:
+        raise ValueError("base_lr must be a positive finite number")
+    for iname, ival, min_v in (
+        ("segment_idx", segment_idx, 0),
+        ("total_segments", total_segments, 1),
+        ("round_idx", round_idx, 0),
+        ("total_rounds", total_rounds, 1),
+    ):
+        if isinstance(ival, bool) or not isinstance(ival, int) or ival < min_v:
+            raise ValueError(f"{iname} must be an integer >= {min_v}")
+    if (
+        isinstance(min_lr_scale, bool)
+        or not isinstance(min_lr_scale, (int, float))
+        or not math.isfinite(float(min_lr_scale))
+        or not (0.0 <= float(min_lr_scale) <= 1.0)
+    ):
+        raise ValueError("min_lr_scale must be a finite number in [0.0, 1.0]")
+    tot_steps = max(1, int(total_rounds) * max(1, int(total_segments)))
+    cur_step = min(tot_steps, max(0, int(round_idx) * max(1, int(total_segments)) + int(segment_idx)))
+    cosine = 0.5 * (1.0 + math.cos(math.pi * cur_step / tot_steps))
+    scale = float(min_lr_scale) + (1.0 - float(min_lr_scale)) * cosine
+    return float(base_lr) * scale
 
 
 def load_peft_model(spec: dict[str, Any], adapter_state: dict[str, Any] | None = None):
     """NF4 attention + fp32 LoRA, deterministic init from ``spec['init_seed']``."""
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    if not isinstance(spec.get("model_id"), str) or not spec["model_id"].strip():
+        raise ValueError("spec['model_id'] must be a non-empty string")
+    if isinstance(spec.get("init_seed"), bool) or not isinstance(spec.get("init_seed"), int):
+        raise ValueError("spec['init_seed'] must be an integer")
+    for iname in ("rank", "alpha"):
+        ival = spec.get(iname)
+        if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+            raise ValueError(f"spec[{iname!r}] must be an integer >= 1")
+    if adapter_state is not None and (not isinstance(adapter_state, dict) or not adapter_state):
+        raise ValueError("adapter_state must be None or a non-empty dict")
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     import torch
     from peft import LoraConfig, get_peft_model
@@ -64,11 +154,19 @@ def load_peft_model(spec: dict[str, Any], adapter_state: dict[str, Any] | None =
 
 def eval_by_domain(model, spec: dict[str, Any]) -> dict[str, float]:
     """Held-out loss per domain (``eval_sets``); falls back to the single ``eval_tokens`` set of older workunits."""
-    sets = spec.get("eval_sets") or {"general": spec["eval_tokens"]}
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    sets = spec.get("eval_sets") or {"general": spec.get("eval_tokens")}
+    if not isinstance(sets, dict) or not any(sets.values()):
+        raise ValueError("spec must provide non-empty eval_sets or eval_tokens")
     return {d: eval_loss(model, toks) for d, toks in sets.items() if toks}
 
 
 def eval_loss(model, tokens, batch: int = 4) -> float:
+    if isinstance(tokens, (str, bytes)) or not isinstance(tokens, list) or not tokens:
+        raise ValueError("tokens must be a non-empty list of token-id sequences")
+    if isinstance(batch, bool) or not isinstance(batch, int) or batch < 1:
+        raise ValueError("batch must be a positive integer")
     import torch
 
     model.eval()
@@ -84,6 +182,8 @@ def eval_loss(model, tokens, batch: int = 4) -> float:
 
 
 def state_sha(state: dict[str, Any]) -> str:
+    if not isinstance(state, dict) or not state:
+        raise ValueError("state must be a non-empty dict")
     from hivemind.core.quantization import compute_state_dict_sha256
 
     return compute_state_dict_sha256(state)
@@ -97,12 +197,33 @@ def train(
     start_state: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """``start_state`` chains workunits: training continues from the adapter the previous validated workunit produced."""
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    if not isinstance(ckpt, Path):
+        raise TypeError("ckpt must be a Path")
+    if crash_after_segment is not None and (
+        isinstance(crash_after_segment, bool) or not isinstance(crash_after_segment, int) or crash_after_segment < 1
+    ):
+        raise ValueError("crash_after_segment must be None or an integer >= 1")
+    if not isinstance(lazy, bool):
+        raise ValueError("lazy must be a boolean")
+    if start_state is not None and (not isinstance(start_state, dict) or not start_state):
+        raise ValueError("start_state must be None or a non-empty dict")
     import torch
 
     from hivemind.core.diloco_inner import replay_inner_segment
     from hivemind.core.quantization import extract_lora_state_dict, load_lora_state_dict
 
-    train_tokens = torch.tensor(spec["train_tokens"], dtype=torch.long)
+    raw_train_tokens = spec["train_tokens"]
+    if spec.get("replay_pools") and not spec.get("domain_isolated_adapter", False):
+        raw_train_tokens = build_mixed_domain_train_tokens(
+            raw_train_tokens,
+            spec["replay_pools"],
+            target_domain=str(spec.get("domain", "general")),
+            replay_ratio=float(spec.get("replay_ratio", 0.2)),
+            rng_seed=int(spec.get("rng_seed", 0)),
+        )
+    train_tokens = torch.tensor(raw_train_tokens, dtype=torch.long)
     model = load_peft_model(spec)
     if start_state is not None:
         load_lora_state_dict(model, start_state)
@@ -117,14 +238,28 @@ def train(
     if eval0 is None:
         eval0 = eval_by_domain(model, spec)
     t0 = time.time()
+    use_cosine_lr = bool(spec.get("cosine_lr", False))
     for k in range(len(states) - 1, k_total):
         if lazy:  # red-team control: claim progress without computing it
             states.append({n: t.clone() for n, t in states[-1].items()})
         else:
+            base_lr = float(spec["lr"])
+            seg_lr = (
+                cosine_segment_lr(
+                    base_lr,
+                    k,
+                    k_total,
+                    round_idx=int(spec.get("round_idx", 0)),
+                    total_rounds=int(spec.get("total_rounds", 1)),
+                    min_lr_scale=float(spec.get("min_lr_scale", 0.2)),
+                )
+                if use_cosine_lr
+                else base_lr
+            )
             states.append(
                 replay_inner_segment(
                     model, states[k], train_tokens, k * seg, (k + 1) * seg,
-                    lr=float(spec["lr"]), weight_decay=float(spec["weight_decay"]),
+                    lr=seg_lr, weight_decay=float(spec["weight_decay"]),
                     rng_seed=int(spec["rng_seed"]), micro_batch_size=int(spec["micro_batch"]),
                 )
             )
@@ -138,12 +273,14 @@ def train(
     load_lora_state_dict(model, states[-1])
     eval1 = eval_by_domain(model, spec)
     wall = time.time() - t0
-    tokens_seen = steps * int(spec["micro_batch"]) * len(spec["train_tokens"][0])
+    tokens_seen = steps * int(spec["micro_batch"]) * len(raw_train_tokens[0])
     meta = {
         "app": spec.get("app", TRAIN_APP), "app_version": APP_VERSION, "wu_id": spec["wu_id"], "model_id": spec["model_id"],
         "device_name": torch.cuda.get_device_name(0), "fingerprint": class_fingerprint("cuda", "fp16"),
         "segments": k_total, "segment_steps": seg, "resumed_from_segment": resumed,
         "state_sha256": [state_sha(s) for s in states], "domain": spec.get("domain", "general"),
+        "domain_isolated_adapter": bool(spec.get("domain_isolated_adapter", False)),
+        "replay_ratio": float(spec.get("replay_ratio", 0.2 if spec.get("replay_pools") else 0.0)),
         "eval_by_domain_before": eval0, "eval_by_domain_after": eval1,
         "eval_loss_before": sum(eval0.values()) / len(eval0), "eval_loss_after": sum(eval1.values()) / len(eval1),  # mean over domains
         "trainable_params": sum(p.numel() for p in model.parameters() if p.requires_grad),
@@ -155,6 +292,16 @@ def train(
 
 
 def infer(spec: dict[str, Any], adapter_state: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    if not isinstance(adapter_state, dict) or not adapter_state:
+        raise ValueError("adapter_state must be a non-empty dict")
+    prompts = spec.get("prompts")
+    if not isinstance(prompts, list) or not prompts or not all(isinstance(p, str) and p.strip() for p in prompts):
+        raise ValueError("spec['prompts'] must be a non-empty list of non-empty strings")
+    max_new = spec.get("max_new_tokens")
+    if isinstance(max_new, bool) or not isinstance(max_new, int) or max_new < 1:
+        raise ValueError("spec['max_new_tokens'] must be a positive integer")
     import torch
     from transformers import AutoTokenizer
 
@@ -180,6 +327,12 @@ def infer(spec: dict[str, Any], adapter_state: dict[str, Any]) -> dict[str, Any]
 def gpu_gate(spec: dict[str, Any], mode: str, have_mb: int) -> str | None:
     """Why this host must not run the workunit, or None. The scheduler should never send a big workunit to a small GPU, but a
     mis-registered host must fail loudly rather than run out of memory halfway through."""
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    if not isinstance(mode, str) or not mode.strip():
+        raise ValueError("mode must be a non-empty string")
+    if isinstance(have_mb, bool) or not isinstance(have_mb, int) or have_mb < 0:
+        raise ValueError("have_mb must be a non-negative integer")
     if mode != "train":
         return None
     if spec.get("app", TRAIN_APP) not in TRAIN_APPS:

@@ -81,14 +81,14 @@ REDDIT_THREAD_HIGHLIGHTS: tuple[dict[str, Any], ...] = (
         "subreddit": "r/webgpu & r/SelfHostedAI",
         "title": "Zero-Install WebGPU Space Game & P2P AI Node that Auto-Pauses for Steam",
         "views": 1890,
-        "comments": 4,
+        "comments": 12,
         "upvotes": 5,
-        "key_participants": ["u/Aransentin", "Homelab Self-Hosters"],
-        "core_concern_fr": "Preuve réelle du nombre de GPU physiques distincts par rapport aux comptes enregistrés et équilibrage réel de la charge entre Producteurs et Prosumers.",
-        "core_concern_en": "Real proof of distinct physical GPUs vs. registered accounts and verifiable load balancing across Producers and Prosumers.",
-        "roadmap_evolution_id": "HM-REDDIT-07 (#402, #403, #430)",
-        "deployed_solution_fr": "Comptage honnête distinct_physical_gpus (#402), télémétrie GCP temps réel (/v1/hivemind/live-telemetry) sur 100 % des pages, et rotation WeightedRoundRobin sur les 42 HiveMinders (76,7 % Prosumers / 23,3 % Producers).",
-        "deployed_solution_en": "Honest distinct_physical_gpus counting (#402), real-time GCP telemetry (/v1/hivemind/live-telemetry) across 100% of pages, and WeightedRoundRobin across all 42 HiveMinders (76.7% Prosumers / 23.3% Producers).",
+        "key_participants": ["u/StevenVincentOne (POND.is)", "u/anonymousart3", "u/lcpjj_", "u/Aransentin"],
+        "core_concern_fr": "Preuve des GPU physiques vs comptes, anti-farming de points HMT (canaris + Multi-Krum), confidentialité P2P (0 prompt privé sur Trainers), redaction des endpoints publics, bouclier CVE-2024-37032 et découverte DHT Kademlia/QUIC.",
+        "core_concern_en": "Proof of distinct physical GPUs vs. accounts, anti-point-farming (Wilson canary spot-checks + Multi-Krum), P2P prompt privacy (0 private prompts on Trainers), public endpoint redaction, CVE-2024-37032 shield, and Kademlia/QUIC DHT discovery.",
+        "roadmap_evolution_id": "HM-REDDIT-07 / HM-REDDIT-09 (#402, #403, #430, 1xjc76k)",
+        "deployed_solution_fr": "Comptage honnête distinct_physical_gpus (#402), filtre local anti-fuites de clés (/v1/hivemind/selfhosted-p2p/scrub-prompt), présélection /signup?role=trainer (0 prompt privé), redaction endpoint_url sur /v1/hivemind/producers/fleet, et audit cryptographique (/v1/hivemind/selfhosted-p2p/audit).",
+        "deployed_solution_en": "Honest distinct_physical_gpus counting (#402), local secret/PII prompt scrubber (/v1/hivemind/selfhosted-p2p/scrub-prompt), /signup?role=trainer pre-selection (0 private prompts), endpoint_url redaction on /v1/hivemind/producers/fleet, and cryptographic audit (/v1/hivemind/selfhosted-p2p/audit).",
     },
 )
 
@@ -147,6 +147,12 @@ MANIFESTO_PILLARS: tuple[dict[str, str], ...] = (
 
 def pick_manifesto_language(query_lang: str | None, accept_language: str | None, default: str = "fr") -> str:
     """Select 'fr' or 'en' from query param or Accept-Language header."""
+    if query_lang is not None and (isinstance(query_lang, bool) or not isinstance(query_lang, str)):
+        raise ValueError("query_lang must be a string or None")
+    if accept_language is not None and (isinstance(accept_language, bool) or not isinstance(accept_language, str)):
+        raise ValueError("accept_language must be a string or None")
+    if isinstance(default, bool) or not isinstance(default, str):
+        raise ValueError("default must be a string")
     if query_lang:
         code = query_lang.strip().lower()[:2]
         if code in SUPPORTED_MANIFESTO_LANGS:
@@ -161,6 +167,8 @@ def pick_manifesto_language(query_lang: str | None, accept_language: str | None,
 
 def manifesto_payload(live_telemetry: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Return the structured JSON payload for GET /v1/hivemind/manifesto."""
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     return {
         "object": "hivemind.manifesto",
         "version": "1.0.0-s36",
@@ -207,6 +215,12 @@ def render_manifesto_page(
     live_telemetry: Mapping[str, Any] | None = None,
 ) -> str:
     """Render the bilingual (FR/EN) Citizen AI Manifesto & Reddit Evolution HTML page."""
+    if not isinstance(lang, str) or not isinstance(nonce, str):
+        raise ValueError("lang and nonce must be strings")
+    if not isinstance(api_url, str) or not api_url.strip() or not isinstance(ruche_url, str) or not ruche_url.strip():
+        raise ValueError("api_url and ruche_url must be non-empty strings")
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     clean_lang = "en" if str(lang).lower().startswith("en") else "fr"
     is_fr = clean_lang == "fr"
     telem = dict(live_telemetry) if isinstance(live_telemetry, Mapping) else {}

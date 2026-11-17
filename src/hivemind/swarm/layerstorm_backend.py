@@ -25,8 +25,9 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
+import math
 import time
-from typing import Any
+from typing import Any, Sequence
 
 import torch
 
@@ -76,10 +77,28 @@ class TwoZoneVRAMBudget:
 
     def validate(self) -> None:
         """Fail-closed check of the Golden VRAM Ceiling invariant."""
+        for attr in (
+            "vram_cap_mib",
+            "dense_attention_mib",
+            "kv_cache_mib",
+            "expert_size_mib",
+            "host_numa_ram_cap_mib",
+        ):
+            val = getattr(self, attr)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{attr} must be a finite numeric value")
+        for slot_attr in ("zone_a_slots", "zone_b_slots"):
+            s_val = getattr(self, slot_attr)
+            if isinstance(s_val, bool) or not isinstance(s_val, int):
+                raise ValueError(f"{slot_attr} must be an integer")
         if self.vram_cap_mib <= 0:
             raise ValueError(f"vram_cap_mib must be positive, got {self.vram_cap_mib}")
         if self.expert_size_mib <= 0:
             raise ValueError(f"expert_size_mib must be positive, got {self.expert_size_mib}")
+        if self.host_numa_ram_cap_mib <= 0:
+            raise ValueError(f"host_numa_ram_cap_mib must be positive, got {self.host_numa_ram_cap_mib}")
+        if self.dense_attention_mib < 0 or self.kv_cache_mib < 0:
+            raise ValueError("dense_attention_mib and kv_cache_mib must be non-negative")
         if self.zone_a_slots < 0 or self.zone_b_slots < 0:
             raise ValueError("Zone A and Zone B slot counts must be non-negative")
         if self.total_vram_mib > self.vram_cap_mib:
@@ -94,6 +113,8 @@ class TwoZoneVRAMCache:
     """Two-Zone GPU VRAM Expert Cache (Zone A: Waggle-Warm Pinned; Zone B: Dynamic LRU)."""
 
     def __init__(self, budget: TwoZoneVRAMBudget) -> None:
+        if not isinstance(budget, TwoZoneVRAMBudget):
+            raise TypeError("budget must be a TwoZoneVRAMBudget")
         budget.validate()
         self.budget = budget
         self._zone_a: set[int] = set()
@@ -117,11 +138,15 @@ class TwoZoneVRAMCache:
         explicit_experts: list[int] | tuple[int, ...] | None = None,
     ) -> list[int]:
         """Pre-populate Zone A during the Kafka Waggle Dance quorum lock window."""
-        candidates = (
-            list(explicit_experts)
-            if explicit_experts is not None
-            else list(DEFAULT_DOMAIN_HOT_EXPERTS.get(domain, ()))
-        )
+        if not isinstance(domain, str) or not domain.strip():
+            raise ValueError("domain must be a non-empty string")
+        if explicit_experts is not None:
+            for e in explicit_experts:
+                if isinstance(e, bool) or not isinstance(e, int) or e < 0:
+                    raise ValueError("explicit_experts must contain non-negative integers")
+            candidates = list(explicit_experts)
+        else:
+            candidates = list(DEFAULT_DOMAIN_HOT_EXPERTS.get(domain, ()))
         selected = candidates[: self.budget.zone_a_slots]
         self._zone_a = set(selected)
         self.active_domain = domain
@@ -131,6 +156,8 @@ class TwoZoneVRAMCache:
 
     def access_expert(self, expert_id: int) -> str:
         """Query an expert; returns 'zone_a_hit', 'zone_b_hit', or 'pcie_stream_miss'."""
+        if isinstance(expert_id, bool) or not isinstance(expert_id, int) or expert_id < 0:
+            raise ValueError("expert_id must be a non-negative integer")
         if expert_id in self._zone_a:
             self.zone_a_hits += 1
             return "zone_a_hit"
@@ -164,6 +191,23 @@ class PCIeStepTelemetry:
     overlapped_stall_ms: float
     total_step_ms: float
 
+    def __post_init__(self) -> None:
+        for tup_field in ("requested_experts", "streamed_experts"):
+            val = getattr(self, tup_field)
+            if not isinstance(val, tuple) or any(
+                isinstance(e, bool) or not isinstance(e, int) or e < 0 for e in val
+            ):
+                raise ValueError(f"{tup_field} must be a tuple of non-negative integers")
+        for flt_field in ("pcie_h2d_mib", "raw_transfer_ms", "overlapped_stall_ms", "total_step_ms"):
+            fval = getattr(self, flt_field)
+            if (
+                isinstance(fval, bool)
+                or not isinstance(fval, (int, float))
+                or not math.isfinite(float(fval))
+                or float(fval) < 0.0
+            ):
+                raise ValueError(f"{flt_field} must be a finite non-negative number")
+
 
 class PCIeWaterlineStreamScheduler:
     """Models LayerStoRm deduplicated PCIe DMA streaming with FoMoE speculative overlap."""
@@ -175,12 +219,25 @@ class PCIeWaterlineStreamScheduler:
         layer_attention_ms: float = 1.8,
         fomoe_speculative_overlap_ratio: float = 0.858,
     ) -> None:
+        if not isinstance(vram_cache, TwoZoneVRAMCache):
+            raise TypeError("vram_cache must be a TwoZoneVRAMCache")
+        for name, val in (
+            ("pcie_bandwidth_gbps", pcie_bandwidth_gbps),
+            ("layer_attention_ms", layer_attention_ms),
+            ("fomoe_speculative_overlap_ratio", fomoe_speculative_overlap_ratio),
+        ):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{name} must be a finite numeric value")
         if pcie_bandwidth_gbps <= 0:
             raise ValueError("pcie_bandwidth_gbps must be positive")
+        if layer_attention_ms < 0:
+            raise ValueError("layer_attention_ms must be non-negative")
+        if not (0.0 <= fomoe_speculative_overlap_ratio <= 1.0):
+            raise ValueError("fomoe_speculative_overlap_ratio must be in [0.0, 1.0]")
         self.vram_cache = vram_cache
         self.pcie_bandwidth_mib_per_ms = (pcie_bandwidth_gbps * 1024.0) / 1000.0
-        self.layer_attention_ms = max(0.0, layer_attention_ms)
-        self.fomoe_speculative_overlap_ratio = max(0.0, min(1.0, fomoe_speculative_overlap_ratio))
+        self.layer_attention_ms = float(layer_attention_ms)
+        self.fomoe_speculative_overlap_ratio = float(fomoe_speculative_overlap_ratio)
         self.cumulative_h2d_mib: float = 0.0
         self.cumulative_steps: int = 0
 
@@ -190,6 +247,11 @@ class PCIeWaterlineStreamScheduler:
         use_waterline_overlap: bool = True,
     ) -> PCIeStepTelemetry:
         """Deduplicate activated experts, stream misses over PCIe, and overlap with attention."""
+        if not isinstance(use_waterline_overlap, bool):
+            raise ValueError("use_waterline_overlap must be a boolean")
+        for exp_id in activated_experts:
+            if isinstance(exp_id, bool) or not isinstance(exp_id, int) or exp_id < 0:
+                raise ValueError("activated_experts must contain non-negative integers")
         unique_experts = tuple(dict.fromkeys(activated_experts))
         streamed: list[int] = []
         for exp_id in unique_experts:
@@ -229,6 +291,21 @@ class LayerStoRmSwarmBridge:
     is_preempted: bool = False
     last_preemption_latency_ms: float = 0.0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.scheduler, PCIeWaterlineStreamScheduler):
+            raise TypeError("scheduler must be a PCIeWaterlineStreamScheduler")
+        if not isinstance(self.nectar_cache, SwarmNectarCache):
+            raise TypeError("nectar_cache must be a SwarmNectarCache")
+        if not isinstance(self.is_preempted, bool):
+            raise ValueError("is_preempted must be a boolean")
+        if (
+            isinstance(self.last_preemption_latency_ms, bool)
+            or not isinstance(self.last_preemption_latency_ms, (int, float))
+            or not math.isfinite(float(self.last_preemption_latency_ms))
+            or float(self.last_preemption_latency_ms) < 0.0
+        ):
+            raise ValueError("last_preemption_latency_ms must be a finite non-negative number")
+
     def serve_request(
         self,
         domain: str,
@@ -239,6 +316,16 @@ class LayerStoRmSwarmBridge:
         use_waterline_overlap: bool = True,
     ) -> dict[str, Any]:
         """Serve a multi-token MoE request through Nectar Cache -> Waggle Prewarm -> LayerStoRm PCIe."""
+        if not isinstance(domain, str) or not domain.strip():
+            raise ValueError("domain must be a non-empty string")
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("query must be a non-empty string")
+        if not isinstance(discoverer_bee_id, str) or not discoverer_bee_id.strip():
+            raise ValueError("discoverer_bee_id must be a non-empty string")
+        if isinstance(token_expert_traces, (str, bytes)) or not isinstance(token_expert_traces, Sequence):
+            raise ValueError("token_expert_traces must be a sequence of expert traces")
+        if not isinstance(prewarm_on_waggle, bool) or not isinstance(use_waterline_overlap, bool):
+            raise ValueError("prewarm_on_waggle and use_waterline_overlap must be booleans")
         if self.is_preempted:
             raise RuntimeError("Node is preempted by active local game/3D application")
 
@@ -326,7 +413,22 @@ class RealCUDAPCIeExpertStreamer:
         expert_cols: int = 1024,
         device: str | None = None,
     ) -> None:
-        if zone_a_slots < 0 or zone_b_slots < 0 or num_total_experts <= 0:
+        for name, val in (
+            ("num_total_experts", num_total_experts),
+            ("zone_a_slots", zone_a_slots),
+            ("zone_b_slots", zone_b_slots),
+            ("expert_rows", expert_rows),
+            ("expert_cols", expert_cols),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int):
+                raise ValueError(f"{name} must be an integer")
+        if (
+            zone_a_slots < 0
+            or zone_b_slots < 0
+            or num_total_experts <= 0
+            or expert_rows <= 0
+            or expert_cols <= 0
+        ):
             raise ValueError("Invalid expert/slot counts for RealCUDAPCIeExpertStreamer")
         self.use_cuda = (device == "cuda") if device is not None else torch.cuda.is_available()
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
@@ -369,11 +471,15 @@ class RealCUDAPCIeExpertStreamer:
 
     def prewarm_zone_a(self, domain: str, explicit_experts: list[int] | tuple[int, ...] | None = None) -> list[int]:
         """Pre-stage domain hot experts into Zone A GPU memory before token 1 arrives."""
-        candidates = (
-            list(explicit_experts)
-            if explicit_experts is not None
-            else list(DEFAULT_DOMAIN_HOT_EXPERTS.get(domain, ()))
-        )
+        if not isinstance(domain, str) or not domain.strip():
+            raise ValueError("domain must be a non-empty string")
+        if explicit_experts is not None:
+            for e in explicit_experts:
+                if isinstance(e, bool) or not isinstance(e, int) or e < 0:
+                    raise ValueError("explicit_experts must contain non-negative integers")
+            candidates = list(explicit_experts)
+        else:
+            candidates = list(DEFAULT_DOMAIN_HOT_EXPERTS.get(domain, ()))
         selected = [e % self.num_total_experts for e in candidates[: self.zone_a_slots]]
         self.zone_a_gpu.clear()
         for exp_id in selected:
@@ -392,6 +498,18 @@ class RealCUDAPCIeExpertStreamer:
         overlap_dma_with_attention: bool = True,
     ) -> dict[str, Any]:
         """Execute one dense-attention + streamed-MoE step and return measured telemetry."""
+        if (
+            not isinstance(hidden_state, torch.Tensor)
+            or hidden_state.ndim != 2
+            or hidden_state.shape[0] < 1
+            or hidden_state.shape[1] != self.expert_rows
+        ):
+            raise ValueError(f"hidden_state must be a 2D tensor with shape (>=1, {self.expert_rows})")
+        if not isinstance(overlap_dma_with_attention, bool):
+            raise ValueError("overlap_dma_with_attention must be a boolean")
+        for e in activated_experts:
+            if isinstance(e, bool) or not isinstance(e, int) or e < 0:
+                raise ValueError("activated_experts must contain non-negative integers")
         unique_experts = tuple(dict.fromkeys(e % self.num_total_experts for e in activated_experts))
         if self.use_cuda:
             torch.cuda.synchronize(self.device)
@@ -493,6 +611,28 @@ class FoMoESkipAttentionLookaheadRouter:
     ) -> None:
         import torch
 
+        for name, val in (
+            ("hidden_dim", hidden_dim),
+            ("num_experts", num_experts),
+            ("top_k", top_k),
+            ("seed", seed),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int):
+                raise ValueError(f"{name} must be an integer")
+        if hidden_dim <= 0 or num_experts <= 0:
+            raise ValueError("hidden_dim and num_experts must be positive")
+        if top_k < 1 or top_k > num_experts:
+            raise ValueError("top_k must be in [1, num_experts]")
+        if seed < 0:
+            raise ValueError("seed must be non-negative")
+        if (
+            isinstance(car_margin_threshold, bool)
+            or not isinstance(car_margin_threshold, (int, float))
+            or not math.isfinite(float(car_margin_threshold))
+            or car_margin_threshold < 0.0
+        ):
+            raise ValueError("car_margin_threshold must be a finite non-negative number")
+
         self.hidden_dim = int(hidden_dim)
         self.num_experts = int(num_experts)
         self.top_k = int(top_k)
@@ -507,6 +647,8 @@ class FoMoESkipAttentionLookaheadRouter:
         import torch
 
         h = pre_attn_hidden.detach().to(device="cpu", dtype=torch.float32)
+        if not bool(torch.isfinite(h).all()):
+            raise ValueError("pre_attn_hidden must contain finite values")
         token_logits = h @ self.lookahead_proj
         if token_logits.ndim == 2:
             return token_logits.max(dim=0).values
@@ -520,7 +662,12 @@ class FoMoESkipAttentionLookaheadRouter:
         """Predict top-k experts for Layer L+1 prior to Layer L attention execution."""
         import torch
 
-        k = self.top_k if top_k is None else int(top_k)
+        if top_k is not None:
+            if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+                raise ValueError("top_k must be a positive integer")
+            k = top_k
+        else:
+            k = self.top_k
         logits = self.predict_next_layer_logits(pre_attn_hidden)
         topk_idx = torch.topk(logits, k=min(k, self.num_experts)).indices.tolist()
         return tuple(int(i) for i in topk_idx)
@@ -537,8 +684,15 @@ class FoMoESkipAttentionLookaheadRouter:
         """
         import torch
 
-        k = self.top_k if top_k is None else int(top_k)
+        if top_k is not None:
+            if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+                raise ValueError("top_k must be a positive integer")
+            k = top_k
+        else:
+            k = self.top_k
         logits = post_attn_logits.detach().to(device="cpu", dtype=torch.float32).reshape(-1)
+        if not bool(torch.isfinite(logits).all()):
+            raise ValueError("post_attn_logits must contain finite values")
         raw_top = torch.topk(logits, k=min(k, self.num_experts)).indices.tolist()
         resident_set = {int(e) for e in resident_experts if 0 <= int(e) < self.num_experts}
         if not resident_set:
@@ -690,6 +844,30 @@ class HybridHiSparseE8KVCache:
     ) -> None:
         from hivemind.compress.lattice_quantizer import LatticeDeltaQuantizer
 
+        for name, val in (
+            ("sink_tokens", sink_tokens),
+            ("sliding_window_tokens", sliding_window_tokens),
+            ("heavy_hitter_tokens", heavy_hitter_tokens),
+            ("num_layers", num_layers),
+            ("num_kv_heads", num_kv_heads),
+            ("head_dim", head_dim),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int):
+                raise ValueError(f"{name} must be an integer")
+        if sink_tokens < 0 or sliding_window_tokens < 0 or heavy_hitter_tokens < 0:
+            raise ValueError("token counts must be non-negative")
+        if sink_tokens + sliding_window_tokens + heavy_hitter_tokens <= 0:
+            raise ValueError("total hot VRAM token budget must be positive")
+        if num_layers <= 0 or num_kv_heads <= 0 or head_dim <= 0:
+            raise ValueError("num_layers, num_kv_heads, and head_dim must be positive")
+        if (
+            isinstance(e8_scale, bool)
+            or not isinstance(e8_scale, (int, float))
+            or not math.isfinite(float(e8_scale))
+            or e8_scale <= 0.0
+        ):
+            raise ValueError("e8_scale must be a positive finite number")
+
         self.sink_tokens = int(sink_tokens)
         self.sliding_window_tokens = int(sliding_window_tokens)
         self.heavy_hitter_tokens = int(heavy_hitter_tokens)
@@ -705,7 +883,16 @@ class HybridHiSparseE8KVCache:
 
     def estimate_vram_kv_mib(self, seq_len: int, bits_per_dim: float = 4.0) -> dict[str, float]:
         """Compute FP16 full-VRAM KV footprint vs Hybrid HiSparse + E8 hot-VRAM footprint."""
-        total_tokens = max(1, int(seq_len))
+        if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len <= 0:
+            raise ValueError("seq_len must be a positive integer")
+        if (
+            isinstance(bits_per_dim, bool)
+            or not isinstance(bits_per_dim, (int, float))
+            or not math.isfinite(float(bits_per_dim))
+            or bits_per_dim <= 0.0
+        ):
+            raise ValueError("bits_per_dim must be a positive finite number")
+        total_tokens = int(seq_len)
         hot_tokens = min(total_tokens, self.max_hot_vram_tokens)
         cold_host_tokens = max(0, total_tokens - hot_tokens)
         # 2 (K and V) * num_layers * num_kv_heads * head_dim
@@ -732,6 +919,10 @@ class HybridHiSparseE8KVCache:
         """Select hot VRAM token indices using HiSparse (sink + window + heavy hitters) or random control."""
         import torch
 
+        if not isinstance(random_control, bool):
+            raise ValueError("random_control must be a boolean")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         seq_len = int(attn_weights.shape[-1])
         budget = min(seq_len, self.max_hot_vram_tokens)
         if seq_len <= budget:
@@ -774,6 +965,8 @@ class HybridHiSparseE8KVCache:
         import math
         import torch
 
+        if not isinstance(random_control, bool):
+            raise ValueError("random_control must be a boolean")
         q = query.detach().to(dtype=torch.float32)
         k = key.detach().to(dtype=torch.float32)
         v = value.detach().to(dtype=torch.float32)
@@ -825,6 +1018,17 @@ def build_layerstorm_byob_preset(
     context_length: int = 32768,
 ) -> dict[str, Any]:
     """Build the BYOB ``layerstorm-frontier-moe`` preset for consumer 8 GB / 16 GB GPUs (HM-S25-05)."""
+    if (
+        isinstance(vram_gb, bool)
+        or not isinstance(vram_gb, (int, float))
+        or not math.isfinite(float(vram_gb))
+        or vram_gb <= 0.0
+    ):
+        raise ValueError("vram_gb must be a positive finite number")
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string")
+    if isinstance(context_length, bool) or not isinstance(context_length, int) or context_length <= 0:
+        raise ValueError("context_length must be a positive integer")
     vram_cap_mib = 6656.0 if vram_gb <= 8.5 else round(vram_gb * 1024.0 * 0.85, 1)
     kv_cache = HybridHiSparseE8KVCache(
         sink_tokens=32,

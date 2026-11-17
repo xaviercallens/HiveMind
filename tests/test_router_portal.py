@@ -85,3 +85,54 @@ def test_portal_page_renders_overnight_boinc_qlora_telemetry_and_caveats() -> No
     assert "Plateau after ~30 rounds" in html
     assert "scripts/t4_training_report.py" in html
 
+
+
+# IP-208 / IP-209 / IP-210: the OpenTrainer heartbeat and the live-telemetry script must not
+# invent hardware, status or counter values. These tests read the rendered page source.
+
+_HEARTBEAT_START = "$('opentrainerHeartbeatBtn').addEventListener"
+_OPENTRAINER_STATUS_START = "fetch('/v1/hivemind/opentrainer/status')"
+_LIVE_TELEMETRY_START = "async function refreshLivePortalTelemetry()"
+_LIVE_TELEMETRY_END = "refreshLivePortalTelemetry();"
+
+
+def _slice_between(html: str, start: str, end: str) -> str:
+    """Return the source between the first ``start`` marker and the next ``end`` marker."""
+    begin = html.index(start)
+    return html[begin : html.index(end, begin)]
+
+
+def test_ip208_heartbeat_sends_only_fields_the_user_typed() -> None:
+    html = render_portal_page(None, "nonce-ip208")
+    heartbeat = _slice_between(html, _HEARTBEAT_START, "// Contributive & Community Help Hub")
+    for literal in ("XAVGAMSRV-RTX2070", "NVIDIA GeForce RTX 2070", "8192", "6400"):
+        assert literal not in heartbeat, f"heartbeat JS still carries literal {literal!r}"
+    assert 'value="XAVGAMSRV-RTX2070"' not in html, "host input is prefilled with a literal"
+    assert 'id="otGpuInput" type="text" value=' not in html, "OpenTrainer GPU input is prefilled with a value"
+    assert "if (hostLabel) payload.host_label = hostLabel;" in heartbeat
+    assert "if (gpuName) payload.gpu_name = gpuName;" in heartbeat
+    assert 'id="otVramTotalInput"' in html and 'id="otVramFreeInput"' in html
+    assert "payload.vram_total_mib = Number(vramTotal)" in heartbeat
+
+
+def test_ip209_status_prefixes_come_from_status_fields_not_string_literals() -> None:
+    html = render_portal_page(None, "nonce-ip209")
+    assert "'OPENTRAINER ONLINE" not in html, "status prefix is a hard-coded string"
+    status = _slice_between(html, _OPENTRAINER_STATUS_START, "Network error querying OpenTrainer coordinator")
+    assert "data.status" in status
+    live = _slice_between(html, _LIVE_TELEMETRY_START, _LIVE_TELEMETRY_END)
+    assert "'LIVE OPENTRAINER" not in live, "live status prefix is a hard-coded string"
+    assert "v(ot.status)" in live
+    for fallback in ("'1.0.0-s36'", "'hivemind.amcp.federation.v1'", "'IDLE_COMPUTE_GREEN'", "'just now'"):
+        assert fallback not in live, f"live script still falls back to {fallback}"
+    assert "|| '" not in live, "live script still has a string fallback"
+
+
+def test_ip210_live_telemetry_script_has_no_numeric_or_constant_fallbacks() -> None:
+    import re
+
+    html = render_portal_page(None, "nonce-ip210")
+    live = _slice_between(html, _LIVE_TELEMETRY_START, _LIVE_TELEMETRY_END)
+    assert re.search(r"\|\|\s*\d", live) is None, "live script has a numeric || fallback"
+    assert re.search(r"\|\|\s*'[A-Z_]{4,}'", live) is None, "live script has a constant || fallback"
+    assert "v(byRole.trainer)" in live and "(byRole.trainer || 0)" not in live

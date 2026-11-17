@@ -141,9 +141,13 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert r_health.json()["status"] == "ok"
     assert r_health.json()["cost_mode"] == "scale_to_zero_min0_max2"
 
+    from hivemind.boinc.hivemind_at_home_dashboard import _count_lean4_spec_theorems
+
+    expected_theorems = _count_lean4_spec_theorems()
+    assert expected_theorems > 0
     r_status = client.get("/api/hivemind-at-home/status")
     assert r_status.status_code == 200
-    assert r_status.json()["formal_verification"]["lean4_theorems_verified"] == 128
+    assert r_status.json()["formal_verification"]["lean4_theorems_verified"] == expected_theorems
 
     r_ruche = client.get("/api/la-ruche/manifest")
     assert r_ruche.status_code == 200
@@ -258,7 +262,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     r_redeem = client.post(
         "/api/v1/compute-points/redeem",
         json={
-            "contributor_handle": "@test-gpu-node",
+            "contributor_handle": "@Vxtzq",
             "service_id": "python_coding_gwaya",
             "prompt": "Write a vectorized E8 lattice quantizer in Python.",
             "points_balance_before": 1250,
@@ -267,10 +271,23 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert r_redeem.status_code == 200
     redeem_json = r_redeem.json()
     assert redeem_json["status"] == "COMPUTE_POINTS_REDEEMED"
+    assert redeem_json["points_balance_before"] == 100000
     assert redeem_json["points_spent"] == 50
-    assert redeem_json["points_balance_after"] == 1200
+    assert redeem_json["points_balance_after"] == 99950
     assert redeem_json["monetary_cost_eur_usd"] == 0.0
-    assert "quantize_e8_coset_2bit" in redeem_json["domain_output"]
+    assert "La Ruche Top-2 Sparse MoE Routing" in redeem_json["domain_output"]
+
+    # Negative control (IP-242): unknown handle with client-supplied points_balance_before=999999 is refused
+    r_unknown_redeem = client.post(
+        "/api/v1/compute-points/redeem",
+        json={
+            "contributor_handle": "@test-gpu-node",
+            "service_id": "python_coding_gwaya",
+            "prompt": "Write a vectorized E8 lattice quantizer in Python.",
+            "points_balance_before": 999999,
+        },
+    )
+    assert r_unknown_redeem.status_code == 422
 
     # Verify 5-Language Support (English, French, Chinese, Spanish, German)
     r_i18n_all = client.get("/api/v1/i18n")
@@ -287,7 +304,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         r_red_lang = client.post(
             "/api/v1/compute-points/redeem",
             json={
-                "contributor_handle": "@test-gpu-node",
+                "contributor_handle": "@Vxtzq",
                 "service_id": "astrophysics_exoplanet",
                 "prompt": "Detect Kepler-186f exoplanet transit dip.",
                 "points_balance_before": 1250,
@@ -341,7 +358,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     def_json = r_def.json()
     assert def_json["firewall_status"] == "ACTIVE"
     assert def_json["rate_limiter"]["firewall_status"] == "ACTIVE"
-    assert def_json["formal_verification"]["lean4_theorems_verified"] == 128
+    assert def_json["formal_verification"]["lean4_theorems_verified"] == expected_theorems
     assert def_json["formal_verification"]["sorry_count"] == 0
     assert def_json["byzantine_poisoning_defense"]["attack_vectors_blocked_count"] == 49
 
@@ -468,7 +485,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
 
     assert client.post("/api/v1/auth/login", json={"handle_or_email": "reg-user-01"}).status_code == 401
     assert client.post("/api/v1/auth/login", json={"handle_or_email": reg_token}).status_code == 200
-    assert client.post("/api/v1/auth/login", json={"handle_or_email": "login-created-01"}).status_code == 200
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": "login-created-01"}).status_code == 404
     assert (
         client.post(
             "/api/v1/auth/login",
@@ -477,18 +494,9 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         == 404
     )
 
-    r_sso = client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"})
-    assert r_sso.status_code == 200
-    sso_token = r_sso.json()["token"]
-    # an unverified handle hint must not reopen an existing account; its token does
-    assert client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code == 401
-    assert (
-        client.post(
-            "/api/v1/auth/sso/google", headers={"Authorization": f"Bearer {sso_token}"}, json={"handle_hint": "sso-user-01"}
-        ).status_code
-        == 200
-    )
-    assert client.post("/api/v1/auth/sso/unsupported_idp", json={"handle_hint": "sso-user-01"}).status_code == 400
+    # the sandbox SSO is deleted (v3.3): no route creates or opens an account without verification by a provider
+    assert client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code == 410
+    sso_token = r_up.json()["token"]
 
     # linking a provider needs the account's token; a handle in the body is not enough (GHSA-gjc6-74f9-wmrr)
     assert client.post("/api/v1/auth/link-provider", json={"handle": "sso-user-01", "provider": "github"}).status_code == 401
@@ -717,7 +725,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         assert (
             client.post(
                 "/api/v1/compute-points/redeem",
-                json={"contributor_handle": "@sso-user-01", "service_id": svc, "prompt": "test", "points_balance_before": 500},
+                json={"contributor_handle": "@upgraded-user-01", "service_id": svc, "prompt": "test", "points_balance_before": 500},
             ).status_code
             == 200
         )

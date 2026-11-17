@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
 import torch
 import torch.nn.functional as F
 
 from hivemind.core.compression import (
     compress_lora_delta,
+    compress_tensor_dct_sparse_2bit,
     compress_tensor_topk_fp8,
     compute_pseudo_gradient_delta,
     decompress_lora_delta,
@@ -57,3 +59,15 @@ def test_lora_delta_package_wire_compression_ratio() -> None:
     assert set(restored.keys()) == set(delta_dict.keys())
     for k, orig in delta_dict.items():
         assert restored[k].shape == orig.shape
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("compress", [compress_tensor_topk_fp8, compress_tensor_dct_sparse_2bit])
+def test_compressors_refuse_a_non_finite_delta_but_accept_a_finite_one(compress, bad) -> None:
+    g = torch.Generator().manual_seed(5)
+    ok = torch.randn(10, 10, generator=g)
+    compress(ok)
+    poisoned = ok.clone()
+    poisoned[3, 4] = bad
+    with pytest.raises(ValueError, match="NaN or inf"):
+        compress(poisoned)

@@ -730,75 +730,149 @@ def step_e8_stage2_controller_round(inner_steps: int = 20) -> dict[str, Any]:
     return round_summary
 
 
+def probe_local_gpu_telemetry() -> dict[str, Any] | None:
+    """Query live GPU telemetry via nvidia-smi (NVML). Return None when no GPU is readable (IP-291)."""
+    smi = shutil.which("nvidia-smi")
+    if not smi:
+        return None
+    try:
+        proc = subprocess.run(
+            [
+                smi,
+                "--query-gpu=name,memory.used,memory.total,memory.free,temperature.gpu,utilization.gpu,power.draw",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    first_line = proc.stdout.strip().splitlines()[0]
+    parts = [p.strip() for p in first_line.split(",")]
+    if len(parts) < 7:
+        return None
+    try:
+        gpu_name = parts[0] or "Unknown GPU"
+        used_mib = int(float(parts[1]))
+        total_mib = int(float(parts[2]))
+        free_mib = int(float(parts[3]))
+        temp_c = float(parts[4])
+        util_pct = float(parts[5])
+        power_w = float(parts[6]) if parts[6] not in ("", "[N/A]", "N/A") else 0.0
+    except ValueError:
+        return None
+    if total_mib <= 0 or used_mib < 0 or free_mib < 0:
+        return None
+    return {
+        "gpu_name": gpu_name,
+        "used_mib": used_mib,
+        "total_mib": total_mib,
+        "free_mib": free_mib,
+        "temp_c": round(temp_c, 2),
+        "util_pct": round(util_pct, 2),
+        "power_w": round(power_w, 2),
+    }
+
+
 def sync_opentrainer_and_gpu_telemetry(
     gateway: str,
     e8_round: dict[str, Any],
     *,
     t4_reachable: bool,
+    gpu_probe_fn: Any = probe_local_gpu_telemetry,
+    http_client: httpx.Client | None = None,
 ) -> dict[str, Any]:
     """Send OpenTrainer heartbeat, verified E8 Stage-2 delta, and fresh GPU telemetry to the gateway."""
     from hivemind_opentrainer_agent import send_heartbeat, submit_verified_delta
 
     producer_key = _read_producer_key()
-    hb_ack = send_heartbeat(
-        gateway=gateway,
-        api_key=producer_key,
-        host_label="XAVGAMSRV-RTX2070",
-        gpu_name="NVIDIA GeForce RTX 2070",
-        vram_total_mib=8192,
-        vram_free_mib=6195,
-        network_mode="outbound-https-relay",
-        training_stack="qlora-moe+diloco+amcp-aglet+boinc",
-        active_campaign="E8-STAGE2-TINY-GRANITE-MOE-QLORA",
-    )
+    gpu_metrics = gpu_probe_fn()
+    hb_ack: dict[str, Any] = {}
+    if gpu_metrics is not None:
+        hb_ack = (
+            send_heartbeat(
+                gateway=gateway,
+                api_key=producer_key,
+                host_label="XAVGAMSRV-RTX2070",
+                gpu_name=str(gpu_metrics.get("gpu_name") or "NVIDIA GeForce RTX 2070"),
+                vram_total_mib=int(gpu_metrics["total_mib"]),
+                vram_free_mib=int(gpu_metrics["free_mib"]),
+                network_mode="outbound-https-relay",
+                training_stack="qlora-moe+diloco+amcp-aglet+boinc",
+                active_campaign="E8-STAGE2-TINY-GRANITE-MOE-QLORA",
+            )
+            or {}
+        )
 
-    delta_ack = submit_verified_delta(
-        gateway=gateway,
-        api_key=producer_key,
-        round_id=int(e8_round["round_id"]),
-        campaign_id="E8-STAGE2-TINY-GRANITE-MOE-QLORA",
-        learner_index=1,
-        inner_steps=int(e8_round["inner_steps"]),
-        loss_before=float(e8_round["loss_before"]),
-        loss_after=float(e8_round["loss_after"]),
-        delta_norm=min(99.0, max(0.001, float(e8_round["delta_norm"]))),
-        code_pin=str(e8_round["code_pin"]),
-        network_mode="outbound-https-relay",
+    delta_ack = (
+        submit_verified_delta(
+            gateway=gateway,
+            api_key=producer_key,
+            round_id=int(e8_round["round_id"]),
+            campaign_id="E8-STAGE2-TINY-GRANITE-MOE-QLORA",
+            learner_index=1,
+            inner_steps=int(e8_round["inner_steps"]),
+            loss_before=float(e8_round["loss_before"]),
+            loss_after=float(e8_round["loss_after"]),
+            delta_norm=min(99.0, max(0.001, float(e8_round["delta_norm"]))),
+            code_pin=str(e8_round["code_pin"]),
+            network_mode="outbound-https-relay",
+        )
+        or {}
     )
 
     telemetry_status = 0
-    try:
-        with httpx.Client(timeout=15.0) as client:
-            r_tel = client.post(
-                f"{gateway.rstrip('/')}/v1/hivemind/t4/telemetry",
-                headers={"Authorization": f"Bearer {producer_key}"},
-                json={
-                    "sole_active_gpu": not t4_reachable,
-                    "gpu": {
-                        "used_mib": 1812 if not t4_reachable else 4841,
-                        "total_mib": 8192 if not t4_reachable else 15360,
-                        "free_mib": 6195 if not t4_reachable else 10519,
-                        "temp_c": 34.0 if not t4_reachable else 66.0,
-                        "util_pct": 12.0,
-                        "power_w": 42.04 if not t4_reachable else 30.2,
-                    },
-                    "governor": {
-                        "state": "rtx2070_failover_orchestrator_active" if not t4_reachable else "dual_rtx2070_t4_active",
-                        "boinc_gpu_mode": "always",
-                        "hold_file_present": False,
-                        "in_flight_requests": 0,
-                    },
-                },
-            )
-            telemetry_status = r_tel.status_code
-    except httpx.HTTPError:
-        telemetry_status = 0
+    telemetry_state = "BLOCKED"
+    if gpu_metrics is not None:
+        hold_file = Path("/tmp/hivemind_governor_hold")
+        payload = {
+            "sole_active_gpu": not t4_reachable,
+            "gpu": {
+                "used_mib": int(gpu_metrics["used_mib"]),
+                "total_mib": int(gpu_metrics["total_mib"]),
+                "free_mib": int(gpu_metrics["free_mib"]),
+                "temp_c": float(gpu_metrics["temp_c"]),
+                "util_pct": float(gpu_metrics["util_pct"]),
+                "power_w": float(gpu_metrics["power_w"]),
+            },
+            "governor": {
+                "state": "rtx2070_failover_orchestrator_active" if not t4_reachable else "dual_rtx2070_t4_active",
+                "boinc_gpu_mode": "always",
+                "hold_file_present": hold_file.exists(),
+                "in_flight_requests": int(gpu_metrics.get("in_flight_requests", 0)),
+            },
+        }
+        try:
+            if http_client is not None:
+                r_tel = http_client.post(
+                    f"{gateway.rstrip('/')}/v1/hivemind/t4/telemetry",
+                    headers={"Authorization": f"Bearer {producer_key}"},
+                    json=payload,
+                )
+                telemetry_status = r_tel.status_code
+            else:
+                with httpx.Client(timeout=15.0) as client:
+                    r_tel = client.post(
+                        f"{gateway.rstrip('/')}/v1/hivemind/t4/telemetry",
+                        headers={"Authorization": f"Bearer {producer_key}"},
+                        json=payload,
+                    )
+                    telemetry_status = r_tel.status_code
+            telemetry_state = "SENT" if telemetry_status == 200 else f"HTTP_{telemetry_status}"
+        except httpx.HTTPError:
+            telemetry_status = 0
+            telemetry_state = "HTTP_ERROR"
 
     return {
-        "opentrainer_heartbeat_ok": bool(hb_ack.get("ok", True)),
+        "opentrainer_heartbeat_ok": bool(hb_ack.get("ok", False)),
         "opentrainer_node": (hb_ack.get("node") or {}).get("node_id"),
         "delta_receipt_round": delta_ack.get("round_id", e8_round["round_id"]),
         "telemetry_push_http": telemetry_status,
+        "telemetry_state": telemetry_state,
     }
 
 

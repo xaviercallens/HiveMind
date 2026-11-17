@@ -154,12 +154,12 @@ async def join_page(request: Request) -> HTMLResponse:
         google = any(p.get("name") == "google" for p in providers.get("providers", []))
         handles = bool(providers.get("handle_registration", True))
     except (httpx.HTTPError, ValueError, AttributeError):
-        pass
+        _ = None
     live_telem = None
     try:
         live_telem = (await _client.get(f"{ROUTER}/v1/hivemind/live-telemetry", timeout=4.0)).json()
     except (httpx.HTTPError, ValueError):
-        pass
+        _ = None
     nonce = secrets.token_urlsafe(18)
     return HTMLResponse(
         render_join_page(lang, nonce, tiers=tiers, api_url=ROUTER, path="/rejoindre" if french_path else "/join", google_enabled=google, handle_registration=handles, live_telemetry=live_telem),
@@ -243,67 +243,68 @@ _DEFAULT_COMMUNITY_STATE: dict[str, Any] = {
             },
         ],
     },
-    "community_members": [
-        {
-            "handle": "pioneer-prosumer-01",
-            "role": "Pioneer Prosumer & BOINC Contributor",
-            "gpu": "NVIDIA Tesla T4 (16 GB)",
-            "boinc_workunits_completed": 42,
-            "boinc_cobblestones": 1890.0,
-            "hmt_compute_points": 840,
-            "favorite_world": "K2-18 b",
-        },
-        {
-            "handle": "rtx2070-boinc-fr",
-            "role": "Steam Gamer + Idle-GPU BOINC Donor",
-            "gpu": "NVIDIA GeForce RTX 2070 (8 GB)",
-            "boinc_workunits_completed": 19,
-            "boinc_cobblestones": 855.0,
-            "hmt_compute_points": 475,
-            "favorite_world": "LHS 1140 b",
-        },
-    ],
-    "coop_discovery_feed": [
-        {
-            "timestamp": "2026-10-29T09:30:00Z",
-            "gamer_handle": "rtx2070-boinc-fr",
-            "scientist_handle": "@GCP_BOINC_Validator",
-            "target": "K2-18 b",
-            "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-            "summary": "GPU idle on NVIDIA GeForce RTX 2070 -> Crunched BLS transit folding on K2-18 b (Depth=2789 ppm) -> +45.0 BOINC Cobblestones & +250 HMT!",
-            "gcp_receipt_sha256": "4a651ffce95b484a747748502c4bf093a1bc8f0ffa34400bad0b3c0a24bafd28",
-        },
-    ],
+    "community_members": [],
+    "coop_discovery_feed": [],
 }
 
 
 def _load_community_state() -> dict[str, Any]:
-    import fcntl
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None  # type: ignore[assignment]
 
     lock_path = _COMMUNITY_STATE_PATH.with_suffix(".lock")
     try:
         with lock_path.open("a+", encoding="utf-8") as lock_file:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_SH)
+            if fcntl is not None:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_SH)
             if _COMMUNITY_STATE_PATH.exists():
-                return json.loads(_COMMUNITY_STATE_PATH.read_text(encoding="utf-8"))
+                raw = _COMMUNITY_STATE_PATH.read_text(encoding="utf-8")
+                try:
+                    loaded = json.loads(raw)
+                except ValueError:
+                    return {
+                        "status": "BLOCKED",
+                        "error": "community_state_corrupt",
+                        "community_members": [],
+                        "coop_discovery_feed": [],
+                    }
+                if not isinstance(loaded, dict):
+                    return {
+                        "status": "BLOCKED",
+                        "error": "community_state_corrupt",
+                        "community_members": [],
+                        "coop_discovery_feed": [],
+                    }
+                return loaded
     except Exception:
-        pass
+        return {
+            "status": "BLOCKED",
+            "error": "community_state_io_error",
+            "community_members": [],
+            "coop_discovery_feed": [],
+        }
     _save_community_state(_DEFAULT_COMMUNITY_STATE)
     return json.loads(json.dumps(_DEFAULT_COMMUNITY_STATE))
 
 
 def _save_community_state(state: dict[str, Any]) -> None:
-    import fcntl
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None  # type: ignore[assignment]
 
     lock_path = _COMMUNITY_STATE_PATH.with_suffix(".lock")
     try:
         with lock_path.open("a+", encoding="utf-8") as lock_file:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            if fcntl is not None:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
             tmp_path = _COMMUNITY_STATE_PATH.with_suffix(".tmp")
             tmp_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
             tmp_path.replace(_COMMUNITY_STATE_PATH)
     except Exception:
-        pass
+        _ = None
 
 
 @app.get("/community", response_class=HTMLResponse)
@@ -358,11 +359,11 @@ def community_hub_page() -> HTMLResponse:
         "<h2>Journal des Découvertes &amp; Unités Calculées en Direct</h2>"
         f"<ul>{feed_items}</ul>"
         "<section id='community-live-telemetry' style='margin-top:1.2rem;padding:0.75rem 1rem;border:1px solid #38bdf8;border-radius:0.5rem;background:#0f172a'>"
-        "<strong>🟢 REAL-LIFE GCP PRODUCTION TELEMETRY:</strong> <span id='comm-gcp-stats'>Synchronisation /v1/hivemind/live-telemetry...</span>"
-        "<script>(function(){function u(){fetch('/v1/hivemind/live-telemetry',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){"
+        "<strong>🟢 GCP TELEMETRY (/v1/hivemind/live-telemetry):</strong> <span id='comm-gcp-stats'>Synchronisation /v1/hivemind/live-telemetry...</span>"
+        "<script>(function(){function v(x){return (x!==undefined&&x!==null&&x!=='')?x:'n/a';}function u(){fetch('/v1/hivemind/live-telemetry',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){"
         "var el=document.getElementById('comm-gcp-stats');if(!el||!d)return;"
         "var a=d.accounts||{},m=d.models||{},p=d.producers||d.producer_fleet||{},t=d.t4_boinc||d.tesla_t4_boinc||{},o=d.opentrainer||{};"
-        "el.textContent='Accounts: '+(a.total_registered_accounts||66)+' | Live Models: '+(m.live_count||15)+' | Active HiveMinders: '+(p.live_hiveminders||42)+'/'+(p.total_hiveminders||42)+' | Tesla T4 BOINC WUs: '+(t.assimilated_workunits||147)+' | OpenTrainer: '+(o.status||'ONLINE');"
+        "el.textContent='Accounts: '+v(a.total_registered_accounts)+' | Live Models: '+v(m.live_count)+' | Active HiveMinders: '+v(p.live_hiveminders)+'/'+v(p.total_hiveminders)+' | Tesla T4 BOINC WUs: '+v(t.assimilated_workunits)+' | OpenTrainer: '+v(o.status);"
         "}).catch(function(){});}u();setInterval(u,15000);})();</script></section>"
         "</body></html>"
     )
@@ -371,7 +372,10 @@ def community_hub_page() -> HTMLResponse:
 
 @app.get("/api/v1/community/hub", response_class=JSONResponse)
 def api_get_community_hub() -> JSONResponse:
-    return JSONResponse(content=_load_community_state())
+    st = _load_community_state()
+    if st.get("status") == "BLOCKED":
+        return JSONResponse(status_code=503, content=st)
+    return JSONResponse(content=st)
 
 
 _MAX_SYNC_COBBLESTONES_PER_WU = 100.0

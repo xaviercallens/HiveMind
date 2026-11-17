@@ -96,6 +96,8 @@ _TEXT: dict[str, dict[str, str]] = {
 
 def load_measured_results(path: Path | None = None) -> list[dict[str, Any]]:
     """The measured results shipped with the gateway (empty if the file is missing or malformed: nothing is invented)."""
+    if path is not None and (isinstance(path, bool) or not isinstance(path, Path)):
+        raise ValueError("path must be a Path or None")
     try:
         data = json.loads((path or MEASURED_RESULTS_PATH).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -125,6 +127,8 @@ def _fmt_result(r: dict[str, Any]) -> str:
 
 def benchmarks_payload(live_telemetry: dict[str, Any] | None = None) -> dict[str, Any]:
     """JSON for ``GET /v1/hivemind/benchmarks``: measured results and the list of unmeasured tiers; no comparison with other vendors."""
+    if live_telemetry is not None and not isinstance(live_telemetry, dict):
+        raise ValueError("live_telemetry must be a dict or None")
     measured = load_measured_results()
     return {
         "object": "hivemind.benchmarks",
@@ -149,6 +153,10 @@ def _live_line(live_telemetry: dict[str, Any] | None, t: dict[str, str]) -> str:
 
 def render_benchmarks_page(lang: str = "en", nonce: str = "", live_telemetry: dict[str, Any] | None = None) -> str:
     """The HTML page. Every number on it comes from ``measured_results.json`` or from the live telemetry argument."""
+    if not isinstance(lang, str) or not isinstance(nonce, str):
+        raise ValueError("lang and nonce must be strings")
+    if live_telemetry is not None and not isinstance(live_telemetry, dict):
+        raise ValueError("live_telemetry must be a dict or None")
     lang = lang if lang in SUPPORTED_BENCHMARK_LANGS else "en"
     t = _TEXT[lang]
     measured = load_measured_results()
@@ -200,6 +208,8 @@ _LIVE_JS = (
 
 def render_hivemind_capacity_infographic_svg(live_telemetry: dict[str, Any] | None = None) -> str:
     """A small SVG listing what is measured. It contains no capacity or speed claim that is not in ``measured_results.json``."""
+    if live_telemetry is not None and not isinstance(live_telemetry, dict):
+        raise ValueError("live_telemetry must be a dict or None")
     measured = load_measured_results()
     lines = ["PROJECT HIVEMIND: measured results only", POC_NOTICE["en"][:96]]
     for r in measured:

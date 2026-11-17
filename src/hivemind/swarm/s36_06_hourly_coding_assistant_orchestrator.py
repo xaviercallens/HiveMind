@@ -10,9 +10,11 @@ co-generation, supervised by the ``GWAYA`` Zero-Stub AST gate (`E = 10^6` fail-c
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import os
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -40,8 +42,11 @@ from hivemind.swarm.s36_05_darl_cas_shard_leasing import DARLShardLeaseCoordinat
 
 def resolve_hivemind_api_key(explicit_key: str | None = None) -> str | None:
     """Resolve the HiveMind API key from argument, environment, or user config without source literals."""
-    if explicit_key and explicit_key.strip():
-        return explicit_key.strip()
+    if explicit_key is not None:
+        if not isinstance(explicit_key, str) or any(ord(c) < 32 or ord(c) == 127 for c in explicit_key):
+            raise ValueError("explicit_key must be a string without control characters")
+        if explicit_key.strip():
+            return explicit_key.strip()
     for env_var in ("HIVEMIND_API_KEY", "OPENAI_API_KEY"):
         val = os.environ.get(env_var, "").strip()
         if val:
@@ -72,6 +77,23 @@ class CodingAssistantTaskReceipt:
     unit_verification_passed: bool
     anse_energy: float
 
+    def __post_init__(self) -> None:
+        for s_field in ("task_id", "title", "model", "live_completion_id", "live_routed_model"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if not isinstance(self.assistant_excerpt, str):
+            raise ValueError("assistant_excerpt must be a string")
+        for b_field in ("gwaya_zero_stub_passed", "unit_verification_passed"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if (
+            isinstance(self.anse_energy, bool)
+            or not isinstance(self.anse_energy, (int, float))
+            or not (float(self.anse_energy) >= 0.0 and float(self.anse_energy) != float("inf"))
+        ):
+            raise ValueError("anse_energy must be a finite non-negative number")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -95,12 +117,46 @@ class HourlyImprovementCycleReport:
     task_receipts: tuple[CodingAssistantTaskReceipt, ...]
     merkle_root_sha256: str
     all_gates_passed: bool
+    status: str = "VERIFIED"
+    blocked_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.timestamp_utc, bool) or not isinstance(self.timestamp_utc, (int, float)) or not (float(self.timestamp_utc) >= 0.0 and float(self.timestamp_utc) != float("inf")):
+            raise ValueError("timestamp_utc must be a finite non-negative number")
+        for b_field in (
+            "antigravity_sdk_compat",
+            "live_openrouter_called",
+            "s36_05_darl_conservation_holds",
+            "ip21_residual_sampling_verified",
+            "ip67_no_hardcoded_xdev_verified",
+            "all_gates_passed",
+        ):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if (
+            isinstance(self.tasks_verified, bool)
+            or not isinstance(self.tasks_verified, int)
+            or self.tasks_verified < 0
+            or isinstance(self.tasks_total, bool)
+            or not isinstance(self.tasks_total, int)
+            or self.tasks_total < 1
+            or self.tasks_verified > self.tasks_total
+        ):
+            raise ValueError("tasks_verified and tasks_total must satisfy 0 <= tasks_verified <= tasks_total and tasks_total >= 1")
+        if not isinstance(self.task_receipts, tuple) or len(self.task_receipts) == 0 or not all(isinstance(r, CodingAssistantTaskReceipt) for r in self.task_receipts):
+            raise ValueError("task_receipts must be a non-empty tuple of CodingAssistantTaskReceipt instances")
+        if not isinstance(self.merkle_root_sha256, str) or len(self.merkle_root_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in self.merkle_root_sha256):
+            raise ValueError("merkle_root_sha256 must be a 64-character hex string")
+        if not isinstance(self.status, str) or not self.status.strip():
+            raise ValueError("status must be a non-empty string")
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "timestamp_utc": self.timestamp_utc,
             "antigravity_sdk_compat": self.antigravity_sdk_compat,
             "live_openrouter_called": self.live_openrouter_called,
+            "status": self.status,
+            "blocked_reason": self.blocked_reason,
             "tasks_verified": self.tasks_verified,
             "tasks_total": self.tasks_total,
             "s36_01_zk_verify_ms": self.s36_01_zk_verify_ms,
@@ -125,6 +181,13 @@ class HourlyHiveMindCodingAssistantOrchestrator:
         api_key: str | None = None,
         base_url: str = DEFAULT_HIVEMIND_BASE_URL,
     ) -> None:
+        if (
+            not isinstance(base_url, str)
+            or not base_url.strip()
+            or not base_url.startswith(("http://", "https://"))
+            or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in base_url)
+        ):
+            raise ValueError("base_url must be a valid http(s) URL without whitespace or control characters")
         self.api_key = resolve_hivemind_api_key(api_key)
         self.base_url = base_url
         self.sdk_compat = ensure_antigravity_sdk_lightweight_compat()
@@ -164,8 +227,20 @@ class HourlyHiveMindCodingAssistantOrchestrator:
             "excerpt": "deterministic local supervision check",
         }
 
-    def run_hourly_improvement_cycle(self, *, call_live_openrouter: bool = False) -> HourlyImprovementCycleReport:
+    def run_hourly_improvement_cycle(
+        self,
+        *,
+        call_live_openrouter: bool = False,
+        task_assertions: Mapping[str, Callable[[Any], bool]] | None = None,
+    ) -> HourlyImprovementCycleReport:
         """Execute and verify all Season 36 & Improvement-Plan checks with HiveMind coding assistant."""
+        if not isinstance(call_live_openrouter, bool):
+            raise ValueError("call_live_openrouter must be a boolean")
+        if task_assertions is not None:
+            if not isinstance(task_assertions, Mapping) or any(
+                not isinstance(k, str) or not k.strip() or not callable(v) for k, v in task_assertions.items()
+            ):
+                raise ValueError("task_assertions must map non-empty task_id strings to callable predicates")
         repo_root = Path(__file__).resolve().parents[3]
         swarm_dir = repo_root / "src" / "hivemind" / "swarm"
 
@@ -300,6 +375,16 @@ class HourlyHiveMindCodingAssistantOrchestrator:
             src_code = module_path.read_text(encoding="utf-8")
             violations = inspect_python_ast_anti_stub(src_code)
             ast_clean = len(violations) == 0
+            effective_unit_ok = bool(unit_ok)
+            if task_assertions and (task_id in task_assertions or "*" in task_assertions):
+                checker = task_assertions.get(task_id) or task_assertions.get("*")
+                if checker is not None:
+                    try:
+                        mod = importlib.import_module(f"hivemind.swarm.{module_path.stem}")
+                        if not bool(checker(mod)):
+                            effective_unit_ok = False
+                    except Exception:
+                        effective_unit_ok = False
             bee_res = self._query_coding_bee(
                 model=model,
                 prompt=prompt,
@@ -307,7 +392,7 @@ class HourlyHiveMindCodingAssistantOrchestrator:
             )
             if bee_res["live"]:
                 any_live = True
-            energy = 0.0 if (ast_clean and unit_ok) else MAXIMUM_PAIN_ENERGY
+            energy = 0.0 if (ast_clean and effective_unit_ok) else MAXIMUM_PAIN_ENERGY
             receipts.append(
                 CodingAssistantTaskReceipt(
                     task_id=task_id,
@@ -317,7 +402,7 @@ class HourlyHiveMindCodingAssistantOrchestrator:
                     live_routed_model=bee_res["routed_model"],
                     assistant_excerpt=bee_res["excerpt"],
                     gwaya_zero_stub_passed=ast_clean,
-                    unit_verification_passed=unit_ok,
+                    unit_verification_passed=effective_unit_ok,
                     anse_energy=energy,
                 )
             )
@@ -325,7 +410,9 @@ class HourlyHiveMindCodingAssistantOrchestrator:
         verified_cnt = sum(
             1 for r in receipts if r.gwaya_zero_stub_passed and r.unit_verification_passed and r.anse_energy < 1_000_000.0
         )
-        all_passed = verified_cnt == len(receipts) and self.sdk_compat
+        status = "VERIFIED" if any_live else "BLOCKED"
+        blocked_reason = None if any_live else "model not called"
+        all_passed = verified_cnt == len(receipts) and self.sdk_compat and (any_live or not call_live_openrouter)
         merkle_payload = json.dumps([r.to_dict() for r in receipts], sort_keys=True).encode("utf-8")
         merkle_root = hashlib.sha256(merkle_payload).hexdigest()
 
@@ -345,4 +432,6 @@ class HourlyHiveMindCodingAssistantOrchestrator:
             task_receipts=tuple(receipts),
             merkle_root_sha256=merkle_root,
             all_gates_passed=all_passed,
+            status=status,
+            blocked_reason=blocked_reason,
         )

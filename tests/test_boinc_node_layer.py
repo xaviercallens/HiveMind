@@ -83,6 +83,43 @@ def test_other_gpu_busy_without_a_boinc_task_uses_whole_gpu_utilisation() -> Non
     assert other_gpu_busy({"procs": [], "util_pct": 3}) == (False, 3)
 
 
+def _pmon(rows: dict[str, int]) -> str:
+    return "# gpu pid type sm mem enc dec jpg ofa command\n" + "".join(f"    0 {pid} C {sm} 1 - - - - x\n" for pid, sm in rows.items())
+
+
+def test_the_validator_replay_is_not_someone_else_using_the_gpu(monkeypatch) -> None:
+    import types
+
+    import t4_governor
+
+    g = {"procs": [("500", "python", "2572"), ("1899", "llama-server", "4818")], "util_pct": 66}
+    monkeypatch.setattr(t4_governor, "pipeline_gpu_pids", lambda procs: ["500"])
+    run = lambda rows: (lambda *a, **k: types.SimpleNamespace(stdout=_pmon(rows)))  # noqa: E731
+    monkeypatch.setattr(t4_governor.subprocess, "run", run({"500": 66, "1899": 0}))
+    assert t4_governor.other_gpu_busy(g) == (False, 0)  # whole-GPU util is 66%, all of it the validator: not busy
+    monkeypatch.setattr(t4_governor.subprocess, "run", run({"500": 66, "1899": 40}))
+    assert t4_governor.other_gpu_busy(g) == (True, 40)  # a real client on another process still yields
+
+
+def test_pipeline_gpu_pids_recognises_the_task_and_the_validator(monkeypatch, tmp_path) -> None:
+    import t4_governor
+
+    cmds = {"11": b"python -m hivemind.boinc.real_client.moe_app --mode train", "12": b"python -m hivemind.boinc.real_client.boinc_server_scripts validate x", "13": b"llama-server -m y"}
+    real = t4_governor.Path
+
+    class FakePath(type(real("/"))):
+        def read_bytes(self):
+            pid = str(self).split("/")[2]
+            if pid not in cmds:
+                raise OSError
+            return cmds[pid].replace(b" ", b"\0")
+
+    monkeypatch.setattr(t4_governor, "Path", FakePath)
+    procs = [("11", "p", "1"), ("12", "p", "1"), ("13", "l", "1"), ("14", "x", "1")]
+    assert t4_governor.pipeline_gpu_pids(procs) == ["11", "12"]
+    assert t4_governor.boinc_gpu_pids(procs) == ["11"]  # only the task is ever terminated on a yield
+
+
 def test_chatlog_counts_new_completions_by_route_and_survives_rotation(tmp_path: Path) -> None:
     from t4_monitor import ChatLog
 
@@ -155,7 +192,15 @@ def test_governor_policy_comes_only_from_its_arguments() -> None:
 
 
 def test_wait_for_idle_does_not_block_when_there_is_no_status_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HIVEMIND_IDLE_URL", "http://127.0.0.1:9/nginx_status")  # nothing listens here
-    t = time.time()
-    wait_for_idle(quiet_s=5, max_wait_s=30)
-    assert time.time() - t < 5  # a box without nginx must not stall validation
+    import urllib.error
+    import urllib.request
+
+    sleeps: list[float] = []
+    now = [100.0]
+
+    def _fail_open(*_a, **_kw):
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fail_open)
+    waited = wait_for_idle(quiet_s=5, max_wait_s=30, clock=lambda: now[0], sleep_fn=sleeps.append)
+    assert waited == 0.0 and sleeps == []

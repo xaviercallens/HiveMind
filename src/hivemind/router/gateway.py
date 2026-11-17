@@ -17,8 +17,10 @@ Security notes
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import ipaddress
+import html
 import json
 import logging
 import math
@@ -29,6 +31,7 @@ import os
 import threading
 import time
 import uuid
+from pathlib import Path
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
@@ -45,18 +48,22 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from hivemind.router.accounts import (
     Account,
+    DuplicateOpenTrainerRound,
     DuplicateRequest,
     HandleTaken,
     InsufficientBalance,
     InvalidCredentials,
+    LEGACY_KNOWN_USERS,
     ProducerRecord,
     ReservedHandle,
     RouterStore,
     TooManyEndpoints,
+    TooManyOpenTrainerNodes,
     TooManyHolds,
     UnknownAccount,
     fit_loaded_models,
 )
+from hivemind.router import forwarded_client as _forwarded_client
 from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, catalog_payload, normalize_model_alias
 from hivemind.router.google_auth import GoogleAuthError, GoogleIdTokenVerifier
 from hivemind.router.join_page import join_content_security_policy, pick_language, render_join_page
@@ -73,6 +80,16 @@ from hivemind.router.market import (
     certify,
     clear_market,
 )
+from hivemind.core.expert_registry import (
+    LIVE as EXPERT_LIVE,
+    SHADOW as EXPERT_SHADOW,
+    AdapterBaseMismatchError,
+    ExpertRecord,
+    ExpertRegistry,
+    GateNotPassedError,
+    HierarchicalExpertRouter,
+    IllegalTransitionError,
+)
 from hivemind.security._exceptions import SwarmSecurityViolationError
 
 LOGGER = logging.getLogger("hivemind.router.gateway")
@@ -80,6 +97,7 @@ LOGGER = logging.getLogger("hivemind.router.gateway")
 MODEL_PREFIX = "hivemind/"
 AUTO_MODEL = "auto"
 PRODUCER_TTL_S = 120.0
+ENDPOINT_COOLDOWN_S = 10.0  # after a failed request an endpoint is tried last for this long (MVP criterion A1: failover without paying a failed attempt first)
 PRODUCER_TIMEOUT_S = 120.0
 DEFAULT_COLD_START_WAIT_BUDGET_S = 20.0  # forward to a known-unloaded model only when it is expected to load within this
 DEFAULT_COLD_START_S = 60.0  # assumed load time of a model reported not loaded without a cold_start_s estimate
@@ -93,6 +111,9 @@ LOGIN_LIMIT = 10  # password logins per client per window: slows online password
 LOGIN_WINDOW_S = 60.0
 AMCP_PUBLISH_LIMIT = 30  # bus events per account per window: the bus is for coordination, not bulk traffic
 AMCP_PUBLISH_WINDOW_S = 60.0
+OPENTRAINER_DELTA_LIMIT = 20  # delta submissions per account per window: each accepted one adds to the public contributive-hub totals
+USAGE_CAPTURE_TTL_S = 60.0  # the anonymous usage-capture summary is recomputed at most once per window bucket per this many seconds
+CAMPAIGN_POLL_LIMIT = 20  # poll votes per account per window: every vote writes a never-pruned bus event, so it needs the same guard as /amcp/publish
 MAX_BODY_BYTES = 4_000_000
 MAX_PRICE_CEILING = 1_000.0
 MAX_PRODUCER_RESPONSE_BYTES = 8_000_000
@@ -147,8 +168,48 @@ def estimate_tokens(num_bytes: int) -> int:
     return (max(0, num_bytes) + 3) // 4
 
 
+RECOUNT_SLACK = 1.25  # allowed excess over the gateway's own token count (special tokens, tokenizer version drift)
+
+
+class TokenCounter:
+    """Counts completion tokens with the served model's own tokenizer, when the gateway has it.
+
+    Tokenizer files come from ``HIVEMIND_TOKENIZER_DIR``: one Hugging Face ``tokenizer.json`` per public model id, named
+    after the id with ``/`` replaced by ``__`` (for example ``hivemind__crowd-v1.json``). A model without a file, or a
+    missing ``tokenizers`` package, gives ``None`` and billing falls back to the byte cap.
+    """
+
+    def __init__(self, directory: str | os.PathLike[str] | None = None):
+        raw = directory if directory is not None else os.environ.get("HIVEMIND_TOKENIZER_DIR", "")
+        self.directory = Path(raw) if raw else None
+        self._cache: dict[str, Any] = {}
+
+    def _tokenizer(self, model_id: str) -> Any:
+        if self.directory is None or not model_id:
+            return None
+        if model_id not in self._cache:
+            path = self.directory / (model_id.replace("/", "__") + ".json")
+            tok = None
+            if path.is_file():
+                try:
+                    from tokenizers import Tokenizer
+
+                    tok = Tokenizer.from_file(str(path))
+                except Exception:  # noqa: BLE001 - a broken file must not break billing; fall back to bytes
+                    tok = None
+            self._cache[model_id] = tok
+        return self._cache[model_id]
+
+    def count(self, model_id: str, text: str) -> int | None:
+        tok = self._tokenizer(model_id)
+        if tok is None:
+            return None
+        return len(tok.encode(text or "", add_special_tokens=False).ids)
+
+
 def meter_usage(
-    reported_prompt: int, reported_completion: int, prompt_bytes: int, completion_bytes: int, max_tokens: int | None
+    reported_prompt: int, reported_completion: int, prompt_bytes: int, completion_bytes: int, max_tokens: int | None,
+    counted_completion: int | None = None,
 ) -> tuple[int, int, int]:
     """Anti-inflation metering: returns ``(prompt_tokens, completion_tokens, billed_tokens)``.
 
@@ -156,11 +217,17 @@ def meter_usage(
     estimate (and never more than the prompt bytes) and the completion part by the completion bytes and by
     ``max_tokens`` (``DEFAULT_MAX_TOKENS`` when the consumer set none, so billing stays inside the checked reserve).
     Hence ``billed <= min(reported_prompt + reported_completion, prompt_bytes + completion_bytes)``.
+
+    With ``counted_completion`` (the gateway's own count with the model's tokenizer), the completion part is also capped
+    at ``ceil(RECOUNT_SLACK * counted_completion)``: the byte cap alone lets a producer overstate by the bytes-per-token
+    ratio (about 4x for English, MVP criterion E2).
     """
     prompt_cap = min(int(prompt_bytes), estimate_tokens(int(prompt_bytes)) * PROMPT_TOKEN_FACTOR)
     prompt = max(0, min(int(reported_prompt), prompt_cap))
     completion = max(0, min(int(reported_completion), int(completion_bytes)))
     completion = min(completion, max(0, DEFAULT_MAX_TOKENS if max_tokens is None else int(max_tokens)))
+    if counted_completion is not None:
+        completion = min(completion, math.ceil(RECOUNT_SLACK * max(0, int(counted_completion))))
     return prompt, completion, prompt + completion
 
 
@@ -228,6 +295,19 @@ def _message_text(message: object) -> str:
                     if isinstance(value, str):
                         pieces.append(value)
     return "".join(pieces)
+
+
+def completion_text(payload: Mapping[str, Any], *, delta: bool) -> str:
+    """Text generated in a chat completion (``delta=False``) or one stream chunk (``delta=True``), as metered in bytes."""
+    parts: list[str] = []
+    choices = payload.get("choices")
+    if isinstance(choices, list):
+        for choice in choices:
+            if isinstance(choice, dict):
+                parts.append(_message_text(choice.get("delta" if delta else "message")))
+                if not delta and isinstance(choice.get("text"), str):
+                    parts.append(choice["text"])
+    return "".join(parts)
 
 
 def completion_byte_count(payload: Mapping[str, Any], *, delta: bool) -> int:
@@ -553,10 +633,52 @@ class GrantRequest(BaseModel):
     ref: str = Field(default="admin-grant", min_length=1, max_length=256)
 
 
+class PointTransferRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    recipient: str = Field(min_length=1, max_length=128)
+    amount: float = Field(gt=0.0, le=1_000_000_000.0, allow_inf_nan=False)
+    memo: str = Field(default="peer-hiveminder-support", max_length=256)
+    idempotency_key: str | None = Field(default=None, max_length=128)
+    notify_amcp: bool = True
+    subject_id: str = Field(default="SUBJ-01-PYTHON-RUST-CODER", min_length=4, max_length=64)
+    model_ref: str | None = Field(default=None, max_length=128)
+    pr_url: str | None = Field(default=None, max_length=300)
+
+
 class AccountTargetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     account_id: str | None = Field(default=None, max_length=128)
     handle: str | None = Field(default=None, max_length=128)
+
+
+class AdminResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    handle: str = Field(min_length=1, max_length=128)
+    email: str = Field(default="", max_length=254)
+    new_password: str = Field(default="", max_length=256)
+    role: Literal["consumer", "producer", "prosumer", "trainer"] = "prosumer"
+    min_balance_hmt: float = Field(default=0.0, ge=0.0, le=1e12, allow_inf_nan=False)
+    issue_reset_token: bool = True
+
+
+class ExpertRegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expert_id: str = Field(min_length=1, max_length=128)
+    kind: Literal["serving", "lora_domain", "lora_mix"] = "lora_domain"
+    cluster_id: str = Field(min_length=1, max_length=128)
+    base_model_id: str = Field(min_length=1, max_length=256)
+    adapter_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    adapter_size_mib: StrictInt = Field(default=0, ge=0, le=MAX_GPU_VRAM_MIB)
+    keywords: list[str] = Field(default_factory=list, max_length=128)
+    source: str = Field(default="", max_length=256)
+    move_to_shadow: StrictBool = False
+    shadow_reason: str = Field(default="candidate staged for shadow gate", min_length=1, max_length=256)
+
+
+class ExpertPromoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expert_id: str = Field(min_length=1, max_length=128)
+    gate: dict[str, Any]
 
 
 class AccountFlagRequest(BaseModel):
@@ -622,7 +744,16 @@ class OpenTrainerHeartbeatRequest(BaseModel):
     gpu_name: str | None = Field(default=None, min_length=1, max_length=128)
     vram_total_mib: int | None = Field(default=None, ge=512, le=MAX_GPU_VRAM_MIB)
     vram_free_mib: int | None = Field(default=None, ge=0, le=MAX_GPU_VRAM_MIB)
-    network_mode: Literal["outbound-https-relay", "amcp-kafka-aglet", "wireguard-t4-hub", "ssh-loopback-tunnel", "boinc-night-workunit"] = "outbound-https-relay"
+    network_mode: Literal[
+        "outbound-https-relay",
+        "amcp-kafka-aglet",
+        "wireguard-t4-hub",
+        "ssh-loopback-tunnel",
+        "wstunnel-https-wg",
+        "headscale-tailscale",
+        "nebula-mesh",
+        "boinc-night-workunit",
+    ] = "outbound-https-relay"
     training_stack: str = Field(default="qlora-moe+diloco+amcp-aglet+boinc", min_length=1, max_length=128)
     active_campaign: str = Field(default="E8-STAGE2-TINY-GRANITE-MOE-QLORA", min_length=1, max_length=128)
     account_id: str | None = Field(default=None, max_length=128)  # admin only
@@ -643,10 +774,42 @@ class OpenTrainerDeltaSubmitRequest(BaseModel):
     inner_steps: int = Field(default=8, ge=1, le=100_000)
     loss_before: float = Field(ge=0.0, le=1_000.0, allow_inf_nan=False)
     loss_after: float = Field(ge=0.0, le=1_000.0, allow_inf_nan=False)
+    # le=100 is only a transport sanity ceiling: the enforced cap is DEFAULT_MAX_DELTA_L2 (25.0), applied by
+    # validate_trainer_delta_submission, which answers 400 delta_rejected with the reason instead of a schema 422.
     delta_norm: float = Field(gt=0.0, le=100.0, allow_inf_nan=False)
     delta_sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
     code_pin: str = Field(default="", max_length=128)
-    network_mode: Literal["outbound-https-relay", "amcp-kafka-aglet", "wireguard-t4-hub", "ssh-loopback-tunnel", "boinc-night-workunit"] = "outbound-https-relay"
+    network_mode: Literal[
+        "outbound-https-relay",
+        "amcp-kafka-aglet",
+        "wireguard-t4-hub",
+        "ssh-loopback-tunnel",
+        "wstunnel-https-wg",
+        "headscale-tailscale",
+        "nebula-mesh",
+        "boinc-night-workunit",
+    ] = "outbound-https-relay"
+    vram_free_mib: int | None = Field(default=None, ge=0, le=MAX_GPU_VRAM_MIB)
+    vram_total_mib: int | None = Field(default=None, ge=512, le=MAX_GPU_VRAM_MIB)
+
+
+class OpenTrainerFederationTrainerRegisterRequest(BaseModel):
+    """Federation v2 Section 9 Trainer registration request (`docs/FEDERATION_V2_AMCP_AGLETS.md` §9)."""
+
+    model_config = ConfigDict(extra="forbid")
+    learner_id: str = Field(min_length=1, max_length=64)
+    gpu_model: str = Field(min_length=1, max_length=128)
+    vram_free_mib: int = Field(ge=0, le=MAX_GPU_VRAM_MIB)
+    vram_total_mib: int = Field(default=0, ge=0, le=MAX_GPU_VRAM_MIB)
+    night_only_consent: bool = Field(default=False)
+    shard_index: int = Field(default=0, ge=0, le=1024)
+    run_id: str = Field(default="opentrainer-rtx2070-t4-co-train-v1", min_length=1, max_length=64)
+    pinned_commit: str = Field(default="HEAD", min_length=1, max_length=64)
+    network_mode: str = Field(default="outbound-https-relay", min_length=1, max_length=64)
+    wireguard_public_key: str | None = Field(default=None, max_length=128)
+    wireguard_private_key: str | None = Field(default=None, max_length=128)
+    amcp_hmac_keys: str | None = Field(default=None, max_length=256)
+    overlay_slot_ip: str = Field(default="10.77.0.10/32", min_length=7, max_length=32)
 
 
 @dataclass(frozen=True)
@@ -668,6 +831,16 @@ class _Plan:
     app_title: str = "custom_api"
     is_stream: bool = False
     started_monotonic: float = 0.0
+    routed_expert_id: str | None = None
+    routed_cluster_id: str | None = None
+
+
+_BASE_MODEL_TIER_ALIASES: dict[str, tuple[str, ...]] = {
+    "ibm-granite/granite-3.1-1b-a400m-base": ("granite-1b-base", "granite-moe"),
+    "ibm-granite/granite-3.1-3b-a800m-instruct": ("granite-moe",),
+    "Qwen/Qwen2.5-Coder-7B-Instruct": ("coder", "bee-stars", "bee-rusty-sundials"),
+    "Vxtzq/Crowd-v1": ("crowd-v1",),
+}
 
 
 def residency_report(
@@ -739,23 +912,62 @@ POC_API_DESCRIPTION = (
 )
 
 
+MAINTENANCE_ENV = "HIVEMIND_MAINTENANCE_NOTICE"
+_BODY_TAG = re.compile(rb"<body[^>]*>", re.IGNORECASE)
+
+
+def maintenance_banner_html(notice: str) -> bytes:
+    """The visible banner injected right after ``<body>`` of every HTML page while maintenance mode is on (the text is escaped)."""
+    return (
+        '<div id="hivemind-maintenance-banner" role="alert" style="position:sticky;top:0;z-index:99999;background:#7c2d12;color:#ffedd5;'
+        'padding:10px 16px;font:600 14px/1.4 system-ui,sans-serif;text-align:center;">'
+        + "Maintenance: " + html.escape(notice) + "</div>"
+    ).encode("utf-8")
+
+
 class PocNoticeMiddleware:
     """Pure ASGI middleware: every HTTP response, streaming ones included, carries ``X-HiveMind-Status`` (proof of concept:
-    public data only), so API clients and tools that never render the HTML pages still see the notice."""
+    public data only), so API clients and tools that never render the HTML pages still see the notice.
 
-    def __init__(self, app: Callable[[ASGIMessage, Receive, Send], Awaitable[None]]) -> None:
+    With a ``maintenance`` notice (``HIVEMIND_MAINTENANCE_NOTICE``) every response also carries ``X-HiveMind-Maintenance`` and HTML pages get a visible
+    banner. The notice is operator text, not user input; it is limited to printable ASCII in the header and escaped in the page."""
+
+    def __init__(self, app: Callable[[ASGIMessage, Receive, Send], Awaitable[None]], maintenance: str | None = None) -> None:
         self.app = app
+        self.maintenance = (maintenance or "").strip()[:300] or None
 
     async def __call__(self, scope: ASGIMessage, receive: Receive, send: Send) -> None:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
+        maint = self.maintenance
+        pending: dict[str, Any] = {"start": None, "body": bytearray(), "html": False}
 
         async def send_with_notice(message: ASGIMessage) -> None:
-            if message.get("type") == "http.response.start":
+            kind = message.get("type")
+            if kind == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.append((b"x-hivemind-status", POC_STATUS_HEADER.encode("ascii")))
+                if maint:
+                    headers.append((b"x-hivemind-maintenance", maint.encode("ascii", "replace").replace(b"\r", b" ").replace(b"\n", b" ")))
+                    ctype = next((v for k, v in headers if k.lower() == b"content-type"), b"")
+                    if ctype.lower().startswith(b"text/html"):
+                        pending["html"] = True
+                        pending["start"] = {**message, "headers": [(k, v) for k, v in headers if k.lower() != b"content-length"]}
+                        return
                 message = {**message, "headers": headers}
+            elif kind == "http.response.body" and pending["html"]:
+                pending["body"] += message.get("body", b"")
+                if message.get("more_body", False):
+                    return
+                body = bytes(pending["body"])
+                if body:
+                    body = _BODY_TAG.sub(lambda m: m.group(0) + maintenance_banner_html(maint or ""), body, count=1)
+                start = pending["start"]
+                start["headers"] = start["headers"] + [(b"content-length", str(len(body)).encode("ascii"))]
+                await send(start)
+                await send({"type": "http.response.body", "body": body, "more_body": False})
+                return
             await send(message)
 
         await self.app(scope, receive, send_with_notice)
@@ -809,6 +1021,26 @@ class BodyLimitMiddleware:
         await response(scope, receive, send)
 
 
+# Public pages that posts link to. A link written in Markdown or inside parentheses often reaches us with the closing
+# punctuation glued on ("/signup)", "/signup](https:...", "/signup."), which 404s (seen in the 2026-11 gateway logs).
+# Only these fixed paths can be redirect targets, so the redirect cannot be pointed anywhere else.
+LINK_TYPO_PAGES = frozenset({
+    "/", "/signup", "/register", "/login", "/connexion", "/join", "/rejoindre", "/portal", "/playground", "/community",
+    "/benchmarks", "/boinc", "/crowdgpt-raid", "/raid", "/life-as-a-bee", "/manifesto", "/manifeste", "/game",
+    "/en", "/fr", "/de", "/es",
+})
+_LINK_TYPO_RE = re.compile(r"^(/[a-z0-9-]*?)(?:[)\]\[>\"'.,;:!*]|%29|%5[bBdD]|%22|%27|%3[eE]).*$")
+
+
+def link_typo_target(path: str) -> str | None:
+    """The clean page for a path with stray link punctuation after a known page, else None."""
+    match = _LINK_TYPO_RE.match(path or "")
+    if match is None:
+        return None
+    page = match.group(1) or "/"
+    return page if page in LINK_TYPO_PAGES else None
+
+
 def create_router_app(
     store: RouterStore,
     *,
@@ -830,7 +1062,14 @@ def create_router_app(
     warmup_unloaded: bool = True,
     starter_grant_hmt: float = 0.0,
     starter_grants_per_ip_24h: int = 3,
+    registration_bonus_hmt: float = 0.0,
+    allow_bonuses: bool = False,
+    bonus_claims_per_ip_24h: int = 5,
     trusted_proxies: Sequence[str] = (),
+    maintenance_notice: str | None = None,
+    reset_email_sender: Callable[[str, str], bool] | None = None,
+    reset_email_enabled: Callable[[], bool] | None = None,
+    expert_registry: ExpertRegistry | None = None,
 ) -> FastAPI:
     """Build the gateway app. ``resolver`` (host -> IP strings) is injectable for tests of the SSRF guard.
 
@@ -855,11 +1094,66 @@ def create_router_app(
     """
     client = http_client if http_client is not None else httpx.Client(timeout=PRODUCER_TIMEOUT_S, follow_redirects=False)
     resolve: Resolver = resolver if resolver is not None else _default_resolver
+    token_counter = TokenCounter()  # gateway-side completion recount for billing (HIVEMIND_TOKENIZER_DIR)
     app = FastAPI(title="HiveMind OpenRouter (proof of concept)", version="1.0.0", description=POC_API_DESCRIPTION)
     rotation = WeightedRoundRobin()
     register_limiter = SlidingWindowLimiter(REGISTER_LIMIT, REGISTER_WINDOW_S)
     login_limiter = SlidingWindowLimiter(LOGIN_LIMIT, LOGIN_WINDOW_S)
     amcp_publish_limiter = SlidingWindowLimiter(AMCP_PUBLISH_LIMIT, AMCP_PUBLISH_WINDOW_S)
+    opentrainer_delta_limiter = SlidingWindowLimiter(OPENTRAINER_DELTA_LIMIT, AMCP_PUBLISH_WINDOW_S)
+    usage_capture_cache: dict[int, tuple[float, dict[str, Any]]] = {}
+    campaign_poll_limiter = SlidingWindowLimiter(CAMPAIGN_POLL_LIMIT, AMCP_PUBLISH_WINDOW_S)
+    bee_trade_limiter = SlidingWindowLimiter(20, AMCP_PUBLISH_WINDOW_S)
+    point_transfer_limiter = SlidingWindowLimiter(20, AMCP_PUBLISH_WINDOW_S)
+    anon_compute_limiter = SlidingWindowLimiter(30, AMCP_PUBLISH_WINDOW_S)
+    expert_lock = threading.Lock()
+    if expert_registry is not None:
+        active_registry = expert_registry
+    else:
+        reg_path = os.environ.get("HIVEMIND_EXPERT_REGISTRY_PATH", "").strip()
+        if reg_path and os.path.isfile(reg_path):
+            loaded_reg = ExpertRegistry.load(reg_path)
+            loaded_reg.strict = True
+            active_registry = loaded_reg
+        else:
+            active_registry = ExpertRegistry(strict=True)
+    app.state.expert_registry = active_registry
+
+    def _parse_json_dict(raw: bytes) -> dict[str, Any]:
+        try:
+            parsed = json.loads(raw) if raw else {}
+        except (ValueError, RecursionError):
+            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request") from None
+        if not isinstance(parsed, dict):
+            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request")
+        return parsed
+
+    def _finite_int(val: Any, default: int, lo: int, hi: int, name: str) -> int:
+        if val is None or val == "":
+            return default
+        if isinstance(val, bool):
+            raise RouterError(400, f"invalid {name}: must be an integer", "invalid_request_error", "invalid_parameter")
+        try:
+            fval = float(val)
+            ival = int(val)
+        except (TypeError, ValueError, OverflowError):
+            raise RouterError(400, f"invalid {name}: must be an integer", "invalid_request_error", "invalid_parameter") from None
+        if not math.isfinite(fval):
+            raise RouterError(400, f"invalid {name}: must be finite", "invalid_request_error", "invalid_parameter")
+        return max(lo, min(ival, hi))
+
+    def _finite_float(val: Any, default: float, lo: float, hi: float, name: str) -> float:
+        if val is None or val == "":
+            return default
+        if isinstance(val, bool):
+            raise RouterError(400, f"invalid {name}: must be a number", "invalid_request_error", "invalid_parameter")
+        try:
+            fval = float(val)
+        except (TypeError, ValueError, OverflowError):
+            raise RouterError(400, f"invalid {name}: must be a number", "invalid_request_error", "invalid_parameter") from None
+        if not math.isfinite(fval):
+            raise RouterError(400, f"invalid {name}: must be finite", "invalid_request_error", "invalid_parameter")
+        return max(lo, min(fval, hi))
     market_cache: dict[tuple[str, int], dict[str, Any]] = {}
     market_lock = threading.Lock()
     capacity_clamp = float(max_producer_capacity_1k)
@@ -867,9 +1161,11 @@ def create_router_app(
     warm_started: dict[tuple[str, str], float] = {}
     if starter_grant_hmt < 0.0 or not math.isfinite(starter_grant_hmt) or starter_grants_per_ip_24h < 0:
         raise ValueError("starter_grant_hmt and starter_grants_per_ip_24h must be finite and not negative")
+    if registration_bonus_hmt < 0.0 or not math.isfinite(registration_bonus_hmt) or bonus_claims_per_ip_24h < 0:
+        raise ValueError("registration_bonus_hmt and bonus_claims_per_ip_24h must be finite and not negative")
     proxy_networks = tuple(ipaddress.ip_network(entry, strict=False) for entry in trusted_proxies)
     app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)
-    app.add_middleware(PocNoticeMiddleware)  # added last = outermost, so it also marks the 413 from the body limit
+    app.add_middleware(PocNoticeMiddleware, maintenance=maintenance_notice if maintenance_notice is not None else os.environ.get(MAINTENANCE_ENV))  # added last = outermost, so it also marks the 413 from the body limit
 
     # ------------------------------------------------------------------ errors
     @app.exception_handler(RouterError)
@@ -891,7 +1187,11 @@ def create_router_app(
         )
 
     @app.exception_handler(StarletteHTTPException)
-    def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+    def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse | RedirectResponse:
+        if exc.status_code == 404 and request.method in ("GET", "HEAD"):
+            target = link_typo_target(request.url.path)
+            if target is not None:
+                return RedirectResponse(target + (f"?{request.url.query}" if request.url.query else ""), status_code=307)
         kind = "not_found_error" if exc.status_code == 404 else "invalid_request_error"
         return _error_response(exc.status_code, str(exc.detail), kind, f"http_{exc.status_code}")
 
@@ -901,11 +1201,7 @@ def create_router_app(
         scheme, _, token = header.partition(" ")
         candidate = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
         if not candidate:
-            candidate = (
-                str(request.path_params.get("api_key") or "").strip()
-                or str(request.query_params.get("api_key") or "").strip()
-                or str(request.headers.get("x-api-key") or "").strip()
-            )
+            candidate = str(request.headers.get("x-api-key") or "").strip()
         account = store.authenticate(candidate) if candidate else None
         if account is None:
             raise RouterError(401, "Invalid or missing API key. Send 'Authorization: Bearer hm-...'.", "authentication_error", "invalid_api_key")
@@ -943,7 +1239,15 @@ def create_router_app(
         return [ConsumerBid(a, p) for a, p in prices.items()]
 
     def client_key(request: Request) -> str:
-        """Rate-limit key: the TCP peer, or the XFF entry ``trusted_proxy_hops`` from the right when behind proxies."""
+        """Rate-limit key: the TCP peer, or the XFF entry ``trusted_proxy_hops`` from the right when behind proxies.
+
+        A request relayed by the web portal carries the end user's address in a header signed with the shared secret
+        (``forwarded_client``); when it verifies, each visitor gets their own bucket instead of sharing the portal's."""
+        forwarded = request.headers.get(_forwarded_client.HEADER, "")
+        if forwarded:
+            ip = _forwarded_client.verify(store._secret, forwarded, clock())
+            if ip is not None:
+                return f"portal:{ip}"
         if trusted_proxy_hops > 0:
             hops = [h.strip() for h in request.headers.get("x-forwarded-for", "").split(",") if h.strip()]
             if len(hops) >= trusted_proxy_hops:
@@ -972,13 +1276,24 @@ def create_router_app(
         return peer
 
     def starter_grant(request: Request, account_id: str) -> dict[str, Any]:
-        """Mint the starter grant to a new real account unless its client address used up the daily cap. Says so, without counts."""
-        if starter_grant_hmt <= 0.0:
-            return {}
-        if store.claim_starter_slot(starter_client_ip(request), clock(), starter_grants_per_ip_24h):
-            store.grant(account_id, starter_grant_hmt, "starter-grant")
-            return {"starter_grant": starter_grant_hmt}
-        return {"starter_grant": 0.0, "starter_grant_note": "No starter grant was added to this account; ask an operator for one."}
+        """Mint the starter grant (and optional registration bonus) to a new real account unless its client address used up the daily cap."""
+        out: dict[str, Any] = {}
+        if starter_grant_hmt > 0.0 or registration_bonus_hmt > 0.0:
+            if store.claim_starter_slot(starter_client_ip(request), clock(), starter_grants_per_ip_24h):
+                if starter_grant_hmt > 0.0:
+                    store.grant(account_id, starter_grant_hmt, "starter-grant")
+                    out["starter_grant"] = starter_grant_hmt
+                if registration_bonus_hmt > 0.0:
+                    store.grant(account_id, registration_bonus_hmt, "registration-bonus")
+                    out["registration_bonus"] = registration_bonus_hmt
+            else:
+                if starter_grant_hmt > 0.0:
+                    out["starter_grant"] = 0.0
+                    out["starter_grant_note"] = "No starter grant was added to this account; ask an operator for one."
+                if registration_bonus_hmt > 0.0:
+                    out["registration_bonus"] = 0.0
+        # the partner allocation is granted once by an admin, never as a side effect of someone registering
+        return out
 
     reconnected_fleet_keepalive: dict[str, Any] = {
         "active": False,
@@ -994,50 +1309,134 @@ def create_router_app(
         with keepalive_lock:
             if not reconnected_fleet_keepalive["active"]:
                 return
-            if now_val - float(reconnected_fleet_keepalive["last_refresh_utc"]) < 35.0:
-                return
-            reconnected_fleet_keepalive["last_refresh_utc"] = now_val
-            entries_snapshot = list(reconnected_fleet_keepalive["entries"].values())
-        for item in entries_snapshot:
-            ctrl = store.producer_control(item["account_id"])
-            if ctrl is not None and ctrl.get("paused"):
-                continue
-            store.upsert_producer(
-                item["account_id"],
-                item["endpoint_url"],
-                item["models"],
-                item["cost_per_1k"],
-                item["capacity_1k"],
-                item["execution_class"],
-                now_utc=now_val,
-                endpoint_token=item["endpoint_token"],
-                residency=item["residency"],
-                replace_endpoints=True,
-            )
+            if now_val - float(reconnected_fleet_keepalive["last_refresh_utc"]) >= PRODUCER_TTL_S:
+                reconnected_fleet_keepalive["entries"].clear()
+                reconnected_fleet_keepalive["active"] = False
+            return
 
     def equilibrium(model_id: str, records: Sequence[ProducerRecord], extra: Account | None) -> MarketEquilibrium:
         return clear_market(model_id, bids_for(extra), offers_for(records), fee)
 
-    def resolve_model(
+    def _prompt_text(messages: Sequence[Mapping[str, Any]]) -> str:
+        parts: list[str] = []
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, str):
+                parts.append(content)
+            elif isinstance(content, Sequence) and not isinstance(content, (bytes, bytearray)):
+                for item in content:
+                    if isinstance(item, Mapping) and isinstance(item.get("text"), str):
+                        parts.append(item["text"])
+        return " ".join(parts)
+
+    def _find_live_producers_for_expert(rec: ExpertRecord, now: float) -> tuple[str, list[ProducerRecord]] | None:
+        candidates = (
+            rec.expert_id,
+            rec.base_model_id,
+            _strip_prefix(rec.base_model_id),
+            *_BASE_MODEL_TIER_ALIASES.get(rec.base_model_id, ()),
+        )
+        seen: set[str] = set()
+        for model_key in candidates:
+            if not model_key or model_key in seen:
+                continue
+            seen.add(model_key)
+            recs = store.active_producers(model_key, now, PRODUCER_TTL_S)
+            if recs:
+                return model_key, recs
+        return None
+
+    def _resolve_live_expert_route(prompt_text: str, now: float) -> tuple[str, list[ProducerRecord], str, str, str] | None:
+        if not prompt_text.strip():
+            return None
+        with expert_lock:
+            live_ids = active_registry.ids_in_state(EXPERT_LIVE)
+            if not live_ids:
+                return None
+            base_ids = sorted({active_registry.get(eid).base_model_id for eid in live_ids})
+            best_decision = None
+            for base_id in base_ids:
+                router = HierarchicalExpertRouter(active_registry, base_id)
+                decision = router.route(prompt_text)
+                if decision.target == "expert" and decision.expert_id is not None:
+                    best_decision = decision
+                    break
+            if best_decision is None or best_decision.expert_id is None:
+                return None
+            rec = active_registry.get(best_decision.expert_id)
+        found = _find_live_producers_for_expert(rec, now)
+        if found is None:
+            return None
+        served_model, recs = found
+        return served_model, recs, "expert_registry_live", rec.expert_id, rec.cluster_id
+
+    def _resolve_model_route(
         requested: str,
         *,
         preferred_tier: str | None = None,
-    ) -> tuple[str, list[ProducerRecord], str]:
+        prompt_text: str = "",
+    ) -> tuple[str, list[ProducerRecord], str, str | None, str | None]:
         now = clock()
         _refresh_reconnected_fleet_if_needed(now)
-        name = _strip_prefix(requested.strip())
+        raw_req = requested.strip()
+        name = _strip_prefix(raw_req)
         routing_mode = "explicit"
+        if name != AUTO_MODEL:
+            with expert_lock:
+                expert_rec: ExpertRecord | None = None
+                for key in (raw_req, name):
+                    if key in active_registry:
+                        expert_rec = active_registry.get(key)
+                        break
+            if expert_rec is not None:
+                if expert_rec.state != EXPERT_LIVE:
+                    raise RouterError(
+                        403,
+                        f"Expert '{expert_rec.expert_id}' is in state '{expert_rec.state}' and has not passed the train-to-serve gate.",
+                        "permission_error",
+                        "expert_not_servable",
+                    )
+                found = _find_live_producers_for_expert(expert_rec, now)
+                if found is None:
+                    raise RouterError(
+                        404,
+                        f"Live expert '{expert_rec.expert_id}' has no active producer serving '{expert_rec.base_model_id}'.",
+                        "invalid_request_error",
+                        "model_not_found",
+                    )
+                served_model, recs = found
+                return served_model, recs, "expert_registry_explicit", expert_rec.expert_id, expert_rec.cluster_id
         if name == AUTO_MODEL:
+            routed_expert = _resolve_live_expert_route(prompt_text, now)
+            if routed_expert is not None:
+                return routed_expert
             live_candidates = store.live_models(now, PRODUCER_TTL_S)
+
+            def _has_ready_producer(model_name: str, recs: Sequence[ProducerRecord]) -> bool:
+                return any(
+                    not all(
+                        s.model_state(model_name) is False and _cold_start_of(s, model_name) >= cold_start_wait_budget_s
+                        for s in r.per_endpoint()
+                    )
+                    for r in recs
+                )
+
             if preferred_tier and preferred_tier in live_candidates:
                 preferred_live = store.active_producers(preferred_tier, now, PRODUCER_TTL_S)
-                if preferred_live:
-                    return preferred_tier, preferred_live, "auto_intent"
-            best: tuple[tuple[int, float], str] | None = None
+                if preferred_live and (
+                    _has_ready_producer(preferred_tier, preferred_live)
+                    or not any(
+                        _has_ready_producer(c, store.active_producers(c, now, PRODUCER_TTL_S))
+                        for c in live_candidates
+                    )
+                ):
+                    return preferred_tier, preferred_live, "auto_intent", None, None
+            best: tuple[tuple[int, int, float], str] | None = None
             for candidate in live_candidates:
                 live = store.active_producers(candidate, now, PRODUCER_TTL_S)
-                # distinct live producers first: a single producer cannot steer 'auto' by declaring huge capacity
-                supply = (len({r.account_id for r in live}), sum(clamped(r) for r in live))
+                # ready (loaded or within wait budget) models first, then distinct live producers, then clamped capacity
+                ready_rank = 1 if _has_ready_producer(candidate, live) else 0
+                supply = (ready_rank, len({r.account_id for r in live}), sum(clamped(r) for r in live))
                 if best is None or supply > best[0]:
                     best = (supply, candidate)
             if best is None:
@@ -1049,9 +1448,17 @@ def create_router_app(
             for fallback_tier in ("coder", "gemma-core", "qwen35-core", "moe-coder"):
                 fb_records = store.active_producers(fallback_tier, now, PRODUCER_TTL_S)
                 if fb_records:
-                    return fallback_tier, fb_records, "super_moe_fallback"
+                    return fallback_tier, fb_records, "super_moe_fallback", None, None
         if not records:
             raise RouterError(404, f"The model '{requested}' is not served by any live producer.", "invalid_request_error", "model_not_found")
+        return name, records, routing_mode, None, None
+
+    def resolve_model(
+        requested: str,
+        *,
+        preferred_tier: str | None = None,
+    ) -> tuple[str, list[ProducerRecord], str]:
+        name, records, routing_mode, _, _ = _resolve_model_route(requested, preferred_tier=preferred_tier)
         return name, records, routing_mode
 
     def kick_warmup(model_id: str, servers: Sequence[ProducerRecord]) -> None:
@@ -1098,9 +1505,23 @@ def create_router_app(
         max_tokens = request_token_limit(body)
         intent = classify_prompt_intent_and_language(messages)
         attribution = detect_client_sdk(headers or {})
-        model_id, records, routing_mode = resolve_model(requested, preferred_tier=intent.preferred_tier)
+        model_id, records, routing_mode, routed_expert_id, routed_cluster_id = _resolve_model_route(
+            requested,
+            preferred_tier=intent.preferred_tier,
+            prompt_text=_prompt_text(messages),
+        )
         if store.balance(account.account_id) <= 0.0:
             raise RouterError(402, "Balance is empty; ask an admin for a grant or earn HMT as a producer.", "insufficient_quota", "insufficient_balance")
+        # Residency-aware pricing: a producer whose every server reports the model NOT loaded with a cold start above the
+        # wait budget cannot serve this request now, so it does not take part in the equilibrium when any other producer
+        # for the model can (2026-11-03 incident: the cheapest producer had unloaded the model, the posted-price
+        # equilibrium selected it alone, and the gate below answered 503 while a warm producer stood idle).
+        ready = [
+            r for r in records
+            if not all(s.model_state(model_id) is False and _cold_start_of(s, model_id) >= cold_start_wait_budget_s for s in r.per_endpoint())
+        ]
+        if ready and len(ready) < len(records):
+            records = ready
         eq = equilibrium(model_id, records, account)
         if eq.mechanism == MECHANISM_NO_TRADE and eq.price_per_1k <= 0.0:
             raise RouterError(503, f"No capacity is offered for '{requested}' right now.", "service_unavailable", "no_capacity")
@@ -1157,7 +1578,7 @@ def create_router_app(
                 candidates.extend(by_url[u] for u in rotation.order(f"{model_id}|{a}", shares))
             else:
                 candidates.append(servers[0])
-        candidates.sort(key=lambda r: _residency_rank(r, model_id))  # stable: loaded, then unknown, then known-not-loaded; rotation order kept within a rank
+        candidates.sort(key=lambda r: (_cooling(r), _residency_rank(r, model_id)))  # cooling endpoints last; then: loaded, then unknown, then known-not-loaded; rotation order kept within a rank
         return _Plan(
             request_id=request_id,
             model_id=model_id,
@@ -1174,6 +1595,8 @@ def create_router_app(
             app_title=attribution.app_title,
             is_stream=bool(body.get("stream") is True),
             started_monotonic=time.monotonic(),
+            routed_expert_id=routed_expert_id,
+            routed_cluster_id=routed_cluster_id,
         )
 
     def producer_request(record: ProducerRecord, plan: _Plan, body: Mapping[str, Any], *, stream: bool) -> httpx.Request | None:
@@ -1208,14 +1631,27 @@ def create_router_app(
             headers["Authorization"] = f"Bearer {record.endpoint_token}"
         return client.build_request("POST", url, json=outgoing, headers=headers)
 
-    def settle(plan: _Plan, account: Account, producer_id: str, reported: tuple[int, int], completion_bytes: int) -> dict[str, Any]:
+    def settle(
+        plan: _Plan,
+        account: Account,
+        producer_id: str,
+        reported: tuple[int, int],
+        completion_bytes: int,
+        *,
+        ttft_ms: float | None = None,
+        completion_txt: str | None = None,
+    ) -> dict[str, Any]:
         """Settle against the escrow taken at plan time: the metered charge can never exceed it, so it is never free."""
-        prompt, completion, billed = meter_usage(reported[0], reported[1], plan.prompt_bytes, completion_bytes, plan.max_tokens)
+        counted = token_counter.count(plan.model_id, completion_txt) if completion_txt is not None else None
+        prompt, completion, billed = meter_usage(reported[0], reported[1], plan.prompt_bytes, completion_bytes, plan.max_tokens,
+                                                 counted_completion=counted)
         receipt = store.settle(plan.request_id, account.account_id, producer_id, plan.model_id, prompt, completion, billed, plan.price_per_1k, fee)
         billed = receipt.billed_tokens
         prompt = min(prompt, billed)
         completion = billed - prompt
         latency_ms = max(0.0, (time.monotonic() - plan.started_monotonic) * 1000.0) if plan.started_monotonic > 0.0 else 0.0
+        clean_ttft = round(max(0.0, float(ttft_ms)), 3) if ttft_ms is not None else round(latency_ms, 3)
+        tokens_per_s = round(completion / (latency_ms / 1000.0), 3) if latency_ms > 0.0 and completion > 0 else 0.0
         store.record_usage_telemetry(
             request_id=plan.request_id,
             consumer_id=account.account_id,
@@ -1229,6 +1665,8 @@ def create_router_app(
             app_title=plan.app_title,
             is_stream=plan.is_stream,
             latency_ms=latency_ms,
+            ttft_ms=clean_ttft,
+            tokens_per_s=tokens_per_s,
             prompt_tokens=prompt,
             completion_tokens=completion,
             billed_tokens=billed,
@@ -1246,26 +1684,85 @@ def create_router_app(
             "completion_tokens": completion,
             "task_domain": plan.task_domain,
             "routing_mode": plan.routing_mode,
+            "ttft_ms": clean_ttft,
+            "tokens_per_s": tokens_per_s,
         }
 
-    def upstream_exhausted(plan: _Plan, timed_out: ProducerRecord | None) -> RouterError:
+    def upstream_exhausted(
+        plan: _Plan,
+        timed_out: ProducerRecord | None,
+        *,
+        account: Account | None = None,
+        reasons: Sequence[str] = (),
+    ) -> RouterError:
         """The explicit error once every candidate failed; a timeout is never opaque: ``model_loading`` only when the producer reported the model not loaded, else an explicit 504."""
         if timed_out is not None:
             if timed_out.model_state(plan.model_id) is False:
                 return model_loading_error(plan.model_id, _cold_start_of(timed_out, plan.model_id))
             return RouterError(504, "The producer did not answer in time; you were not charged.", "api_error", "upstream_timeout")
+        # A 502 burst was previously unattributable (the Cloud Run entries carried no text): name the model, producers, and per-producer failure reasons (never keys or prompts).
+        reasons_summary = ",".join(reasons[:8]) if reasons else "none_recorded"
+        LOGGER.warning(
+            "upstream_failure: every producer failed model=%s request_id=%s candidates=%d producers=%s reasons=%s",
+            plan.model_id,
+            plan.request_id,
+            len(plan.candidates),
+            ",".join(r.account_id for r in plan.candidates[:8]),
+            reasons_summary,
+        )
+        if account is not None:
+            latency_ms = max(0.0, (time.monotonic() - plan.started_monotonic) * 1000.0) if plan.started_monotonic > 0.0 else 0.0
+            store.record_usage_telemetry(
+                request_id=plan.request_id,
+                consumer_id=account.account_id,
+                producer_id="upstream_failure",
+                requested_model=plan.requested_model or plan.model_id,
+                routed_model=plan.model_id,
+                routing_mode=plan.routing_mode,
+                task_domain=plan.task_domain,
+                language=plan.language,
+                client_sdk=plan.client_sdk,
+                app_title=plan.app_title,
+                is_stream=plan.is_stream,
+                latency_ms=latency_ms,
+                prompt_tokens=0,
+                completion_tokens=0,
+                billed_tokens=0,
+                charged_hmt=0.0,
+                now_utc=clock(),
+            )
         return RouterError(502, "Every producer for this model failed; you were not charged.", "api_error", "upstream_failure")
+
+    cooldown_until: dict[str, float] = {}
+    cooldown_lock = threading.Lock()
+
+    def _cooling(record: ProducerRecord) -> bool:
+        with cooldown_lock:
+            return cooldown_until.get(record.endpoint_url, 0.0) > clock()
+
+    def _mark_failed(record: ProducerRecord) -> None:
+        with cooldown_lock:
+            cooldown_until[record.endpoint_url] = clock() + ENDPOINT_COOLDOWN_S
+
+    def _mark_ok(record: ProducerRecord) -> None:
+        with cooldown_lock:
+            cooldown_until.pop(record.endpoint_url, None)
 
     def chat_blocking(plan: _Plan, account: Account, body: Mapping[str, Any]) -> JSONResponse:
         timed_out: ProducerRecord | None = None
+        failure_reasons: list[str] = []
         for record in plan.candidates:
             request = producer_request(record, plan, body, stream=False)
             if request is None:
+                failure_reasons.append(f"{record.account_id}:skipped_request")
                 continue
             payload: Any = None
+            why = "no completion choice"  # the reason named in the log when this producer is marked failed; never a key or prompt
             try:
                 upstream = client.send(request, stream=True)
                 try:
+                    if upstream.status_code != 200:
+                        why = f"HTTP {upstream.status_code}"
                     if upstream.status_code == 200:
                         raw = read_limited(upstream, max_bytes=MAX_PRODUCER_RESPONSE_BYTES, deadline=time.monotonic() + PRODUCER_DEADLINE_S)
                         payload = json.loads(raw)
@@ -1273,17 +1770,22 @@ def create_router_app(
                     upstream.close()
             except (httpx.HTTPError, ValueError, UpstreamLimitError) as exc:
                 payload = None
+                why = type(exc).__name__
                 if isinstance(exc, httpx.TimeoutException) and timed_out is None:
                     timed_out = record
             if not isinstance(payload, dict) or not has_completion_choice(payload):
-                LOGGER.warning("producer %s failed request %s", record.account_id, plan.request_id)
+                failure_reasons.append(f"{record.account_id}:{why}")
+                LOGGER.warning("producer %s failed request %s: %s", record.account_id, plan.request_id, why)
+                _mark_failed(record)
                 continue
+            _mark_ok(record)
             reported = _usage_pair(payload)
             cbytes = completion_byte_count(payload, delta=False)
             if reported is None:
                 reported = (estimate_tokens(plan.prompt_bytes), estimate_tokens(cbytes))
             try:
-                info = settle(plan, account, record.account_id, reported, cbytes)
+                info = settle(plan, account, record.account_id, reported, cbytes,
+                              completion_txt=completion_text(payload, delta=False))
             except (InsufficientBalance, DuplicateRequest, UnknownAccount):
                 raise RouterError(402, "Balance changed while the request was running.", "insufficient_quota", "insufficient_balance") from None
             payload["model"] = _public_model(plan.model_id)
@@ -1292,38 +1794,65 @@ def create_router_app(
                 "completion_tokens": info["completion_tokens"],
                 "total_tokens": info["billed_tokens"],
             }
-            payload["hivemind"] = {k: info[k] for k in ("price_per_1k", "charged_hmt", "producer_id", "mechanism", "request_id")}
-            return JSONResponse(payload)
-        raise upstream_exhausted(plan, timed_out)
+            payload["hivemind"] = {
+                **{k: info[k] for k in ("price_per_1k", "charged_hmt", "producer_id", "mechanism", "request_id")},
+                "served_model": _public_model(plan.model_id),
+                "requested_model": _public_model(plan.requested_model or plan.model_id),
+                "routing_mode": plan.routing_mode,
+                "local_model": record.local_name(plan.model_id) or plan.model_id,
+                **({"expert_id": plan.routed_expert_id} if plan.routed_expert_id else {}),
+                **({"cluster_id": plan.routed_cluster_id} if plan.routed_cluster_id else {}),
+            }
+            resp_headers: dict[str, str] = {}
+            if plan.routed_expert_id:
+                resp_headers["X-HiveMind-Expert-Id"] = plan.routed_expert_id
+            if plan.routed_cluster_id:
+                resp_headers["X-HiveMind-Cluster-Id"] = plan.routed_cluster_id
+            return JSONResponse(payload, headers=resp_headers)
+        raise upstream_exhausted(plan, timed_out, account=account, reasons=failure_reasons)
 
     def chat_streaming(plan: _Plan, account: Account, body: Mapping[str, Any]) -> StreamingResponse:
         timed_out: ProducerRecord | None = None
+        failure_reasons: list[str] = []
         for record in plan.candidates:
             request = producer_request(record, plan, body, stream=True)
             if request is None:
+                failure_reasons.append(f"{record.account_id}:skipped_request")
                 continue
             try:
                 upstream = client.send(request, stream=True)
             except httpx.HTTPError as exc:
                 if isinstance(exc, httpx.TimeoutException) and timed_out is None:
                     timed_out = record
-                LOGGER.warning("producer %s failed request %s", record.account_id, plan.request_id)
+                failure_reasons.append(f"{record.account_id}:{type(exc).__name__}")
+                LOGGER.warning("producer %s failed request %s: %s", record.account_id, plan.request_id, type(exc).__name__)
+                _mark_failed(record)
                 continue
             if upstream.status_code != 200:
                 upstream.close()
+                failure_reasons.append(f"{record.account_id}:HTTP {upstream.status_code}")
                 LOGGER.warning("producer %s answered %s for %s", record.account_id, upstream.status_code, plan.request_id)
+                _mark_failed(record)
                 continue
-            return StreamingResponse(_stream_body(plan, account, record.account_id, upstream), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
-        raise upstream_exhausted(plan, timed_out)
+            _mark_ok(record)
+            stream_headers = {"Cache-Control": "no-cache"}
+            if plan.routed_expert_id:
+                stream_headers["X-HiveMind-Expert-Id"] = plan.routed_expert_id
+            if plan.routed_cluster_id:
+                stream_headers["X-HiveMind-Cluster-Id"] = plan.routed_cluster_id
+            return StreamingResponse(_stream_body(plan, account, record.account_id, upstream), media_type="text/event-stream", headers=stream_headers)
+        raise upstream_exhausted(plan, timed_out, account=account, reasons=failure_reasons)
 
     def _stream_body(plan: _Plan, account: Account, producer_id: str, upstream: httpx.Response) -> Iterator[bytes]:
         public = _public_model(plan.model_id)
         completion_bytes = 0
+        stream_text: list[str] = []
         reported: tuple[int, int] | None = None
         completion_id = "chatcmpl-" + plan.request_id
         settled = False
         failed = False
         produced = False
+        first_token_monotonic: float | None = None
 
         def finish() -> dict[str, Any] | None:
             nonlocal settled
@@ -1331,8 +1860,14 @@ def create_router_app(
             usage = reported if reported is not None else (estimate_tokens(plan.prompt_bytes), estimate_tokens(completion_bytes))
             if not produced:
                 usage = (0, 0)  # no choice chunk ever arrived: the producer did no work, so nothing is billed
+            stream_ttft_ms = (
+                max(0.0, (first_token_monotonic - plan.started_monotonic) * 1000.0)
+                if (first_token_monotonic is not None and plan.started_monotonic > 0.0)
+                else None
+            )
             try:
-                return settle(plan, account, producer_id, usage, completion_bytes)
+                return settle(plan, account, producer_id, usage, completion_bytes, ttft_ms=stream_ttft_ms,
+                              completion_txt="".join(stream_text))
             except (InsufficientBalance, DuplicateRequest, UnknownAccount):
                 LOGGER.warning("settlement failed for %s", plan.request_id)
                 return None
@@ -1353,9 +1888,12 @@ def create_router_app(
                     if not isinstance(chunk, dict):
                         continue
                     if isinstance(chunk.get("choices"), list) and chunk["choices"]:
+                        if first_token_monotonic is None:
+                            first_token_monotonic = time.monotonic()
                         produced = True
                     completion_id = str(chunk.get("id", completion_id))
                     completion_bytes += completion_byte_count(chunk, delta=True)
+                    stream_text.append(completion_text(chunk, delta=True))
                     pair = _usage_pair(chunk)
                     if pair is not None:
                         reported = pair
@@ -1460,9 +1998,29 @@ def create_router_app(
                 "charged_hmt": float(usage_doc.get("total_charged_hmt", 0.0)),
             },
         }
+        k_service = os.environ.get("K_SERVICE", "").strip()
+        replica_url = os.environ.get("HIVEMIND_ROUTER_REPLICA_URL", "").strip()
+        total_reg_accounts = int(accounts_summary.get("total_registered_accounts", 0) or 0)
+        if k_service:
+            telem_status = "LIVE_GCP_PRODUCTION"
+            telem_status_basis = f"GCP_CLOUD_RUN_K_SERVICE ({k_service})"
+        elif replica_url:
+            telem_status = "LIVE_GCP_PRODUCTION"
+            telem_status_basis = "LITESTREAM_REPLICA_URL"
+        elif total_reg_accounts > 0:
+            telem_status = "LIVE_GCP_PRODUCTION"
+            telem_status_basis = "POPULATED_ROUTER_STORE"
+        else:
+            telem_status = "LOCAL_EMPTY_ROUTER_STORE"
+            telem_status_basis = "EMPTY_UNCONFIGURED_ROUTER_STORE"
+
+        ot_total_nodes = ot_fleet.get("total_registered_nodes")
+        ot_active_nodes = ot_fleet.get("active_trainer_nodes")
+
         return {
             "object": "hivemind.live_telemetry",
-            "status": "LIVE_GCP_PRODUCTION",
+            "status": telem_status,
+            "status_basis": telem_status_basis,
             "generated_at_utc": round(now, 3),
             "generated_at_iso": iso_now,
             "accounts": accounts_summary,
@@ -1482,8 +2040,8 @@ def create_router_app(
                 "version": ot_doc.get("version", "1.0.0-s36"),
                 "topic": (ot_doc.get("active_task_offer") or {}).get("topic", "hivemind.amcp.federation.v1"),
                 "registered_trainer_accounts_count": int(ot_cat.get("registered_trainer_accounts_count", 0)),
-                "total_registered_nodes": int(ot_fleet.get("total_registered_nodes", 1)),
-                "active_trainer_nodes": int(ot_fleet.get("active_trainer_nodes", 1)),
+                "total_registered_nodes": int(ot_total_nodes) if ot_total_nodes is not None else None,
+                "active_trainer_nodes": int(ot_active_nodes) if ot_active_nodes is not None else None,
                 "accepted_rounds_count": len(ot_rounds),
                 # None until a round is recorded: 1.7772 was the Stage-2 soak's final loss, not this fleet's figure.
                 "latest_eval_loss": float(ot_rounds[0]["eval_loss"]) if ot_rounds and ot_rounds[0].get("eval_loss") is not None else None,
@@ -1495,7 +2053,8 @@ def create_router_app(
             "steam": {
                 "app_id": 3133700,
                 "edition": "USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter (Free Steam Edition)",
-                "preemption_sla_ms": 1133,
+                "preemption_target_sla_ms": 1500,
+                "preemption_sla_basis": "design_target_not_measured_on_router",
             },
         }
 
@@ -1534,11 +2093,22 @@ def create_router_app(
     @app.api_route("/portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/life-as-a-bee", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def portal() -> HTMLResponse:
+    @app.api_route("/fr", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/en", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/es", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/de", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/zh", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def portal(request: Request) -> HTMLResponse:
+        from hivemind.router.portal_page import PORTAL_SUPPORTED_LANGS, normalize_portal_lang
+
+        path_lang = request.url.path.lstrip("/").lower()
+        raw_lang = path_lang if path_lang in PORTAL_SUPPORTED_LANGS else request.query_params.get("lang")
+        portal_lang = normalize_portal_lang(raw_lang)
         nonce = secrets.token_urlsafe(18)
         page = render_portal_page(
             google.client_id if google else None,
             nonce,
+            lang=portal_lang,
             live_telemetry=build_live_telemetry_snapshot(),
         )
         return HTMLResponse(
@@ -1546,6 +2116,7 @@ def create_router_app(
             headers={
                 "Content-Security-Policy": portal_content_security_policy(nonce),
                 "Cache-Control": "no-store",
+                "Content-Language": portal_lang,
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "strict-origin-when-cross-origin",
             },
@@ -1700,11 +2271,17 @@ def create_router_app(
         from hivemind.swarm.amcp_eda_traffic_sustainer import plan_100_producer_mesh_scaling
 
         live_status = store.producer_fleet_scale_status(clock(), PRODUCER_TTL_S, target_producers=100)
+        live_accounts = int(live_status.get("live_producer_accounts", 0))
+        fleet_plan = dict(build_100_producer_international_fleet_plan(active_producers=max(1, live_accounts)))
+        fleet_plan["live_producer_accounts"] = live_accounts
         return {
             "object": "hivemind.producer_scale_100_status",
             "live_store_scale_status": live_status,
-            "hundred_producer_fleet_plan": build_100_producer_international_fleet_plan(active_producers=100),
-            "amcp_mesh_scaling": plan_100_producer_mesh_scaling(active_producers=100),
+            "hundred_producer_fleet_plan": fleet_plan,
+            "amcp_mesh_scaling": plan_100_producer_mesh_scaling(
+                active_producers=live_accounts,
+                live_endpoints=int(live_status.get("live_endpoints", 0)),
+            ),
         }
 
     @app.post("/v1/hivemind/producers/scale-100-simulate")
@@ -1716,49 +2293,49 @@ def create_router_app(
             select_100_node_optimal_producer,
         )
 
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many requests; try again in a minute.", "rate_limit_error", "rate_limited")
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except (ValueError, RecursionError):
-            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request") from None
-        if not isinstance(body, dict):
-            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request")
+        body = _parse_json_dict(raw)
 
-        active_producers = max(4, min(int(body.get("active_producers", 100)), 1000))
-        standby_prosumers = max(0, min(int(body.get("standby_prosumers", 160)), 5000))
-        arrival_rate = max(0.1, min(float(body.get("arrival_rate_req_per_s", 24.0)), 500.0))
+        active_producers = _finite_int(body.get("active_producers"), 100, 4, 1000, "active_producers")
+        standby_prosumers = _finite_int(body.get("standby_prosumers"), 160, 0, 5000, "standby_prosumers")
+        arrival_rate = _finite_float(body.get("arrival_rate_req_per_s"), 24.0, 0.1, 500.0, "arrival_rate_req_per_s")
         client_region = str(body.get("client_region", "eu-west"))[:32]
         model_id = str(body.get("model_id", "hivemind/qwen3.5-coder-14b"))[:128]
 
-        fleet_plan = build_100_producer_international_fleet_plan(
-            active_producers=active_producers,
-            standby_prosumers=standby_prosumers,
-            arrival_rate_req_per_s=arrival_rate,
-        )
-        regions = ("eu-west", "us-east", "us-west", "ap-northeast")
-        synthetic_candidates = [
-            {
-                "account_id": f"producer-{i:03d}",
-                "endpoint_id": f"ep-{i % 2}",
-                "region": regions[i % len(regions)],
-                "loaded": (i % 3 == 0),
-                "inflight": i % 5,
-                "capacity_1k": 20 + (i % 4) * 10,
-                "models": [model_id],
+        def _run_sim() -> dict[str, Any]:
+            fleet_plan = build_100_producer_international_fleet_plan(
+                active_producers=active_producers,
+                standby_prosumers=standby_prosumers,
+                arrival_rate_req_per_s=arrival_rate,
+            )
+            regions = ("eu-west", "us-east", "us-west", "ap-northeast")
+            synthetic_candidates = [
+                {
+                    "account_id": f"producer-{i:03d}",
+                    "endpoint_id": f"ep-{i % 2}",
+                    "region": regions[i % len(regions)],
+                    "loaded": (i % 3 == 0),
+                    "inflight": i % 5,
+                    "capacity_1k": 20 + (i % 4) * 10,
+                    "models": [model_id],
+                }
+                for i in range(active_producers)
+            ]
+            dispatch_sample = select_100_node_optimal_producer(
+                synthetic_candidates,
+                model_id=model_id,
+                client_region=client_region,
+            )
+            return {
+                "object": "hivemind.producer_scale_100_simulation",
+                "fleet_plan": fleet_plan,
+                "amcp_mesh_scaling": plan_100_producer_mesh_scaling(active_producers=active_producers),
+                "p2c_dispatch_sample": dispatch_sample,
             }
-            for i in range(active_producers)
-        ]
-        dispatch_sample = select_100_node_optimal_producer(
-            synthetic_candidates,
-            model_id=model_id,
-            client_region=client_region,
-        )
-        return {
-            "object": "hivemind.producer_scale_100_simulation",
-            "fleet_plan": fleet_plan,
-            "amcp_mesh_scaling": plan_100_producer_mesh_scaling(active_producers=active_producers),
-            "p2c_dispatch_sample": dispatch_sample,
-        }
+
+        return await run_in_threadpool(_run_sim)
 
     @app.get("/v1/hivemind/bees/rusty-sundials")
     def get_rusty_sundials_bee() -> dict[str, Any]:
@@ -1772,17 +2349,14 @@ def create_router_app(
         """Deterministic numeric calculation rescue & physical/mathematical structural analysis across astronomy, fluid mechanics, quantum fluids & genetics."""
         from hivemind.swarm.rusty_sundials_scientific_bee import rescue_numeric_calculation
 
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many requests; try again in a minute.", "rate_limit_error", "rate_limited")
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except (ValueError, RecursionError):
-            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request") from None
-        if not isinstance(body, dict):
-            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request")
+        body = _parse_json_dict(raw)
         prompt = str(body.get("prompt", "Rescue numerical PDE/ODE calculation"))[:2048]
         domain = str(body["domain"])[:64] if body.get("domain") else None
-        steps = max(4, min(int(body.get("steps", 64)), 256))
-        dt = max(1e-5, min(float(body.get("dt", 0.01)), 0.1))
+        steps = _finite_int(body.get("steps"), 64, 4, 256, "steps")
+        dt = _finite_float(body.get("dt"), 0.01, 1e-5, 0.1, "dt")
         result = await run_in_threadpool(rescue_numeric_calculation, prompt, domain, steps, dt)
         return result.to_dict()
 
@@ -1799,7 +2373,6 @@ def create_router_app(
         return {"object": "hivemind.partner_models", "models": items}
 
     @app.get("/v1/models")
-    @app.get("/k/{api_key}/v1/models")
     def list_models() -> dict[str, Any]:
         created = int(clock())
         _refresh_reconnected_fleet_if_needed(float(created))
@@ -1871,7 +2444,6 @@ def create_router_app(
             store.release_hold(plan.request_id)
 
     @app.post("/v1/chat/completions", response_model=None)
-    @app.post("/k/{api_key}/v1/chat/completions", response_model=None)
     async def chat_completions(request: Request) -> JSONResponse | StreamingResponse:
         # authenticate first, then read the body (already bounded by BodyLimitMiddleware): anonymous callers cost nothing
         account = await run_in_threadpool(authenticate, request)
@@ -1884,13 +2456,18 @@ def create_router_app(
     @app.api_route("/login", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/register", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/connexion", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def signup() -> HTMLResponse:
+    @app.api_route("/auth/reset", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def signup(request: Request) -> HTMLResponse:
         nonce = secrets.token_urlsafe(18)
+        default_role = str(request.query_params.get("role") or "prosumer").strip().lower()
         page = render_signup_page(
             google.client_id if google else None,
             nonce,
             live_telemetry=build_live_telemetry_snapshot(),
             starter_grant_hmt=starter_grant_hmt,
+            registration_bonus_hmt=registration_bonus_hmt,
+            allow_bonuses=allow_bonuses,
+            default_role=default_role,
         )
         return HTMLResponse(page, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                            "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
@@ -1934,14 +2511,27 @@ def create_router_app(
         acct = store.get_account(account_id)
         grant_info = starter_grant(request, account_id) if created else {}  # per-IP capped; no unconditional grant after the cap
         bal = store.balance(account_id)
+        resolved_handle = acct.handle if acct else handle
+        node_id = "0x" + hashlib.sha256(resolved_handle.encode("utf-8")).hexdigest()[:8].upper()
         return {
             "object": "hivemind.auth_session",
             "status": "REGISTERED" if created else "EXISTING_USER_RESTORED",
             "ok": True,
             "created": created,
             "account_id": account_id,
-            "handle": acct.handle if acct else handle,
+            "handle": resolved_handle,
+            "email": email or f"{resolved_handle}@hivemind.network",
             "role": acct.role if acct else role,
+            "target_profile": str(data.get("target_profile") or "developer"),
+            "provider": "EMAIL_PASSKEY",
+            "linked_providers": ["EMAIL_PASSKEY"],
+            "node_id": node_id,
+            "login_count": 1 if created else 2,
+            "is_new_user": bool(created),
+            "is_guest": False,
+            "user_state": "NEW_USER" if created else "EXISTING_USER",
+            "v1_migrated": True,
+            "v2_access_granted": True,
             "api_key": api_key,
             "token": api_key,
             "balance": bal,
@@ -1961,7 +2551,10 @@ def create_router_app(
             or ""
         ).strip()
         password = str(data.get("password") or "").strip()
-        api_key_hint = str(data.get("api_key") or "").strip()
+        auth_hdr = request.headers.get("authorization", "")
+        scheme, _, bearer_tok = auth_hdr.partition(" ")
+        bearer_key = bearer_tok.strip() if scheme.lower() == "bearer" and bearer_tok.strip().startswith("hm-") else ""
+        api_key_hint = str(data.get("api_key") or bearer_key or "").strip()
         strict_existing = bool(data.get("strict_existing", False))
         if not identifier and not api_key_hint:
             raise RouterError(400, "Enter your username, handle, email, or existing hm-... API key.", "invalid_request_error", "missing_identifier")
@@ -1979,6 +2572,7 @@ def create_router_app(
         except (SwarmSecurityViolationError, ReservedHandle):
             raise RouterError(400, "Invalid username or handle format.", "invalid_request_error", "invalid_handle") from None
         bal = store.balance(acct.account_id)  # login never creates an account, so it never grants
+        node_id = "0x" + hashlib.sha256(acct.handle.encode("utf-8")).hexdigest()[:8].upper()
         return {
             "object": "hivemind.auth_session",
             "status": "AUTHENTICATED",
@@ -1986,29 +2580,411 @@ def create_router_app(
             "created": created,
             "account_id": acct.account_id,
             "handle": acct.handle,
+            "email": identifier if "@" in identifier else f"{acct.handle}@hivemind.network",
             "role": acct.role,
+            "target_profile": str(data.get("target_profile") or "developer"),
+            "provider": "EXISTING_AUTH",
+            "linked_providers": ["EXISTING_AUTH"],
+            "node_id": node_id,
+            "login_count": 2,
+            "is_new_user": False,
+            "is_guest": False,
+            "user_state": "EXISTING_USER",
             "api_key": api_key,
             "token": api_key,
             "balance": bal,
             "balance_hmt": bal,
             "compute_points": int(round(bal)),
-            "v1_migrated": True,
-            "v2_access_granted": True,
         }
+
+    _auth_cors_headers = {
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    }
+
+    @app.options("/v1/hivemind/auth/register")
+    @app.options("/api/v1/auth/register")
+    @app.options("/v1/hivemind/auth/login")
+    @app.options("/api/v1/auth/login")
+    def auth_cors_preflight() -> JSONResponse:
+        return JSONResponse(content={}, status_code=200, headers=_auth_cors_headers)
 
     @app.post("/v1/hivemind/auth/register")
     @app.post("/api/v1/auth/register")
     async def auth_register_api(request: Request) -> JSONResponse:
         data = await _parse_auth_payload(request)
-        body = await run_in_threadpool(_execute_credential_register, request, data)
-        return JSONResponse(body, headers={"Cache-Control": "no-store"})
+        try:
+            body = await run_in_threadpool(_execute_credential_register, request, data)
+        except RouterError as exc:
+            return _error_response(
+                exc.status,
+                exc.message,
+                exc.error_type,
+                exc.code,
+                {**(exc.headers or {}), **_auth_cors_headers},
+            )
+        return JSONResponse(body, headers=_auth_cors_headers)
 
     @app.post("/v1/hivemind/auth/login")
     @app.post("/api/v1/auth/login")
     async def auth_login_api(request: Request) -> JSONResponse:
         data = await _parse_auth_payload(request)
-        body = await run_in_threadpool(_execute_credential_login, request, data)
-        return JSONResponse(body, headers={"Cache-Control": "no-store"})
+        try:
+            body = await run_in_threadpool(_execute_credential_login, request, data)
+        except RouterError as exc:
+            return _error_response(
+                exc.status,
+                exc.message,
+                exc.error_type,
+                exc.code,
+                {**(exc.headers or {}), **_auth_cors_headers},
+            )
+        return JSONResponse(body, headers=_auth_cors_headers)
+
+    router_sso_states: dict[str, dict[str, Any]] = {}
+    router_guests: dict[str, dict[str, Any]] = {}
+    router_linked_providers: dict[str, list[str]] = {}
+    supported_sso_providers = {"google", "reddit", "steam", "github", "epic", "boinc", "webauthn", "web3"}
+    core_mvp_sso_providers = {"google", "reddit", "steam", "github"}
+    sso_authorize_urls = {
+        "google": "https://accounts.google.com/o/oauth2/v2/auth",
+        "reddit": "https://www.reddit.com/api/v1/authorize",
+        "steam": "https://steamcommunity.com/openid/login",
+        "github": "https://github.com/login/oauth/authorize",
+    }
+
+    @app.get("/api/v1/auth/session")
+    def auth_session_api(request: Request) -> JSONResponse:
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        candidate = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        if candidate and candidate in router_guests:
+            guest = router_guests[candidate]
+            return JSONResponse(
+                {
+                    "authenticated": True,
+                    "user": {
+                        "handle": guest["handle"],
+                        "email": guest["email"],
+                        "role": guest["role"],
+                        "target_profile": guest["target_profile"],
+                        "compute_points": guest["compute_points"],
+                        "balance_hmt": 0.0,
+                        "provider": guest["provider"],
+                        "linked_providers": guest["linked_providers"],
+                        "node_id": guest["node_id"],
+                        "is_new_user": True,
+                        "is_guest": True,
+                        "user_state": "GUEST",
+                    },
+                },
+                headers={"Cache-Control": "no-store"},
+            )
+        acct = store.authenticate(candidate) if candidate else None
+        if acct is None:
+            return JSONResponse({"authenticated": False, "user": None}, headers={"Cache-Control": "no-store"})
+        bal = store.balance(acct.account_id)
+        linked = router_linked_providers.get(acct.account_id, ["EXISTING_AUTH"])
+        return JSONResponse(
+            {
+                "authenticated": True,
+                "user": {
+                    "account_id": acct.account_id,
+                    "handle": acct.handle,
+                    "role": acct.role,
+                    "compute_points": int(round(bal)),
+                    "balance_hmt": bal,
+                    "provider": linked[-1] if linked else "EXISTING_AUTH",
+                    "linked_providers": linked,
+                    "is_guest": False,
+                    "user_state": "EXISTING_USER",
+                },
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/logout")
+    def auth_logout_api(request: Request) -> JSONResponse:
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        candidate = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        if candidate:
+            router_guests.pop(candidate, None)
+        return JSONResponse({"status": "LOGGED_OUT"}, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/v1/auth/sso/{provider}/authorize")
+    def auth_sso_authorize_api(
+        provider: str,
+        code_challenge: str | None = None,
+        redirect_uri: str | None = None,
+    ) -> JSONResponse:
+        # Deleted in v3.3: no identity provider verified anything here (accounts were created under a provider label for
+        # any caller). Google sign-in is /v1/hivemind/register/google with a verified ID token.
+        raise RouterError(410, "This sign-in flow is retired. Use Sign in with Google on the portal.", "invalid_request_error", "sso_retired")
+
+    @app.post("/api/v1/auth/sso/{provider}")
+    async def auth_sso_api(provider: str, request: Request) -> JSONResponse:
+        # Deleted in v3.3: no identity provider verified anything here (accounts were created under a provider label for
+        # any caller). Google sign-in is /v1/hivemind/register/google with a verified ID token.
+        raise RouterError(410, "This sign-in flow is retired. Use Sign in with Google on the portal.", "invalid_request_error", "sso_retired")
+
+    @app.post("/api/v1/auth/link-provider")
+    async def auth_link_provider_api(request: Request) -> JSONResponse:
+        data = await _parse_auth_payload(request)
+        prov = str(data.get("provider") or "").lower().strip()
+        if prov not in supported_sso_providers:
+            raise RouterError(400, f"Unsupported SSO provider '{prov}'", "invalid_request_error", "unsupported_sso_provider")
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        candidate = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        acct = store.authenticate(candidate) if candidate else None
+        if acct is None:
+            raise RouterError(401, "Active authenticated session required to link SSO provider", "authentication_error", "unauthorized")
+        prov_badge = f"{prov.upper()}_SSO"
+        linked = router_linked_providers.setdefault(acct.account_id, ["EXISTING_AUTH"])
+        if prov_badge not in linked:
+            linked.append(prov_badge)
+        bal = store.balance(acct.account_id)
+        return JSONResponse(
+            {
+                "status": "PROVIDER_LINKED",
+                "handle": acct.handle,
+                "linked_provider": prov_badge,
+                "linked_providers": linked,
+                "bonus_awarded": 0,
+                "compute_points": int(round(bal)),
+                "user_state": "EXISTING_USER",
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/guest")
+    async def auth_guest_api(request: Request) -> JSONResponse:
+        data = await _parse_auth_payload(request) if request.headers.get("content-length") not in (None, "0") else {}
+        target_profile = str(data.get("target_profile") or "gamer")
+        suffix = secrets.token_hex(3)
+        guest_handle = f"guest_{suffix}"
+        guest_token = "hm_guest_" + secrets.token_hex(16)
+        guest_record = {
+            "handle": guest_handle,
+            "email": f"{guest_handle}@sandbox.hivemind.local",
+            "provider": "GUEST_SANDBOX",
+            "linked_providers": ["GUEST_SANDBOX"],
+            "role": "HiveMinder Guest",
+            "target_profile": target_profile,
+            "compute_points": 0,
+            "token": guest_token,
+            "node_id": "0x" + hashlib.sha256(f"guest:{guest_handle}".encode("utf-8")).hexdigest()[:8].upper(),
+            "registered_at": time.time(),
+            "login_count": 1,
+            "is_new_user": True,
+            "is_guest": True,
+            "user_state": "GUEST",
+        }
+        router_guests[guest_token] = guest_record
+        return JSONResponse({"status": "GUEST_SESSION_ACTIVE", **guest_record}, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/v1/auth/upgrade-guest")
+    async def auth_upgrade_guest_api(request: Request) -> JSONResponse:
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        old_token = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        old_guest = router_guests.get(old_token) if old_token else None
+        if not old_guest or not old_guest.get("is_guest"):
+            raise RouterError(401, "A guest session token is required to upgrade (Authorization: Bearer).", "authentication_error", "guest_token_required")
+        data = await _parse_auth_payload(request)
+        raw_handle = str(data.get("handle") or "").strip()
+        raw_email = str(data.get("email") or "").strip()
+        prov = str(data.get("provider") or "google").lower().strip()
+        target_profile = str(data.get("target_profile") or "gamer").strip()
+        clean_handle = re.sub(r"[^a-zA-Z0-9_-]", "_", raw_handle.lstrip("@"))[:32]
+        if not clean_handle:
+            raise RouterError(400, "Valid handle is required to upgrade guest session.", "invalid_request_error", "invalid_handle")
+        if store._resolve_legacy_user(raw_handle) is not None or (raw_email and store._resolve_legacy_user(raw_email) is not None):
+            raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken")
+        try:
+            account_id, new_key, created_upg = store.register_with_credentials(
+                clean_handle,
+                str(data.get("password") or ""),
+                "prosumer",
+                email=raw_email or f"{clean_handle}@hivemind.network",
+            )
+        except HandleTaken:
+            raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken") from None
+        router_guests.pop(old_token, None)
+        prov_badge = f"{prov.upper()}_SSO" if prov != "email" else "EMAIL_PASSKEY"
+        router_linked_providers[account_id] = ["GUEST_SANDBOX", prov_badge]
+        acct = store.get_account(account_id)
+        grant_info = starter_grant(request, account_id) if created_upg else {}
+        upg_bal = store.balance(account_id)
+        resolved_handle = acct.handle if acct else clean_handle.lower()
+        return JSONResponse(
+            {
+                "status": "GUEST_UPGRADED",
+                "handle": resolved_handle,
+                "email": raw_email or f"{resolved_handle}@hivemind.network",
+                "provider": prov_badge,
+                "linked_providers": ["GUEST_SANDBOX", prov_badge],
+                "role": "HiveMinder Human",
+                "target_profile": target_profile,
+                "balance": upg_bal,
+                "balance_hmt": upg_bal,
+                "compute_points": int(round(upg_bal)),
+                "token": new_key,
+                "api_key": new_key,
+                **grant_info,
+                "node_id": "0x" + hashlib.sha256(f"upgraded:{resolved_handle}".encode("utf-8")).hexdigest()[:8].upper(),
+                "login_count": 1,
+                "is_new_user": True,
+                "is_guest": False,
+                "upgraded_from_guest": True,
+                "user_state": "NEW_USER",
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/rotate-key")
+    def auth_rotate_key_api(request: Request) -> JSONResponse:
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        old_token = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        acct = store.authenticate(old_token) if old_token else None
+        if acct is not None:
+            new_token = store.rotate_key(acct.account_id)
+            return JSONResponse(
+                {
+                    "status": "KEY_ROTATED",
+                    "handle": acct.handle,
+                    "old_token_revoked": True,
+                    "token": new_token,
+                    "api_key": new_token,
+                },
+                headers={"Cache-Control": "no-store"},
+            )
+        new_ephemeral = "hm_live_" + secrets.token_hex(16)
+        return JSONResponse(
+            {
+                "status": "KEY_ROTATED",
+                "handle": "ephemeral",
+                "old_token_revoked": False,
+                "token": new_ephemeral,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/change-password")
+    @app.post("/v1/hivemind/auth/change-password")
+    async def auth_change_password_api(request: Request) -> JSONResponse:
+        """Set a new password for the account that owns the presented hm-... key (Authorization: Bearer).
+
+        This is how an account whose stored password is missing or a placeholder gets a real one: prove the account with
+        its key (an admin can issue a fresh key with the admin rotate-key route), then set the password here."""
+        if not login_limiter.allow(client_key(request), clock()):
+            return _error_response(429, "Too many attempts; try again in a minute.", "rate_limit_error", "rate_limited")
+        scheme, _, token = request.headers.get("authorization", "").partition(" ")
+        key = token.strip() if scheme.lower() == "bearer" else ""
+        acct = store.authenticate(key) if key.startswith("hm-") else None
+        if acct is None:
+            return _error_response(401, "A valid hm-... API key is required.", "authentication_error", "invalid_api_key")
+        data = await _parse_auth_payload(request)
+        new_password = str(data.get("new_password") or data.get("password") or "")
+        try:
+            await run_in_threadpool(store.set_password, acct.account_id, new_password)
+        except ValueError:
+            return _error_response(400, "The new password must be 12 to 256 characters.", "invalid_request_error", "weak_password")
+        # v3.3: a password change also replaces the API key, so a stolen key or session does not survive it
+        new_key = await run_in_threadpool(store.rotate_key, acct.account_id)
+        return JSONResponse(
+            {"status": "PASSWORD_SET", "handle": acct.handle, "api_key": new_key, "old_key_revoked": True},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    # ---- v3.2: capabilities, password reset by e-mail, linking a Google identity to an existing account ---------------
+    from hivemind.router.password_reset_email import reset_email_configured, send_reset_email
+
+    _send_reset = reset_email_sender or send_reset_email
+    _reset_enabled = reset_email_enabled or reset_email_configured
+    reset_ip_limiter = SlidingWindowLimiter(5, 3600.0)
+    reset_email_limiter = SlidingWindowLimiter(3, 3600.0)
+    _RESET_ACCEPTED = {
+        "status": "RESET_REQUESTED",
+        "message": "If an account uses this e-mail address, a reset link is on its way. It is valid for 30 minutes.",
+    }
+
+    @app.get("/api/v1/auth/capabilities")
+    def auth_capabilities() -> JSONResponse:
+        """Sign-in methods that really work on this deployment; a client shows nothing else."""
+        return JSONResponse(
+            {
+                "object": "hivemind.auth_capabilities",
+                "password_login": True,
+                "password_reset_email": bool(_reset_enabled()),
+                "google": bool(google),
+                "google_client_id": google.client_id if google else None,
+                "change_password": True,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/password-reset/request")
+    async def auth_password_reset_request(request: Request) -> JSONResponse:
+        """Always answers the same way, whether or not an account uses the e-mail, so it cannot be used to find accounts."""
+        data = await _parse_auth_payload(request)
+        email = str(data.get("email") or "").strip().lower()[:254]
+        now = clock()
+        if not reset_ip_limiter.allow(client_key(request), now):
+            return _error_response(429, "Too many reset requests; try again later.", "rate_limit_error", "rate_limited")
+        if not _reset_enabled():
+            return _error_response(503, "Password reset by e-mail is not available on this deployment yet.", "service_unavailable", "reset_email_not_configured")
+        if "@" in email and reset_email_limiter.allow(hashlib.sha256(email.encode("utf-8")).hexdigest(), now):
+            account_id = await run_in_threadpool(store.account_id_for_email, email)
+            if account_id is not None:
+                token = await run_in_threadpool(store.create_password_reset, account_id, now)
+                await run_in_threadpool(_send_reset, email, token)
+        return JSONResponse(_RESET_ACCEPTED, status_code=202, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/v1/auth/password-reset/confirm")
+    async def auth_password_reset_confirm(request: Request) -> JSONResponse:
+        if not login_limiter.allow(client_key(request), clock()):
+            return _error_response(429, "Too many attempts; try again in a minute.", "rate_limit_error", "rate_limited")
+        data = await _parse_auth_payload(request)
+        token = str(data.get("token") or "")
+        new_password = str(data.get("new_password") or "")
+        try:
+            await run_in_threadpool(store.consume_password_reset, token, new_password, clock())
+        except InvalidCredentials:
+            return _error_response(400, "This reset link is invalid or has expired. Ask for a new one.", "invalid_request_error", "invalid_reset_token")
+        except ValueError:
+            return _error_response(400, "The new password must be 12 to 256 characters.", "invalid_request_error", "weak_password")
+        return JSONResponse(
+            {"status": "PASSWORD_RESET", "message": "Your password is changed. Sign in with it; your previous API key no longer works."},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/link/google")
+    def auth_link_google(request: Request, payload: GoogleRegisterRequest) -> JSONResponse:
+        """Link a Google identity to the account whose hm-... key is presented, so 'Sign in with Google' opens it."""
+        if google is None:
+            return _error_response(503, "Sign in with Google is not enabled on this gateway.", "service_unavailable", "google_signin_disabled")
+        if not register_limiter.allow(client_key(request), clock()):
+            return _error_response(429, "Too many attempts; try again in a minute.", "rate_limit_error", "rate_limited")
+        scheme, _, token = request.headers.get("authorization", "").partition(" ")
+        key = token.strip() if scheme.lower() == "bearer" else ""
+        acct = store.authenticate(key) if key.startswith("hm-") else None
+        if acct is None:
+            return _error_response(401, "A valid hm-... API key is required.", "authentication_error", "invalid_api_key")
+        try:
+            identity = google.verify(payload.id_token)
+        except GoogleAuthError as exc:
+            LOGGER.info("google link refused: %s", exc.code)  # reason code only: never the token
+            return _error_response(401, "Google sign-in failed. Sign in again.", "authentication_error", f"google_{exc.code}")
+        try:
+            store.link_identity(acct.account_id, "google", identity.subject)
+        except HandleTaken as exc:
+            return _error_response(409, str(exc), "invalid_request_error", "identity_taken")
+        return JSONResponse({"status": "GOOGLE_LINKED", "handle": acct.handle}, headers={"Cache-Control": "no-store"})
 
     @app.post("/signup", response_class=HTMLResponse)
     @app.post("/register", response_class=HTMLResponse)
@@ -2017,10 +2993,10 @@ def create_router_app(
         data = await _parse_auth_payload(request)
         try:
             res = await run_in_threadpool(_execute_credential_register, request, data)
-            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = 200
         except RouterError as exc:
-            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = exc.status
         return HTMLResponse(page, status_code=status, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                                                "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
@@ -2032,10 +3008,10 @@ def create_router_app(
         data = await _parse_auth_payload(request)
         try:
             res = await run_in_threadpool(_execute_credential_login, request, data)
-            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = 200
         except RouterError as exc:
-            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = exc.status
         return HTMLResponse(page, status_code=status, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                                                "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
@@ -2154,14 +3130,223 @@ def create_router_app(
             "recent_usage": store.recent_usage(account.account_id, 20),
         }
 
+    _bonus_cors_headers = {
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+    }
+
+    @app.options("/v1/hivemind/bonus/status")
+    @app.options("/api/v1/auth/bonus/status")
+    @app.options("/v1/hivemind/bonus/claim")
+    @app.options("/api/v1/auth/bonus/claim")
+    def bonus_cors_preflight() -> JSONResponse:
+        return JSONResponse(content={}, status_code=200, headers=_bonus_cors_headers)
+
+    @app.get("/v1/hivemind/bonus/status")
+    @app.get("/api/v1/auth/bonus/status")
+    def bonus_status_api(request: Request) -> JSONResponse:
+        account = authenticate(request)
+        welcome_amt = registration_bonus_hmt if registration_bonus_hmt > 0.0 else 500.0
+        status_body = store.bonus_status(account.account_id, now_utc=clock(), welcome_bonus_hmt=welcome_amt)
+        return JSONResponse(
+            {
+                "object": "hivemind.bonus_status",
+                "allow_bonuses": bool(allow_bonuses),
+                "starter_grant_hmt": starter_grant_hmt,
+                "registration_bonus_hmt": registration_bonus_hmt,
+                **status_body,
+            },
+            headers=_bonus_cors_headers,
+        )
+
+    @app.post("/v1/hivemind/bonus/claim")
+    @app.post("/api/v1/auth/bonus/claim")
+    async def bonus_claim_api(request: Request) -> JSONResponse:
+        if not allow_bonuses:
+            raise RouterError(403, "Bonus HMT claims are not enabled on this gateway.", "permission_error", "bonus_disabled")
+        account = authenticate(request)
+        if account.kind != "user" or account.is_test:
+            raise RouterError(403, "Test and probe accounts cannot claim HMT bonuses.", "permission_error", "bonus_forbidden_account_kind")
+        raw = await request.body()
+        data = _parse_json_dict(raw) if raw else {}
+        bonus_code = str(data.get("bonus_code") or "auto").strip().lower()
+        welcome_amt = registration_bonus_hmt if registration_bonus_hmt > 0.0 else 500.0
+        def _do_claim() -> dict[str, Any]:
+            try:
+                return store.claim_bonus(
+                    account.account_id,
+                    bonus_code=bonus_code,
+                    client_ip=starter_client_ip(request),
+                    now_utc=clock(),
+                    ip_cap_24h=bonus_claims_per_ip_24h,
+                    welcome_bonus_hmt=welcome_amt,
+                )
+            except PermissionError as exc:
+                raise RouterError(403, str(exc), "permission_error", "bonus_forbidden") from None
+            except ValueError as exc:
+                raise RouterError(400, str(exc), "invalid_request_error", "invalid_bonus_code") from None
+
+        res = await run_in_threadpool(_do_claim)
+        return JSONResponse({"object": "hivemind.bonus_claim", **res}, headers=_bonus_cors_headers)
+
+    @app.options("/v1/hivemind/points/transfer")
+    @app.options("/api/v1/points/transfer")
+    @app.options("/v1/hivemind/points/transfers")
+    @app.options("/api/v1/points/transfers")
+    def point_transfer_cors_preflight() -> JSONResponse:
+        return JSONResponse(content={}, status_code=200, headers=_bonus_cors_headers)
+
+    @app.post("/v1/hivemind/points/transfer")
+    @app.post("/api/v1/points/transfer")
+    def transfer_points_api(request: Request, payload: PointTransferRequest) -> JSONResponse:
+        """Transfer HMT Reflexion Points from the authenticated HiveMinder to another HiveMinder and emit an AMCP/Kafka receipt."""
+        from hivemind.swarm.amcp_kafka_campaign_bus import build_amcp_kafka_event
+        from hivemind.swarm.amcp_kafka_transport import SchemaError, validate_event_dict
+
+        sender = authenticate(request)
+        if sender.kind != "user" or sender.is_test:
+            raise RouterError(
+                403,
+                "Test and probe accounts may not transfer HMT points.",
+                "permission_error",
+                "transfer_forbidden_account_kind",
+            )
+        now = clock()
+        if not point_transfer_limiter.allow(sender.account_id, now):
+            raise RouterError(
+                429,
+                "Too many HMT transfers from this account; try again in a minute.",
+                "rate_limit_error",
+                "rate_limited",
+            )
+        try:
+            receipt = store.transfer_points(
+                sender.account_id,
+                payload.recipient,
+                payload.amount,
+                memo=payload.memo,
+                idempotency_key=payload.idempotency_key,
+                now_utc=now,
+            )
+        except UnknownAccount:
+            raise RouterError(
+                404,
+                "Recipient HiveMinder account not found.",
+                "invalid_request_error",
+                "account_not_found",
+            ) from None
+        except PermissionError as exc:
+            raise RouterError(403, str(exc), "permission_error", "transfer_forbidden") from None
+        except InsufficientBalance:
+            raise RouterError(
+                402,
+                "Insufficient HMT balance to complete this transfer.",
+                "insufficient_quota",
+                "insufficient_balance",
+            ) from None
+        except ValueError as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "invalid_transfer") from None
+
+        amcp_event_dict: dict[str, Any] | None = None
+        bus_status: dict[str, Any] = {"status": "skipped"}
+        if payload.notify_amcp and not receipt["idempotent_replay"]:
+            amcp_payload: dict[str, Any] = {
+                "transfer_id": receipt["transfer_id"],
+                "sender_handle": receipt["sender_handle"],
+                "recipient_handle": receipt["recipient_handle"],
+                "amount_hmt": round(float(receipt["amount_hmt"]), 6),
+                "memo": receipt["memo"],
+                "text": (
+                    f"@{receipt['sender_handle']} transferred {receipt['amount_hmt']:.2f} HMT to "
+                    f"@{receipt['recipient_handle']} ({receipt['memo']})."
+                ),
+            }
+            if payload.model_ref:
+                amcp_payload["model_ref"] = payload.model_ref.strip()[:128]
+            if payload.pr_url:
+                amcp_payload["pr_url"] = payload.pr_url.strip()[:300]
+            ev = build_amcp_kafka_event(
+                topic_key="human_agent",
+                event_type="io.hivemind.amcp.points.transfer",
+                sender_id=sender.handle,
+                sender_kind="human_researcher",
+                recipient_id=receipt["recipient_handle"],
+                subject_id=payload.subject_id,
+                correlation_id=receipt["transfer_id"],
+                payload=amcp_payload,
+                now_utc=now,
+            )
+            try:
+                validate_event_dict(ev.to_dict(), ev.topic)
+                store.record_amcp_kafka_event(
+                    event_id=ev.event_id,
+                    topic=ev.topic,
+                    event_type=ev.event_type,
+                    sender_id=ev.sender_id,
+                    sender_kind=ev.sender_kind,
+                    recipient_id=ev.recipient_id,
+                    subject_id=ev.subject_id,
+                    correlation_id=ev.correlation_id,
+                    payload=ev.payload,
+                    now_utc=ev.utc,
+                )
+                store.attach_transfer_amcp_event(receipt["transfer_id"], ev.event_id)
+                receipt["amcp_event_id"] = ev.event_id
+                amcp_event_dict = ev.to_dict()
+                bus_status = {"status": "not_configured"}
+                if amcp_bus is not None:
+                    try:
+                        bus_status = {"status": "published", **amcp_bus(ev)}
+                    except Exception:  # noqa: BLE001
+                        LOGGER.warning("Transfer AMCP event %s stored but not published to Kafka", ev.event_id, exc_info=True)
+                        bus_status = {"status": "unavailable"}
+            except SchemaError:
+                LOGGER.warning("Transfer AMCP event failed schema check", exc_info=True)
+                bus_status = {"status": "schema_skipped"}
+
+        return JSONResponse(
+            {
+                "object": "hivemind.point_transfer",
+                **receipt,
+                "amcp_event": amcp_event_dict,
+                "bus": bus_status,
+            },
+            headers=_bonus_cors_headers,
+        )
+
+    @app.get("/v1/hivemind/points/transfers")
+    @app.get("/api/v1/points/transfers")
+    def list_point_transfers_api(request: Request, limit: int = 25) -> JSONResponse:
+        account = authenticate(request)
+        if isinstance(limit, bool) or limit < 1 or limit > 100:
+            raise RouterError(400, "limit must be between 1 and 100.", "invalid_request_error", "invalid_parameter")
+        transfers = store.list_point_transfers(account.account_id, limit=limit)
+        bal = store.balance(account.account_id)
+        return JSONResponse(
+            {
+                "object": "hivemind.point_transfer_list",
+                "account_id": account.account_id,
+                "handle": account.handle,
+                "balance": bal,
+                "balance_hmt": bal,
+                "compute_points": int(round(bal)),
+                "count": len(transfers),
+                "transfers": transfers,
+            },
+            headers=_bonus_cors_headers,
+        )
+
+
     @app.get("/v1/hivemind/t4/status")
     def t4_status(request: Request) -> dict[str, Any]:
         from hivemind.router.t4_visibility import build_t4_visibility_payload
         now = clock()
         models = store.live_models(now, PRODUCER_TTL_S)
         scale = store.producer_fleet_scale_status(now, PRODUCER_TTL_S)
-        producers = max(1, int(scale["live_producer_accounts"]))
-        distinct_gpus = max(1, int(scale["distinct_physical_gpus"]))
+        producers = max(0, int(scale["live_producer_accounts"]))
+        distinct_gpus = max(0, int(scale["distinct_physical_gpus"]))
         return build_t4_visibility_payload(
             now_utc=now,
             live_models=models,
@@ -2205,6 +3390,66 @@ def create_router_app(
             raise RouterError(400, f"telemetry rejected: {exc}", "invalid_request_error", "invalid_request") from None
         return {"ok": True, "updated_epoch": snap.get("updated_epoch"), "node_name": snap.get("node_name")}
 
+    @app.get("/v1/hivemind/experts")
+    def list_experts(state: str | None = None) -> dict[str, Any]:
+        """List registered domain experts/adapters and their lifecycle/gate states."""
+        with expert_lock:
+            if state is not None and state.strip():
+                clean_state = state.strip().lower()
+                try:
+                    ids = active_registry.ids_in_state(clean_state)
+                except ValueError as exc:
+                    raise RouterError(400, str(exc), "invalid_request_error", "invalid_state") from None
+                rows = [active_registry.get(eid).to_dict() for eid in ids]
+            else:
+                rows = [r.to_dict() for r in active_registry.all_experts()]
+            live_ids = active_registry.ids_in_state(EXPERT_LIVE)
+        return {
+            "object": "hivemind.expert_registry",
+            "strict": active_registry.strict,
+            "live_count": len(live_ids),
+            "live_experts": live_ids,
+            "experts": rows,
+        }
+
+    @app.post("/v1/hivemind/experts/register")
+    def register_expert(request: Request, payload: ExpertRegisterRequest) -> dict[str, Any]:
+        """Register a domain expert candidate (and optionally move it to shadow evaluation)."""
+        require_admin(request)
+        try:
+            rec = ExpertRecord(
+                expert_id=payload.expert_id.strip(),
+                kind=payload.kind,
+                cluster_id=payload.cluster_id.strip(),
+                base_model_id=payload.base_model_id.strip(),
+                adapter_sha256=payload.adapter_sha256.lower() if payload.adapter_sha256 else None,
+                adapter_size_mib=int(payload.adapter_size_mib),
+                keywords=tuple(payload.keywords),
+                source=payload.source,
+            )
+            with expert_lock:
+                registered = active_registry.register(rec)
+                if payload.move_to_shadow:
+                    registered = active_registry.transition(registered.expert_id, EXPERT_SHADOW, payload.shadow_reason)
+        except (ValueError, AdapterBaseMismatchError, IllegalTransitionError) as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "expert_register_rejected") from None
+        return {"ok": True, "expert": registered.to_dict()}
+
+    @app.post("/v1/hivemind/experts/promote")
+    def promote_expert(request: Request, payload: ExpertPromoteRequest) -> dict[str, Any]:
+        """Promote a shadow adapter to LIVE only through a passing train-to-serve gate for its exact bytes."""
+        require_admin(request)
+        with expert_lock:
+            if payload.expert_id not in active_registry:
+                raise RouterError(404, f"Unknown expert '{payload.expert_id}'.", "invalid_request_error", "expert_not_found")
+            try:
+                promoted = active_registry.promote_with_gate(payload.expert_id, payload.gate)
+            except GateNotPassedError as exc:
+                raise RouterError(400, str(exc), "invalid_request_error", "gate_not_passed") from None
+            except (IllegalTransitionError, AdapterBaseMismatchError, ValueError) as exc:
+                raise RouterError(400, str(exc), "invalid_request_error", "expert_promote_rejected") from None
+        return {"ok": True, "expert": promoted.to_dict()}
+
     @app.post("/v1/hivemind/consumer/max-price")
     def set_max_price(request: Request, payload: MaxPriceRequest) -> dict[str, Any]:
         account = authenticate(request)
@@ -2228,6 +3473,20 @@ def create_router_app(
         problem = producer_url_problem(payload.endpoint_url, allow_private=allow_private_producers, resolver=resolve)
         if problem is not None:
             raise RouterError(400, problem, "invalid_request_error", "invalid_endpoint")
+        if request.headers.get("x-admin-key") is None:
+            norm_url = str(payload.endpoint_url).rstrip("/")
+            known_tokens = store.existing_endpoint_tokens()
+            expected_url_token = known_tokens.get(norm_url)
+            owner_token = known_tokens.get(account.account_id)
+            if expected_url_token and expected_url_token != owner_token:
+                supplied_tok = (payload.endpoint_token or "").strip()
+                if not supplied_tok or not hmac.compare_digest(supplied_tok, expected_url_token):
+                    raise RouterError(
+                        403,
+                        "Endpoint URL is already registered with an ownership token; matching endpoint_token required.",
+                        "permission_error",
+                        "endpoint_ownership_required",
+                    )
         models: list[dict[str, str]] = []
         for entry in payload.models:
             public = _strip_prefix(entry.id)
@@ -2273,14 +3532,79 @@ def create_router_app(
             ack["residency"] = {"loaded": sorted(m for m, v in residency["models"].items() if v["loaded"] is True), "effective_capacity_1k": capacity, "capacity_note": residency["capacity_note"]}
         return ack
 
+    @app.get("/v1/hivemind/remote/config")
+    def get_remote_producer_config(request: Request) -> dict[str, Any]:
+        """Authenticated remote producer control endpoint polled by ``hivemind_producer_agent.py``."""
+        account = authenticate(request)
+        ctrl = store.producer_control(account.account_id)
+        paused = bool(ctrl and ctrl.get("paused"))
+        vram_cap = ctrl.get("vram_cap_mib") if ctrl else None
+        version = int(ctrl.get("version", 1)) if ctrl else 1
+        remote_cfg = {
+            "node_state": "paused" if paused else "active",
+            "paused": paused,
+            "vram_cap_mib": vram_cap,
+            "min_price_per_1k": 0.0,
+            "version": version,
+        }
+        return {
+            "ok": True,
+            "account_id": account.account_id,
+            "handle": account.handle,
+            "control": ctrl or {"paused": False, "vram_cap_mib": None, "version": 1},
+            "remote_config": remote_cfg,
+        }
+
+    @app.post("/v1/hivemind/remote/config")
+    async def set_remote_producer_config(request: Request) -> dict[str, Any]:
+        """Update remote producer control state (`node_state` / `paused` / `vram_cap_mib`) for the authenticated producer."""
+        account = authenticate(request)
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        if not isinstance(body, dict):
+            raise RouterError(400, "payload must be a JSON object", "invalid_request_error", "invalid_request")
+        current = store.producer_control(account.account_id) or {"paused": False, "vram_cap_mib": None}
+        if "node_state" in body:
+            paused = str(body["node_state"]).strip().lower() == "paused"
+        elif "paused" in body:
+            paused = bool(body["paused"])
+        else:
+            paused = bool(current.get("paused"))
+        vram_cap = body.get("vram_cap_mib", current.get("vram_cap_mib"))
+        if vram_cap is not None:
+            vram_cap = _finite_int(vram_cap, 8192, 512, MAX_GPU_VRAM_MIB, "vram_cap_mib")
+        ctrl = store.set_producer_control(account.account_id, paused, vram_cap, now_utc=clock())
+        return {
+            "ok": True,
+            "account_id": account.account_id,
+            "handle": account.handle,
+            "control": ctrl,
+            "remote_config": {
+                "node_state": "paused" if ctrl["paused"] else "active",
+                "paused": bool(ctrl["paused"]),
+                "vram_cap_mib": ctrl["vram_cap_mib"],
+                "min_price_per_1k": 0.0,
+                "version": ctrl["version"],
+            },
+        }
+
     @app.get("/v1/hivemind/producers/fleet")
-    def list_producers_fleet() -> dict[str, Any]:
+    def list_producers_fleet(request: Request) -> dict[str, Any]:
         """Public HiveMinder fleet connectivity summary across all registered producer and prosumer accounts."""
         now = clock()
         _refresh_reconnected_fleet_if_needed(now)
         fleet = store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S)
         scale = store.producer_fleet_scale_status(now_utc=now, ttl_s=PRODUCER_TTL_S)
         live_rows = [r for r in fleet if r["status"] == "live"]
+        supplied_admin = request.headers.get("x-admin-key", "").strip()
+        is_admin = bool(
+            admin_key_hash is not None
+            and supplied_admin
+            and hmac.compare_digest(store.key_digest(supplied_admin), admin_key_hash)
+        )
         return {
             "object": "hivemind.producer_fleet",
             "ttl_s": PRODUCER_TTL_S,
@@ -2293,12 +3617,11 @@ def create_router_app(
             "live_models": store.live_models(now, PRODUCER_TTL_S),
             "hiveminders": [
                 {
-                    "account_id": r["account_id"],
+                    **({"account_id": r["account_id"], "host_root": r.get("host_root")} if is_admin else {}),
                     "handle": r["handle"],
                     "role": r["role"],
                     "status": r["status"],
                     "live_endpoints": r["live_endpoints"],
-                    "host_root": r.get("host_root"),
                     "shared_host": r.get("shared_host", False),
                     "execution_class": r["execution_class"],
                     "capacity_1k": r["capacity_1k"],
@@ -2384,14 +3707,24 @@ def create_router_app(
 
         fleet_before = store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S)
         wanted_handles = {h.strip().lower() for h in payload.handles} if payload.handles else None
+        known_owner_handles = (
+            {str(meta.get("handle", "")).strip().lower() for meta in LEGACY_KNOWN_USERS.values()}
+            | {k.strip().lower() for k in LEGACY_KNOWN_USERS}
+            | {"cybervalkyrie-fr-5ecb"}
+        )
         reconnected_ids: list[str] = []
         new_keepalive_entries: dict[str, dict[str, Any]] = {}
 
         for item in fleet_before:
             aid = str(item["account_id"])
             handle = str(item["handle"])
-            if wanted_handles is not None and handle.lower() not in wanted_handles and aid.lower() not in wanted_handles:
-                continue
+            h_low = handle.lower()
+            if wanted_handles is not None:
+                if h_low not in wanted_handles and aid.lower() not in wanted_handles:
+                    continue
+            else:
+                if h_low not in known_owner_handles and not h_low.startswith(("gcp-t4-", "xavgamsrv", "rtx2070", "rtx-2070")):
+                    continue
             ctrl = store.producer_control(aid)
             if ctrl is not None and ctrl.get("paused"):
                 store.set_producer_control(aid, False, ctrl.get("vram_cap_mib"), now_utc=now)
@@ -2452,6 +3785,7 @@ def create_router_app(
             "object": "hivemind.admin_producers_reconnected",
             "ok": True,
             "reconnected_count": len(reconnected_ids),
+            "reconnected_account_ids": list(reconnected_ids),
             "total_hiveminders": len(fleet_after),
             "live_hiveminders": len(live_rows),
             "live_endpoints": sum(int(r["live_endpoints"]) for r in live_rows),
@@ -2517,7 +3851,17 @@ def create_router_app(
         """Public anonymized usage & adoption telemetry (domains, French vs English share, client SDKs, latency, MoE weights)."""
         if not math.isfinite(window_s) or window_s < 0.0:
             raise RouterError(400, "window_s must be a finite number of seconds, zero or more.", "invalid_request_error", "invalid_request")
-        return store.usage_capture_summary(now_utc=clock(), window_s=min(window_s, 30 * 86_400.0))
+        # The summary scans every telemetry row under the store lock (about 3 s at 100,000 rows) for an anonymous caller, so it is
+        # cached per whole-minute window bucket for USAGE_CAPTURE_TTL_S; the bucket count is bounded by the 30-day clamp.
+        now = clock()
+        window = min(window_s, 30 * 86_400.0)
+        key = int(window // 60.0)
+        hit = usage_capture_cache.get(key)
+        if hit is not None and 0.0 <= now - hit[0] < USAGE_CAPTURE_TTL_S:
+            return hit[1]
+        summary = store.usage_capture_summary(now_utc=now, window_s=window)
+        usage_capture_cache[key] = (now, summary)
+        return summary
 
     @app.post("/v1/hivemind/feedback")
     def submit_feedback(request: Request, payload: FeedbackRequest) -> dict[str, Any]:
@@ -2570,6 +3914,8 @@ def create_router_app(
         account = authenticate(request)
         if payload.subject_id not in SUBJECT_BY_ID:
             raise RouterError(404, f"Unknown subject_id '{payload.subject_id}'.", "invalid_request_error", "subject_not_found")
+        if not campaign_poll_limiter.allow(account.account_id, clock()):
+            raise RouterError(429, "Too many poll votes from this account; try again in a minute.", "rate_limit_error", "rate_limited")
         vote = store.record_campaign_poll_vote(
             account_id=account.account_id,
             participant_handle=account.handle,
@@ -2580,37 +3926,39 @@ def create_router_app(
             comment=payload.comment,
             now_utc=clock(),
         )
-        ev = build_amcp_kafka_event(
-            topic_key="campaigns",
-            event_type="io.hivemind.amcp.campaign.poll_registered",
-            sender_id=account.handle,
-            sender_kind=payload.participant_kind,
-            recipient_id="broadcast",
-            subject_id=payload.subject_id,
-            payload={
-                "pledged_vram_gb": payload.pledged_vram_gb,
-                "availability_slot": payload.availability_slot,
-                "comment": payload.comment,
-            },
-            now_utc=clock(),
-        )
-        store.record_amcp_kafka_event(
-            event_id=ev.event_id,
-            topic=ev.topic,
-            event_type=ev.event_type,
-            sender_id=ev.sender_id,
-            sender_kind=ev.sender_kind,
-            recipient_id=ev.recipient_id,
-            subject_id=ev.subject_id,
-            correlation_id=ev.correlation_id,
-            payload=ev.payload,
-            now_utc=ev.utc,
-        )
+        ev = None
+        if vote["changed"]:  # an identical re-vote writes no new never-pruned bus event
+            ev = build_amcp_kafka_event(
+                topic_key="campaigns",
+                event_type="io.hivemind.amcp.campaign.poll_registered",
+                sender_id=account.handle,
+                sender_kind=payload.participant_kind,
+                recipient_id="broadcast",
+                subject_id=payload.subject_id,
+                payload={
+                    "pledged_vram_gb": payload.pledged_vram_gb,
+                    "availability_slot": payload.availability_slot,
+                    "comment": payload.comment,
+                },
+                now_utc=clock(),
+            )
+            store.record_amcp_kafka_event(
+                event_id=ev.event_id,
+                topic=ev.topic,
+                event_type=ev.event_type,
+                sender_id=ev.sender_id,
+                sender_kind=ev.sender_kind,
+                recipient_id=ev.recipient_id,
+                subject_id=ev.subject_id,
+                correlation_id=ev.correlation_id,
+                payload=ev.payload,
+                now_utc=ev.utc,
+            )
         summary = compute_campaign_poll_summary(store.list_campaign_poll_votes())
         return {
             "object": "hivemind.campaign_poll_receipt",
             "registration": vote,
-            "amcp_event": ev.to_dict(),
+            "amcp_event": ev.to_dict() if ev is not None else None,
             "poll_summary": summary,
         }
 
@@ -2700,9 +4048,16 @@ def create_router_app(
     @app.post("/v1/hivemind/bees/coordinate")
     async def coordinate_bees(request: Request, payload: BeeCoordinateRequest) -> dict[str, Any]:
         """Coordinate multi-bee inference handoff (`primary_bee <-> specialist_bee`) over AMCP/Kafka (`hivemind.amcp.bee_coord.v1`)."""
+        from hivemind.swarm.amcp_collab import CollabError, check_publish
         from hivemind.swarm.amcp_kafka_campaign_bus import coordinate_inter_bee_inference
 
-        authenticate(request)
+        account = authenticate(request)
+        try:
+            check_publish(account.role, "bee_specialist", "bee_coord", "io.hivemind.amcp.bee.handoff", {}, via_gateway=True)
+        except CollabError as exc:
+            raise RouterError(403, str(exc), "permission_error", exc.code) from None
+        if not amcp_publish_limiter.allow(account.account_id, clock()):
+            raise RouterError(429, "Too many bus events from this account; try again in a minute.", "rate_limit_error", "rate_limited")
         result = await run_in_threadpool(
             coordinate_inter_bee_inference,
             primary_bee=payload.primary_bee,
@@ -2729,13 +4084,68 @@ def create_router_app(
     @app.post("/v1/hivemind/bees/trade")
     def post_bee_trade_order(request: Request, payload: BeeTradeOrderRequest) -> dict[str, Any]:
         """Submit an inter-bee or producer capacity `OFFER` or `BID` on `hivemind.amcp.bee_trading.v1` and clear the market."""
+        from hivemind.swarm.amcp_collab import CollabError, check_publish
         from hivemind.swarm.amcp_kafka_campaign_bus import (
             build_amcp_kafka_event,
             clear_bee_capacity_market,
+            is_allowed_bee_id,
         )
 
         account = authenticate(request)
+        try:
+            check_publish(
+                account.role,
+                "bee_specialist",
+                "bee_trading",
+                f"io.hivemind.amcp.trade.{payload.side.lower()}",
+                {},
+                via_gateway=True,
+            )
+        except CollabError as exc:
+            raise RouterError(403, str(exc), "permission_error", exc.code) from None
+        if not is_allowed_bee_id(payload.bee_id, account.handle, account.account_id):
+            raise RouterError(
+                403,
+                f"Bee '{payload.bee_id}' is not in the canonical bee allow-list or owned by account '{account.handle}'.",
+                "permission_error",
+                "forbidden_bee_id",
+            )
+        now = clock()
+        if not amcp_publish_limiter.allow(account.account_id, now) or not bee_trade_limiter.allow(account.account_id, now):
+            raise RouterError(
+                429,
+                "Too many bee trade orders from this account; try again in a minute.",
+                "rate_limit_error",
+                "rate_limited",
+            )
+        existing_orders = store.list_bee_trade_orders(window_s=86_400.0, now_utc=now)
+        if sum(1 for o in existing_orders if o.get("account_id") == account.account_id) >= 32:
+            raise RouterError(
+                429,
+                "Per-account open bee trade order cap reached (max 32 in 24h).",
+                "rate_limit_error",
+                "order_cap_reached",
+            )
         order_id = "ord-" + uuid.uuid4().hex[:14]
+        escrow_hmt = 0.0
+        if payload.side == "BID":
+            escrow_hmt = round(payload.capacity_1k * payload.price_per_1k, 6)
+            try:
+                store.hold(order_id, account.account_id, escrow_hmt, now_utc=now)
+            except InsufficientBalance:
+                raise RouterError(
+                    402,
+                    "Insufficient HMT balance to escrow this capacity BID.",
+                    "payment_required",
+                    "insufficient_balance",
+                ) from None
+            except TooManyHolds:
+                raise RouterError(
+                    429,
+                    "Too many active escrow holds for this account.",
+                    "rate_limit_error",
+                    "too_many_holds",
+                ) from None
         order = store.record_bee_trade_order(
             order_id=order_id,
             account_id=account.account_id,
@@ -2744,7 +4154,7 @@ def create_router_app(
             subject_id=payload.subject_id,
             capacity_1k=payload.capacity_1k,
             price_per_1k=payload.price_per_1k,
-            now_utc=clock(),
+            now_utc=now,
         )
         ev = build_amcp_kafka_event(
             topic_key="bee_trading",
@@ -2758,8 +4168,9 @@ def create_router_app(
                 "side": payload.side,
                 "capacity_1k": payload.capacity_1k,
                 "price_per_1k": payload.price_per_1k,
+                "escrow_hold_hmt": escrow_hmt,
             },
-            now_utc=clock(),
+            now_utc=now,
         )
         store.record_amcp_kafka_event(
             event_id=ev.event_id,
@@ -2773,10 +4184,11 @@ def create_router_app(
             payload=ev.payload,
             now_utc=ev.utc,
         )
-        clearing = clear_bee_capacity_market(store.list_bee_trade_orders(window_s=86_400.0, now_utc=clock()))
+        clearing = clear_bee_capacity_market(existing_orders + [order])
         return {
             "object": "hivemind.bee_trade_receipt",
             "order": order,
+            "escrow_hold_hmt": escrow_hmt,
             "amcp_event": ev.to_dict(),
             "market_clearing": clearing,
         }
@@ -2831,6 +4243,7 @@ def create_router_app(
             COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE,
             FIREWALL_TRAVERSAL_MODES,
             MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK,
+            build_crowdgpt_trainer_producer_plan,
             default_active_task_offer,
             summarize_moe_self_training_progress,
         )
@@ -2878,7 +4291,54 @@ def create_router_app(
             "firewall_traversal_modes": list(FIREWALL_TRAVERSAL_MODES),
             "community_help_guide": list(COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE),
             "multi_gpu_2_to_4_byom_playbook": MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK,
+            "crowdgpt_trainer_producer_plan": build_crowdgpt_trainer_producer_plan(
+                opentrainer_nodes=ot_nodes,
+                recent_rounds=ot_rounds,
+                now_utc=now,
+            ),
         }
+
+    @app.get("/v1/hivemind/opentrainer/crowdgpt-plan")
+    @app.get("/v1/opentrainer/crowdgpt-plan")
+    def get_opentrainer_crowdgpt_plan() -> dict[str, Any]:
+        """Public CrowdGPT (Vxtzq/Crowd-v1) Trainer + Producer GPU Co-Training Plan & live campaign telemetry."""
+        from hivemind.router.opentrainer import build_crowdgpt_trainer_producer_plan
+
+        now = clock()
+        nodes = store.list_opentrainer_nodes()
+        rounds = store.list_opentrainer_rounds(limit=100)
+        return build_crowdgpt_trainer_producer_plan(
+            opentrainer_nodes=nodes,
+            recent_rounds=rounds,
+            now_utc=now,
+        )
+
+    @app.get("/v1/hivemind/opentrainer/crowdgpt-weekend-raid")
+    @app.get("/v1/opentrainer/crowdgpt-weekend-raid")
+    def get_opentrainer_crowdgpt_weekend_raid(
+        handle: str | None = None,
+        role: str = "prosumer",
+        vram_mib: int = 8192,
+    ) -> dict[str, Any]:
+        """Public Nov 14-15, 2026 CrowdGPT x HiveMind Weekend Massive Training manifest, MoE split & OpenDiLoCo config."""
+        from hivemind.swarm.crowdgpt_moe_opendiloco import (
+            assign_hiveminder_moe_shards,
+            build_weekend_nov14_15_raid_manifest,
+        )
+
+        manifest = build_weekend_nov14_15_raid_manifest()
+        if handle and str(handle).strip():
+            eff_role = str(role or "prosumer").strip().lower()
+            if eff_role not in {"producer", "trainer", "prosumer"}:
+                eff_role = "prosumer"
+            eff_vram = max(0, min(int(vram_mib), 1_048_576))
+            manifest["personalized_assignment"] = assign_hiveminder_moe_shards(
+                str(handle).strip()[:64],
+                eff_role,
+                eff_vram,
+            )
+        manifest["live_opentrainer_rounds_count"] = len(store.list_opentrainer_rounds(limit=100))
+        return manifest
 
     @app.post("/v1/hivemind/opentrainer/heartbeat")
     @app.post("/v1/opentrainer/heartbeat")
@@ -2912,18 +4372,22 @@ def create_router_app(
             )
         now = clock()
         stacks = [s.strip() for s in payload.training_stack.replace("+", ",").split(",") if s.strip()] or list(SUPPORTED_STACKS)
-        node = store.upsert_opentrainer_node(
-            account_id=account.account_id,
-            handle=account.handle,
-            node_id=f"{account.handle}:{payload.host_label}",
-            gpu_name=payload.gpu_name or "not reported",
-            vram_total_mib=payload.vram_total_mib or 0,
-            vram_free_mib=min(payload.vram_free_mib or 0, payload.vram_total_mib or 0),
-            network_mode=payload.network_mode,
-            stacks=stacks,
-            host_label=payload.host_label,
-            now_utc=now,
-        )
+        try:
+            node = store.upsert_opentrainer_node(
+                account_id=account.account_id,
+                handle=account.handle,
+                node_id=f"{account.handle}:{payload.host_label}",
+                gpu_name=payload.gpu_name or "not reported",
+                vram_total_mib=payload.vram_total_mib or 0,
+                vram_free_mib=min(payload.vram_free_mib or 0, payload.vram_total_mib or 0),
+                network_mode=payload.network_mode,
+                stacks=stacks,
+                host_label=payload.host_label,
+                active_campaign=payload.active_campaign,
+                now_utc=now,
+            )
+        except TooManyOpenTrainerNodes as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "too_many_nodes") from None
         node["role"] = account.role
         offer = default_active_task_offer(now_utc=now)
         fw_mode = next(
@@ -2942,12 +4406,77 @@ def create_router_app(
             "active_task_offer": offer,
         }
 
+    @app.post("/v1/hivemind/opentrainer/register-trainer")
+    @app.post("/v1/opentrainer/register-trainer")
+    def post_opentrainer_register_trainer(
+        request: Request, payload: OpenTrainerFederationTrainerRegisterRequest
+    ) -> dict[str, Any]:
+        """Validate and register a Federation v2 Trainer per docs/FEDERATION_V2_AMCP_AGLETS.md Section 9."""
+        from hivemind.router.opentrainer import (
+            SUPPORTED_STACKS,
+            validate_federation_v2_trainer_registration,
+        )
+
+        account = authenticate(request)
+        if account.role not in ("trainer", "prosumer", "producer", "admin"):
+            raise RouterError(
+                403,
+                "Only trainer, prosumer, or producer accounts may register a Federation v2 trainer.",
+                "permission_error",
+                "role_forbidden",
+            )
+        try:
+            manifest = validate_federation_v2_trainer_registration(
+                learner_id=payload.learner_id,
+                gpu_model=payload.gpu_model,
+                vram_free_mib=payload.vram_free_mib,
+                vram_total_mib=payload.vram_total_mib,
+                night_only_consent=payload.night_only_consent,
+                shard_index=payload.shard_index,
+                run_id=payload.run_id,
+                pinned_commit=payload.pinned_commit,
+                network_mode=payload.network_mode,
+                wireguard_public_key=payload.wireguard_public_key,
+                wireguard_private_key=payload.wireguard_private_key,
+                amcp_hmac_keys=payload.amcp_hmac_keys,
+                overlay_slot_ip=payload.overlay_slot_ip,
+            )
+        except ValueError as exc:
+            raise RouterError(
+                400,
+                f"Federation v2 trainer registration rejected: {exc}",
+                "invalid_request_error",
+                "trainer_registration_rejected",
+            ) from None
+        now = clock()
+        try:
+            node = store.upsert_opentrainer_node(
+                account_id=account.account_id,
+                handle=account.handle,
+                node_id=f"{account.handle}:{manifest['learner_id']}",
+                gpu_name=manifest["gpu_model"],
+                vram_total_mib=max(manifest["vram_total_mib"], manifest["vram_free_mib"]),
+                vram_free_mib=manifest["vram_free_mib"],
+                network_mode=manifest["network_mode"],
+                stacks=list(SUPPORTED_STACKS),
+                host_label=manifest["learner_id"],
+                active_campaign=manifest["run_id"],
+                now_utc=now,
+            )
+        except TooManyOpenTrainerNodes as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "too_many_nodes") from None
+        manifest["account_id"] = account.account_id
+        manifest["handle"] = account.handle
+        manifest["node_id"] = node["node_id"]
+        return manifest
+
     @app.post("/v1/hivemind/opentrainer/submit-delta")
     @app.post("/v1/opentrainer/submit-delta")
     def post_opentrainer_submit_delta(request: Request, payload: OpenTrainerDeltaSubmitRequest) -> dict[str, Any]:
         """Record a Stage-2 QLoRA / DiLoCo outer-step delta report; the figures are the client's and are not verified here."""
         from hivemind.router.opentrainer import (
             OPENTRAINER_TOPIC,
+            is_allowed_opentrainer_campaign_id,
             validate_trainer_delta_submission,
         )
 
@@ -2960,6 +4489,25 @@ def create_router_app(
                 "role_forbidden",
             )
         now = clock()
+        if not opentrainer_delta_limiter.allow(account.account_id, now):
+            raise RouterError(429, "Too many OpenTrainer delta submissions from this account; try again in a minute.", "rate_limit_error", "rate_limited")
+        active_node_campaigns = {
+            str(n.get("active_campaign") or "")
+            for n in store.list_opentrainer_nodes()
+            if str(n.get("account_id")) == account.account_id and n.get("active_campaign")
+        }
+        if not is_allowed_opentrainer_campaign_id(payload.campaign_id, registered_account_campaigns=active_node_campaigns):
+            raise RouterError(
+                400,
+                f"unknown campaign: {payload.campaign_id!r} is not in the active campaign catalog.",
+                "invalid_request_error",
+                "unknown_campaign",
+            )
+        vram_reported = payload.vram_free_mib is not None or payload.vram_total_mib is not None
+        req_vram_free = int(payload.vram_free_mib or 0)
+        req_vram_total = int(
+            payload.vram_total_mib if payload.vram_total_mib is not None else (8192 if vram_reported else 0)
+        )
         try:
             check = validate_trainer_delta_submission(
                 run_id=payload.campaign_id,
@@ -2967,8 +4515,8 @@ def create_router_app(
                 delta_l2=payload.delta_norm,
                 eval_loss=payload.loss_after,
                 tokens_trained=max(1, payload.inner_steps * 512),
-                vram_free_mib=0,  # 0 = not reported: the request carries no hardware reading
-                vram_total_mib=0,
+                vram_free_mib=req_vram_free,
+                vram_total_mib=req_vram_total,
             )
         except ValueError as exc:
             raise RouterError(
@@ -2978,22 +4526,25 @@ def create_router_app(
                 "delta_rejected",
             ) from None
         check["verification"] = "CLIENT_REPORTED_UNVERIFIED"
-        check["vram_values_reported_by_client"] = False  # no hardware reading was sent: 0 MiB is recorded as "not reported"
+        check["vram_values_reported_by_client"] = vram_reported
         check["tokens_trained_is_estimate"] = True  # inner_steps * 512, not a count the client measured
-        saved = store.record_opentrainer_round_submission(
-            account_id=account.account_id,
-            handle=account.handle,
-            run_id=payload.campaign_id,
-            round_index=payload.round_id,
-            host_label=account.handle,
-            network_mode=payload.network_mode,
-            delta_l2=payload.delta_norm,
-            eval_loss=payload.loss_after,
-            tokens_trained=max(1, payload.inner_steps * 512),
-            vram_free_mib=0,
-            vram_total_mib=0,
-            now_utc=now,
-        )
+        try:
+            saved = store.record_opentrainer_round_submission(
+                account_id=account.account_id,
+                handle=account.handle,
+                run_id=payload.campaign_id,
+                round_index=payload.round_id,
+                host_label=account.handle,
+                network_mode=payload.network_mode,
+                delta_l2=payload.delta_norm,
+                eval_loss=payload.loss_after,
+                tokens_trained=max(1, payload.inner_steps * 512),
+                vram_free_mib=req_vram_free if vram_reported else 0,
+                vram_total_mib=int(payload.vram_total_mib or 0),
+                now_utc=now,
+            )
+        except DuplicateOpenTrainerRound as exc:
+            raise RouterError(409, str(exc), "invalid_request_error", "round_already_submitted") from None
         saved["tokens_trained_is_estimate"] = True
         saved["delta_sha256"] = payload.delta_sha256.lower()
         event_id = "ev-ot-" + uuid.uuid4().hex[:14]
@@ -3055,6 +4606,34 @@ def create_router_app(
             raise RouterError(404, "Unknown account.", "invalid_request_error", "account_not_found") from None
         return JSONResponse({"account_id": target, "api_key": new_key}, headers={"Cache-Control": "no-store"})
 
+    @app.post("/v1/hivemind/admin/accounts/reset-password")
+    def admin_reset_password(request: Request, payload: AdminResetPasswordRequest) -> JSONResponse:
+        """Admin account recovery & provisioning: ensure the account exists, update its email, set a new password if
+        provided, top up HMT balance to ``min_balance_hmt`` (or its legacy starter balance), rotate and return a fresh
+        ``hm-...`` API key, and issue a single-use password reset token/link."""
+        require_admin(request)
+        try:
+            res = store.admin_reset_or_provision_account(
+                payload.handle,
+                email=payload.email,
+                new_password=payload.new_password,
+                role=payload.role,
+                min_balance_hmt=payload.min_balance_hmt,
+                issue_reset_token=payload.issue_reset_token,
+                now_utc=clock(),
+            )
+        except ValueError as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "weak_password") from None
+        except (SwarmSecurityViolationError, ReservedHandle):
+            raise RouterError(400, "Invalid handle.", "invalid_request_error", "invalid_handle") from None
+        public_web_url = os.environ.get(
+            "HIVEMIND_PUBLIC_WEB_URL",
+            "https://hivemind-at-home-1003063861791.us-central1.run.app",
+        ).rstrip("/")
+        if res.get("reset_token"):
+            res["reset_url"] = f"{public_web_url}/auth/reset#token={res['reset_token']}"
+        return JSONResponse(res, headers={"Cache-Control": "no-store"})
+
     @app.post("/v1/hivemind/admin/test-flag")
     def admin_test_flag(request: Request, payload: AccountFlagRequest) -> dict[str, Any]:
         """Set an account's kind: 'user' (bids and counts as a real user), 'test' or 'probe' (neither). Admin key only."""
@@ -3108,15 +4687,16 @@ def create_router_app(
 
     @app.get("/v1/hivemind/steam/status")
     def steam_free_game_status() -> dict[str, Any]:
-        """Public metadata confirming USS Hivemind NCC-31337 is registered as a Free Steam Game on the Portal."""
+        """Public metadata for USS Hivemind NCC-31337 Steam placeholder configuration (IP-31)."""
         return {
             "object": "hivemind.steam_free_game",
             "app_id": 3133700,
+            "app_id_status": "PLACEHOLDER_NOT_REGISTERED",
             "depot_id": 3133702,
             "title": "USS Hivemind NCC-31337 v5.1 — Astrophysics Exoplanet Hunter & Idle-GPU BOINC Edition",
             "pricing_model": "FreeOnDemand (100% Free-to-Play on Steam • Non-Monetary HMT Compute Reciprocity)",
             "boinc_idle_gpu_preemption_ms": 100,
-            "portal_registration_status": "REGISTERED_AND_LIVE",
+            "portal_registration_status": "NOT_REGISTERED",
             "endpoints": {
                 "register_login": "/v1/hivemind/steam/register-login",
                 "contribute_boinc": "/v1/hivemind/steam/contribute-boinc",
@@ -3128,10 +4708,7 @@ def create_router_app(
     async def steam_register_or_login(request: Request) -> JSONResponse:
         """Register or sign in a Free Steam Game (AppID 3133700) player and return an active hm-... API key."""
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
         handle = str(body.get("handle") or "Cmdr_RTX2070_Steam").strip()[:64]
         steam_id64 = str(body.get("steam_id64") or "76561198031337001").strip()[:32]
         gpu_model = str(body.get("gpu_model") or "NVIDIA GeForce RTX 2070").strip()[:96]
@@ -3180,69 +4757,67 @@ def create_router_app(
     async def steam_contribute_boinc(request: Request) -> dict[str, Any]:
         """Execute/record an idle-GPU CUDA PTX BOINC workunit from the Free Steam Game client and credit HMT points."""
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
         target_planet = str(body.get("target_planet") or "K2-18 b").strip()[:64]
         # Always authenticated: no account is created or chosen from the body (a "handle" in the body used to create or
         # select the credited account without any key).
-        acc = authenticate(request)
+        acc = await run_in_threadpool(authenticate, request)
         account_id = acc.account_id
         handle = acc.handle
 
-        # Execute real CUDA Driver PTX BLS fold if scripts/hivemind_boinc_idle_worker.py is available
-        fold_res: dict[str, Any] = {
-            "backend": "nvidia_cuda_driver_ptx_sm50",
-            "cuda_device": "NVIDIA GeForce RTX 2070",
-            "n_points_folded": 16384,
-            "kernel_exec_ms": 0.28,
-            "recovered_transit_depth_ppm": 2789.0,
-            "result_sha256": hashlib.sha256(f"{handle}:{target_planet}:{clock()}".encode("utf-8")).hexdigest(),
-        }
-        try:
-            import importlib.util
-            from pathlib import Path as _Path
+        def _execute_steam_fold_sync() -> dict[str, Any]:
+            fold_res: dict[str, Any] = {
+                "backend": "nvidia_cuda_driver_ptx_sm50",
+                "cuda_device": "NVIDIA GeForce RTX 2070",
+                "n_points_folded": 16384,
+                "kernel_exec_ms": 0.28,
+                "recovered_transit_depth_ppm": 2789.0,
+                "result_sha256": hashlib.sha256(f"{handle}:{target_planet}:{clock()}".encode("utf-8")).hexdigest(),
+            }
+            try:
+                import importlib.util
+                from pathlib import Path as _Path
 
-            worker_path = _Path(__file__).resolve().parents[3] / "scripts" / "hivemind_boinc_idle_worker.py"
-            if worker_path.exists():
-                spec = importlib.util.spec_from_file_location("hivemind_boinc_idle_worker", worker_path)
-                if spec and spec.loader:
-                    mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-                    fold_res = mod.execute_cuda_ptx_bls_fold(target_planet=target_planet, n_pts=16384)
-        except Exception as exc:
-            fold_res = dict(fold_res, fallback_reason=str(exc))
+                worker_path = _Path(__file__).resolve().parents[3] / "scripts" / "hivemind_boinc_idle_worker.py"
+                if worker_path.exists():
+                    spec = importlib.util.spec_from_file_location("hivemind_boinc_idle_worker", worker_path)
+                    if spec and spec.loader:
+                        mod = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+                        fold_res = mod.execute_cuda_ptx_bls_fold(target_planet=target_planet, n_pts=16384)
+            except Exception as exc:
+                fold_res = dict(fold_res, fallback_reason=str(exc))
 
-        supplied_receipt = str(body.get("receipt_sha256") or "").strip()
-        receipt_sha256 = supplied_receipt or str(
-            fold_res.get("result_sha256") or hashlib.sha256(f"{account_id}:{clock()}".encode()).hexdigest()
-        )
-        duplicate_receipt = receipt_sha256 in seen_boinc_receipts
-        seen_boinc_receipts.add(receipt_sha256)
-        # No HMT for a client-supplied receipt: nothing in it can be checked by the server (it used to grant 250 HMT per
-        # unseen value, so credit could be minted without limit). Credit comes back once results are verified server-side.
-        hmt_awarded = 0.0
-        cobblestones_awarded = 0.0
-        return {
-            "object": "hivemind.steam_boinc_contribution",
-            "credit_status": "pending_verification",
-            "ok": True,
-            "account_id": account_id,
-            "handle": handle,
-            "app_id": 3133700,
-            "target_planet": target_planet,
-            "backend": fold_res.get("backend", "nvidia_cuda_driver_ptx_sm50"),
-            "cuda_device": fold_res.get("cuda_device", "NVIDIA GeForce RTX 2070"),
-            "n_points_folded": fold_res.get("n_points_folded", 16384),
-            "kernel_exec_ms": fold_res.get("kernel_exec_ms", 0.28),
-            "recovered_transit_depth_ppm": fold_res.get("recovered_transit_depth_ppm", 2789.0),
-            "hmt_awarded": hmt_awarded,
-            "cobblestones_awarded": cobblestones_awarded,
-            "duplicate_receipt": duplicate_receipt,
-            "balance_hmt": store.balance(account_id),
-            "receipt_sha256": receipt_sha256,
-        }
+            supplied_receipt = str(body.get("receipt_sha256") or "").strip()
+            receipt_sha256 = supplied_receipt or str(
+                fold_res.get("result_sha256") or hashlib.sha256(f"{account_id}:{clock()}".encode()).hexdigest()
+            )
+            duplicate_receipt = store.record_boinc_receipt(receipt_sha256, account_id, now_utc=clock()) or (
+                receipt_sha256 in seen_boinc_receipts
+            )
+            if len(seen_boinc_receipts) < 4096:
+                seen_boinc_receipts.add(receipt_sha256)
+            return {
+                "object": "hivemind.steam_boinc_contribution",
+                "credit_status": "pending_verification",
+                "ok": True,
+                "account_id": account_id,
+                "handle": handle,
+                "app_id": 3133700,
+                "target_planet": target_planet,
+                "backend": fold_res.get("backend", "nvidia_cuda_driver_ptx_sm50"),
+                "cuda_device": fold_res.get("cuda_device", "NVIDIA GeForce RTX 2070"),
+                "n_points_folded": fold_res.get("n_points_folded", 16384),
+                "kernel_exec_ms": fold_res.get("kernel_exec_ms", 0.28),
+                "recovered_transit_depth_ppm": fold_res.get("recovered_transit_depth_ppm", 2789.0),
+                "hmt_awarded": 0.0,
+                "cobblestones_awarded": 0.0,
+                "duplicate_receipt": duplicate_receipt,
+                "balance_hmt": store.balance(account_id),
+                "receipt_sha256": receipt_sha256,
+            }
+
+        return await run_in_threadpool(_execute_steam_fold_sync)
 
     @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/webgpu.html", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -3327,10 +4902,7 @@ def create_router_app(
     async def webgpu_register_or_login(request: Request) -> JSONResponse:
         """Register or sign in a Zero-Install WebGPU contributor and return a Bearer hm-... API key."""
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
         handle = str(body.get("handle") or "Cmdr_WebGPU_RTX2070").strip()[:64]
         gpu_adapter = str(body.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
         role = str(body.get("role") or "prosumer").strip()
@@ -3375,31 +4947,42 @@ def create_router_app(
         """Record a verified browser WebGPU WGSL @compute workunit. Strictly requires registration & login (Bearer hm-...)."""
         from hivemind.game.webgpu_galaxy_cockpit import execute_server_webgpu_verification_and_sync
 
-        account = authenticate(request)
+        account = await run_in_threadpool(authenticate, request)
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
         target_planet = str(body.get("target_planet") or "K2-18 b").strip()[:64]
         gpu_adapter = str(body.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
         backend = str(body.get("backend") or "webgpu_wgsl_compute_shader").strip()[:64]
-        n_points = int(body.get("n_points_folded") or 16384)
-        kernel_ms = float(body.get("kernel_exec_ms") or 0.42)
-        depth_ppm = float(body.get("recovered_transit_depth_ppm") or 2789.0)
-
-        verified = execute_server_webgpu_verification_and_sync(
-            handle=account.handle,
-            target_planet=target_planet,
-            gpu_adapter=gpu_adapter,
-            backend=backend,
-            n_points_folded=n_points,
-            kernel_exec_ms=kernel_ms,
-            recovered_transit_depth_ppm=depth_ppm,
-        )
+        raw_n_points = body.get("n_points_folded")
+        raw_kernel_ms = body.get("kernel_exec_ms")
+        raw_depth_ppm = body.get("recovered_transit_depth_ppm")
+        try:
+            n_points = 16384 if raw_n_points is None else raw_n_points
+            kernel_ms = 0.42 if raw_kernel_ms is None else raw_kernel_ms
+            depth_ppm = 2789.0 if raw_depth_ppm is None else raw_depth_ppm
+            verified = await run_in_threadpool(
+                execute_server_webgpu_verification_and_sync,
+                handle=account.handle,
+                target_planet=target_planet,
+                gpu_adapter=gpu_adapter,
+                backend=backend,
+                n_points_folded=n_points,
+                kernel_exec_ms=kernel_ms,
+                recovered_transit_depth_ppm=depth_ppm,
+            )
+        except (TypeError, ValueError) as exc:
+            raise RouterError(
+                400,
+                f"Invalid WebGPU contribution parameters: {exc}",
+                "invalid_request_error",
+                "invalid_parameter",
+            ) from None
         receipt_sha256 = str(body.get("receipt_sha256") or verified["receipt_sha256"]).strip()
-        duplicate_receipt = receipt_sha256 in seen_boinc_receipts
-        seen_boinc_receipts.add(receipt_sha256)
+        duplicate_receipt = store.record_boinc_receipt(receipt_sha256, account.account_id, now_utc=clock()) or (
+            receipt_sha256 in seen_boinc_receipts
+        )
+        if len(seen_boinc_receipts) < 4096:
+            seen_boinc_receipts.add(receipt_sha256)
         # No HMT: the "verification" hashes client-supplied figures, so a receipt proves no work (it used to grant 250 HMT
         # per unseen receipt). Credit comes back once results are verified server-side.
         hmt_awarded = 0.0
@@ -3447,30 +5030,33 @@ def create_router_app(
     @app.post("/v1/hivemind/bees/rusty-sundials/surrogate")
     async def rusty_sundials_surrogate_endpoint(request: Request) -> dict[str, Any]:
         """Run Wave 2 Solver-Taught Neural Surrogate with fail-closed rusty-SUNDIALS teacher verification."""
-        from hivemind.swarm.rusty_sundials_scientific_bee import SolverTaughtSurrogateExpert
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many anonymous compute requests from this IP; try again in a minute.", "rate_limit_error", "rate_limited")
 
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
 
-        prompt = str(body.get("prompt") or "Integrate stiff Robertson chemical kinetics ODE with mass conservation")
+        prompt = str(body.get("prompt") or "Integrate stiff Robertson chemical kinetics ODE with mass conservation")[:4000]
         domain = body.get("domain")
         if domain is not None:
-            domain = str(domain)
-        steps = max(4, min(int(body.get("steps") or 32), 256))
-        dt = max(1e-5, min(float(body.get("dt") or 0.01), 0.25))
-        injected_noise = max(0.0, min(float(body.get("injected_perturbation") or 0.0), 10.0))
+            domain = str(domain)[:128]
+        steps = _finite_int(body.get("steps"), 32, 4, 256, "steps")
+        dt = _finite_float(body.get("dt"), 0.01, 1e-5, 0.25, "dt")
+        injected_noise = _finite_float(body.get("injected_perturbation"), 0.0, 0.0, 10.0, "injected_perturbation")
 
-        surrogate = SolverTaughtSurrogateExpert()
-        verdict = surrogate.predict_and_verify(
-            prompt,
-            domain=domain,
-            steps=steps,
-            dt=dt,
-            force_surrogate_perturbation=injected_noise,
-        )
+        def _run_surrogate() -> dict[str, Any]:
+            from hivemind.swarm.rusty_sundials_scientific_bee import SolverTaughtSurrogateExpert
+
+            surrogate = SolverTaughtSurrogateExpert()
+            return surrogate.predict_and_verify(
+                prompt,
+                domain=domain,
+                steps=steps,
+                dt=dt,
+                force_surrogate_perturbation=injected_noise,
+            )
+
+        verdict = await run_in_threadpool(_run_surrogate)
         return {
             **verdict,
             "object": "hivemind.bee.rusty_sundials.surrogate_verification",
@@ -3480,79 +5066,107 @@ def create_router_app(
     @app.post("/v1/hivemind/bees/rusty-sundials/sweep")
     async def rusty_sundials_sweep_endpoint(request: Request) -> dict[str, Any]:
         """Run a Wave 2 BOINC quorum-of-2 scientific parameter sweep or Method-of-Lines PDE rollout."""
-        from hivemind.swarm.rusty_sundials_scientific_bee import (
-            run_wave2_parameter_sweep_quorum,
-            solve_wave2_method_of_lines_pde,
-        )
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many anonymous compute requests from this IP; try again in a minute.", "rate_limit_error", "rate_limited")
 
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
 
         pde_family = body.get("pde_family")
         if pde_family:
-            grid_points = max(8, min(int(body.get("grid_points") or 32), 128))
-            steps = max(4, min(int(body.get("steps") or 24), 256))
-            dt = max(1e-5, min(float(body.get("dt") or 0.005), 0.1))
-            param = float(body.get("param") or 0.05)
-            pde_res = solve_wave2_method_of_lines_pde(
-                str(pde_family),
-                grid_points=grid_points,
-                steps=steps,
-                dt=dt,
-                param=param,
-            )
+            grid_points = _finite_int(body.get("grid_points"), 32, 8, 64, "grid_points")
+            steps = _finite_int(body.get("steps"), 24, 4, 64, "steps")
+            dt = _finite_float(body.get("dt"), 0.005, 1e-5, 0.1, "dt")
+            param = _finite_float(body.get("param"), 0.05, -100.0, 100.0, "param")
+
+            def _run_pde() -> dict[str, Any]:
+                from hivemind.swarm.rusty_sundials_scientific_bee import solve_wave2_method_of_lines_pde
+
+                return solve_wave2_method_of_lines_pde(
+                    str(pde_family)[:64],
+                    grid_points=grid_points,
+                    steps=steps,
+                    dt=dt,
+                    param=param,
+                )
+
+            pde_res = await run_in_threadpool(_run_pde)
             return {
                 "object": "hivemind.bee.rusty_sundials.mol_pde",
                 "succeeded": float(pde_res["invariant_drift"]) < 1e-2,
                 **pde_res,
             }
 
-        family = str(body.get("family") or body.get("domain") or "van_der_pol")
+        family = str(body.get("family") or body.get("domain") or "van_der_pol")[:64]
         raw_grid = body.get("parameter_grid")
-        if isinstance(raw_grid, list) and raw_grid:
-            param_grid = [float(x) for x in raw_grid[:16]]
+        if raw_grid is not None:
+            if not isinstance(raw_grid, list) or not raw_grid:
+                raise RouterError(400, "parameter_grid must be a non-empty list of finite numbers", "invalid_request_error", "invalid_parameter")
+            param_grid = [_finite_float(x, 0.2, -100.0, 100.0, "parameter_grid") for x in raw_grid[:16]]
         else:
             param_grid = [0.2, 0.4, 0.6, 0.8]
-        steps = max(4, min(int(body.get("steps") or 24), 128))
-        dt = max(1e-5, min(float(body.get("dt") or 0.01), 0.1))
+        raw_steps = _finite_int(body.get("steps"), 24, 4, 128, "steps")
+        # Bound total ODE integration steps across the quorum-of-2 grid so worst-case wall time stays well under 1s
+        steps = max(4, min(raw_steps, 192 // max(1, len(param_grid))))
+        dt = _finite_float(body.get("dt"), 0.01, 1e-5, 0.1, "dt")
 
-        sweep_bundle = run_wave2_parameter_sweep_quorum(
-            family=family,
-            parameter_grid=param_grid,
-            steps=steps,
-            dt=dt,
-        )
-        try:
-            from hivemind.boinc.real_client.boinc_server_scripts import validate_solver_sweep
-
-            verdict = validate_solver_sweep(
-                sweep_bundle["spec"],
-                sweep_bundle["replica_a"],
-                host=str(sweep_bundle["replica_a"].get("host", "cpu-host-a")),
-                peer_meta=sweep_bundle["replica_b"],
+        def _run_sweep() -> dict[str, Any]:
+            import sys as _sys
+            from hivemind.swarm.rusty_sundials_scientific_bee import (
+                run_wave2_parameter_sweep_quorum,
+                verify_wave2_quorum_replicas,
             )
-            q_valid = verdict.valid
-            q_reason = verdict.reason
-            q_credit = verdict.credit
-            q_pflops = verdict.pflops_seconds
-        except (ImportError, ValueError):
-            # Slim router container without torch: verify S-1 cross-CPU quorum directly in stdlib
-            q_valid = sweep_bundle["replica_a"].get("sha256_digest") == sweep_bundle["replica_b"].get("sha256_digest")
-            q_reason = "s1_cross_cpu_quorum_verified_stdlib" if q_valid else "quorum_mismatch"
-            q_credit = round(len(param_grid) * steps * 0.125, 4) if q_valid else 0.0
-            q_pflops = round(len(param_grid) * steps * 1.28e-4, 6)
-        return {
-            "object": "hivemind.bee.rusty_sundials.parameter_sweep",
-            "family": family,
-            "quorum_verified": q_valid,
-            "validator_reason": q_reason,
-            "credit": q_credit,
-            "pflops_seconds": q_pflops,
-            **sweep_bundle,
-        }
+
+            sweep_bundle = run_wave2_parameter_sweep_quorum(
+                family=family,
+                parameter_grid=param_grid,
+                steps=steps,
+                dt=dt,
+            )
+            if "hivemind.boinc.real_client.boinc_server_scripts" in _sys.modules:
+                try:
+                    from hivemind.boinc.real_client.boinc_server_scripts import validate_solver_sweep
+
+                    verdict = validate_solver_sweep(
+                        sweep_bundle["spec"],
+                        sweep_bundle["replica_a"],
+                        host=str(sweep_bundle["replica_a"].get("host", "cpu-host-a")),
+                        peer_meta=sweep_bundle["replica_b"],
+                    )
+                    q_valid = verdict.valid
+                    q_reason = verdict.reason
+                    q_credit = verdict.credit
+                    q_pflops = verdict.pflops_seconds
+                except (ImportError, ValueError):
+                    q_valid = verify_wave2_quorum_replicas(
+                        sweep_bundle["spec"],
+                        sweep_bundle["replica_a"],
+                        sweep_bundle["replica_b"],
+                    )
+                    q_reason = "s1_cross_cpu_quorum_verified_stdlib" if q_valid else "quorum_mismatch"
+                    q_credit = round(len(param_grid) * steps * 0.125, 4) if q_valid else 0.0
+                    q_pflops = round(len(param_grid) * steps * 1.28e-4, 6)
+            else:
+                # Avoid cold-importing torch inside the HTTP router: verify S-1 cross-CPU quorum directly in stdlib
+                q_valid = verify_wave2_quorum_replicas(
+                    sweep_bundle["spec"],
+                    sweep_bundle["replica_a"],
+                    sweep_bundle["replica_b"],
+                )
+                q_reason = "s1_cross_cpu_quorum_verified_stdlib" if q_valid else "quorum_mismatch"
+                q_credit = round(len(param_grid) * steps * 0.125, 4) if q_valid else 0.0
+                q_pflops = round(len(param_grid) * steps * 1.28e-4, 6)
+            return {
+                "object": "hivemind.bee.rusty_sundials.parameter_sweep",
+                "family": family,
+                "quorum_verified": q_valid,
+                "validator_reason": q_reason,
+                "credit": q_credit,
+                "pflops_seconds": q_pflops,
+                **sweep_bundle,
+            }
+
+        return await run_in_threadpool(_run_sweep)
 
     @app.post("/v1/hivemind/bees/science-bee/slot-compile")
     async def science_bee_slot_compile_endpoint(request: Request) -> dict[str, Any]:
@@ -3560,17 +5174,21 @@ def create_router_app(
         from hivemind.solverbee import families as fam
         from hivemind.solverbee import science_bee as sb
 
-        raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many anonymous compute requests from this IP; try again in a minute.", "rate_limit_error", "rate_limited")
 
-        try:
+        raw = await request.body()
+        body = _parse_json_dict(raw)
+
+        def _compile_slots() -> tuple[Any, Any, Any]:
             spec, trace = fam.compile_slot_spec(body, return_trace=True)
             validated = sb.with_house_tolerances(sb.validate_spec(spec))
-            echo = sb.echo_interpreted_problem(validated, language=str(body.get("language", "en")), slot_trace=trace)
-        except (fam.FamilyError, sb.SpecInvalid) as exc:
+            echo = sb.echo_interpreted_problem(validated, language=str(body.get("language", "en"))[:16], slot_trace=trace)
+            return validated, trace, echo
+
+        try:
+            validated, trace, echo = await run_in_threadpool(_compile_slots)
+        except (fam.FamilyError, sb.SpecInvalid, TypeError, ValueError) as exc:
             raise RouterError(400, str(exc), "invalid_request_error", "invalid_slot_spec") from None
 
         return {
@@ -3585,18 +5203,23 @@ def create_router_app(
         """Ask the Next-Gen MoE Science Bee (`hivemind/moe-science-bee-v2`) a plain-language science question."""
         from hivemind.swarm.rusty_sundials_scientific_bee import NextGenMoEScienceBee
 
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many anonymous compute requests from this IP; try again in a minute.", "rate_limit_error", "rate_limited")
+
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
 
         question = str(body.get("question") or body.get("prompt") or "").strip()
         if not question:
             raise RouterError(400, "question is required", "invalid_request_error", "missing_question")
+        if len(question) > 4000:
+            raise RouterError(400, "question must be <= 4000 characters", "invalid_request_error", "invalid_question")
 
         bee = NextGenMoEScienceBee()
-        ans = bee.ask(question, language=body.get("language"))
+        try:
+            ans = await run_in_threadpool(bee.ask, question, language=body.get("language"))
+        except (TypeError, ValueError) as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "invalid_question") from None
         return {
             "object": "hivemind.bee.science_bee.answer",
             **ans,
@@ -3673,14 +5296,402 @@ def create_router_app(
             "federated_ledger_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger",
             "night_window": "22:00-07:00 Europe/Paris (24/7 on-demand workunits active)",
             "night_training_roles": {
-                "end_users": "Overnight (22:00-07:00 CET) or idle-GPU BOINC folding & rank-4 QLoRA inner-loop updates (+250 HMT & +45 Cobblestones/WU)",
+                "end_users": "Overnight (22:00-07:00 CET) or idle-GPU BOINC folding & rank-4 QLoRA inner-loop updates (credit pending server-side verification; 0 HMT awarded per workunit today)",
                 "hivemind_nodes": "Daytime (07:00-22:00 CET) OpenRouter inference -> Nighttime (22:00-07:00 CET) DiLoCo outer-step aggregation, Multi-Krum & SVD Teacher-to-Student distillation (/v1/hivemind/bees/owner-fleet-status)",
             },
             "plan_classes": ["cuda_hivemind", "cuda_hivemind_big", "cpu_hivemind_solver"],
-            "rewards_per_verified_workunit": {
-                "hmt_reflexion_points": 250,
-                "boinc_cobblestones": 45.0,
+            # IP-212: no per-workunit credit is awarded until a server-side verified path exists (steam_contribute_boinc
+            # awards 0 and marks the receipt pending_verification), so no schedule is advertised here.
+            "credit_policy": {
+                "hmt_per_verified_workunit": None,
+                "boinc_cobblestones_per_verified_workunit": None,
+                "basis": "NOT_PERFORMED: no verified credit path is implemented; client-supplied receipts award 0 HMT",
             },
         }
+
+    # -------------------------------------------------------------------------
+    # HiveMind v3.1.1 Unified GCP Web Interface & V3 Core Engine Dashboards
+    # Mounted directly on the OpenRouter Gateway so `deploy/gcp_openrouter/deploy.sh`
+    # deploys both the OpenRouter v3.0.0 Core Engine and the V3.1 GCP WebUI.
+    # -------------------------------------------------------------------------
+    @app.api_route("/stitch-portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/v3-portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/v3", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/v3.1", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/v3.1/auth", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def router_v3_1_stitch_portal(request: Request) -> HTMLResponse:
+        from hivemind.boinc.hivemind_at_home_dashboard import POC_STATUS_HEADER, build_hivemind_at_home_state, portal_csp
+        from hivemind.boinc.stitch_portal import render_stitch_enhanced_portal
+
+        state = build_hivemind_at_home_state()
+        screen = "auth" if request.url.path.endswith("/auth") or request.query_params.get("screen") == "auth" else "home"
+        html_doc = render_stitch_enhanced_portal(
+            state,
+            api_base_url=str(request.base_url).rstrip("/"),
+            default_screen=screen,
+        )
+        return HTMLResponse(
+            content=html_doc,
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+                "X-HiveMind-PoC-Status": POC_STATUS_HEADER,
+                "Content-Security-Policy": portal_csp(),
+                "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+            },
+        )
+
+    async def v3_body(request: Request, model: Any) -> Any:
+        """A request body as ``model``: malformed input is the caller's error (400), never a 500."""
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+            if not isinstance(body, dict):
+                raise TypeError("the JSON body must be an object")
+            return model(**body)
+        except (ValueError, TypeError) as exc:  # JSONDecodeError and pydantic's ValidationError are ValueErrors
+            raise RouterError(400, f"Invalid request body for {model.__name__}.", "invalid_request_error", "invalid_body") from exc
+
+    def v3_account_write(request: Request) -> Account:
+        """Writes need an account, and share the per-account limit of the real AMCP bus."""
+        account = authenticate(request)
+        if not amcp_publish_limiter.allow(account.account_id, clock()):
+            raise RouterError(429, "Too many requests from this account; try again in a minute.", "rate_limit_error", "rate_limited")
+        return account
+
+    @app.get("/api/v1/v3.1/overview")
+    @app.get("/api/v1/v3-mvp/overview")
+    def router_v3_mvp_overview() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_v3_mvp_overview()
+
+    @app.get("/api/v1/amcp/kafka/space")
+    def router_v3_amcp_kafka_space(topic: str | None = None) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_amcp_kafka_space(topic=topic)
+
+    @app.post("/api/v1/amcp/kafka/publish")
+    async def router_v3_amcp_kafka_publish(request: Request) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import AmcpKafkaPublishRequest, _v3_mvp_mgr
+
+        account = v3_account_write(request)
+        req_obj = (await v3_body(request, AmcpKafkaPublishRequest)).model_copy(update={"actor_handle": "@" + account.handle.lstrip("@")})
+        return _v3_mvp_mgr.publish_amcp_kafka_event(req_obj)
+
+    @app.get("/api/v1/training/calendar")
+    def router_v3_training_calendar() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_training_calendar()
+
+    @app.post("/api/v1/training/calendar/propose")
+    async def router_v3_training_propose(request: Request) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import TrainingSessionProposeRequest, _v3_mvp_mgr
+
+        account = v3_account_write(request)
+        req_obj = (await v3_body(request, TrainingSessionProposeRequest)).model_copy(update={"proposer_handle": "@" + account.handle.lstrip("@")})
+        return _v3_mvp_mgr.propose_training_session(req_obj)
+
+    @app.post("/api/v1/training/calendar/pledge-gpu")
+    async def router_v3_training_pledge(request: Request) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import TrainingGpuPledgeRequest, _v3_mvp_mgr
+
+        account = v3_account_write(request)
+        req_obj = (await v3_body(request, TrainingGpuPledgeRequest)).model_copy(update={"contributor_handle": "@" + account.handle.lstrip("@")})
+        return _v3_mvp_mgr.pledge_gpu_to_session(req_obj)
+
+    @app.get("/api/v1/training/t4-daily-schedule")
+    def router_v3_t4_schedule_get() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_personal_schedule()
+
+    @app.post("/api/v1/training/t4-daily-schedule")
+    async def router_v3_t4_schedule_post(request: Request) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import PersonalScheduleUpdateRequest, _v3_mvp_mgr
+
+        require_admin(request)
+        return _v3_mvp_mgr.update_personal_schedule(await v3_body(request, PersonalScheduleUpdateRequest))
+
+    @app.get("/api/v1/dashboard/globe-users")
+    def router_v3_globe_users(role: str | None = None) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_globe_dashboard(filter_role=role)
+
+    @app.get("/api/v1/dashboard/nash-equilibrium")
+    def router_v3_nash_get(
+        active_producers: int = 18,
+        active_consumers: int = 42,
+        producer_gpu_tflops_avg: float = 28.5,
+        consumer_req_per_min: float = 64.0,
+    ) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import NashEquilibriumSimRequest, _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_nash_equilibrium(
+            NashEquilibriumSimRequest(
+                active_producers=active_producers,
+                active_consumers=active_consumers,
+                producer_gpu_tflops_avg=producer_gpu_tflops_avg,
+                consumer_req_per_min=consumer_req_per_min,
+            )
+        )
+
+    @app.post("/api/v1/dashboard/nash-equilibrium/simulate")
+    async def router_v3_nash_sim(request: Request) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import NashEquilibriumSimRequest, _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_nash_equilibrium(await v3_body(request, NashEquilibriumSimRequest))
+
+    @app.get("/api/v1/dashboard/inference-analytics")
+    def router_v3_inference_analytics() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_inference_analytics()
+
+    @app.get("/api/v1/dashboard/moe-bees")
+    def router_v3_moe_bees() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_real_moe_bees_dashboard()
+
+    @app.get("/api/v1/security/red-team-v3-audit")
+    def router_v3_red_team_audit() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import POC_STATUS_HEADER
+
+        return {
+            "status": "SELF_REPORTED_NOT_INDEPENDENTLY_VERIFIED",
+            "version": "3.1.1",
+            "base_engine_release": "v3.0.0",
+            "advisory_ref": "GHSA-gjc6-74f9-wmrr",
+            "evidence": "The repository's tests; this response runs no check.",
+            "privacy_notice": POC_STATUS_HEADER,
+        }
+
+    @app.get("/v1/hivemind/bees/swat-telepathy/status")
+    async def s34_swat_telepathy_status_endpoint() -> dict[str, Any]:
+        """Return Season 34 SwaT Latent KV Telepathy & Wake-to-Sleep Consolidation status (`HM-S34-01..10`)."""
+        from hivemind.swarm.swat_telepathy_bridge import (
+            SwaTTelepathyBridge,
+            UniversalHiveLatentHub,
+            compute_cms_chunk_periods,
+        )
+
+        hub = UniversalHiveLatentHub()
+        bridge = SwaTTelepathyBridge(hub=hub)
+        rep = hub.complexity_report()
+        return {
+            "object": "hivemind.s34_swat_telepathy.status",
+            "season": "S34",
+            "hub_summary": {
+                **rep,
+                "strictly_fewer_than_pairwise": rep["strictly_fewer_mappers"],
+            },
+            "n_blocks": bridge.n_blocks,
+            "cms_chunk_periods": compute_cms_chunk_periods([10.0, 2.0, 1.0], max_chunk_tokens=10000),
+            "lean4_theorems": [
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_identical_tokenizer_rope_identity",
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_cross_causal_prefix_no_future_leakage",
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_universal_hub_2n_strictly_below_pairwise",
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_am_compacted_vram_fits_rtx2070_wddm",
+            ],
+        }
+
+    @app.post("/v1/hivemind/bees/swat-telepathy/plan")
+    async def s34_swat_telepathy_plan_endpoint(request: Request) -> dict[str, Any]:
+        """Plan a Season 34 SwaT Latent KV Telepathy handoff or Dense-OCR fallback (`HM-S34-04`, `HM-S34-05`)."""
+        from hivemind.swarm.swat_telepathy_bridge import SwaTTelepathyBridge
+
+        raw = await request.body()
+        body = _parse_json_dict(raw)
+
+        sender_family = str(body.get("sender_family") or "ibm-granite/granite-3.3-8b-instruct")[:128]
+        receiver_family = str(body.get("receiver_family") or "HuggingFaceTB/SmolLM3-3B")[:128]
+        task_category = str(body.get("task_category") or "code").lower()[:32]
+        input_tokens = _finite_int(body.get("input_tokens"), 28000, 1, 1_000_000, "input_tokens")
+        am_compaction_ratio = _finite_float(body.get("am_compaction_ratio"), 5.0, 1.0, 64.0, "am_compaction_ratio")
+        default_ocr = 0.75 if task_category in {"docvqa", "infovqa", "dense_ocr", "ocr"} else 0.0
+        ocr_text_density = _finite_float(body.get("ocr_text_density"), default_ocr, 0.0, 1.0, "ocr_text_density")
+
+        sample_len = min(input_tokens, 64)
+        offsets = [(i * 4, (i + 1) * 4) for i in range(sample_len)]
+        bridge = SwaTTelepathyBridge()
+        plan = await run_in_threadpool(
+            bridge.plan_transfer,
+            sender_model_id=sender_family,
+            receiver_model_id=receiver_family,
+            sender_offsets=offsets,
+            receiver_offsets=offsets,
+            am_compaction_ratio=am_compaction_ratio,
+            ocr_text_density=ocr_text_density,
+        )
+        compacted_tokens = max(1, int(round(input_tokens / am_compaction_ratio)))
+        use_swat = bool(plan["vlm_routing_gate"]["use_swat_kv_transfer"])
+        return {
+            "object": "hivemind.s34_swat_telepathy.plan",
+            "mode": "swat_kv_telepathy" if use_swat else "native_vlm_fallback",
+            "reason": plan["vlm_routing_gate"]["reason"],
+            "sender_family": sender_family,
+            "receiver_family": receiver_family,
+            "input_tokens": input_tokens,
+            "compacted_tokens": compacted_tokens,
+            "am_compaction_ratio": am_compaction_ratio,
+            "sender_slices": [list(s) for s in plan["sender_layer_slices"]],
+            "receiver_slices": [list(s) for s in plan["receiver_layer_slices"]],
+            "vram_guards": plan["vram_guards"],
+            "fits_rtx2070_wddm_ceiling": bool(plan["vram_guards"]["rtx2070_wddm_6656_ok"]),
+            "transfer_sha256": plan["transfer_sha256"],
+        }
+
+    @app.get("/hivemind_producer_agent.py")
+    def get_producer_agent_source() -> PlainTextResponse:
+        """Serve the canonical standalone producer heartbeat agent script (`src/hivemind/router/hivemind_producer_agent.py`)."""
+        from pathlib import Path
+
+        src_path = Path(__file__).with_name("hivemind_producer_agent.py")
+        return PlainTextResponse(src_path.read_text(encoding="utf-8"), media_type="text/x-python; charset=utf-8")
+
+    @app.get("/hivemind_producer_shield.py")
+    def get_producer_shield_source() -> PlainTextResponse:
+        """Serve the canonical standalone producer shield script (`src/hivemind/router/hivemind_producer_shield.py`)."""
+        from pathlib import Path
+
+        src_path = Path(__file__).with_name("hivemind_producer_shield.py")
+        return PlainTextResponse(src_path.read_text(encoding="utf-8"), media_type="text/x-python; charset=utf-8")
+
+    _ALLOWED_ONBOARDING_SCRIPTS = {
+        "hivemind_boinc_idle_worker.py",
+        "hivemind_producer_agent.py",
+        "hivemind_producer_shield.py",
+        "hivemind_producer_autostart.py",
+        "hivemind_volunteer_config.py",
+        "hivemind_volunteer_preflight.py",
+        "hivemind_opentrainer_agent.py",
+    }
+
+    def _serve_onboarding_script(script_name: str) -> PlainTextResponse:
+        from pathlib import Path
+
+        if script_name not in _ALLOWED_ONBOARDING_SCRIPTS:
+            raise HTTPException(status_code=404, detail="Unknown onboarding script")
+        router_dir = Path(__file__).resolve().parent
+        repo_root = router_dir.parents[2]
+        for candidate_dir in (repo_root / "scripts", Path("/app/scripts"), router_dir):
+            sp = candidate_dir / script_name
+            if sp.exists():
+                return PlainTextResponse(
+                    sp.read_text(encoding="utf-8"),
+                    media_type="text/x-python; charset=utf-8",
+                    headers={"Content-Disposition": f'inline; filename="{script_name}"'},
+                )
+        raise HTTPException(status_code=404, detail="Script file not present on server")
+
+    @app.get("/hivemind_boinc_idle_worker.py")
+    def get_boinc_idle_worker_source() -> PlainTextResponse:
+        """Serve the canonical BOINC & Steam idle-GPU worker (`scripts/hivemind_boinc_idle_worker.py`)."""
+        return _serve_onboarding_script("hivemind_boinc_idle_worker.py")
+
+    @app.get("/scripts/{script_name}")
+    def download_onboarding_script(script_name: str) -> PlainTextResponse:
+        """Serve any allowlisted volunteer/producer/trainer onboarding script (`/scripts/hivemind_boinc_idle_worker.py`, etc.)."""
+        return _serve_onboarding_script(script_name)
+
+    @app.get("/v1/hivemind/selfhosted-p2p/audit")
+    def get_selfhosted_p2p_promises_audit(request: Request) -> dict[str, Any]:
+        """Run and return the live SHA-256-verified audit for all 6 promises in r/SelfHostedAI thread 1xjc76k."""
+        from hivemind.router.selfhosted_p2p_promises import audit_selfhosted_reddit_1xjc76k_promises
+
+        fleet_payload = list_producers_fleet(request)
+        return audit_selfhosted_reddit_1xjc76k_promises(public_fleet_payload=fleet_payload)
+
+    @app.post("/v1/hivemind/selfhosted-p2p/scrub-prompt")
+    async def post_selfhosted_p2p_scrub_prompt(request: Request) -> JSONResponse:
+        """Scrub or reject accidental API keys, tokens, private keys, or PII before P2P volunteer dispatch."""
+        from hivemind.router.selfhosted_p2p_promises import scrub_or_reject_sensitive_prompt
+
+        raw = await request.body()
+        body = _parse_json_dict(raw)
+        prompt_text = str(body.get("prompt") or body.get("content") or "")
+        mode = str(body.get("mode") or "redact").strip().lower()
+        scrub_pii = bool(body.get("scrub_pii", True))
+        try:
+            res = scrub_or_reject_sensitive_prompt(prompt_text, mode=mode, scrub_pii=scrub_pii)
+        except ValueError as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "sensitive_prompt_rejected") from None
+        if mode == "strict" and not res.get("safe_to_forward", True):
+            raise RouterError(
+                400,
+                "Refusing to dispatch prompt to volunteer P2P node: sensitive credentials or PII detected.",
+                "invalid_request_error",
+                "sensitive_prompt_rejected",
+            )
+        return JSONResponse(res, headers={"Cache-Control": "no-store"})
+
+    @app.api_route("/raid", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/crowdgpt-raid", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def router_v34_pioneer_raid_hub(request: Request, lang: str | None = None) -> HTMLResponse:
+        """Serve the strict-CSP bilingual (EN/FR) HiveMind v3.4 Pioneer Thank-You & Nov 14-15 CrowdGPT Raid Hub."""
+        import secrets as _secrets
+        from hivemind.router.community_outreach_v34 import (
+            raid_hub_content_security_policy,
+            render_v34_raid_hub_page,
+        )
+
+        chosen_lang = lang or ("fr" if "fr" in (request.headers.get("accept-language") or "").lower().split(",")[0] else "en")
+        nonce = _secrets.token_urlsafe(18)
+        html_doc = render_v34_raid_hub_page(lang=chosen_lang, nonce=nonce, starter_grant_hmt=starter_grant_hmt)
+        return HTMLResponse(
+            content=html_doc,
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+                "Content-Security-Policy": raid_hub_content_security_policy(nonce),
+                "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+            },
+        )
+
+    @app.get("/calendar/crowdgpt-weekend-raid.ics", response_class=PlainTextResponse)
+    def router_crowdgpt_weekend_raid_ics() -> PlainTextResponse:
+        """Serve the RFC 5545 6-wave iCalendar (.ics) feed for the Nov 14-15, 2026 CrowdGPT-MoE Swarm Raid."""
+        from hivemind.cli.campaign_calendar_quorum import generate_crowdgpt_weekend_ics_calendar
+
+        ics_body = generate_crowdgpt_weekend_ics_calendar()
+        return PlainTextResponse(
+            content=ics_body,
+            media_type="text/calendar; charset=utf-8",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+                "Content-Disposition": 'attachment; filename="hivemind_crowdgpt_weekend_nov14_15_2026.ics"',
+            },
+        )
+
+    @app.get("/v1/hivemind/community/v34-outreach")
+    def router_v34_community_outreach_plan() -> JSONResponse:
+        """Return the structured 5-phase v3.4 Pioneer & CrowdGPT Weekend Raid communication plan manifest."""
+        from hivemind.router.community_outreach_v34 import build_v34_communication_plan_status
+
+        return JSONResponse(
+            build_v34_communication_plan_status(),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+            },
+        )
+
+    from hivemind.boinc.rtx_boinc_deployer import RTXBoincServer, build_rtx_boinc_fastapi_router
+
+    _rtx_boinc_server = RTXBoincServer(router_store=store)
+    app.include_router(build_rtx_boinc_fastapi_router(_rtx_boinc_server))
 
     return app

@@ -138,19 +138,20 @@ def run_e20_benchmark_suite() -> Dict[str, Any]:
     coalesced = coalesce_ledger_settlement_batch(synthetic_settlements, window_ms=250)
 
     elapsed_s = round(time.time() - t0, 3)
+    predictions_check = {
+        "P20a_all_prelude_vram_le_1536mb": all_under_1536mb,
+        "P20b_compression_ratio_ge_100x": min_compression_ratio >= 100.0,
+        "P20b_ef21_conservation_drift_le_1e_5": max_ef21_drift <= 1e-5,
+        "P20c_coordinator_reduction_ge_25x": fanout_10k.ingress_reduction_factor >= 25.0,
+        "P20c_sqlite_hmt_exact_conservation": coalesced.hmt_conservation_exact,
+    }
     payload: Dict[str, Any] = {
         "experiment_id": "E20",
         "roadmap_refs": ["HM-S29-01", "HM-S29-02", "HM-S31-02"],
-        "status": "VERIFIED_PASS",
+        "status": "VERIFIED_PASS" if all(predictions_check.values()) else "FAILED",
         "executed_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "elapsed_seconds": elapsed_s,
-        "predictions_check": {
-            "P20a_all_prelude_vram_le_1536mb": all_under_1536mb,
-            "P20b_compression_ratio_ge_100x": min_compression_ratio >= 100.0,
-            "P20b_ef21_conservation_drift_le_1e_5": max_ef21_drift <= 1e-5,
-            "P20c_coordinator_reduction_ge_25x": fanout_10k.ingress_reduction_factor >= 25.0,
-            "P20c_sqlite_hmt_exact_conservation": coalesced.hmt_conservation_exact,
-        },
+        "predictions_check": predictions_check,
         "adaptive_multisplit_profiles": split_plans,
         "top1pct_dct_ef21_steps": dct_steps,
         "hierarchical_fanout_10k": asdict(fanout_10k),

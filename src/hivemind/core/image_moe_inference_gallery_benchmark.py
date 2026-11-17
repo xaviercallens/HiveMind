@@ -17,6 +17,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -114,6 +115,81 @@ class PublicImageScenarioSpec:
     svg_markup: str
     source_url: str = "https://commons.wikimedia.org"
     jpg_filename: str = ""
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("scenario_id", self.scenario_id),
+            ("division_id", self.division_id),
+            ("division_title", self.division_title),
+            ("category", self.category),
+            ("badge_label", self.badge_label),
+            ("title_fr", self.title_fr),
+            ("title_en", self.title_en),
+            ("public_source_label", self.public_source_label),
+            ("license_spdx", self.license_spdx),
+            ("svg_filename", self.svg_filename),
+            ("model_id", self.model_id),
+            ("primary_expert_bee", self.primary_expert_bee),
+            ("secondary_expert_bee", self.secondary_expert_bee),
+            ("backbone_tag", self.backbone_tag),
+            ("served_by_hybrid_node", self.served_by_hybrid_node),
+            ("image_resolution", self.image_resolution),
+            ("top1_routed_division", self.top1_routed_division),
+            ("top2_routed_division", self.top2_routed_division),
+            ("gpu_residency", self.gpu_residency),
+            ("prompt_fr", self.prompt_fr),
+            ("response_excerpt_fr", self.response_excerpt_fr),
+            ("when_to_use_fr", self.when_to_use_fr),
+            ("how_to_invoke", self.how_to_invoke),
+            ("svg_markup", self.svg_markup),
+            ("source_url", self.source_url),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.jpg_filename, str):
+            raise ValueError("jpg_filename must be a string")
+        if (
+            not isinstance(self.rgb_mean_channels, tuple)
+            or len(self.rgb_mean_channels) != 3
+            or any(
+                isinstance(c, bool)
+                or not isinstance(c, (int, float))
+                or not math.isfinite(float(c))
+                or not (0.0 <= float(c) <= 1.0)
+                for c in self.rgb_mean_channels
+            )
+        ):
+            raise ValueError("rgb_mean_channels must be a 3-tuple of finite numbers in [0.0, 1.0]")
+        for g_name in ("top1_gate_weight", "top2_gate_weight"):
+            g_val = getattr(self, g_name)
+            if (
+                isinstance(g_val, bool)
+                or not isinstance(g_val, (int, float))
+                or not math.isfinite(float(g_val))
+                or not (0.0 <= float(g_val) <= 1.0)
+            ):
+                raise ValueError(f"{g_name} must be a finite number in [0.0, 1.0]")
+        for field_name, val in (
+            ("warm_latency_ms", self.warm_latency_ms),
+            ("tokens_per_sec", self.tokens_per_sec),
+            ("active_vram_mib", self.active_vram_mib),
+        ):
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) <= 0.0
+            ):
+                raise ValueError(f"{field_name} must be a positive finite number")
+        if (
+            isinstance(self.grounding_confidence, bool)
+            or not isinstance(self.grounding_confidence, (int, float))
+            or not math.isfinite(float(self.grounding_confidence))
+            or not (0.0 <= float(self.grounding_confidence) <= 1.0)
+        ):
+            raise ValueError("grounding_confidence must be a finite number in [0.0, 1.0]")
+        if isinstance(self.http_status, bool) or not isinstance(self.http_status, int) or self.http_status < 100:
+            raise ValueError("http_status must be a valid HTTP status code integer")
 
     def svg_data_uri(self) -> str:
         """Return a CSP-safe `data:image/svg+xml;base64,...` URI for embedding in HTML."""
@@ -294,6 +370,14 @@ def _build_scenario_svg_assets() -> Dict[str, str]:
 
 def _svg_to_rgb_tensor(svg_markup: str, division_index: int, height: int = 64, width: int = 64) -> torch.Tensor:
     """Convert an SVG visual asset into a deterministic `(3, H, W)` normalized RGB tensor."""
+    if not isinstance(svg_markup, str) or not svg_markup.strip():
+        raise ValueError("svg_markup must be a non-empty string")
+    if isinstance(division_index, bool) or not isinstance(division_index, int) or division_index < 0:
+        raise ValueError("division_index must be a non-negative integer")
+    if isinstance(height, bool) or not isinstance(height, int) or height < 1:
+        raise ValueError("height must be a positive integer")
+    if isinstance(width, bool) or not isinstance(width, int) or width < 1:
+        raise ValueError("width must be a positive integer")
     digest = hashlib.sha256(svg_markup.encode("utf-8")).digest()
     seed = int.from_bytes(digest[:4], "little") + division_index * 97
     rng = np.random.default_rng(seed)
@@ -318,6 +402,10 @@ def _svg_to_rgb_tensor(svg_markup: str, division_index: int, height: int = 64, w
 
 def build_trained_7division_image_moe(seed: int = 20261030, inner_steps: int = 180) -> MassiveSwarmSparseImageMoE:
     """Train and upcycle the 7-Division `MassiveSwarmSparseImageMoE` for live scenario inference."""
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -370,6 +458,10 @@ def build_public_image_moe_gallery_scenarios(
     output_gallery_dir: Optional[Path] = None,
 ) -> Tuple[PublicImageScenarioSpec, ...]:
     """Build and evaluate all 12 real public-image Vision-MoE scenarios across the 7 divisions."""
+    if output_gallery_dir is not None:
+        if not isinstance(output_gallery_dir, (Path, str)) or not str(output_gallery_dir).strip():
+            raise ValueError("output_gallery_dir must be a non-empty Path or string when provided")
+        output_gallery_dir = Path(output_gallery_dir)
     svg_map = _build_scenario_svg_assets()
     moe = build_trained_7division_image_moe(seed=20261030, inner_steps=160) if _HAS_TORCH else None
     div_keys = list(MASSIVE_IMAGE_MOE_DIVISIONS.keys())
@@ -750,8 +842,16 @@ def run_intensive_image_moe_inference_stress_campaign(
     save_report_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Run intensive real-image Vision-MoE inference tests + 240-request stress burst."""
-    if concurrent_requests_per_node < 1:
+    if (
+        isinstance(concurrent_requests_per_node, bool)
+        or not isinstance(concurrent_requests_per_node, int)
+        or concurrent_requests_per_node < 1
+    ):
         raise ValueError("concurrent_requests_per_node must be >= 1")
+    if save_report_path is not None:
+        if not isinstance(save_report_path, (Path, str)) or not str(save_report_path).strip():
+            raise ValueError("save_report_path must be None or a non-empty Path/str")
+        save_report_path = Path(save_report_path)
 
     scenarios = build_public_image_moe_gallery_scenarios(output_gallery_dir=output_gallery_dir)
     all_http_200 = all(s.http_status == 200 for s in scenarios)
@@ -794,6 +894,7 @@ def run_intensive_image_moe_inference_stress_campaign(
     total_burst_reqs = sum(n["requests_executed"] for n in node_stress_reports)
     payload: Dict[str, Any] = {
         "campaign_id": "HM-S29-IMAGE-MOE-INFERENCE-GALLERY-BENCHMARK",
+        "simulated": True,
         "title": "Intensive 7-Division Image-MoE Live Inference Benchmark & 12-Scenario Public Gallery",
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "total_gallery_scenarios": len(scenarios),

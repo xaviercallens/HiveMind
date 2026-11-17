@@ -25,3 +25,4 @@ def test_native_worker_fleet_manifests_require_zero_wsl_or_python() -> None:
         assert m.requires_python_or_wsl is False
         assert m.active_vram_cap_mib <= CITIZEN_VRAM_CAP_MIB
         assert m.steam_preemption_ms < 1500.0
+        assert m.basis == "planning_targets"

@@ -108,6 +108,32 @@ class ZeroRTTSessionTicket:
     turn_relay_endpoint: Optional[str] = None
     last_accepted_nonce: int = 0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.peer_id, str) or not self.peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
+        if not isinstance(self.session_token, (bytes, bytearray)) or len(self.session_token) == 0:
+            raise ValueError("session_token must be non-empty bytes")
+        if (
+            isinstance(self.issued_at, bool)
+            or not isinstance(self.issued_at, (int, float))
+            or not math.isfinite(float(self.issued_at))
+        ):
+            raise ValueError("issued_at must be a finite number")
+        if isinstance(self.resumed_count, bool) or not isinstance(self.resumed_count, int) or self.resumed_count < 0:
+            raise ValueError("resumed_count must be a non-negative integer")
+        if (
+            isinstance(self.reflexive_port, bool)
+            or not isinstance(self.reflexive_port, int)
+            or not (0 <= self.reflexive_port <= 65535)
+        ):
+            raise ValueError("reflexive_port must be an integer in [0, 65535]")
+        if (
+            isinstance(self.last_accepted_nonce, bool)
+            or not isinstance(self.last_accepted_nonce, int)
+            or self.last_accepted_nonce < 0
+        ):
+            raise ValueError("last_accepted_nonce must be a non-negative integer")
+
 
 # ============================================================================
 # HM-S4-02: 2-Tier Kademlia Continental Super-Ring & BBR-Inspired Congestion Control
@@ -152,6 +178,8 @@ def classify_continent(region: str) -> str:
     Returns one of `EU`, `US`, `APAC` or `OTHER` when the region cannot be mapped to a
     known continental super-ring (`HM-S4-02`).
     """
+    if not isinstance(region, str):
+        raise TypeError("region must be a string")
     head = (region or "").strip().split("-", 1)[0].upper()
     if head in CONTINENT_CODES:
         return head
@@ -195,6 +223,21 @@ class RegionalBridgePeer:
     rtt_ms: float
     stun_verified: bool = True
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.peer_id, str) or not self.peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
+        if not isinstance(self.continent, str) or not self.continent.strip():
+            raise ValueError("continent must be a non-empty string")
+        if (
+            isinstance(self.rtt_ms, bool)
+            or not isinstance(self.rtt_ms, (int, float))
+            or not math.isfinite(float(self.rtt_ms))
+            or float(self.rtt_ms) <= 0.0
+        ):
+            raise ValueError("rtt_ms must be a positive finite number")
+        if not isinstance(self.stun_verified, bool):
+            raise TypeError("stun_verified must be a bool")
+
 
 class ContinentalSuperRingRouter:
     """HM-S4-02: 2-Tier Kademlia Super-Ring (`Continental Bridge -> Regional <20 ms Geo-Ring`).
@@ -220,7 +263,21 @@ class ContinentalSuperRingRouter:
             self.bridge_peers = list(max_regional_rtt_ms)
             self.max_regional_rtt_ms = 20.0
         else:
+            if (
+                isinstance(max_regional_rtt_ms, bool)
+                or not isinstance(max_regional_rtt_ms, (int, float))
+                or not math.isfinite(float(max_regional_rtt_ms))
+                or float(max_regional_rtt_ms) <= 0.0
+            ):
+                raise ValueError("max_regional_rtt_ms must be a finite number > 0")
             self.max_regional_rtt_ms = float(max_regional_rtt_ms)
+        if (
+            isinstance(max_bridge_jitter_ms, bool)
+            or not isinstance(max_bridge_jitter_ms, (int, float))
+            or not math.isfinite(float(max_bridge_jitter_ms))
+            or float(max_bridge_jitter_ms) < 0.0
+        ):
+            raise ValueError("max_bridge_jitter_ms must be a finite number >= 0")
         self.max_bridge_jitter_ms = float(max_bridge_jitter_ms)
         self.inter_continent_rtt_table: Dict[str, Dict[str, float]] = (
             dict(inter_continent_rtt_ms)
@@ -265,9 +322,22 @@ class ContinentalSuperRingRouter:
     @staticmethod
     def bbr_window(base_window: int, jitter_ms: float, loss: float) -> int:
         """Shrink the burst window when RTT jitter or loss rises. Floor is 1 packet (`HM-S4-02`)."""
-        if base_window < 1:
+        if isinstance(base_window, bool) or not isinstance(base_window, int) or base_window < 1:
             raise ValueError("base_window must be positive")
-        if loss < 0.0 or loss > 1.0:
+        if (
+            isinstance(jitter_ms, bool)
+            or not isinstance(jitter_ms, (int, float))
+            or not math.isfinite(float(jitter_ms))
+            or float(jitter_ms) < 0.0
+        ):
+            raise ValueError("jitter_ms must be finite and >= 0")
+        if (
+            isinstance(loss, bool)
+            or not isinstance(loss, (int, float))
+            or not math.isfinite(float(loss))
+            or loss < 0.0
+            or loss > 1.0
+        ):
             raise ValueError("loss must be in [0, 1]")
         scale = 1.0
         if jitter_ms > 5.0:
@@ -282,6 +352,17 @@ class ContinentalSuperRingRouter:
     # ------------------------------------------------------------------
     def register_peer(self, node: SuperRingPeerNode) -> bool:
         """Admit `node` into its Tier-1 Regional Geo-Ring (only if the `<20 ms` SLA holds)."""
+        if not isinstance(node, SuperRingPeerNode):
+            raise TypeError("node must be a SuperRingPeerNode")
+        if not isinstance(node.peer_id, str) or not node.peer_id.strip():
+            return False
+        if (
+            isinstance(node.rtt_ms, bool)
+            or not isinstance(node.rtt_ms, (int, float))
+            or not math.isfinite(float(node.rtt_ms))
+            or float(node.rtt_ms) <= 0.0
+        ):
+            return False
         if node.rtt_ms > self.max_regional_rtt_ms:
             return False
         existing = self.peers.get(node.peer_id)
@@ -295,6 +376,8 @@ class ContinentalSuperRingRouter:
 
     def remove_peer(self, peer_id: str) -> bool:
         """Evict a peer (e.g. after a failed STUN re-probe) and re-elect the bridges."""
+        if not isinstance(peer_id, str) or not peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
         node = self.peers.pop(peer_id, None)
         if node is None:
             return False
@@ -308,10 +391,14 @@ class ContinentalSuperRingRouter:
 
     def peers_in_region(self, region: str) -> List[SuperRingPeerNode]:
         """All Tier-1 peers currently registered in `region`."""
+        if not isinstance(region, str) or not region.strip():
+            raise ValueError("region must be a non-empty string")
         return list(self.rings.get(region, []))
 
     def find_peer_in_region(self, region: str) -> Optional[SuperRingPeerNode]:
         """Lowest-RTT peer of `region` (used as the default regional entry point)."""
+        if not isinstance(region, str) or not region.strip():
+            raise ValueError("region must be a non-empty string")
         members = self.peers_in_region(region)
         if not members:
             return None
@@ -356,6 +443,13 @@ class ContinentalSuperRingRouter:
 
     def inter_continent_rtt_ms(self, source_continent: str, target_continent: str) -> float:
         """Measured (or default) WAN RTT between two continental bridge rings."""
+        if (
+            not isinstance(source_continent, str)
+            or not source_continent.strip()
+            or not isinstance(target_continent, str)
+            or not target_continent.strip()
+        ):
+            raise ValueError("source_continent and target_continent must be non-empty strings")
         if source_continent == target_continent:
             return 0.0
         table = self.inter_continent_rtt_table.get(source_continent, {})
@@ -370,6 +464,20 @@ class ContinentalSuperRingRouter:
         self, source_continent: str, target_continent: str, rtt_ms: float
     ) -> None:
         """Store a freshly measured WAN RTT between two continental bridge rings."""
+        if (
+            not isinstance(source_continent, str)
+            or not source_continent.strip()
+            or not isinstance(target_continent, str)
+            or not target_continent.strip()
+        ):
+            raise ValueError("source_continent and target_continent must be non-empty strings")
+        if (
+            isinstance(rtt_ms, bool)
+            or not isinstance(rtt_ms, (int, float))
+            or not math.isfinite(float(rtt_ms))
+            or float(rtt_ms) <= 0.0
+        ):
+            raise ValueError("rtt_ms must be a finite number > 0")
         self.inter_continent_rtt_table.setdefault(source_continent, {})[target_continent] = float(
             rtt_ms
         )
@@ -386,6 +494,13 @@ class ContinentalSuperRingRouter:
         Same-region peers stay inside the Tier-1 Regional Geo-Ring (`< 20 ms`), while
         cross-continent peers are routed through the elected Continental Bridges.
         """
+        if (
+            not isinstance(source_peer_id, str)
+            or not source_peer_id.strip()
+            or not isinstance(target_peer_id, str)
+            or not target_peer_id.strip()
+        ):
+            raise ValueError("source_peer_id and target_peer_id must be non-empty strings")
         if source_peer_id not in self.peers and target_peer_id not in self.peers:
             bridges = self.elect_bridges()
             if source_peer_id == target_peer_id:
@@ -514,6 +629,10 @@ class ContinentalSuperRingRouter:
         self, target_key: str, k: int = 2
     ) -> List[SuperRingPeerNode]:
         """Kademlia XOR lookup over the Tier-2 Continental Bridge ring."""
+        if not isinstance(target_key, str) or not target_key.strip():
+            raise ValueError("target_key must be a non-empty string")
+        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+            raise ValueError("k must be a positive integer")
         self.refresh_bridges()
         target_hex = hashlib.sha1(target_key.encode("utf-8")).hexdigest()
         bridges = [
@@ -584,6 +703,23 @@ class CongestionWindowTelemetry:
     mtu_bytes: int
     mode: str = "steady"
 
+    def __post_init__(self) -> None:
+        for int_name in ("cwnd_bytes", "cwnd_packets", "mtu_bytes"):
+            ival = getattr(self, int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{int_name} must be an integer >= 1")
+        for f_name in ("btl_bw_bps", "rtprop_ms", "jitter_ms", "loss_ratio", "gain"):
+            fval = getattr(self, f_name)
+            if (
+                isinstance(fval, bool)
+                or not isinstance(fval, (int, float))
+                or not math.isfinite(float(fval))
+                or float(fval) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a non-negative finite number")
+        if not isinstance(self.mode, str) or not self.mode.strip():
+            raise ValueError("mode must be a non-empty string")
+
     def to_dict(self) -> Dict[str, Any]:
         """Plain-dict view of the telemetry (JSON friendly)."""
         return {
@@ -628,6 +764,28 @@ class AdaptiveCongestionController:
         rtt_window: int = 10,
         startup_packets: int = 20,
     ) -> None:
+        for int_name, int_val in (
+            ("mtu_bytes", mtu_bytes),
+            ("initial_cwnd_packets", initial_cwnd_packets),
+            ("min_cwnd_packets", min_cwnd_packets),
+            ("max_cwnd_packets", max_cwnd_packets),
+            ("bandwidth_window", bandwidth_window),
+            ("rtt_window", rtt_window),
+            ("startup_packets", startup_packets),
+        ):
+            if isinstance(int_val, bool) or not isinstance(int_val, int) or int_val < 1:
+                raise ValueError(f"{int_name} must be a positive integer >= 1")
+        if max_cwnd_packets < min_cwnd_packets:
+            raise ValueError("max_cwnd_packets must be >= min_cwnd_packets")
+        for flt_name, flt_val in (
+            ("startup_gain", startup_gain),
+            ("steady_gain", steady_gain),
+            ("loss_sensitivity", loss_sensitivity),
+        ):
+            if isinstance(flt_val, bool) or not isinstance(flt_val, (int, float)) or not math.isfinite(float(flt_val)) or float(flt_val) <= 0.0:
+                raise ValueError(f"{flt_name} must be a finite number > 0")
+        if isinstance(loss_beta, bool) or not isinstance(loss_beta, (int, float)) or not math.isfinite(float(loss_beta)) or not (0.0 < float(loss_beta) <= 1.0):
+            raise ValueError("loss_beta must be in (0.0, 1.0]")
         self.mtu_bytes = int(mtu_bytes)
         self.initial_cwnd_packets = int(initial_cwnd_packets)
         self.startup_gain = float(startup_gain)
@@ -655,6 +813,8 @@ class AdaptiveCongestionController:
     # ------------------------------------------------------------------
     def record_rtt_sample(self, rtt_ms: float) -> None:
         """Feed an RTT sample into the `RTprop` min-filter and the jitter estimator."""
+        if isinstance(rtt_ms, bool) or not isinstance(rtt_ms, (int, float)) or not math.isfinite(float(rtt_ms)):
+            raise ValueError("rtt_ms must be a finite number")
         rtt = float(rtt_ms)
         if rtt <= 0.0:
             return
@@ -668,6 +828,15 @@ class AdaptiveCongestionController:
 
     def record_delivery(self, bytes_delivered: int, elapsed_ms: float) -> None:
         """Record a delivery-rate sample (`bytes / elapsed`) for the `BTlBw` max-filter."""
+        if (
+            isinstance(bytes_delivered, bool)
+            or not isinstance(bytes_delivered, (int, float))
+            or not math.isfinite(float(bytes_delivered))
+            or isinstance(elapsed_ms, bool)
+            or not isinstance(elapsed_ms, (int, float))
+            or not math.isfinite(float(elapsed_ms))
+        ):
+            raise ValueError("bytes_delivered and elapsed_ms must be finite numbers")
         if bytes_delivered <= 0 or elapsed_ms <= 0:
             return
         self.delivery_samples.append((float(bytes_delivered), float(elapsed_ms)))
@@ -683,6 +852,10 @@ class AdaptiveCongestionController:
 
     def record_loss(self, lost_packets: int, sent_packets: int) -> float:
         """Fold a loss report into the loss EWMA and apply a multiplicative decrease."""
+        if isinstance(lost_packets, bool) or not isinstance(lost_packets, int) or lost_packets < 0:
+            raise ValueError("lost_packets must be a non-negative integer")
+        if isinstance(sent_packets, bool) or not isinstance(sent_packets, int) or sent_packets < 0:
+            raise ValueError("sent_packets must be a non-negative integer")
         if sent_packets <= 0:
             return self.loss_ratio
         ratio = max(0.0, min(1.0, float(lost_packets) / float(sent_packets)))
@@ -704,6 +877,27 @@ class AdaptiveCongestionController:
         loss_ratio: Optional[float] = None,
     ) -> CongestionWindowTelemetry:
         """Compute the BBR-inspired congestion window for the current path conditions."""
+        if rtt_ms is not None and (
+            isinstance(rtt_ms, bool)
+            or not isinstance(rtt_ms, (int, float))
+            or not math.isfinite(float(rtt_ms))
+            or float(rtt_ms) <= 0.0
+        ):
+            raise ValueError("rtt_ms must be a finite positive number or None")
+        if jitter_ms is not None and (
+            isinstance(jitter_ms, bool)
+            or not isinstance(jitter_ms, (int, float))
+            or not math.isfinite(float(jitter_ms))
+            or float(jitter_ms) < 0.0
+        ):
+            raise ValueError("jitter_ms must be a finite non-negative number or None")
+        if loss_ratio is not None and (
+            isinstance(loss_ratio, bool)
+            or not isinstance(loss_ratio, (int, float))
+            or not math.isfinite(float(loss_ratio))
+            or not (0.0 <= float(loss_ratio) <= 1.0)
+        ):
+            raise ValueError("loss_ratio must be in [0.0, 1.0] or None")
         rtprop = float(rtt_ms) if (rtt_ms is not None and rtt_ms > 0.0) else (self.rtprop_ms or 20.0)
         jitter = float(jitter_ms) if jitter_ms is not None else self.jitter_ms
         loss = float(loss_ratio) if loss_ratio is not None else self.loss_ratio
@@ -747,6 +941,10 @@ class AdaptiveCongestionController:
         total_packets: int = 1,
     ) -> Dict[str, Any]:
         """Size the in-flight burst of `CompressedHiddenStatePacket` frames allowed by the window."""
+        if not isinstance(packet, CompressedHiddenStatePacket):
+            raise TypeError("packet must be a CompressedHiddenStatePacket")
+        if isinstance(total_packets, bool) or not isinstance(total_packets, int) or total_packets < 1:
+            raise ValueError("total_packets must be a positive integer")
         window = self.compute_target_window(
             rtt_ms=rtt_ms, jitter_ms=jitter_ms, loss_ratio=loss_ratio
         )
@@ -810,6 +1008,8 @@ class AsyncQUICGeoRingTransport(RegionalGeoRingTransport):
         The TLS 1.3 session ticket that actually enables 0-RTT is issued by the QUIC server in
         `quic_link`; this record carries the swarm-side nonce window and NAT metadata.
         """
+        if not isinstance(peer_id, str) or not peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
         with self._nonce_lock:
             previous = self.zero_rtt_tickets.get(peer_id)
             # A new ticket refreshes its lifetime, never the peer's strike register.
@@ -852,9 +1052,13 @@ class AsyncQUICGeoRingTransport(RegionalGeoRingTransport):
                 return False, "invalid_0rtt_nonce"
             now = timestamp if timestamp is not None else time.time()
             if (
-                not math.isfinite(now)
+                isinstance(timestamp, bool)
+                or isinstance(max_age_sec, bool)
+                or not isinstance(now, (int, float))
+                or not isinstance(max_age_sec, (int, float))
+                or not math.isfinite(float(now))
                 or not math.isfinite(ticket.issued_at)
-                or not math.isfinite(max_age_sec)
+                or not math.isfinite(float(max_age_sec))
                 or max_age_sec < 0
             ):
                 return False, "invalid_0rtt_ticket_time"
@@ -885,11 +1089,22 @@ class AsyncQUICGeoRingTransport(RegionalGeoRingTransport):
         """Run both sides of a simultaneous-open hole punch at once (B on a worker thread)."""
         session = secrets.token_bytes(8)
         result_b: List[PunchResult] = []
-        worker = threading.Thread(
-            target=lambda: result_b.append(udp_hole_punch(sock_b, candidates_a, session, timeout))
-        )
+        start_barrier = threading.Barrier(2, timeout=max(0.5, timeout))
+
+        def _run_b() -> None:
+            try:
+                start_barrier.wait()
+            except threading.BrokenBarrierError:
+                pass
+            result_b.append(udp_hole_punch(sock_b, candidates_a, session, timeout))
+
+        worker = threading.Thread(target=_run_b)
         worker.start()
         try:
+            try:
+                start_barrier.wait()
+            except threading.BrokenBarrierError:
+                pass
             result_a = udp_hole_punch(sock_a, candidates_b, session, timeout)
         finally:
             worker.join()
@@ -1191,6 +1406,8 @@ class AsyncQUICGeoRingTransport(RegionalGeoRingTransport):
         `simulate_udp_blocked` aims the QUIC client at a UDP port nothing listens on, so the
         handshake genuinely times out and the libp2p WebSocket fallback carries the frames.
         """
+        if isinstance(num_frames, bool) or not isinstance(num_frames, int) or num_frames < 1:
+            raise ValueError("num_frames must be a positive integer >= 1")
         pkt = compress_hidden_states_fp8(hidden_states)
         peer_id = "peer-paris-01"
         self.issue_0rtt_ticket(peer_id)
@@ -1351,7 +1568,7 @@ class AsyncQUICGeoRingTransport(RegionalGeoRingTransport):
             from_a, data_at_b = client_b.recv_from(timeout)
             client_b.send_to(relay_a, probe[::-1])
             from_b, data_at_a = client_a.recv_from(timeout)
-            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            elapsed_ms = ((time.perf_counter() - t0) * 1000.0) / 2.0
             verified = (
                 data_at_b == probe and data_at_a == probe[::-1] and from_a == relay_a and from_b == relay_b
             )

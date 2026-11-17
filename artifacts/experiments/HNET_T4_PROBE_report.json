@@ -1,0 +1,62 @@
+{
+  "schema_version": "hivemind-hnet-t4-probe/v1.0",
+  "issue": 448,
+  "plan_doc": "docs/HNET_T4_PROBE_PLAN.md",
+  "preflight": {
+    "allowed": true,
+    "reason": "idle_and_above_vram_floor",
+    "free_vram_mib": 4609.0,
+    "min_free_vram_mib": 4300.0
+  },
+  "hn1_concept_probe": {
+    "status": "MEASURED",
+    "report_sha256": "2b3227b58201ea286882dab8654aa91e54b791ae9cf3a36757980294493e286f",
+    "model": "Qwen/Qwen2.5-0.5B",
+    "H1_supported": true,
+    "H2_supported": true,
+    "H3_supported": false,
+    "positive_control_valid": false,
+    "negative_control_valid": false,
+    "experiment_valid": false
+  },
+  "measurements": {
+    "1_sm75_checkpoint_load": {
+      "status": "NOT_RUN",
+      "reason": "parked_before_t4_download: HN1 boundary-signal concept probe failed both validity controls (experiment_valid=false) and analytic Measurement 4 shows 0.6481x boundary reduction vs BPE (< 2.0x required)"
+    },
+    "2_peak_vram_and_speed": {
+      "status": "NOT_RUN",
+      "reason": "parked_before_t4_download: HN1 boundary-signal concept probe failed both validity controls (experiment_valid=false) and analytic Measurement 4 shows 0.6481x boundary reduction vs BPE (< 2.0x required)"
+    },
+    "3_bytes_per_chunk_4sets": {
+      "status": "NOT_RUN",
+      "reason": "parked_before_t4_download: HN1 boundary-signal concept probe failed both validity controls (experiment_valid=false) and analytic Measurement 4 shows 0.6481x boundary reduction vs BPE (< 2.0x required)"
+    },
+    "4_activation_boundary_bytes": {
+      "status": "MEASURED",
+      "hnet_dim": 1536,
+      "qwen_dim": 896,
+      "dtype_bytes": 2,
+      "bytes_per_hnet_chunk": 5.0,
+      "bytes_per_bpe_token": 4.5,
+      "hnet_boundary_bytes_per_generated_byte": 614.4,
+      "bpe_boundary_bytes_per_generated_byte": 398.2222,
+      "reduction_factor_vs_bpe_split": 0.6481,
+      "reduction_factor_vs_raw_byte_routing": 5.0,
+      "meets_2x_reduction_vs_bpe_threshold": false
+    },
+    "5_held_out_bits_per_byte": {
+      "status": "NOT_RUN",
+      "reason": "parked_before_t4_download: HN1 boundary-signal concept probe failed both validity controls (experiment_valid=false) and analytic Measurement 4 shows 0.6481x boundary reduction vs BPE (< 2.0x required)"
+    },
+    "6_chunk_to_qwen_token_ratio": {
+      "status": "NOT_RUN",
+      "reason": "parked_before_t4_download: HN1 boundary-signal concept probe failed both validity controls (experiment_valid=false) and analytic Measurement 4 shows 0.6481x boundary reduction vs BPE (< 2.0x required)"
+    }
+  },
+  "decision": {
+    "continue_to_two_host_pipeline_split": false,
+    "verdict": "PARK_CHUNK_LEVEL_ROUTING",
+    "governor_or_hold_modified": false
+  }
+}

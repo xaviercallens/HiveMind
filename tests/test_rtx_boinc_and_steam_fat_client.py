@@ -180,7 +180,7 @@ def test_portal_free_steam_game_registration_login_and_boinc_contribution(tmp_pa
     # 2. Verify /v1/hivemind/steam/status
     st = client.get("/v1/hivemind/steam/status").json()
     assert st["app_id"] == 3133700
-    assert st["portal_registration_status"] == "REGISTERED_AND_LIVE"
+    assert st["portal_registration_status"] == "NOT_REGISTERED"
 
     # 3. Simulate first-time Registration of Free Steam Game player
     reg = client.post(
@@ -428,12 +428,17 @@ def test_intense_all_10_stitch_planet_keys_vetting_and_bee_moe_scan() -> None:
         ("koi14", "SECTOR-09-KOI-CAND-14", "FALSE_POSITIVE"),
         ("koibin", "SECTOR-10-KOI-BIN-02", "FALSE_POSITIVE"),
     ]
+    # The first accurate discovery of a target earns the award and a repeat by the same tag earns nothing, so each run
+    # needs a tag the persisted ledger has never seen; a fixed tag would pass once and then fail on every later run.
+    import uuid
+
+    gamer_tag = f"IntensePytest-{uuid.uuid4().hex[:12]}"
     for key, expected_sector, classification in expected_planets:
         scan = client.post("/api/astro/bee-moe-scan", json={"target_id": key}).json()
         assert scan["target_id"] == expected_sector
         disc = client.post(
             "/api/astro/discover",
-            json={"target_id": key, "gamer_tag": "IntensePytest", "player_classification": classification},
+            json={"target_id": key, "gamer_tag": gamer_tag, "player_classification": classification},
         ).json()
         assert disc["accurate"] is True
         assert disc["points_earned"] == 600

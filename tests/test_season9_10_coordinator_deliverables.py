@@ -353,10 +353,12 @@ def test_hm_s10_02_orchestrator_lean_axioms_gate_and_scientific_lead_pr_guard() 
     assert cov_bad["all_theorems_have_print_axioms"] is False
     assert cov_bad["unprinted_theorems"] == ["t2"]
 
-    # Audit the real repo's HiveMindSpec.lean (161 theorems after the Season29 section)
+    # Audit the real repo's HiveMindSpec.lean dynamically without hardcoded literal theorem counts
+    spec_src = (Path(__file__).resolve().parents[1] / "lean4" / "HiveMindSpec.lean").read_text(encoding="utf-8")
+    expected_cov = verify_lean_print_axioms_coverage(spec_src)
     audit = run_hourly_quality_and_experiment_audit()
-    assert audit["lean4_theorems_verified"] == 161
-    assert audit["lean4_print_axioms_lines"] == 161
+    assert audit["lean4_theorems_verified"] == expected_cov["declared_theorems"]
+    assert audit["lean4_print_axioms_lines"] == expected_cov["print_axioms_lines"]
     assert audit["lean4_all_theorems_have_print_axioms"] is True
     assert audit["lean4_sorry_count"] == 0
 

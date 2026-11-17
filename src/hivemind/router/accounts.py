@@ -49,6 +49,16 @@ MIN_SECRET_BYTES = 32
 DEFAULT_VALIDATOR_SHARE = 0.10
 DEFAULT_BURN_SHARE = 0.05
 
+VXTZQ_MODEL_TESTING_TARGET_HMT = 100_000.0
+VXTZQ_MODEL_TESTING_GRANT_REF = "partner-model-testing-grant:vxtzq-crowd-v1-100k"
+# Only the reserved, seeded handle: a variant or a self-declared e-mail would let anyone who registers it first claim the
+# partner allocation (owner decision 2026-11-12: the allocation is granted once by an admin).
+VXTZQ_HANDLES: tuple[str, ...] = ("vxtzq",)
+DEFAULT_WELCOME_BONUS_HMT = 500.0
+DEFAULT_CONTRIBUTOR_ROLE_BONUS_HMT = 1_000.0
+DEFAULT_DAILY_TESTING_FAUCET_HMT = 250.0
+DAILY_TESTING_FAUCET_MAX_BALANCE_HMT = 500.0
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts(
     account_id TEXT PRIMARY KEY,
@@ -65,6 +75,33 @@ CREATE TABLE IF NOT EXISTS starter_grant_ips(
     utc REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS starter_grant_ips_hash ON starter_grant_ips(ip_hash, utc);
+CREATE TABLE IF NOT EXISTS bonus_claims(
+    account_id TEXT NOT NULL,
+    bonus_code TEXT NOT NULL,
+    amount REAL NOT NULL,
+    utc REAL NOT NULL,
+    PRIMARY KEY(account_id, bonus_code)
+);
+CREATE INDEX IF NOT EXISTS bonus_claims_account_utc ON bonus_claims(account_id, utc);
+CREATE TABLE IF NOT EXISTS bonus_claim_ips(
+    ip_hash TEXT NOT NULL,
+    utc REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS bonus_claim_ips_hash ON bonus_claim_ips(ip_hash, utc);
+CREATE TABLE IF NOT EXISTS point_transfers(
+    transfer_id TEXT PRIMARY KEY,
+    sender_id TEXT NOT NULL,
+    sender_handle TEXT NOT NULL,
+    recipient_id TEXT NOT NULL,
+    recipient_handle TEXT NOT NULL,
+    amount REAL NOT NULL,
+    memo TEXT NOT NULL,
+    idempotency_key TEXT UNIQUE,
+    amcp_event_id TEXT,
+    utc REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS point_transfers_sender_utc ON point_transfers(sender_id, utc DESC);
+CREATE INDEX IF NOT EXISTS point_transfers_recipient_utc ON point_transfers(recipient_id, utc DESC);
 CREATE TABLE IF NOT EXISTS ledger(
     seq INTEGER PRIMARY KEY,
     account_id TEXT NOT NULL,
@@ -138,6 +175,8 @@ CREATE TABLE IF NOT EXISTS usage_telemetry(
     app_title TEXT NOT NULL,
     is_stream INTEGER NOT NULL,
     latency_ms REAL NOT NULL,
+    ttft_ms REAL,
+    tokens_per_s REAL,
     prompt_tokens INTEGER NOT NULL,
     completion_tokens INTEGER NOT NULL,
     billed_tokens INTEGER NOT NULL,
@@ -197,6 +236,7 @@ CREATE TABLE IF NOT EXISTS opentrainer_nodes(
     network_mode TEXT NOT NULL,
     stacks_json TEXT NOT NULL,
     host_label TEXT NOT NULL,
+    active_campaign TEXT NOT NULL DEFAULT 'E8-STAGE2-TINY-GRANITE-MOE-QLORA',
     last_heartbeat_utc REAL NOT NULL,
     PRIMARY KEY(account_id, node_id)
 );
@@ -214,6 +254,12 @@ CREATE TABLE IF NOT EXISTS opentrainer_rounds(
     vram_free_mib INTEGER NOT NULL,
     vram_total_mib INTEGER NOT NULL,
     utc REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS boinc_receipts (
+    receipt_sha256 TEXT PRIMARY KEY,
+    account_id     TEXT NOT NULL,
+    utc            REAL NOT NULL
 );
 """
 
@@ -235,10 +281,19 @@ class DuplicateRequest(ValueError):
     """Raised when a ``request_id`` has already been settled."""
 
 
+class DuplicateOpenTrainerRound(ValueError):
+    """Raised by :meth:`RouterStore.record_opentrainer_round_submission` when this account already submitted this (run_id, round_index)."""
+
+
 class TooManyEndpoints(ValueError):
     """Raised by :meth:`RouterStore.upsert_producer` when an account already advertises ``MAX_ENDPOINTS_PER_ACCOUNT`` endpoints."""
 
 
+class TooManyOpenTrainerNodes(ValueError):
+    """Raised by :meth:`RouterStore.upsert_opentrainer_node` when an account already has ``MAX_OPENTRAINER_NODES_PER_ACCOUNT`` distinct host labels."""
+
+
+MAX_OPENTRAINER_NODES_PER_ACCOUNT = 8  # IP-211: host_label is caller-chosen, so one account could otherwise register unlimited "GPUs"
 MAX_ENDPOINTS_PER_ACCOUNT = 8  # one account may run several GPUs / servers; bounded so a heartbeat flood cannot grow the table without limit
 STALE_ENDPOINT_PURGE_S = 86_400.0  # an endpoint silent for a day is forgotten (it left the pool long ago) and frees its slot
 
@@ -252,6 +307,33 @@ IDENTITY_PROVIDER_NAME_RE = re.compile(r"^[a-z][a-z0-9]{1,15}$")
 
 class ReservedHandle(ValueError):
     """The handle belongs to an identity provider and cannot be registered by hand."""
+
+
+MODERN_HASH_PREFIX = "pbkdf2_sha256$"
+MODERN_HASH_ITERATIONS = 600_000  # OWASP 2023 recommendation for PBKDF2-HMAC-SHA256
+
+
+def modern_password_hash(password: str, iterations: int | None = None) -> str:
+    """``pbkdf2_sha256$<iterations>$<salt hex>$<digest hex>`` with a fresh 16-byte salt (``MODERN_HASH_ITERATIONS`` by default,
+    read at call time)."""
+    iterations = MODERN_HASH_ITERATIONS if iterations is None else iterations
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations).hex()
+    return f"{MODERN_HASH_PREFIX}{iterations}${salt.hex()}${digest}"
+
+
+def verify_modern_password_hash(stored: str, password: str) -> bool:
+    """Constant-time check of a modern hash; iteration counts outside 100k-5M are refused (no cheap or abusive hashes)."""
+    try:
+        _algo, iters_text, salt_hex, digest_hex = stored.split("$")
+        iterations = int(iters_text)
+        salt = bytes.fromhex(salt_hex)
+    except ValueError:
+        return False
+    if not (100_000 <= iterations <= 5_000_000) or not salt or not digest_hex:
+        return False
+    computed = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations).hex()
+    return hmac.compare_digest(computed, digest_hex)
 
 
 class HandleTaken(ValueError):
@@ -279,6 +361,8 @@ LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
         "aliases": (
             "xaviercallens",
             "@xaviercallens",
+            "callensxavier",
+            "@callensxavier",
             "callensxavier@gmail.com",
             "xavier@hivemind.network",
             "hm_live_xavier_994a102f88c",
@@ -289,8 +373,36 @@ LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
     },
     "vxtzq": {
         "handle": "vxtzq",
-        "aliases": ("@vxtzq", "vxtzq@github.com", "hm_live_vxtzq_771a904c55b"),
+        "aliases": (
+            "@vxtzq",
+            "vxtzq",
+            "vxtzq1",
+            "@vxtzq1",
+            "vxtzq@github.com",
+            "116555319+vxtzq@users.noreply.github.com",
+            "vxtzq@crowdgpt.net",
+            "contact@crowdgpt.net",
+            "vxtzq@hivemind.network",
+            "hm_live_vxtzq_771a904c55b",
+        ),
         "email": "vxtzq@github.com",
+        "role": "prosumer",
+        "starter_hmt": VXTZQ_MODEL_TESTING_TARGET_HMT,
+    },
+    "jblam62122": {
+        "handle": "jblam62122",
+        "aliases": (
+            "jblam62122",
+            "@jblam62122",
+            "jblam-o",
+            "@jblam-o",
+            "jblam_o",
+            "@jblam_o",
+            "43570951+jblam-o@users.noreply.github.com",
+            "jblam-o@github.com",
+            "jblam62122@hivemind.network",
+        ),
+        "email": "43570951+jblam-o@users.noreply.github.com",
         "role": "prosumer",
         "starter_hmt": 30000.0,
     },
@@ -526,78 +638,100 @@ def _finite(value: float, name: str) -> float:
 class RouterStore:
     """SQLite-backed accounts, API keys, producer registry, usage log and hash-chained HMT ledger."""
 
-    def __init__(self, path: Path | str, secret: bytes) -> None:
+    def __init__(self, path: Path | str, secret: bytes, *, writer_lock: Any = None) -> None:
         if not isinstance(secret, (bytes, bytearray)) or len(secret) < MIN_SECRET_BYTES:
             raise ValueError(f"secret must be at least {MIN_SECRET_BYTES} bytes")
         self._secret = bytes(secret)
         self._identity_providers: set[str] = set(IDENTITY_PROVIDERS)
         self._active_key_cache: dict[str, str] = {}
         self._lock = threading.Lock()
+        self._writer_lock: Any = None
+        has_write_lease = True
+        if writer_lock is not None:
+            has_write_lease = bool(writer_lock.acquire())
         target = ":memory:" if str(path) == ":memory:" else str(path)
         self._conn = sqlite3.connect(target, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
-        if target != ":memory:":
+        if target != ":memory:" and has_write_lease:
             self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
-        with self._tx():
-            for statement in _SCHEMA.split(";"):
-                if statement.strip():
-                    self._conn.execute(statement)
-            # Databases created before the endpoint token existed are upgraded in place (additive, NULL for old rows).
-            columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producers)")}
-            if "endpoint_token" not in columns:
-                self._conn.execute("ALTER TABLE producers ADD COLUMN endpoint_token TEXT")
-            # Databases created before model residency reporting (HM-S16-06) gain the nullable column in place.
-            endpoint_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producer_endpoints)")}
-            if "residency_json" not in endpoint_columns:
-                self._conn.execute("ALTER TABLE producer_endpoints ADD COLUMN residency_json TEXT")
-            # Databases created before the test/probe flag existed gain it in place; every existing account stays a real one.
-            account_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(accounts)")}
-            if "is_test" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0")
-            # Databases created before account kinds (HM-S16-07) gain the column in place: flagged accounts become 'test', all others 'user'.
-            if "kind" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'")
-                self._conn.execute("UPDATE accounts SET kind='test' WHERE is_test=1")
-            if "password_hash" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN password_hash TEXT")
-            if "email" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN email TEXT")
-            acct_sql_row = self._conn.execute(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'"
-            ).fetchone()
-            if acct_sql_row and "'trainer'" not in str(acct_sql_row["sql"]):
+        if has_write_lease:
+            with self._tx():
+                for statement in _SCHEMA.split(";"):
+                    if statement.strip():
+                        self._conn.execute(statement)
+                # Databases created before the endpoint token existed are upgraded in place (additive, NULL for old rows).
+                columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producers)")}
+                if "endpoint_token" not in columns:
+                    self._conn.execute("ALTER TABLE producers ADD COLUMN endpoint_token TEXT")
+                # Databases created before model residency reporting (HM-S16-06) gain the nullable column in place.
+                endpoint_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producer_endpoints)")}
+                if "residency_json" not in endpoint_columns:
+                    self._conn.execute("ALTER TABLE producer_endpoints ADD COLUMN residency_json TEXT")
+                telemetry_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(usage_telemetry)")}
+                if "ttft_ms" not in telemetry_columns:
+                    self._conn.execute("ALTER TABLE usage_telemetry ADD COLUMN ttft_ms REAL")
+                if "tokens_per_s" not in telemetry_columns:
+                    self._conn.execute("ALTER TABLE usage_telemetry ADD COLUMN tokens_per_s REAL")
+                opentrainer_node_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(opentrainer_nodes)")}
+                if "active_campaign" not in opentrainer_node_columns:
+                    self._conn.execute(
+                        "ALTER TABLE opentrainer_nodes ADD COLUMN active_campaign TEXT NOT NULL DEFAULT 'E8-STAGE2-TINY-GRANITE-MOE-QLORA'"
+                    )
+                # Databases created before the test/probe flag existed gain it in place; every existing account stays a real one.
+                account_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(accounts)")}
+                if "is_test" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0")
+                # Databases created before account kinds (HM-S16-07) gain the column in place: flagged accounts become 'test', all others 'user'.
+                if "kind" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'")
+                    self._conn.execute("UPDATE accounts SET kind='test' WHERE is_test=1")
+                if "password_hash" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN password_hash TEXT")
+                if "email" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN email TEXT")
+                acct_sql_row = self._conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'"
+                ).fetchone()
+                if acct_sql_row and "'trainer'" not in str(acct_sql_row["sql"]):
+                    self._conn.execute(
+                        "CREATE TABLE accounts_opentrainer_mig("
+                        "account_id TEXT PRIMARY KEY, handle TEXT NOT NULL UNIQUE, "
+                        "role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','trainer','admin')), "
+                        "key_hash TEXT NOT NULL UNIQUE, created_utc REAL NOT NULL, max_price_per_1k REAL NOT NULL, "
+                        "is_test INTEGER NOT NULL DEFAULT 0, kind TEXT NOT NULL DEFAULT 'user', "
+                        "password_hash TEXT, email TEXT)"
+                    )
+                    self._conn.execute(
+                        "INSERT INTO accounts_opentrainer_mig("
+                        "account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email"
+                        ") SELECT account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email "
+                        "FROM accounts"
+                    )
+                    self._conn.execute("DROP TABLE accounts")
+                    self._conn.execute("ALTER TABLE accounts_opentrainer_mig RENAME TO accounts")
+                # One account may advertise several endpoints (several GPUs / servers): rows of the old one-per-account table move across once.
                 self._conn.execute(
-                    "CREATE TABLE accounts_opentrainer_mig("
-                    "account_id TEXT PRIMARY KEY, handle TEXT NOT NULL UNIQUE, "
-                    "role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','trainer','admin')), "
-                    "key_hash TEXT NOT NULL UNIQUE, created_utc REAL NOT NULL, max_price_per_1k REAL NOT NULL, "
-                    "is_test INTEGER NOT NULL DEFAULT 0, kind TEXT NOT NULL DEFAULT 'user', "
-                    "password_hash TEXT, email TEXT)"
+                    "INSERT OR IGNORE INTO producer_endpoints(account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
+                    "execution_class, endpoint_token) SELECT account_id, rtrim(endpoint_url, '/'), models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
+                    "execution_class, endpoint_token FROM producers"
                 )
-                self._conn.execute(
-                    "INSERT INTO accounts_opentrainer_mig("
-                    "account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email"
-                    ") SELECT account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email "
-                    "FROM accounts"
-                )
-                self._conn.execute("DROP TABLE accounts")
-                self._conn.execute("ALTER TABLE accounts_opentrainer_mig RENAME TO accounts")
-            # One account may advertise several endpoints (several GPUs / servers): rows of the old one-per-account table move across once.
-            self._conn.execute(
-                "INSERT OR IGNORE INTO producer_endpoints(account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
-                "execution_class, endpoint_token) SELECT account_id, rtrim(endpoint_url, '/'), models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
-                "execution_class, endpoint_token FROM producers"
-            )
-            for sys_id in _ESCROW_ACCOUNTS:
-                self._conn.execute(
-                    "INSERT OR IGNORE INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k) VALUES (?,?,?,?,?,?)",
-                    (sys_id, sys_id, "admin", f"!{sys_id}", time.time(), 0.0),
-                )
+                for sys_id in _ESCROW_ACCOUNTS:
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k) VALUES (?,?,?,?,?,?)",
+                        (sys_id, sys_id, "admin", f"!{sys_id}", time.time(), 0.0),
+                    )
+        self._writer_lock = writer_lock
+
+    @property
+    def read_only(self) -> bool:
+        return bool(self._writer_lock is not None and not self._writer_lock.is_writer)
 
     # ------------------------------------------------------------------ plumbing
     @contextmanager
     def _tx(self) -> Iterator[sqlite3.Connection]:
+        if self._writer_lock is not None:
+            self._writer_lock.assert_writable()
         with self._lock:
             self._conn.execute("BEGIN IMMEDIATE")
             try:
@@ -613,6 +747,8 @@ class RouterStore:
 
     def close(self) -> None:
         with self._lock:
+            if self._writer_lock is not None and self._writer_lock.is_writer:
+                self._writer_lock.release()
             self._conn.close()
 
     @staticmethod
@@ -696,6 +832,14 @@ class RouterStore:
         account_id = self._hmac_hex(handle)[:32]
         new_key = "hm-" + secrets.token_urlsafe(32)
         with self._tx() as conn:
+            self._ensure_auth_v32_tables(conn)
+            linked = conn.execute(
+                "SELECT account_id FROM identity_links WHERE subject_hmac=?", (self._hmac_hex(f"{provider}:{subject}"),)
+            ).fetchone()
+            if linked is not None:
+                # the provider identity was linked to an existing (e.g. e-mail/password) account by its owner
+                conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (self._hmac_hex(new_key), str(linked["account_id"])))
+                return str(linked["account_id"]), new_key, False
             row = conn.execute("SELECT role FROM accounts WHERE account_id=?", (account_id,)).fetchone()
             if row is not None:
                 conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (self._hmac_hex(new_key), account_id))
@@ -725,6 +869,249 @@ class RouterStore:
     def _hash_password(self, normalised_handle: str, password: str) -> str:
         salt = self._secret + b":pwd:" + normalised_handle.encode("utf-8")
         return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000).hex()
+
+    def _verify_row_password(
+        self,
+        conn: sqlite3.Connection,
+        row: sqlite3.Row,
+        password: str,
+        *,
+        email_hint: str = "",
+    ) -> tuple[bool, bool]:
+        """Return ``(has_password, password_matches)`` for ``row`` across current and legacy password formats.
+
+        Only evidence bound to this row counts: its own ``password_hash``, legacy ``credentials`` rows tied to its
+        ``account_id``, and legacy rows found through e-mail addresses that belong to this account (its stored e-mail and
+        the e-mails of the legacy identity its handle or e-mail resolves to). ``email_hint`` comes from the caller and is
+        therefore never used to find credentials: a caller could otherwise pair someone else's account with their own
+        e-mail and password. It is kept in the signature for callers' compatibility.
+        """
+        del email_hint
+        stored_pwd = str(row["password_hash"] or "") if "password_hash" in row.keys() else ""
+        raw_handle = str(row["handle"] or "")
+        row_email = str(row["email"] or "") if "email" in row.keys() else ""
+        legacy_meta = self._resolve_legacy_user(raw_handle) or (self._resolve_legacy_user(row_email) if row_email else None)
+        email_candidates = [
+            e.strip().lower()
+            for e in (
+                row_email,
+                str(legacy_meta.get("email", "")) if legacy_meta else "",
+                *[str(a) for a in (legacy_meta.get("aliases", ()) if legacy_meta else ()) if "@" in str(a)],
+            )
+            if e and "@" in e
+        ]
+        legacy_cred_rows: list[sqlite3.Row] = []
+        try:
+            by_acct = conn.execute(
+                "SELECT salt_hex, password_hash FROM credentials WHERE account_id=?",
+                (str(row["account_id"]),),
+            ).fetchone()
+            if by_acct is not None:
+                legacy_cred_rows.append(by_acct)
+            for em in dict.fromkeys(email_candidates):
+                for ehash in (self._hmac_hex(f"email:{em}"), self._hmac_hex(em)):
+                    by_ehash = conn.execute(
+                        "SELECT salt_hex, password_hash FROM credentials WHERE email_hash=?",
+                        (ehash,),
+                    ).fetchone()
+                    if by_ehash is not None:
+                        legacy_cred_rows.append(by_ehash)
+            # No table-wide fallback: trying every stored credential let any legacy user's password open another account.
+        except sqlite3.OperationalError:
+            pass
+        has_pwd = bool(stored_pwd or legacy_cred_rows)
+        if not has_pwd:
+            return False, False
+        pwd_candidates = [p for p in dict.fromkeys((password, password.strip())) if p]
+        if not pwd_candidates:
+            return True, False
+
+        handle_candidates = {raw_handle, raw_handle.lower()}
+        try:
+            handle_candidates.add(normalise_identity(raw_handle))
+        except Exception:
+            pass
+
+        if stored_pwd.startswith(MODERN_HASH_PREFIX):
+            for p_cand in pwd_candidates:
+                if verify_modern_password_hash(stored_pwd, p_cand):
+                    return True, True
+        elif stored_pwd:
+            if ":" in stored_pwd:
+                salt_hex, _, exp_hex = stored_pwd.partition(":")
+                try:
+                    salt_bytes = bytes.fromhex(salt_hex)
+                except ValueError:
+                    salt_bytes = b""
+                if salt_bytes and exp_hex:
+                    for p_cand in pwd_candidates:
+                        for iters in (200_000, 120_000, 100_000):
+                            digest = hashlib.pbkdf2_hmac("sha256", p_cand.encode("utf-8"), salt_bytes, iters).hex()
+                            if hmac.compare_digest(exp_hex, digest):
+                                return True, True
+            for h_cand in handle_candidates:
+                for p_cand in pwd_candidates:
+                    if hmac.compare_digest(stored_pwd, self._hash_password(h_cand, p_cand)):
+                        return True, True
+
+        seen_cred_pairs: set[tuple[str, str]] = set()
+        for legacy_cred_row in legacy_cred_rows:
+            salt_hex = str(legacy_cred_row["salt_hex"] or "")
+            exp_hex = str(legacy_cred_row["password_hash"] or "")
+            if (salt_hex, exp_hex) in seen_cred_pairs:
+                continue
+            seen_cred_pairs.add((salt_hex, exp_hex))
+            try:
+                salt_bytes = bytes.fromhex(salt_hex)
+            except ValueError:
+                salt_bytes = b""
+            if salt_bytes and exp_hex:
+                for p_cand in pwd_candidates:
+                    for iters in (200_000, 120_000, 100_000):
+                        digest = hashlib.pbkdf2_hmac("sha256", p_cand.encode("utf-8"), salt_bytes, iters).hex()
+                        if hmac.compare_digest(exp_hex, digest):
+                            return True, True
+
+        # No account accepts an arbitrary password, and no failed check ever writes a new hash: a placeholder or missing
+        # hash means the owner proves the account with its hm-... key and sets a password with ``set_password``.
+        return True, False
+
+    # ---- v3.2: password reset and identity linking -------------------------------------------------------------------
+
+    PASSWORD_RESET_TTL_S: float = 1800.0
+
+    @staticmethod
+    def _ensure_auth_v32_tables(conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS password_resets(token_hmac TEXT PRIMARY KEY, account_id TEXT NOT NULL, "
+            "created_utc REAL NOT NULL, expires_utc REAL NOT NULL, used_utc REAL)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS identity_links(subject_hmac TEXT PRIMARY KEY, provider TEXT NOT NULL, "
+            "account_id TEXT NOT NULL, linked_utc REAL NOT NULL)"
+        )
+
+    def account_id_for_email(self, email: str) -> str | None:
+        """The account whose stored e-mail is ``email`` (case-insensitive), or ``None``. Used only to address a reset
+        e-mail; the caller must answer identically whether or not an account exists."""
+        clean = (email or "").strip().lower()
+        if "@" not in clean or len(clean) > 254:
+            return None
+        with self._lock:
+            row = self._conn.execute("SELECT account_id FROM accounts WHERE lower(email)=? LIMIT 1", (clean,)).fetchone()
+            if row is not None:
+                return str(row["account_id"])
+            # previous users whose e-mail is only in the legacy credentials table (as either hash form)
+            try:
+                for ehash in (self._hmac_hex(f"email:{clean}"), self._hmac_hex(clean)):
+                    cred = self._conn.execute(
+                        "SELECT c.account_id FROM credentials c JOIN accounts a ON a.account_id = c.account_id WHERE c.email_hash=? LIMIT 1",
+                        (ehash,),
+                    ).fetchone()
+                    if cred is not None:
+                        return str(cred["account_id"])
+            except sqlite3.OperationalError:
+                pass
+            # previous users known by their legacy identity (the e-mail is recorded in LEGACY_KNOWN_USERS).
+            # Only the primary e-mail: a reset link sent to an alias would hand the account to whoever reads that
+            # mailbox (a shared contact@ address, a domain the user does not control). Aliases stay sign-in names.
+            legacy = self._resolve_legacy_user(clean)
+            if legacy is not None and str(legacy.get("email", "")).lower() == clean:
+                by_handle = self._conn.execute(
+                    "SELECT account_id FROM accounts WHERE lower(handle)=lower(?) LIMIT 1", (str(legacy.get("handle", "")),)
+                ).fetchone()
+                if by_handle is not None:
+                    return str(by_handle["account_id"])
+        return None
+
+    def create_password_reset(self, account_id: str, now: float | None = None) -> str:
+        """Issue a single-use reset token for ``account_id`` (256 bits, stored only as an HMAC, valid 30 minutes).
+        Earlier unused tokens of the account are revoked."""
+        now = time.time() if now is None else now
+        token = secrets.token_urlsafe(32)
+        with self._tx() as conn:
+            self._ensure_auth_v32_tables(conn)
+            if conn.execute("SELECT 1 FROM accounts WHERE account_id=?", (account_id,)).fetchone() is None:
+                raise UnknownAccount(account_id)
+            conn.execute("DELETE FROM password_resets WHERE account_id=? AND used_utc IS NULL", (account_id,))
+            conn.execute(
+                "INSERT INTO password_resets(token_hmac, account_id, created_utc, expires_utc) VALUES (?,?,?,?)",
+                (self._hmac_hex(f"reset:{token}"), account_id, now, now + self.PASSWORD_RESET_TTL_S),
+            )
+        return token
+
+    def consume_password_reset(self, token: str, new_password: str, now: float | None = None) -> str:
+        """Set ``new_password`` for the account that owns a valid, unused, unexpired ``token``; mark it used and rotate the
+        account's API key so every earlier session and key stops working. Returns the account id.
+
+        ``InvalidCredentials`` for an unknown, used or expired token; ``ValueError`` for a weak password (the token is then
+        left unused)."""
+        now = time.time() if now is None else now
+        if not isinstance(new_password, str) or len(new_password) < 12 or len(new_password) > 256:
+            raise ValueError("password must be 12 to 256 characters")
+        if not isinstance(token, str) or not (20 <= len(token) <= 128):
+            raise InvalidCredentials("This reset link is invalid or has expired.")
+        token_hmac = self._hmac_hex(f"reset:{token}")
+        with self._tx() as conn:
+            self._ensure_auth_v32_tables(conn)
+            row = conn.execute(
+                "SELECT account_id, expires_utc, used_utc FROM password_resets WHERE token_hmac=?", (token_hmac,)
+            ).fetchone()
+            if row is None or row["used_utc"] is not None or float(row["expires_utc"]) < now:
+                raise InvalidCredentials("This reset link is invalid or has expired.")
+            account_id = str(row["account_id"])
+            conn.execute("UPDATE password_resets SET used_utc=? WHERE token_hmac=?", (now, token_hmac))
+        self.set_password(account_id, new_password)
+        self.rotate_key(account_id)
+        return account_id
+
+    def link_identity(self, account_id: str, provider: str, subject: str) -> None:
+        """Link a provider identity (already verified by the caller) to ``account_id`` so that signing in with the
+        provider opens that account. The caller must have proved ``account_id`` (its hm-... key).
+
+        ``HandleTaken`` if the identity is linked to another account or already owns a provider account of its own."""
+        if provider not in self._identity_providers and provider != "google":
+            raise ValueError(f"unknown identity provider {provider!r}")
+        subject_hmac = self._hmac_hex(f"{provider}:{subject}")
+        own_handle = f"{provider}.{subject_hmac[:32]}"
+        with self._tx() as conn:
+            self._ensure_auth_v32_tables(conn)
+            if conn.execute("SELECT 1 FROM accounts WHERE account_id=?", (account_id,)).fetchone() is None:
+                raise UnknownAccount(account_id)
+            existing = conn.execute("SELECT account_id FROM identity_links WHERE subject_hmac=?", (subject_hmac,)).fetchone()
+            if existing is not None:
+                if str(existing["account_id"]) == account_id:
+                    return
+                raise HandleTaken("this identity is already linked to another account")
+            if conn.execute("SELECT 1 FROM accounts WHERE handle=?", (own_handle,)).fetchone() is not None:
+                raise HandleTaken("this identity already has its own account; sign in with it")
+            conn.execute(
+                "INSERT INTO identity_links(subject_hmac, provider, account_id, linked_utc) VALUES (?,?,?,?)",
+                (subject_hmac, provider, account_id, time.time()),
+            )
+
+    def set_password(self, account_id: str, password: str) -> None:
+        """Set the password of ``account_id`` in the modern format (PBKDF2-HMAC-SHA256, 600,000 iterations).
+
+        The caller must already have proved the account (its own API key); this method does not authorise.
+        ``UnknownAccount`` if absent, ``ValueError`` if the password is shorter than 12 characters."""
+        if not isinstance(password, str) or len(password) < 12 or len(password) > 256:
+            raise ValueError("password must be 12 to 256 characters")
+        stored = modern_password_hash(password)
+        with self._tx() as conn:
+            if conn.execute("SELECT 1 FROM accounts WHERE account_id=?", (account_id,)).fetchone() is None:
+                raise UnknownAccount(account_id)
+            conn.execute("UPDATE accounts SET password_hash=? WHERE account_id=?", (stored, account_id))
+
+    def _upgrade_password_hash(self, conn: sqlite3.Connection, row: sqlite3.Row, password: str) -> None:
+        """After a successful check, store the password in the modern format if it is not already (legacy users migrate
+        silently on their next sign-in). Only ever called with a password that has just been verified for ``row``."""
+        if "password_hash" not in row.keys() or not password:
+            return
+        current = str(row["password_hash"] or "")
+        if current.startswith(MODERN_HASH_PREFIX):
+            return
+        conn.execute("UPDATE accounts SET password_hash=? WHERE account_id=?", (modern_password_hash(password), str(row["account_id"])))
 
     @staticmethod
     def _resolve_legacy_user(identifier: str) -> dict[str, Any] | None:
@@ -772,31 +1159,75 @@ class RouterStore:
         if "@" in cleaned_handle and not email:
             email = cleaned_handle
             cleaned_handle = cleaned_handle.split("@")[0]
+        clean_email = email.strip().lower()[:128] if email else None
+        if clean_email and 0 < len(cleaned_handle) < 3 and cleaned_handle.lower() == clean_email.split("@")[0].lower():
+            cleaned_handle = f"{cleaned_handle}_user"
         normalised = normalise_identity(cleaned_handle)
         if normalised.startswith(tuple(f"{provider}." for provider in sorted(self._identity_providers))):
             raise ReservedHandle(f"handle prefix is reserved: {normalised}")
         account_id = self._hmac_hex(normalised)[:32]
-        pwd_hash = self._hash_password(normalised, password) if password else None
-        clean_email = email.strip().lower()[:128] if email else None
+        pwd_hash = modern_password_hash(password) if password else None
 
         with self._tx() as conn:
-            row = conn.execute(
-                "SELECT * FROM accounts WHERE account_id=? OR handle=?",
-                (account_id, normalised),
-            ).fetchone()
-            if row is not None:
-                # An existing handle is returned ONLY to a caller who proves it with the account's own password. A caller
-                # without a password, or an account without one (handle-only, Google/OIDC), gets HandleTaken: register
-                # never hands out an existing account's key and never binds a password to an account it did not create.
-                existing_id = str(row["account_id"])
-                existing_pwd = row["password_hash"]
-                if not (existing_pwd and password):
+            candidate_rows: list[sqlite3.Row] = []
+
+            def _add_reg_candidate(r: sqlite3.Row | None) -> None:
+                if r is not None and all(str(x["account_id"]) != str(r["account_id"]) for x in candidate_rows):
+                    candidate_rows.append(r)
+
+            if clean_email:
+                _add_reg_candidate(
+                    conn.execute(
+                        "SELECT * FROM accounts WHERE lower(email)=lower(?)",
+                        (clean_email,),
+                    ).fetchone()
+                )
+                try:
+                    for ehash in (self._hmac_hex(f"email:{clean_email.lower()}"), self._hmac_hex(clean_email.lower())):
+                        _add_reg_candidate(
+                            conn.execute(
+                                "SELECT a.* FROM credentials c JOIN accounts a ON a.account_id = c.account_id WHERE c.email_hash=?",
+                                (ehash,),
+                            ).fetchone()
+                        )
+                except sqlite3.OperationalError:
+                    pass
+            _add_reg_candidate(
+                conn.execute(
+                    "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                    (account_id, normalised),
+                ).fetchone()
+            )
+            legacy_reg = self._resolve_legacy_user(cleaned_handle) or (
+                self._resolve_legacy_user(clean_email) if clean_email else None
+            )
+            if legacy_reg is not None:
+                leg_h = str(legacy_reg.get("handle") or "")
+                if leg_h:
+                    _add_reg_candidate(
+                        conn.execute(
+                            "SELECT * FROM accounts WHERE lower(handle)=lower(?)",
+                            (leg_h,),
+                        ).fetchone()
+                    )
+
+            if candidate_rows:
+                # An existing handle/email is returned ONLY to a caller who proves it with the account's own password.
+                if not password:
                     raise HandleTaken(f"handle already registered: {normalised}")
-                expected = self._hash_password(str(row["handle"]), password)
-                if not hmac.compare_digest(str(existing_pwd), expected):
-                    raise HandleTaken(f"handle already registered: {normalised}")
-                api_key = self._issue_or_reuse_key(conn, existing_id)
-                return existing_id, api_key, False
+                for cand in candidate_rows:
+                    has_pwd, matched_pwd = self._verify_row_password(
+                        conn,
+                        cand,
+                        password,
+                        email_hint=clean_email or "",
+                    )
+                    if has_pwd and matched_pwd:
+                        self._upgrade_password_hash(conn, cand, password)
+                        existing_id = str(cand["account_id"])
+                        api_key = self._issue_or_reuse_key(conn, existing_id)
+                        return existing_id, api_key, False
+                raise HandleTaken(f"handle already registered: {normalised}")
 
             api_key = "hm-" + secrets.token_urlsafe(32)
             conn.execute(
@@ -839,6 +1270,23 @@ class RouterStore:
             if candidate_key.startswith("hm-"):
                 acct = self.authenticate(candidate_key)
                 if acct is not None:
+                    if candidate_key != ident and ident:
+                        ident_norm = ident.lstrip("@").lower()
+                        if ident_norm not in (acct.handle.lower(), acct.account_id.lower()):
+                            legacy_ident = self._resolve_legacy_user(ident)
+                            legacy_match = (
+                                legacy_ident is not None
+                                and str(legacy_ident.get("handle", "")).lower() == acct.handle.lower()
+                            )
+                            if not legacy_match:
+                                with self._lock:
+                                    email_row = self._conn.execute(
+                                        "SELECT email FROM accounts WHERE account_id=?",
+                                        (acct.account_id,),
+                                    ).fetchone()
+                                stored_email = str(email_row["email"] or "").lower() if email_row else ""
+                                if not stored_email or ident_norm != stored_email:
+                                    continue
                     self._active_key_cache[acct.account_id] = candidate_key
                     return acct, candidate_key, False
 
@@ -857,29 +1305,69 @@ class RouterStore:
             normalised = ""
 
         with self._tx() as conn:
-            row = None
+            candidate_rows: list[sqlite3.Row] = []
+
+            def _add_candidate(r: sqlite3.Row | None) -> None:
+                if r is not None and all(str(x["account_id"]) != str(r["account_id"]) for x in candidate_rows):
+                    candidate_rows.append(r)
+
+            email_candidates = [email_candidate] if email_candidate else []
+            if "@" in ident and not ident.strip().startswith("@"):
+                raw_em = ident.strip().lower()
+                if raw_em not in email_candidates:
+                    email_candidates.append(raw_em)
+            for em_cand in email_candidates:
+                _add_candidate(
+                    conn.execute(
+                        "SELECT * FROM accounts WHERE lower(email)=lower(?)",
+                        (em_cand,),
+                    ).fetchone()
+                )
             if normalised:
                 candidate_id = self._hmac_hex(normalised)[:32]
-                row = conn.execute(
-                    "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
-                    (candidate_id, normalised),
-                ).fetchone()
-            if row is None and email_candidate:
-                row = conn.execute(
-                    "SELECT * FROM accounts WHERE lower(email)=lower(?)",
-                    (email_candidate,),
-                ).fetchone()
-            if row is None and normalised:
+                _add_candidate(
+                    conn.execute(
+                        "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                        (candidate_id, normalised),
+                    ).fetchone()
+                )
                 alt = normalised.replace("-", "_") if "-" in normalised else normalised.replace("_", "-")
-                row = conn.execute(
-                    "SELECT * FROM accounts WHERE lower(handle)=lower(?)",
-                    (alt,),
-                ).fetchone()
+                _add_candidate(
+                    conn.execute(
+                        "SELECT * FROM accounts WHERE lower(handle)=lower(?)",
+                        (alt,),
+                    ).fetchone()
+                )
+            if email_candidate or "@" in ident:
+                em_lookup = (email_candidate or ident.strip()).lower()
+                try:
+                    for ehash in (self._hmac_hex(f"email:{em_lookup}"), self._hmac_hex(em_lookup)):
+                        _add_candidate(
+                            conn.execute(
+                                "SELECT a.* FROM credentials c JOIN accounts a ON a.account_id = c.account_id WHERE c.email_hash=?",
+                                (ehash,),
+                            ).fetchone()
+                        )
+                except sqlite3.OperationalError:
+                    pass
 
-            if row is not None:
-                acct_obj = self._row_account(row)
-                stored_pwd = row["password_hash"]
-                if not stored_pwd:
+            if candidate_rows:
+                any_has_pwd = False
+                for cand in candidate_rows:
+                    has_pwd, matched_pwd = self._verify_row_password(
+                        conn,
+                        cand,
+                        password,
+                        email_hint=email_candidate or (ident if "@" in ident else ""),
+                    )
+                    if has_pwd:
+                        any_has_pwd = True
+                    if has_pwd and matched_pwd:
+                        self._upgrade_password_hash(conn, cand, password)
+                        acct_obj = self._row_account(cand)
+                        api_key = self._issue_or_reuse_key(conn, acct_obj.account_id)
+                        return acct_obj, api_key, False
+                if not any_has_pwd:
                     # A handle-only or Google/OIDC account has no password to check: knowing its handle proves nothing, and
                     # binding the caller's password here would hand the account to whoever asks first.
                     raise InvalidCredentials(
@@ -887,11 +1375,7 @@ class RouterStore:
                     )
                 if not pwd:
                     raise InvalidCredentials("Password is required for this account.")
-                expected = self._hash_password(acct_obj.handle, pwd)
-                if not hmac.compare_digest(str(stored_pwd), expected):
-                    raise InvalidCredentials("Invalid username or password.")
-                api_key = self._issue_or_reuse_key(conn, acct_obj.account_id)
-                return acct_obj, api_key, False
+                raise InvalidCredentials("Invalid username or password.")
 
         # 3. Unknown account: login never creates one (it used to "restore" it, with a starter grant, for any handle asked
         #    for). The store is replicated, so a real account does not vanish; new users register. ``auto_restore_previous``
@@ -1445,17 +1929,30 @@ class RouterStore:
         completion_tokens: int,
         billed_tokens: int,
         charged_hmt: float,
+        ttft_ms: float | None = None,
+        tokens_per_s: float | None = None,
         now_utc: float | None = None,
     ) -> None:
         """Store privacy-preserving usage metadata for one settled request (never raw prompt text or IP)."""
         stamp = time.time() if now_utc is None else float(now_utc)
         lat = max(0.0, float(latency_ms)) if math.isfinite(latency_ms) else 0.0
+        clean_ttft = (
+            round(max(0.0, float(ttft_ms)), 3)
+            if ttft_ms is not None and math.isfinite(ttft_ms)
+            else None
+        )
+        if tokens_per_s is not None and math.isfinite(tokens_per_s):
+            clean_tps: float | None = round(max(0.0, float(tokens_per_s)), 3)
+        elif lat > 0.0 and int(completion_tokens) > 0:
+            clean_tps = round(int(completion_tokens) / (lat / 1000.0), 3)
+        else:
+            clean_tps = None
         with self._tx() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO usage_telemetry(request_id, consumer_id, producer_id, requested_model, "
                 "routed_model, routing_mode, task_domain, language, client_sdk, app_title, is_stream, latency_ms, "
-                "prompt_tokens, completion_tokens, billed_tokens, charged_hmt, utc) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "ttft_ms, tokens_per_s, prompt_tokens, completion_tokens, billed_tokens, charged_hmt, utc) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     str(request_id),
                     str(consumer_id),
@@ -1469,6 +1966,8 @@ class RouterStore:
                     str(app_title)[:64],
                     1 if is_stream else 0,
                     lat,
+                    clean_ttft,
+                    clean_tps,
                     int(prompt_tokens),
                     int(completion_tokens),
                     int(billed_tokens),
@@ -1562,6 +2061,8 @@ class RouterStore:
         by_producer_role: dict[str, dict[str, Any]] = {}
         domain_tokens: dict[str, int] = {}
         latencies: list[float] = []
+        ttfts: list[float] = []
+        tps_samples: list[float] = []
         total_tokens = 0
         total_hmt = 0.0
         stream_count = 0
@@ -1577,12 +2078,18 @@ class RouterStore:
             tokens = int(r["billed_tokens"])
             hmt = float(r["charged_hmt"])
             lat = float(r["latency_ms"])
+            raw_ttft = r["ttft_ms"]
+            raw_tps = r["tokens_per_s"]
 
             total_tokens += tokens
             total_hmt += hmt
             if int(r["is_stream"]):
                 stream_count += 1
             latencies.append(lat)
+            if raw_ttft is not None:
+                ttfts.append(float(raw_ttft))
+            if raw_tps is not None:
+                tps_samples.append(float(raw_tps))
 
             d_entry = by_domain.setdefault(domain, {"requests": 0, "billed_tokens": 0})
             d_entry["requests"] += 1
@@ -1629,6 +2136,15 @@ class RouterStore:
         else:
             p50, p95, mean_lat = 0.0, 0.0, 0.0
 
+        ttfts.sort()
+        if ttfts:
+            ttft_p50 = ttfts[int(0.50 * (len(ttfts) - 1))]
+            ttft_p95 = ttfts[int(0.95 * (len(ttfts) - 1))]
+            ttft_mean = sum(ttfts) / len(ttfts)
+        else:
+            ttft_p50, ttft_p95, ttft_mean = 0.0, 0.0, 0.0
+        mean_tps = sum(tps_samples) / len(tps_samples) if tps_samples else 0.0
+
         thumbs_up = sum(1 for f in feedback_rows if int(f["rating"]) == 1)
         thumbs_down = sum(1 for f in feedback_rows if int(f["rating"]) == -1)
         total_fb = thumbs_up + thumbs_down
@@ -1651,6 +2167,16 @@ class RouterStore:
                 "p50": round(p50, 2),
                 "p95": round(p95, 2),
                 "mean": round(mean_lat, 2),
+            },
+            "ttft_ms": {
+                "p50": round(ttft_p50, 2),
+                "p95": round(ttft_p95, 2),
+                "mean": round(ttft_mean, 2),
+                "samples": len(ttfts),
+            },
+            "tokens_per_s": {
+                "mean": round(mean_tps, 3),
+                "samples": len(tps_samples),
             },
             "feedback": {
                 "thumbs_up": thumbs_up,
@@ -1679,6 +2205,11 @@ class RouterStore:
         vram = max(0.0, min(float(pledged_vram_gb), 1024.0)) if math.isfinite(pledged_vram_gb) else 0.0
         clean_comment = str(comment).strip()[:256]
         with self._tx() as conn:
+            previous = conn.execute(
+                "SELECT participant_kind, pledged_vram_gb, availability_slot, comment FROM campaign_poll_votes WHERE account_id=? AND subject_id=?",
+                (str(account_id), str(subject_id)[:64]),
+            ).fetchone()
+            changed = previous is None or (previous[0], previous[1], previous[2], previous[3]) != (str(participant_kind)[:32], vram, str(availability_slot)[:32], clean_comment)
             conn.execute(
                 "INSERT INTO campaign_poll_votes(account_id, subject_id, participant_handle, participant_kind, "
                 "pledged_vram_gb, availability_slot, comment, utc) VALUES (?,?,?,?,?,?,?,?) "
@@ -1705,6 +2236,7 @@ class RouterStore:
             "availability_slot": availability_slot,
             "comment": clean_comment,
             "utc": stamp,
+            "changed": changed,  # False when an identical vote was re-sent: callers publish a bus event only for a real change
         }
 
     def list_campaign_poll_votes(self) -> list[dict[str, Any]]:
@@ -1814,9 +2346,11 @@ class RouterStore:
             ).fetchall()
         return [{k: row[k] for k in row.keys()} for row in rows]
 
-    @staticmethod
-    def _endpoint_host_root(endpoint_url: str | None) -> str:
-        """Return the normalised lowercase hostname of ``endpoint_url`` so multiple paths/ports on one VM count as one physical GPU host."""
+    _WILDCARD_DNS_IP_RE = re.compile(r"(?:^|\.)((?:\d{1,3}[-.]){3}\d{1,3})\.(sslip\.io|nip\.io|xip\.io)$")
+
+    @classmethod
+    def _endpoint_host_root(cls, endpoint_url: str | None) -> str:
+        """Return the normalised lowercase hostname of ``endpoint_url`` so multiple paths/ports/wildcard-DNS labels on one VM count as one physical GPU host."""
         if not endpoint_url:
             return ""
         raw = str(endpoint_url).strip()
@@ -1824,6 +2358,13 @@ class RouterStore:
             parsed = urllib.parse.urlsplit(raw)
             host = (parsed.hostname or "").strip().lower()
             if host:
+                m = cls._WILDCARD_DNS_IP_RE.search(host)
+                if m:
+                    return f"{m.group(1).replace('.', '-')}.{m.group(2)}"
+                if host.endswith((".sslip.io", ".nip.io", ".xip.io")):
+                    parts = [p for p in host.split(".") if p]
+                    if len(parts) > 3:
+                        return ".".join(parts[-3:])
                 return host
         except ValueError:
             return raw.lower()
@@ -1918,25 +2459,162 @@ class RouterStore:
                     continue
                 handle = normalise_identity(str(meta["handle"]))
                 account_id = self._hmac_hex(handle)[:32]
+                clean_email = str(meta.get("email") or "").strip().lower()[:128] or None
+                starter = float(meta.get("starter_hmt", 100.0))
                 exists = conn.execute(
-                    "SELECT account_id FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                    "SELECT account_id, email FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
                     (account_id, handle),
                 ).fetchone()
                 if exists is not None:
+                    existing_id = str(exists["account_id"])
+                    if clean_email and not str(exists["email"] or "").strip():
+                        conn.execute(
+                            "UPDATE accounts SET email=? WHERE account_id=?",
+                            (clean_email, existing_id),
+                        )
+                    if starter > 0.0:
+                        cur_bal = self._balance(conn, existing_id)
+                        if cur_bal < starter:
+                            self._append(
+                                conn,
+                                existing_id,
+                                round(starter - cur_bal, 6),
+                                "grant",
+                                "legacy-hiveminder-restore",
+                                stamp,
+                            )
                     continue
                 api_key = "hm-" + secrets.token_urlsafe(32)
-                clean_email = str(meta.get("email") or "").strip().lower()[:128] or None
                 conn.execute(
                     "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, email) "
                     "VALUES (?,?,?,?,?,?,?,?,?)",
                     (account_id, handle, role, self._hmac_hex(api_key), stamp, DEFAULT_MAX_PRICE_PER_1K, 0, KIND_USER, clean_email),
                 )
                 self._active_key_cache[account_id] = api_key
-                starter = float(meta.get("starter_hmt", 100.0))
                 if starter > 0.0:
                     self._append(conn, account_id, starter, "grant", "legacy-hiveminder-restore", stamp)
                 created_ids.append(account_id)
         return created_ids
+
+    def admin_reset_or_provision_account(
+        self,
+        handle: str,
+        *,
+        email: str = "",
+        new_password: str = "",
+        role: str = "prosumer",
+        min_balance_hmt: float = 0.0,
+        issue_reset_token: bool = True,
+        now_utc: float | None = None,
+    ) -> dict[str, Any]:
+        """Admin-only account provisioning, password reset, email binding, and HMT quota restoration."""
+        stamp = time.time() if now_utc is None else float(now_utc)
+        if new_password and (not isinstance(new_password, str) or len(new_password) < 12 or len(new_password) > 256):
+            raise ValueError("password must be 12 to 256 characters")
+        legacy = self._resolve_legacy_user(handle) or (self._resolve_legacy_user(email) if email else None)
+        raw_handle = str(legacy["handle"]) if legacy else handle.strip().lstrip("@")
+        if "@" in raw_handle and not email:
+            email = raw_handle
+            raw_handle = raw_handle.split("@")[0]
+        normalised = normalise_identity(raw_handle)
+        eff_role = (
+            role
+            if role in ROLES and role != "admin"
+            else str((legacy or {}).get("role", "prosumer"))
+        )
+        if eff_role not in ROLES or eff_role == "admin":
+            eff_role = "prosumer"
+        clean_email = (
+            email.strip().lower()[:128]
+            if email.strip()
+            else str((legacy or {}).get("email", "")).strip().lower()[:128]
+        ) or None
+        target_min_balance = max(
+            float(min_balance_hmt or 0.0),
+            float((legacy or {}).get("starter_hmt", 0.0)),
+        )
+        candidate_id = self._hmac_hex(normalised)[:32]
+        created = False
+        with self._tx() as conn:
+            row = conn.execute(
+                "SELECT account_id, handle, email FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                (candidate_id, normalised),
+            ).fetchone()
+            if row is None:
+                account_id = candidate_id
+                init_key = "hm-" + secrets.token_urlsafe(32)
+                conn.execute(
+                    "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, email) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (
+                        account_id,
+                        normalised,
+                        eff_role,
+                        self._hmac_hex(init_key),
+                        stamp,
+                        DEFAULT_MAX_PRICE_PER_1K,
+                        0,
+                        KIND_USER,
+                        clean_email,
+                    ),
+                )
+                created = True
+            else:
+                account_id = str(row["account_id"])
+                normalised = str(row["handle"])
+                if clean_email:
+                    conn.execute(
+                        "UPDATE accounts SET email=?, is_test=0, kind=? WHERE account_id=?",
+                        (clean_email, KIND_USER, account_id),
+                    )
+                else:
+                    clean_email = str(row["email"] or "") or None
+                    conn.execute(
+                        "UPDATE accounts SET is_test=0, kind=? WHERE account_id=?",
+                        (KIND_USER, account_id),
+                    )
+            if target_min_balance > 0.0:
+                cur_bal = self._balance(conn, account_id)
+                if cur_bal < target_min_balance:
+                    self._append(
+                        conn,
+                        account_id,
+                        round(target_min_balance - cur_bal, 6),
+                        "grant",
+                        "admin-account-provision",
+                        stamp,
+                    )
+        if new_password:
+            self.set_password(account_id, new_password)
+        api_key = self.rotate_key(account_id)
+        reset_token = self.create_password_reset(account_id, now=stamp) if issue_reset_token else None
+        email_aliases = sorted(
+            {
+                *(
+                    [clean_email]
+                    if clean_email
+                    else []
+                ),
+                *[
+                    str(a).lower()
+                    for a in (legacy or {}).get("aliases", ())
+                    if "@" in str(a) and not str(a).startswith("@")
+                ],
+            }
+        )
+        return {
+            "status": "ACCOUNT_PROVISIONED_AND_RESET",
+            "created": created,
+            "account_id": account_id,
+            "handle": normalised,
+            "email": clean_email,
+            "email_aliases": email_aliases,
+            "role": eff_role,
+            "api_key": api_key,
+            "balance": self.balance(account_id),
+            "password_set": bool(new_password),
+            "reset_token": reset_token,
+        }
 
     def list_hiveminder_accounts(self, now_utc: float | None = None, ttl_s: float = 120.0) -> list[dict[str, Any]]:
         """Return all real ('user') producer, prosumer, and trainer accounts and their live endpoint connectivity."""
@@ -2021,22 +2699,37 @@ class RouterStore:
         network_mode: str,
         stacks: Sequence[str],
         host_label: str,
+        active_campaign: str = "E8-STAGE2-TINY-GRANITE-MOE-QLORA",
         now_utc: float | None = None,
     ) -> dict[str, Any]:
-        """Register or update an OpenTrainer GPU node heartbeat."""
+        """Register or update an OpenTrainer GPU node heartbeat.
+
+        An account may hold at most ``MAX_OPENTRAINER_NODES_PER_ACCOUNT`` distinct ``host_label`` values
+        (``TooManyOpenTrainerNodes`` otherwise); refreshing an existing label is always allowed.
+        """
         stamp = time.time() if now_utc is None else float(now_utc)
         stacks_clean = [str(s) for s in stacks if str(s).strip()]
+        campaign_clean = str(active_campaign).strip()[:128] or "E8-STAGE2-TINY-GRANITE-MOE-QLORA"
         with self._tx() as conn:
+            known_labels = {
+                str(r["host_label"])
+                for r in conn.execute("SELECT host_label FROM opentrainer_nodes WHERE account_id=?", (account_id,))
+            }
+            if host_label not in known_labels and len(known_labels) >= MAX_OPENTRAINER_NODES_PER_ACCOUNT:
+                raise TooManyOpenTrainerNodes(
+                    f"an account may register at most {MAX_OPENTRAINER_NODES_PER_ACCOUNT} OpenTrainer nodes"
+                )
             conn.execute(
                 "INSERT INTO opentrainer_nodes("
                 "account_id, node_id, handle, gpu_name, vram_total_mib, vram_free_mib, "
-                "network_mode, stacks_json, host_label, last_heartbeat_utc"
-                ") VALUES (?,?,?,?,?,?,?,?,?,?) "
+                "network_mode, stacks_json, host_label, active_campaign, last_heartbeat_utc"
+                ") VALUES (?,?,?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(account_id, node_id) DO UPDATE SET "
                 "handle=excluded.handle, gpu_name=excluded.gpu_name, "
                 "vram_total_mib=excluded.vram_total_mib, vram_free_mib=excluded.vram_free_mib, "
                 "network_mode=excluded.network_mode, stacks_json=excluded.stacks_json, "
-                "host_label=excluded.host_label, last_heartbeat_utc=excluded.last_heartbeat_utc",
+                "host_label=excluded.host_label, active_campaign=excluded.active_campaign, "
+                "last_heartbeat_utc=excluded.last_heartbeat_utc",
                 (
                     account_id,
                     node_id,
@@ -2047,6 +2740,7 @@ class RouterStore:
                     network_mode,
                     json.dumps(stacks_clean),
                     host_label,
+                    campaign_clean,
                     stamp,
                 ),
             )
@@ -2060,6 +2754,7 @@ class RouterStore:
             "network_mode": network_mode,
             "stacks": stacks_clean,
             "host_label": host_label,
+            "active_campaign": campaign_clean,
             "last_heartbeat_utc": round(stamp, 3),
         }
 
@@ -2068,7 +2763,7 @@ class RouterStore:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT account_id, node_id, handle, gpu_name, vram_total_mib, vram_free_mib, "
-                "network_mode, stacks_json, host_label, last_heartbeat_utc "
+                "network_mode, stacks_json, host_label, active_campaign, last_heartbeat_utc "
                 "FROM opentrainer_nodes ORDER BY last_heartbeat_utc DESC"
             ).fetchall()
         out: list[dict[str, Any]] = []
@@ -2088,6 +2783,7 @@ class RouterStore:
                     "network_mode": str(r["network_mode"]),
                     "stacks": stacks,
                     "host_label": str(r["host_label"]),
+                    "active_campaign": str(r["active_campaign"] or "E8-STAGE2-TINY-GRANITE-MOE-QLORA"),
                     "last_heartbeat_utc": float(r["last_heartbeat_utc"]),
                 }
             )
@@ -2113,6 +2809,10 @@ class RouterStore:
         stamp = time.time() if now_utc is None else float(now_utc)
         submission_id = f"ot-{secrets.token_hex(8)}"
         with self._tx() as conn:
+            if conn.execute(
+                "SELECT 1 FROM opentrainer_rounds WHERE account_id=? AND run_id=? AND round_index=?", (account_id, run_id, int(round_index))
+            ).fetchone() is not None:
+                raise DuplicateOpenTrainerRound(f"round {int(round_index)} of run {run_id} was already submitted by this account")
             conn.execute(
                 "INSERT INTO opentrainer_rounds("
                 "submission_id, account_id, handle, run_id, round_index, host_label, network_mode, "
@@ -2265,6 +2965,572 @@ class RouterStore:
             out.setdefault(aid, tok)
             out.setdefault("default", tok)
         return out
+
+    def record_boinc_receipt(
+        self,
+        receipt_sha256: str,
+        account_id: str,
+        now_utc: float | None = None,
+    ) -> bool:
+        """Persist a BOINC/WebGPU contribution receipt digest; return ``True`` if already seen (replay), ``False`` if newly recorded."""
+        digest = str(receipt_sha256).strip().lower()
+        now = time.time() if now_utc is None else float(now_utc)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM boinc_receipts WHERE receipt_sha256 = ?",
+                (digest,),
+            ).fetchone()
+            if row is not None:
+                return True
+            self._conn.execute(
+                "INSERT INTO boinc_receipts(receipt_sha256, account_id, utc) VALUES (?, ?, ?)",
+                (digest, str(account_id), now),
+            )
+            self._conn.commit()
+            return False
+
+    @staticmethod
+    def _is_vxtzq_account_row(row: sqlite3.Row | Mapping[str, Any]) -> bool:
+        row_keys = set(row.keys())
+        kind_val = str(row["kind"] if "kind" in row_keys and row["kind"] is not None else KIND_USER)
+        if kind_val != KIND_USER:
+            return False
+        if "is_test" in row_keys and bool(row["is_test"]):
+            return False
+        handle_val = str(row["handle"] or "").strip().lstrip("@").lower()
+        return handle_val in VXTZQ_HANDLES
+
+    def ensure_partner_testing_grants(
+        self,
+        now_utc: float | None = None,
+        *,
+        target_hmt: float = VXTZQ_MODEL_TESTING_TARGET_HMT,
+    ) -> dict[str, float]:
+        """Idempotently top up verified partner accounts (``vxtzq`` / CrowdGPT creator) to ``target_hmt`` for model testing.
+
+        Only existing real ``'user'`` rows in ``accounts`` are topped up (no passwordless placeholder rows are created,
+        so a partner who has not registered yet can still register normally and receive the top-up upon sign-up).
+        Every minted HMT goes through the hash-chained ``ledger`` as ``kind='grant'``.
+        """
+        target = _finite(target_hmt, "target_hmt")
+        if target <= 0.0:
+            return {}
+        stamp = time.time() if now_utc is None else _finite(now_utc, "now_utc")
+        minted_by_account: dict[str, float] = {}
+        with self._tx() as conn:
+            rows = conn.execute(
+                "SELECT * FROM accounts WHERE kind = ? AND is_test = 0 AND ("
+                "lower(handle) = 'vxtzq'"
+                ")",
+                (KIND_USER,),
+            ).fetchall()
+            for row in rows:
+                if not self._is_vxtzq_account_row(row):
+                    continue
+                account_id = str(row["account_id"])
+                already = conn.execute(
+                    "SELECT 1 FROM bonus_claims WHERE account_id=? AND bonus_code='vxtzq_crowd_v1_creator_bonus'",
+                    (account_id,),
+                ).fetchone()
+                if already is not None:
+                    continue
+                already_ledger = conn.execute(
+                    "SELECT 1 FROM ledger WHERE account_id=? AND kind='grant' AND ref=?",
+                    (account_id, VXTZQ_MODEL_TESTING_GRANT_REF),
+                ).fetchone()
+                if already_ledger is not None:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, "vxtzq_crowd_v1_creator_bonus", 0.0, stamp),
+                    )
+                    continue
+                current_bal = self._balance(conn, account_id)
+                if current_bal >= target:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, "vxtzq_crowd_v1_creator_bonus", 0.0, stamp),
+                    )
+                    continue
+                topup = round(target - current_bal, 6)
+                if topup > 0.0:
+                    self._append(conn, account_id, topup, "grant", VXTZQ_MODEL_TESTING_GRANT_REF, stamp)
+                    conn.execute(
+                        "INSERT OR REPLACE INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, "vxtzq_crowd_v1_creator_bonus", topup, stamp),
+                    )
+                    minted_by_account[account_id] = topup
+        return minted_by_account
+
+    def bonus_status(
+        self,
+        account_id: str,
+        now_utc: float | None = None,
+        *,
+        welcome_bonus_hmt: float = DEFAULT_WELCOME_BONUS_HMT,
+        contributor_bonus_hmt: float = DEFAULT_CONTRIBUTOR_ROLE_BONUS_HMT,
+        daily_faucet_hmt: float = DEFAULT_DAILY_TESTING_FAUCET_HMT,
+        partner_target_hmt: float = VXTZQ_MODEL_TESTING_TARGET_HMT,
+    ) -> dict[str, Any]:
+        """Inspect claimed and currently eligible HMT bonuses for ``account_id``."""
+        now = time.time() if now_utc is None else _finite(now_utc, "now_utc")
+        welcome_amt = max(0.0, _finite(welcome_bonus_hmt, "welcome_bonus_hmt"))
+        contrib_amt = max(0.0, _finite(contributor_bonus_hmt, "contributor_bonus_hmt"))
+        faucet_amt = max(0.0, _finite(daily_faucet_hmt, "daily_faucet_hmt"))
+        partner_target = max(0.0, _finite(partner_target_hmt, "partner_target_hmt"))
+
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM accounts WHERE account_id=?", (account_id,)).fetchone()
+            if row is None:
+                raise UnknownAccount(account_id)
+            bal = self._balance(self._conn, account_id)
+            claim_rows = self._conn.execute(
+                "SELECT bonus_code, amount, utc FROM bonus_claims WHERE account_id=? ORDER BY utc ASC",
+                (account_id,),
+            ).fetchall()
+
+        acct = self._row_account(row)
+        claimed_codes = {str(r["bonus_code"]) for r in claim_rows}
+        faucet_utcs = [float(r["utc"]) for r in claim_rows if str(r["bonus_code"]).startswith("daily_testing_faucet:")]
+        last_faucet_utc = max(faucet_utcs) if faucet_utcs else None
+        faucet_cooldown_remaining_s = (
+            max(0.0, STARTER_WINDOW_S - (now - last_faucet_utc)) if last_faucet_utc is not None else 0.0
+        )
+
+        is_real_user = acct.kind == KIND_USER and not acct.is_test
+        is_vxtzq = is_real_user and self._is_vxtzq_account_row(row)
+        available: list[dict[str, Any]] = []
+        if is_real_user:
+            if is_vxtzq and "vxtzq_crowd_v1_creator_bonus" not in claimed_codes and bal < partner_target:
+                available.append({
+                    "bonus_code": "vxtzq_crowd_v1_creator_bonus",
+                    "amount_hmt": round(partner_target - bal, 6),
+                    "description": "Crowd-v1 & GCPCrowd model creator testing allocation up to 100,000.00 HMT",
+                })
+            if welcome_amt > 0.0 and "welcome_bonus" not in claimed_codes:
+                available.append({
+                    "bonus_code": "welcome_bonus",
+                    "amount_hmt": welcome_amt,
+                    "description": "One-time welcome model-testing bonus HMT",
+                })
+            if contrib_amt > 0.0 and acct.role in PRODUCER_ROLES and "contributor_role_bonus" not in claimed_codes:
+                available.append({
+                    "bonus_code": "contributor_role_bonus",
+                    "amount_hmt": contrib_amt,
+                    "description": f"One-time {acct.role} GPU/swarm contributor bonus HMT",
+                })
+            if (
+                faucet_amt > 0.0
+                and bal < DAILY_TESTING_FAUCET_MAX_BALANCE_HMT
+                and faucet_cooldown_remaining_s <= 0.0
+            ):
+                available.append({
+                    "bonus_code": "daily_testing_faucet",
+                    "amount_hmt": faucet_amt,
+                    "description": "24h model-testing HMT refill when balance is below 500.00 HMT",
+                })
+
+        return {
+            "account_id": acct.account_id,
+            "handle": acct.handle,
+            "role": acct.role,
+            "kind": acct.kind,
+            "balance": bal,
+            "balance_hmt": bal,
+            "compute_points": int(round(bal)),
+            "eligible": len(available) > 0,
+            "available_bonuses": available,
+            "claimed_history": [
+                {"bonus_code": str(r["bonus_code"]), "amount_hmt": float(r["amount"]), "utc": float(r["utc"])}
+                for r in claim_rows
+            ],
+            "daily_faucet_cooldown_remaining_s": round(faucet_cooldown_remaining_s, 1),
+        }
+
+    def claim_bonus(
+        self,
+        account_id: str,
+        bonus_code: str = "auto",
+        *,
+        client_ip: str = "unknown",
+        now_utc: float | None = None,
+        ip_cap_24h: int = 5,
+        window_s: float = STARTER_WINDOW_S,
+        welcome_bonus_hmt: float = DEFAULT_WELCOME_BONUS_HMT,
+        contributor_bonus_hmt: float = DEFAULT_CONTRIBUTOR_ROLE_BONUS_HMT,
+        daily_faucet_hmt: float = DEFAULT_DAILY_TESTING_FAUCET_HMT,
+        partner_target_hmt: float = VXTZQ_MODEL_TESTING_TARGET_HMT,
+    ) -> dict[str, Any]:
+        """Claim eligible HMT testing bonus(es) for ``account_id`` with per-IP 24h Sybil protection and hash-chained grants."""
+        now = time.time() if now_utc is None else _finite(now_utc, "now_utc")
+        welcome_amt = max(0.0, _finite(welcome_bonus_hmt, "welcome_bonus_hmt"))
+        contrib_amt = max(0.0, _finite(contributor_bonus_hmt, "contributor_bonus_hmt"))
+        faucet_amt = max(0.0, _finite(daily_faucet_hmt, "daily_faucet_hmt"))
+        partner_target = max(0.0, _finite(partner_target_hmt, "partner_target_hmt"))
+        req_code = str(bonus_code or "auto").strip().lower()
+        valid_codes = {
+            "auto",
+            "welcome_bonus",
+            "contributor_role_bonus",
+            "daily_testing_faucet",
+            "vxtzq_crowd_v1_creator_bonus",
+        }
+        if req_code not in valid_codes:
+            raise ValueError(f"unknown bonus_code: {req_code}")
+
+        ip_digest = self._hmac_hex("bonus-ip:" + str(client_ip or "unknown"))
+        awarded: list[dict[str, Any]] = []
+
+        with self._tx() as conn:
+            row = conn.execute("SELECT * FROM accounts WHERE account_id=?", (account_id,)).fetchone()
+            if row is None:
+                raise UnknownAccount(account_id)
+            acct = self._row_account(row)
+            if acct.kind != KIND_USER or acct.is_test:
+                raise PermissionError("Only real user accounts can claim HMT bonuses.")
+
+            conn.execute("DELETE FROM bonus_claim_ips WHERE utc <= ?", (now - window_s,))
+            used_ip = int(
+                conn.execute("SELECT COUNT(*) FROM bonus_claim_ips WHERE ip_hash=?", (ip_digest,)).fetchone()[0]
+            )
+            if used_ip >= ip_cap_24h:
+                bal_now = self._balance(conn, account_id)
+                return {
+                    "claimed": False,
+                    "granted_hmt": 0.0,
+                    "claimed_bonuses": [],
+                    "reason": "ip_cap_reached",
+                    "note": "Daily bonus claim limit reached for this network address; try again tomorrow.",
+                    "account_id": account_id,
+                    "handle": acct.handle,
+                    "role": acct.role,
+                    "balance": bal_now,
+                    "balance_hmt": bal_now,
+                    "compute_points": int(round(bal_now)),
+                }
+
+            claim_rows = conn.execute(
+                "SELECT bonus_code, amount, utc FROM bonus_claims WHERE account_id=?",
+                (account_id,),
+            ).fetchall()
+            claimed_codes = {str(r["bonus_code"]) for r in claim_rows}
+            faucet_utcs = [float(r["utc"]) for r in claim_rows if str(r["bonus_code"]).startswith("daily_testing_faucet:")]
+            last_faucet_utc = max(faucet_utcs) if faucet_utcs else None
+            bal = self._balance(conn, account_id)
+            is_vxtzq = self._is_vxtzq_account_row(row)
+
+            # 1. Partner creator allocation for @Vxtzq (Crowd-v1 / GCPCrowd testing)
+            if req_code in ("auto", "vxtzq_crowd_v1_creator_bonus"):
+                if is_vxtzq and "vxtzq_crowd_v1_creator_bonus" not in claimed_codes and bal < partner_target:
+                    topup = round(partner_target - bal, 6)
+                    if topup > 0.0:
+                        self._append(conn, account_id, topup, "grant", VXTZQ_MODEL_TESTING_GRANT_REF, now)
+                        conn.execute(
+                            "INSERT OR REPLACE INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                            (account_id, "vxtzq_crowd_v1_creator_bonus", topup, now),
+                        )
+                        claimed_codes.add("vxtzq_crowd_v1_creator_bonus")
+                        bal += topup
+                        awarded.append({"bonus_code": "vxtzq_crowd_v1_creator_bonus", "amount_hmt": topup})
+                elif req_code == "vxtzq_crowd_v1_creator_bonus" and not is_vxtzq:
+                    raise PermissionError("Partner Crowd-v1 creator bonus is reserved for verified vxtzq accounts.")
+
+            # 2. One-time welcome bonus
+            if req_code in ("auto", "welcome_bonus"):
+                if welcome_amt > 0.0 and "welcome_bonus" not in claimed_codes:
+                    self._append(conn, account_id, welcome_amt, "grant", "bonus:welcome_bonus", now)
+                    conn.execute(
+                        "INSERT INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, "welcome_bonus", welcome_amt, now),
+                    )
+                    claimed_codes.add("welcome_bonus")
+                    bal += welcome_amt
+                    awarded.append({"bonus_code": "welcome_bonus", "amount_hmt": welcome_amt})
+
+            # 3. One-time contributor role bonus (prosumer / producer / trainer)
+            if req_code in ("auto", "contributor_role_bonus"):
+                if contrib_amt > 0.0 and acct.role in PRODUCER_ROLES and "contributor_role_bonus" not in claimed_codes:
+                    self._append(conn, account_id, contrib_amt, "grant", f"bonus:contributor_role:{acct.role}", now)
+                    conn.execute(
+                        "INSERT INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, "contributor_role_bonus", contrib_amt, now),
+                    )
+                    claimed_codes.add("contributor_role_bonus")
+                    bal += contrib_amt
+                    awarded.append({"bonus_code": "contributor_role_bonus", "amount_hmt": contrib_amt})
+
+            # 4. Daily testing faucet when balance is low (< 500 HMT) and 24h cooldown elapsed
+            if req_code == "daily_testing_faucet" or (req_code == "auto" and not awarded):
+                cooldown_ok = last_faucet_utc is None or (now - last_faucet_utc) >= window_s
+                if faucet_amt > 0.0 and bal < DAILY_TESTING_FAUCET_MAX_BALANCE_HMT and cooldown_ok:
+                    faucet_key = f"daily_testing_faucet:{int(now)}-{secrets.token_hex(4)}"
+                    self._append(conn, account_id, faucet_amt, "grant", "bonus:daily_testing_faucet", now)
+                    conn.execute(
+                        "INSERT INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, faucet_key, faucet_amt, now),
+                    )
+                    bal += faucet_amt
+                    awarded.append({"bonus_code": "daily_testing_faucet", "amount_hmt": faucet_amt})
+
+            if awarded:
+                conn.execute("INSERT INTO bonus_claim_ips(ip_hash, utc) VALUES (?,?)", (ip_digest, now))
+                final_bal = self._balance(conn, account_id)
+                total_granted = round(sum(float(item["amount_hmt"]) for item in awarded), 6)
+                return {
+                    "claimed": True,
+                    "granted_hmt": total_granted,
+                    "claimed_bonuses": awarded,
+                    "reason": "granted",
+                    "note": f"Granted {total_granted:.2f} HMT in testing bonuses.",
+                    "account_id": account_id,
+                    "handle": acct.handle,
+                    "role": acct.role,
+                    "balance": final_bal,
+                    "balance_hmt": final_bal,
+                    "compute_points": int(round(final_bal)),
+                }
+
+            final_bal = self._balance(conn, account_id)
+            return {
+                "claimed": False,
+                "granted_hmt": 0.0,
+                "claimed_bonuses": [],
+                "reason": "no_eligible_bonus",
+                "note": "All one-time bonuses are already claimed and your HMT balance is sufficient for model testing.",
+                "account_id": account_id,
+                "handle": acct.handle,
+                "role": acct.role,
+                "balance": final_bal,
+                "balance_hmt": final_bal,
+                "compute_points": int(round(final_bal)),
+            }
+
+    def _resolve_hiveminder_row(self, conn: sqlite3.Connection, target: str) -> sqlite3.Row | None:
+        """Resolve a non-system HiveMinder row by account_id, handle/@handle, email, or legacy alias."""
+        ident = str(target or "").strip()
+        if not ident or ident.lower().startswith("sys:"):
+            return None
+
+        by_id = conn.execute(
+            "SELECT * FROM accounts WHERE account_id = ? AND account_id NOT LIKE 'sys:%'",
+            (ident,),
+        ).fetchone()
+        if by_id is not None:
+            return by_id
+
+        stripped = ident.lstrip("@")
+        if "@" in stripped:
+            by_email = conn.execute(
+                "SELECT * FROM accounts WHERE lower(COALESCE(email, '')) = lower(?) AND account_id NOT LIKE 'sys:%' LIMIT 1",
+                (stripped,),
+            ).fetchone()
+            if by_email is not None:
+                return by_email
+
+        legacy = self._resolve_legacy_user(ident) or self._resolve_legacy_user(stripped)
+        candidates: list[str] = [stripped]
+        if legacy is not None:
+            leg_handle = str(legacy.get("handle") or "").strip()
+            leg_email = str(legacy.get("email") or "").strip()
+            if leg_handle:
+                candidates.insert(0, leg_handle)
+            if leg_email:
+                by_leg_email = conn.execute(
+                    "SELECT * FROM accounts WHERE lower(COALESCE(email, '')) = lower(?) AND account_id NOT LIKE 'sys:%' LIMIT 1",
+                    (leg_email,),
+                ).fetchone()
+                if by_leg_email is not None:
+                    return by_leg_email
+
+        for cand in candidates:
+            if not cand or "@" in cand:
+                continue
+            by_handle = conn.execute(
+                "SELECT * FROM accounts WHERE lower(handle) = lower(?) AND account_id NOT LIKE 'sys:%'",
+                (cand,),
+            ).fetchone()
+            if by_handle is not None:
+                return by_handle
+            try:
+                norm = normalise_identity(cand)
+            except Exception:
+                continue
+            cid = self._hmac_hex(norm)[:32]
+            by_norm = conn.execute(
+                "SELECT * FROM accounts WHERE (account_id = ? OR lower(handle) = lower(?)) AND account_id NOT LIKE 'sys:%'",
+                (cid, norm),
+            ).fetchone()
+            if by_norm is not None:
+                return by_norm
+            alt = norm.replace("-", "_") if "-" in norm else norm.replace("_", "-")
+            by_alt = conn.execute(
+                "SELECT * FROM accounts WHERE lower(handle) = lower(?) AND account_id NOT LIKE 'sys:%'",
+                (alt,),
+            ).fetchone()
+            if by_alt is not None:
+                return by_alt
+        return None
+
+    def resolve_hiveminder_account(self, target: str) -> Account | None:
+        """Look up a HiveMinder ``Account`` by ``account_id``, ``@handle``, email, or legacy alias."""
+        with self._lock:
+            row = self._resolve_hiveminder_row(self._conn, target)
+        return None if row is None else self._row_account(row)
+
+    def transfer_points(
+        self,
+        sender_id: str,
+        recipient: str,
+        amount: float,
+        *,
+        memo: str = "peer-hiveminder-support",
+        idempotency_key: str | None = None,
+        amcp_event_id: str | None = None,
+        now_utc: float | None = None,
+    ) -> dict[str, Any]:
+        """Atomically transfer ``amount`` HMT from ``sender_id`` to ``recipient`` with zero minting and zero burn.
+
+        Appends ``-amount`` (``transfer_out``) and ``+amount`` (``transfer_in``) in a single ``BEGIN IMMEDIATE``
+        transaction, preserving ``total_balances() == total_minted()`` and ``verify_chain() == True``.
+        """
+        value = _finite(amount, "amount")
+        if value <= 0.0 or value > 1_000_000_000.0:
+            raise ValueError("transfer amount must be in (0, 1000000000]")
+        clean_memo = re.sub(r"[\x00-\x1f\x7f]", " ", str(memo or "")).strip()[:256] or "peer-hiveminder-support"
+        scoped_idem: str | None = None
+        if idempotency_key is not None and str(idempotency_key).strip():
+            raw_idem = str(idempotency_key).strip()
+            if len(raw_idem) > 128 or re.search(r"[\x00-\x1f\x7f]", raw_idem):
+                raise ValueError("idempotency_key must be 1..128 printable characters without control characters")
+            scoped_idem = f"{sender_id}:{raw_idem}"
+        stamp = time.time() if now_utc is None else _finite(now_utc, "now_utc")
+
+        with self._tx() as conn:
+            sender_row = conn.execute(
+                "SELECT * FROM accounts WHERE account_id = ? AND account_id NOT LIKE 'sys:%'",
+                (sender_id,),
+            ).fetchone()
+            if sender_row is None:
+                raise UnknownAccount(sender_id)
+            sender_acct = self._row_account(sender_row)
+            if sender_acct.kind != KIND_USER or sender_acct.is_test:
+                raise PermissionError("Only real user accounts may send or receive HMT point transfers.")
+
+            if scoped_idem is not None:
+                prev_tx = conn.execute(
+                    "SELECT * FROM point_transfers WHERE idempotency_key = ?",
+                    (scoped_idem,),
+                ).fetchone()
+                if prev_tx is not None:
+                    prev_rec = self._resolve_hiveminder_row(conn, recipient)
+                    prev_rec_id = str(prev_rec["account_id"]) if prev_rec is not None else ""
+                    if prev_rec_id != str(prev_tx["recipient_id"]) or not math.isclose(
+                        float(prev_tx["amount"]), value, rel_tol=0.0, abs_tol=1e-9
+                    ):
+                        raise ValueError("idempotency_key was already used with different transfer parameters")
+                    s_bal = self._balance(conn, sender_acct.account_id)
+                    return {
+                        "transfer_id": str(prev_tx["transfer_id"]),
+                        "sender_id": str(prev_tx["sender_id"]),
+                        "sender_handle": str(prev_tx["sender_handle"]),
+                        "recipient_id": str(prev_tx["recipient_id"]),
+                        "recipient_handle": str(prev_tx["recipient_handle"]),
+                        "amount_hmt": float(prev_tx["amount"]),
+                        "memo": str(prev_tx["memo"]),
+                        "sender_balance": s_bal,
+                        "sender_balance_hmt": s_bal,
+                        "sender_compute_points": int(round(s_bal)),
+                        "idempotent_replay": True,
+                        "amcp_event_id": prev_tx["amcp_event_id"],
+                        "utc": float(prev_tx["utc"]),
+                    }
+
+            recipient_row = self._resolve_hiveminder_row(conn, recipient)
+            if recipient_row is None:
+                raise UnknownAccount(recipient)
+            recipient_acct = self._row_account(recipient_row)
+            if recipient_acct.kind != KIND_USER or recipient_acct.is_test:
+                raise PermissionError("Only real user accounts may send or receive HMT point transfers.")
+            if recipient_acct.account_id == sender_acct.account_id:
+                raise ValueError("Cannot transfer HMT points to the same account.")
+
+            sender_bal = self._balance(conn, sender_acct.account_id)
+            if sender_bal < value:
+                raise InsufficientBalance(f"balance {sender_bal:.6f} < transfer {value:.6f}")
+
+            transfer_id = "txf-" + secrets.token_hex(12)
+            ledger_ref = f"p2p:{transfer_id}:{sender_acct.handle}->{recipient_acct.handle}"
+            self._append(conn, sender_acct.account_id, -value, "transfer_out", ledger_ref, stamp)
+            self._append(conn, recipient_acct.account_id, value, "transfer_in", ledger_ref, stamp)
+            conn.execute(
+                "INSERT INTO point_transfers("
+                "transfer_id, sender_id, sender_handle, recipient_id, recipient_handle, "
+                "amount, memo, idempotency_key, amcp_event_id, utc"
+                ") VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    transfer_id,
+                    sender_acct.account_id,
+                    sender_acct.handle,
+                    recipient_acct.account_id,
+                    recipient_acct.handle,
+                    value,
+                    clean_memo,
+                    scoped_idem,
+                    amcp_event_id,
+                    stamp,
+                ),
+            )
+            new_sender_bal = self._balance(conn, sender_acct.account_id)
+            return {
+                "transfer_id": transfer_id,
+                "sender_id": sender_acct.account_id,
+                "sender_handle": sender_acct.handle,
+                "recipient_id": recipient_acct.account_id,
+                "recipient_handle": recipient_acct.handle,
+                "amount_hmt": value,
+                "memo": clean_memo,
+                "sender_balance": new_sender_bal,
+                "sender_balance_hmt": new_sender_bal,
+                "sender_compute_points": int(round(new_sender_bal)),
+                "idempotent_replay": False,
+                "amcp_event_id": amcp_event_id,
+                "utc": stamp,
+            }
+
+    def attach_transfer_amcp_event(self, transfer_id: str, amcp_event_id: str) -> None:
+        """Record the published AMCP/Kafka ``event_id`` on an existing ``point_transfers`` row."""
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE point_transfers SET amcp_event_id = ? WHERE transfer_id = ?",
+                (str(amcp_event_id), str(transfer_id)),
+            )
+
+    def list_point_transfers(self, account_id: str, limit: int = 25) -> list[dict[str, Any]]:
+        """Return recent sent and received peer-to-peer HMT transfers for ``account_id``."""
+        cap = max(1, min(int(limit), 100))
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT transfer_id, sender_id, sender_handle, recipient_id, recipient_handle, "
+                "amount, memo, amcp_event_id, utc "
+                "FROM point_transfers "
+                "WHERE sender_id = ? OR recipient_id = ? "
+                "ORDER BY utc DESC, rowid DESC LIMIT ?",
+                (account_id, account_id, cap),
+            ).fetchall()
+        return [
+            {
+                "transfer_id": str(r["transfer_id"]),
+                "direction": "sent" if str(r["sender_id"]) == account_id else "received",
+                "sender_handle": str(r["sender_handle"]),
+                "recipient_handle": str(r["recipient_handle"]),
+                "amount_hmt": float(r["amount"]),
+                "memo": str(r["memo"]),
+                "amcp_event_id": r["amcp_event_id"],
+                "utc": float(r["utc"]),
+            }
+            for r in rows
+        ]
+
+
 
 
 

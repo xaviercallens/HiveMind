@@ -7,6 +7,8 @@ After=network-online.target wg-quick@wg-hivemind.service
 Wants=network-online.target
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 Type=simple
 User=kafka
 Environment=JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64

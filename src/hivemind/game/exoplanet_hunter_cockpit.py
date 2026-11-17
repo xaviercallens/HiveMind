@@ -2928,6 +2928,10 @@ def create_exoplanet_hunter_fastapi_app(
     require_portal_secret: bool = False,
 ) -> FastAPI:
     """Create the FastAPI server for the v4.0 Star Trek Curved Console Game + Multi-Producer Router."""
+    if portal_secret is not None and not isinstance(portal_secret, (bytes, str)):
+        raise TypeError("portal_secret must be bytes, str, or None")
+    if not isinstance(require_portal_secret, bool):
+        raise TypeError("require_portal_secret must be a boolean")
     service = AstroBeeMoEGPUService()
     producer_pool = HiveMindMultiProducerInferencePool(service)
     app = FastAPI(

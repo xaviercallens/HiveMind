@@ -98,6 +98,10 @@ class SteamOpenIDVerifier:
                  nonce_ttl_s: float = 300.0, max_nonces: int = 4096, max_attempts_per_ip: int = 64) -> None:
         if not isinstance(return_to, str) or (not return_to.startswith("https://") and not return_to.startswith("http://127.0.0.1") and not return_to.startswith("http://localhost")):
             raise ValueError("return_to must be https (or loopback http for development)")
+        if not callable(http):
+            raise ValueError("http must be callable")
+        if not callable(clock):
+            raise ValueError("clock must be callable")
         if isinstance(nonce_ttl_s, bool) or not isinstance(nonce_ttl_s, (int, float)) or not math.isfinite(float(nonce_ttl_s)) or float(nonce_ttl_s) <= 0.0:
             raise ValueError("nonce_ttl_s must be finite and > 0")
         if isinstance(max_nonces, bool) or not isinstance(max_nonces, int) or int(max_nonces) <= 0:
@@ -157,6 +161,10 @@ class SteamOpenIDVerifier:
             self._seen[nonce] = now + self._ttl + 60.0
 
     def verify_assertion(self, params: Mapping[str, str], *, client_ip: str | None = None) -> str:
+        if not isinstance(params, Mapping):
+            raise IdentityError("params must be a Mapping")
+        if client_ip is not None and (isinstance(client_ip, bool) or not isinstance(client_ip, str)):
+            raise IdentityError("client_ip must be a string or None")
         self._check_ip_rate_limit(client_ip)
         if params.get("openid.ns") != OPENID_NS or params.get("openid.mode") != "id_res":
             raise IdentityError("not an OpenID 2.0 positive assertion")
@@ -202,6 +210,8 @@ class AccountFacts:
 
 def fetch_account_facts(steam_id64: str, http: Http = default_http) -> AccountFacts:
     """Limited/VAC-ban flags straight from Steam's community profile XML. Regex, not an XML parser: this is a network answer and entity expansion is not worth risking."""
+    if not callable(http):
+        raise ValueError("http must be callable")
     if not is_valid_steamid64(steam_id64):
         raise IdentityError("not a SteamID64")
     status, body = http("GET", PROFILE_XML_URL.format(steam_id64=steam_id64), None)
@@ -222,6 +232,8 @@ class IdentityTokens:
     def __init__(self, secret: bytes | None = None, ttl_s: float = 3600.0, clock: Callable[[], float] = time.time) -> None:
         if secret is not None and not isinstance(secret, (bytes, bytearray)):
             raise ValueError("identity secret must be bytes")
+        if not callable(clock):
+            raise ValueError("clock must be callable")
         env = os.environ.get("HIVEMIND_IDENTITY_SECRET", "")
         self._secret = bytes(secret) if secret else (bytes.fromhex(env) if re.fullmatch(r"[0-9a-fA-F]{64,}", env or "") else secrets.token_bytes(32))
         if len(self._secret) < 32:
@@ -263,6 +275,12 @@ class SteamIdentityGate:
                  verifier: SteamOpenIDVerifier | None = None, allow_limited: bool = False) -> None:
         if not isinstance(allow_limited, bool):
             raise ValueError("allow_limited must be a boolean")
+        if not callable(http):
+            raise ValueError("http must be callable")
+        if tokens is not None and not isinstance(tokens, IdentityTokens):
+            raise ValueError("tokens must be an IdentityTokens instance or None")
+        if verifier is not None and not isinstance(verifier, SteamOpenIDVerifier):
+            raise ValueError("verifier must be a SteamOpenIDVerifier instance or None")
         self.return_to, self._http, self.allow_limited = return_to, http, allow_limited
         self.verifier = verifier or SteamOpenIDVerifier(return_to, http=http)
         self.tokens = tokens or IdentityTokens()

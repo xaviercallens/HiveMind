@@ -60,6 +60,28 @@ class NodeReputationRecord:
     reputation_score: float = 100.0
     flagged_byzantine: bool = False
 
+    def __post_init__(self) -> None:
+        for s_name in ("steam_id64", "worker_id"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for b_name in ("is_non_limited_steam_account", "flagged_byzantine"):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
+        for i_name in ("validated_workunits", "rejected_workunits"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        for f_name in ("contributed_tflops", "minted_api_credits", "reputation_score"):
+            val = getattr(self, f_name)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a finite non-negative number")
+
 
 class WorkunitRequestPayload(BaseModel):
     worker_id: str

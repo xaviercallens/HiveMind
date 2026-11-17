@@ -271,9 +271,9 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert r_redeem.status_code == 200
     redeem_json = r_redeem.json()
     assert redeem_json["status"] == "COMPUTE_POINTS_REDEEMED"
-    assert redeem_json["points_balance_before"] == 30000
+    assert redeem_json["points_balance_before"] == 100000
     assert redeem_json["points_spent"] == 50
-    assert redeem_json["points_balance_after"] == 29950
+    assert redeem_json["points_balance_after"] == 99950
     assert redeem_json["monetary_cost_eur_usd"] == 0.0
     assert "La Ruche Top-2 Sparse MoE Routing" in redeem_json["domain_output"]
 

@@ -133,6 +133,10 @@ class BoincHostDirectory:
 
 def replay_all_for_result(result_id: int | str | None, directory: HostDirectory | None, env: Mapping[str, str] | None = None) -> bool:
     """Full replay for this result? False unless community mode is on (``HIVEMIND_COMMUNITY=1``), so existing behaviour is unchanged."""
+    if result_id is not None and (isinstance(result_id, bool) or not isinstance(result_id, (int, str))):
+        raise ValueError("result_id must be None, int, or str")
+    if env is not None and not isinstance(env, Mapping):
+        raise TypeError("env must be None or a Mapping")
     env = os.environ if env is None else env
     if env.get("HIVEMIND_COMMUNITY") != "1":
         return False

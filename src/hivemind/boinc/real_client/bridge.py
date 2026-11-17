@@ -16,6 +16,7 @@ column and the HiveMind ledger cannot disagree.
 from __future__ import annotations
 
 import base64
+import math
 import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -40,6 +41,27 @@ class Verdict:
     cross_class_max_ulp: float | None
     grant: dict[str, Any]
     detail: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for s_name in ("wu_id", "host", "reason"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        if not isinstance(self.valid, bool):
+            raise ValueError("valid must be a boolean")
+        if self.same_class_exact is not None and not isinstance(self.same_class_exact, bool):
+            raise ValueError("same_class_exact must be None or a boolean")
+        if self.cross_class_max_ulp is not None and (
+            isinstance(self.cross_class_max_ulp, bool)
+            or not isinstance(self.cross_class_max_ulp, (int, float))
+            or not math.isfinite(float(self.cross_class_max_ulp))
+            or float(self.cross_class_max_ulp) < 0.0
+        ):
+            raise ValueError("cross_class_max_ulp must be None or a finite non-negative number")
+        if not isinstance(self.grant, dict):
+            raise ValueError("grant must be a dict")
+        if not isinstance(self.detail, dict):
+            raise ValueError("detail must be a dict")
 
     @property
     def credit(self) -> float:

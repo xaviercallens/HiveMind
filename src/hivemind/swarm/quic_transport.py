@@ -178,6 +178,8 @@ def classify_continent(region: str) -> str:
     Returns one of `EU`, `US`, `APAC` or `OTHER` when the region cannot be mapped to a
     known continental super-ring (`HM-S4-02`).
     """
+    if not isinstance(region, str):
+        raise TypeError("region must be a string")
     head = (region or "").strip().split("-", 1)[0].upper()
     if head in CONTINENT_CODES:
         return head
@@ -220,6 +222,21 @@ class RegionalBridgePeer:
     continent: str
     rtt_ms: float
     stun_verified: bool = True
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.peer_id, str) or not self.peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
+        if not isinstance(self.continent, str) or not self.continent.strip():
+            raise ValueError("continent must be a non-empty string")
+        if (
+            isinstance(self.rtt_ms, bool)
+            or not isinstance(self.rtt_ms, (int, float))
+            or not math.isfinite(float(self.rtt_ms))
+            or float(self.rtt_ms) <= 0.0
+        ):
+            raise ValueError("rtt_ms must be a positive finite number")
+        if not isinstance(self.stun_verified, bool):
+            raise TypeError("stun_verified must be a bool")
 
 
 class ContinentalSuperRingRouter:
@@ -335,6 +352,8 @@ class ContinentalSuperRingRouter:
     # ------------------------------------------------------------------
     def register_peer(self, node: SuperRingPeerNode) -> bool:
         """Admit `node` into its Tier-1 Regional Geo-Ring (only if the `<20 ms` SLA holds)."""
+        if not isinstance(node, SuperRingPeerNode):
+            raise TypeError("node must be a SuperRingPeerNode")
         if not isinstance(node.peer_id, str) or not node.peer_id.strip():
             return False
         if (
@@ -424,6 +443,13 @@ class ContinentalSuperRingRouter:
 
     def inter_continent_rtt_ms(self, source_continent: str, target_continent: str) -> float:
         """Measured (or default) WAN RTT between two continental bridge rings."""
+        if (
+            not isinstance(source_continent, str)
+            or not source_continent.strip()
+            or not isinstance(target_continent, str)
+            or not target_continent.strip()
+        ):
+            raise ValueError("source_continent and target_continent must be non-empty strings")
         if source_continent == target_continent:
             return 0.0
         table = self.inter_continent_rtt_table.get(source_continent, {})
@@ -468,6 +494,13 @@ class ContinentalSuperRingRouter:
         Same-region peers stay inside the Tier-1 Regional Geo-Ring (`< 20 ms`), while
         cross-continent peers are routed through the elected Continental Bridges.
         """
+        if (
+            not isinstance(source_peer_id, str)
+            or not source_peer_id.strip()
+            or not isinstance(target_peer_id, str)
+            or not target_peer_id.strip()
+        ):
+            raise ValueError("source_peer_id and target_peer_id must be non-empty strings")
         if source_peer_id not in self.peers and target_peer_id not in self.peers:
             bridges = self.elect_bridges()
             if source_peer_id == target_peer_id:
@@ -670,6 +703,23 @@ class CongestionWindowTelemetry:
     mtu_bytes: int
     mode: str = "steady"
 
+    def __post_init__(self) -> None:
+        for int_name in ("cwnd_bytes", "cwnd_packets", "mtu_bytes"):
+            ival = getattr(self, int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{int_name} must be an integer >= 1")
+        for f_name in ("btl_bw_bps", "rtprop_ms", "jitter_ms", "loss_ratio", "gain"):
+            fval = getattr(self, f_name)
+            if (
+                isinstance(fval, bool)
+                or not isinstance(fval, (int, float))
+                or not math.isfinite(float(fval))
+                or float(fval) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a non-negative finite number")
+        if not isinstance(self.mode, str) or not self.mode.strip():
+            raise ValueError("mode must be a non-empty string")
+
     def to_dict(self) -> Dict[str, Any]:
         """Plain-dict view of the telemetry (JSON friendly)."""
         return {
@@ -827,6 +877,27 @@ class AdaptiveCongestionController:
         loss_ratio: Optional[float] = None,
     ) -> CongestionWindowTelemetry:
         """Compute the BBR-inspired congestion window for the current path conditions."""
+        if rtt_ms is not None and (
+            isinstance(rtt_ms, bool)
+            or not isinstance(rtt_ms, (int, float))
+            or not math.isfinite(float(rtt_ms))
+            or float(rtt_ms) <= 0.0
+        ):
+            raise ValueError("rtt_ms must be a finite positive number or None")
+        if jitter_ms is not None and (
+            isinstance(jitter_ms, bool)
+            or not isinstance(jitter_ms, (int, float))
+            or not math.isfinite(float(jitter_ms))
+            or float(jitter_ms) < 0.0
+        ):
+            raise ValueError("jitter_ms must be a finite non-negative number or None")
+        if loss_ratio is not None and (
+            isinstance(loss_ratio, bool)
+            or not isinstance(loss_ratio, (int, float))
+            or not math.isfinite(float(loss_ratio))
+            or not (0.0 <= float(loss_ratio) <= 1.0)
+        ):
+            raise ValueError("loss_ratio must be in [0.0, 1.0] or None")
         rtprop = float(rtt_ms) if (rtt_ms is not None and rtt_ms > 0.0) else (self.rtprop_ms or 20.0)
         jitter = float(jitter_ms) if jitter_ms is not None else self.jitter_ms
         loss = float(loss_ratio) if loss_ratio is not None else self.loss_ratio

@@ -72,7 +72,11 @@ def _spec_flops_bound_infer(spec: dict[str, Any], completions: list[dict[str, An
 def _resolve_server_elapsed(spec: dict[str, Any], server_elapsed_seconds: float | None) -> float | None:
     if not isinstance(spec, dict):
         raise TypeError("spec must be a dict")
-    cand = server_elapsed_seconds if server_elapsed_seconds is not None else spec.get("server_elapsed_seconds")
+    if server_elapsed_seconds is not None:
+        if isinstance(server_elapsed_seconds, bool) or not isinstance(server_elapsed_seconds, (int, float)) or not math.isfinite(float(server_elapsed_seconds)) or float(server_elapsed_seconds) <= 0.0:
+            raise ValueError("server_elapsed_seconds must be a finite positive number when provided")
+        return float(server_elapsed_seconds)
+    cand = spec.get("server_elapsed_seconds")
     if isinstance(cand, (int, float)) and not isinstance(cand, bool) and math.isfinite(cand) and float(cand) > 0.0:
         return float(cand)
     return None
@@ -87,6 +91,19 @@ class MoEValidator:
         self._rng = random.SystemRandom()
 
     def _ensure(self, spec: dict[str, Any]) -> None:
+        if not isinstance(spec, dict):
+            raise TypeError("spec must be a dict")
+        for req in ("model_id", "rank", "alpha", "init_seed"):
+            if req not in spec:
+                raise ValueError(f"spec is missing required key {req!r}")
+        if not isinstance(spec["model_id"], str) or not spec["model_id"].strip():
+            raise ValueError("spec['model_id'] must be a non-empty string")
+        if isinstance(spec["rank"], bool) or not isinstance(spec["rank"], int) or spec["rank"] < 1:
+            raise ValueError("spec['rank'] must be a positive integer")
+        if isinstance(spec["alpha"], bool) or not isinstance(spec["alpha"], (int, float)) or not math.isfinite(float(spec["alpha"])) or float(spec["alpha"]) <= 0.0:
+            raise ValueError("spec['alpha'] must be a finite positive number")
+        if isinstance(spec["init_seed"], bool) or not isinstance(spec["init_seed"], int):
+            raise ValueError("spec['init_seed'] must be an integer")
         from hivemind.boinc.real_client.moe_app import load_peft_model
         from hivemind.core.quantization import extract_lora_state_dict
 
@@ -105,6 +122,20 @@ class MoEValidator:
         replay_all: bool = False,
         server_elapsed_seconds: float | None = None,
     ) -> Verdict:
+        if not isinstance(spec, dict) or not isinstance(spec.get("wu_id"), str) or not spec["wu_id"].strip():
+            raise ValueError("spec must be a dict containing a non-empty string 'wu_id'")
+        if not isinstance(meta_path, (Path, str)) or not str(meta_path).strip():
+            raise ValueError("meta_path must be a non-empty Path or string")
+        if not isinstance(states_path, (Path, str)) or not str(states_path).strip():
+            raise ValueError("states_path must be a non-empty Path or string")
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("host must be a non-empty string")
+        if not isinstance(replay_all, bool):
+            raise ValueError("replay_all must be a bool")
+        if server_elapsed_seconds is not None and (isinstance(server_elapsed_seconds, bool) or not isinstance(server_elapsed_seconds, (int, float)) or not math.isfinite(float(server_elapsed_seconds)) or float(server_elapsed_seconds) <= 0.0):
+            raise ValueError("server_elapsed_seconds must be a finite positive number when provided")
+        meta_path = Path(meta_path)
+        states_path = Path(states_path)
         import torch
 
         from hivemind.boinc.real_client.moe_app import state_sha
@@ -176,6 +207,17 @@ class MoEValidator:
         host: str,
         server_elapsed_seconds: float | None = None,
     ) -> Verdict:
+        if not isinstance(spec, dict) or not isinstance(spec.get("wu_id"), str) or not spec["wu_id"].strip():
+            raise ValueError("spec must be a dict containing a non-empty string 'wu_id'")
+        if not isinstance(meta_path, (Path, str)) or not str(meta_path).strip():
+            raise ValueError("meta_path must be a non-empty Path or string")
+        if not isinstance(adapter, dict):
+            raise TypeError("adapter must be a dict")
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("host must be a non-empty string")
+        if server_elapsed_seconds is not None and (isinstance(server_elapsed_seconds, bool) or not isinstance(server_elapsed_seconds, (int, float)) or not math.isfinite(float(server_elapsed_seconds)) or float(server_elapsed_seconds) <= 0.0):
+            raise ValueError("server_elapsed_seconds must be a finite positive number when provided")
+        meta_path = Path(meta_path)
         from hivemind.boinc.real_client.moe_app import infer
 
         wu = spec["wu_id"]

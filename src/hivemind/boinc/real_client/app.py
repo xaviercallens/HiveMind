@@ -86,6 +86,8 @@ def _build(spec: dict[str, Any], device: str):
 
 
 def q16_digest(state: dict[str, Any]) -> str:
+    if not isinstance(state, dict) or not state:
+        raise ValueError("state must be a non-empty dict")
     from hivemind.boinc.validator import quantize_fixed_point_q16_state
 
     h = hashlib.sha256()

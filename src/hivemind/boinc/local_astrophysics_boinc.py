@@ -83,6 +83,10 @@ console = Console()
 
 def _find_cached_hf_dataset_file(repo_id: str, filename_suffix: str) -> Path | None:
     """Locate a cached Hugging Face dataset file without spawning Rust hf_xet threads."""
+    if not isinstance(repo_id, str) or not repo_id.strip():
+        raise ValueError("repo_id must be a non-empty string")
+    if not isinstance(filename_suffix, str) or not filename_suffix.strip():
+        raise ValueError("filename_suffix must be a non-empty string")
     repo_folder = "datasets--" + repo_id.replace("/", "--")
     search_roots = [
         CACHE_ROOT / "huggingface" / "hub" / repo_folder / "snapshots",
@@ -251,6 +255,8 @@ def create_signed_astrophysics_parquet_shard(
     secret_key: bytes = DEFAULT_COORDINATOR_SECRET,
 ) -> Tuple[Path, str, str, List[str], Dict[str, Any]]:
     """Fetch real Hugging Face Astrophysics examples, screen via Phase S-2 guard, tokenize into Parquet, and sign."""
+    if not isinstance(shard_path, (Path, str)) or not str(shard_path).strip():
+        raise ValueError("shard_path must be a non-empty Path or string")
     if isinstance(rng_seed, bool) or not isinstance(rng_seed, int) or rng_seed < 0:
         raise ValueError("rng_seed must be a non-negative integer")
     if isinstance(num_sequences, bool) or not isinstance(num_sequences, int) or num_sequences <= 0:
@@ -321,6 +327,10 @@ def _evaluate_model_loss_on_shard(
     device: torch.device,
 ) -> float:
     """Compute mean causal language modeling cross-entropy loss on a BOINC shard."""
+    if not isinstance(model, torch.nn.Module):
+        raise TypeError("model must be a torch.nn.Module")
+    if not isinstance(token_sequences, torch.Tensor) or token_sequences.ndim != 2 or token_sequences.size(0) < 1:
+        raise ValueError("token_sequences must be a non-empty 2D Tensor")
     model.eval()
     batch = token_sequences[: min(8, token_sequences.size(0))].to(device, dtype=torch.long)
     out = model(input_ids=batch, labels=batch)
@@ -349,6 +359,8 @@ def run_local_boinc_astrophysics_campaign(
             raise ValueError(f"{name} must be a positive integer")
     if spot_check_interval_s > inner_steps_H:
         raise ValueError("spot_check_interval_s must be <= inner_steps_H")
+    if output_json_path is not None and (not isinstance(output_json_path, (Path, str)) or not str(output_json_path).strip()):
+        raise ValueError("output_json_path must be a non-empty Path or string when provided")
     t_start = time.perf_counter()
     configure_deterministic_runtime(42)
     hw_info = detect_local_hardware()

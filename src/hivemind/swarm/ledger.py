@@ -49,6 +49,20 @@ class WorkReceipt:
     delta_sha256: str
     validator_node_id: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.node_id, str) or not self.node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(self.steam_id64, str) or not self.steam_id64.strip():
+            raise ValueError("steam_id64 must be a non-empty string")
+        if not isinstance(self.branch_name, str) or not self.branch_name.strip():
+            raise ValueError("branch_name must be a non-empty string")
+        if not isinstance(self.delta_sha256, str) or not self.delta_sha256.strip():
+            raise ValueError("delta_sha256 must be a non-empty string")
+        if not isinstance(self.spot_check_passed, bool):
+            raise ValueError("spot_check_passed must be a boolean")
+        if not isinstance(self.multikrum_accepted, bool):
+            raise ValueError("multikrum_accepted must be a boolean")
+
 
 @dataclass
 class StorageProofReceipt:
@@ -62,6 +76,22 @@ class StorageProofReceipt:
     verified: bool
     validator_node_id: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.node_id, str) or not self.node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(self.shard_cid, str) or not self.shard_cid.strip():
+            raise ValueError("shard_cid must be a non-empty string")
+        if (
+            isinstance(self.challenged_chunk_index, bool)
+            or not isinstance(self.challenged_chunk_index, int)
+            or self.challenged_chunk_index < 0
+        ):
+            raise ValueError("challenged_chunk_index must be a non-negative integer")
+        if not isinstance(self.merkle_proof_hash, str) or not self.merkle_proof_hash.strip():
+            raise ValueError("merkle_proof_hash must be a non-empty string")
+        if not isinstance(self.verified, bool):
+            raise ValueError("verified must be a boolean")
+
 
 @dataclass
 class InferenceSettlementReceipt:
@@ -73,6 +103,23 @@ class InferenceSettlementReceipt:
     verified_tokens: int
     rtt_speedup: Optional[float]
     fee_paid_hive: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.consumer_node_id, str) or not self.consumer_node_id.strip():
+            raise ValueError("consumer_node_id must be a non-empty string")
+        if not isinstance(self.expert_provider_nodes, list) or len(self.expert_provider_nodes) == 0:
+            raise ValueError("expert_provider_nodes must be a non-empty list")
+        if not isinstance(self.domain_expert, str) or not self.domain_expert.strip():
+            raise ValueError("domain_expert must be a non-empty string")
+        if isinstance(self.verified_tokens, bool) or not isinstance(self.verified_tokens, int) or self.verified_tokens < 1:
+            raise ValueError("verified_tokens must be a positive integer")
+        if (
+            isinstance(self.fee_paid_hive, bool)
+            or not isinstance(self.fee_paid_hive, (int, float))
+            or not math.isfinite(float(self.fee_paid_hive))
+            or float(self.fee_paid_hive) < 0.0
+        ):
+            raise ValueError("fee_paid_hive must be a finite number >= 0.0")
 
 
 @dataclass
@@ -89,6 +136,22 @@ class HivePoUWBlock:
     reward_allocations: Dict[str, float]
     slashed_nodes: List[str]
     block_hash: str = ""
+
+    def __post_init__(self) -> None:
+        if isinstance(self.block_height, bool) or not isinstance(self.block_height, int) or self.block_height < 0:
+            raise ValueError("block_height must be a non-negative integer")
+        if not isinstance(self.prev_block_hash, str) or not self.prev_block_hash.strip():
+            raise ValueError("prev_block_hash must be a non-empty string")
+        if isinstance(self.outer_step, bool) or not isinstance(self.outer_step, int) or self.outer_step < 0:
+            raise ValueError("outer_step must be a non-negative integer")
+        if not isinstance(self.expert_cid, str) or not self.expert_cid.strip():
+            raise ValueError("expert_cid must be a non-empty string")
+        if not isinstance(self.merkle_root, str) or not self.merkle_root.strip():
+            raise ValueError("merkle_root must be a non-empty string")
+        if not isinstance(self.reward_allocations, dict):
+            raise ValueError("reward_allocations must be a dictionary")
+        if not isinstance(self.slashed_nodes, list):
+            raise ValueError("slashed_nodes must be a list")
 
     def compute_hash(self) -> str:
         payload = {
@@ -681,6 +744,33 @@ class IndemnityReceipt:
     shortfall_hive: float
     stake_surplus_to_reserve: float
     settlement_ms: float
+
+    def __post_init__(self) -> None:
+        for field_name in ("fault_id", "commitment_root", "fault_reason", "faulty_peer_id", "consumer_node_id"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            isinstance(self.claimed_hive, bool)
+            or not isinstance(self.claimed_hive, (int, float))
+            or not math.isfinite(float(self.claimed_hive))
+            or float(self.claimed_hive) <= 0.0
+        ):
+            raise ValueError("claimed_hive must be a positive finite number")
+        if (
+            isinstance(self.indemnified_hive, bool)
+            or not isinstance(self.indemnified_hive, (int, float))
+            or not math.isfinite(float(self.indemnified_hive))
+            or float(self.indemnified_hive) < 0.0
+        ):
+            raise ValueError("indemnified_hive must be a finite number >= 0.0")
+        if (
+            isinstance(self.shortfall_hive, bool)
+            or not isinstance(self.shortfall_hive, (int, float))
+            or not math.isfinite(float(self.shortfall_hive))
+            or float(self.shortfall_hive) < 0.0
+        ):
+            raise ValueError("shortfall_hive must be a finite number >= 0.0")
 
 
 class GuildSlashingInsurancePool:

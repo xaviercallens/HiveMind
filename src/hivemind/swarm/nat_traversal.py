@@ -161,6 +161,8 @@ def encode_xor_address(addr: Address, transaction_id: bytes) -> bytes:
 
 
 def decode_xor_address(value: bytes, transaction_id: bytes) -> Address:
+    if not isinstance(value, (bytes, bytearray)) or not isinstance(transaction_id, (bytes, bytearray)):
+        raise TypeError("value and transaction_id must be bytes")
     family = _address_family(value)
     if len(transaction_id) != 12:
         raise StunError("invalid STUN transaction ID length")
@@ -178,6 +180,8 @@ def decode_xor_address(value: bytes, transaction_id: bytes) -> Address:
 
 
 def decode_plain_address(value: bytes) -> Address:
+    if not isinstance(value, (bytes, bytearray)):
+        raise TypeError("value must be bytes")
     family = _address_family(value)
     port = struct.unpack("!H", value[2:4])[0]
     if family == 0x01:
@@ -188,6 +192,8 @@ def decode_plain_address(value: bytes) -> Address:
 
 
 def _address_family(value: bytes) -> int:
+    if not isinstance(value, (bytes, bytearray)):
+        raise TypeError("value must be bytes")
     if len(value) < 4:
         raise StunError("truncated STUN address")
     family = value[1]
@@ -199,6 +205,8 @@ def _address_family(value: bytes) -> int:
 
 def is_channel_data(data: bytes) -> bool:
     """True when `data` is a ChannelData message rather than a STUN message (RFC 5766 §11.4)."""
+    if not isinstance(data, (bytes, bytearray)):
+        raise TypeError("data must be bytes")
     return len(data) >= CHANNEL_HEADER.size and bool(data[0] & CHANNEL_DATA_FLAG) and not data[0] & 0x80
 
 
@@ -224,6 +232,8 @@ def encode_channel_number(number: int) -> bytes:
 
 def decode_channel_number(value: bytes) -> int:
     """Decode a CHANNEL-NUMBER attribute; the RFFU field is ignored on reception (§14.1)."""
+    if not isinstance(value, (bytes, bytearray)):
+        raise TypeError("value must be bytes")
     if len(value) != 4:
         raise StunError("CHANNEL-NUMBER must be 4 bytes long")
     number = struct.unpack("!H", value[:2])[0]
@@ -234,6 +244,8 @@ def decode_channel_number(value: bytes) -> int:
 
 def decode_channel_data(data: bytes) -> Tuple[int, bytes]:
     """Parse a ChannelData message into `(channel_number, payload)`."""
+    if not isinstance(data, (bytes, bytearray)):
+        raise TypeError("data must be bytes")
     if not is_channel_data(data):
         raise StunError("not a ChannelData message")
     channel_number, length = CHANNEL_HEADER.unpack_from(data, 0)
@@ -305,6 +317,23 @@ class StunMessage:
     transaction_id: bytes = field(default_factory=lambda: secrets.token_bytes(12))
     attributes: List[Tuple[int, bytes]] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        if isinstance(self.method, bool) or not isinstance(self.method, int) or not (0 <= self.method <= 0x0FFF):
+            raise ValueError("method must be an integer in 0..0x0FFF")
+        if isinstance(self.cls, bool) or not isinstance(self.cls, int) or not (0 <= self.cls <= 3):
+            raise ValueError("cls must be an integer in 0..3")
+        if not isinstance(self.transaction_id, (bytes, bytearray)) or len(self.transaction_id) != 12:
+            raise ValueError("transaction_id must be 12 bytes")
+        if not isinstance(self.attributes, list) or any(
+            not isinstance(item, tuple)
+            or len(item) != 2
+            or isinstance(item[0], bool)
+            or not isinstance(item[0], int)
+            or not isinstance(item[1], (bytes, bytearray))
+            for item in self.attributes
+        ):
+            raise ValueError("attributes must be a list of (int, bytes) tuples")
+
     def add(self, attr_type: int, value: bytes) -> "StunMessage":
         self.attributes.append((attr_type, value))
         return self
@@ -366,6 +395,8 @@ class StunMessage:
 
 def verify_message_integrity(raw: bytes, key: bytes) -> bool:
     """Check MESSAGE-INTEGRITY per RFC 5389 §15.4 (length field covers up to the MAC)."""
+    if not isinstance(raw, (bytes, bytearray)) or not isinstance(key, (bytes, bytearray)) or len(key) == 0:
+        raise ValueError("raw must be bytes and key must be non-empty bytes")
     try:
         StunMessage.decode(raw)
         entries = _wire_attributes(raw)
@@ -382,6 +413,8 @@ def verify_message_integrity(raw: bytes, key: bytes) -> bool:
 
 def verify_fingerprint(raw: bytes) -> bool:
     """Check the trailing FINGERPRINT attribute (CRC-32 XOR 0x5354554E, RFC 5389 §15.5)."""
+    if not isinstance(raw, (bytes, bytearray)):
+        raise ValueError("raw must be bytes")
     try:
         entries = _wire_attributes(raw)
     except StunError:
@@ -393,6 +426,7 @@ def verify_fingerprint(raw: bytes) -> bool:
 
 
 def udp_socket(bind: Address = ("0.0.0.0", 0)) -> socket.socket:
+    _validate_address_tuple(bind, "bind")
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     if hasattr(socket, "SIO_UDP_CONNRESET"):
         # Windows otherwise turns an ICMP port-unreachable into an error on the next recvfrom.
@@ -404,16 +438,36 @@ def udp_socket(bind: Address = ("0.0.0.0", 0)) -> socket.socket:
 def resolve(server: ServerSpec) -> Address:
     """Resolve `"host:port"` (or a `(host, port)` tuple) to an IPv4 transport address."""
     if isinstance(server, tuple):
-        host, port = server[0], int(server[1])
-    else:
+        if (
+            len(server) != 2
+            or not isinstance(server[0], str)
+            or not server[0].strip()
+            or isinstance(server[1], bool)
+            or not isinstance(server[1], int)
+            or not (1 <= server[1] <= 65535)
+        ):
+            raise ValueError("server tuple must be (non-empty host, port in 1..65535)")
+        host, port = server[0].strip(), int(server[1])
+    elif isinstance(server, str):
+        if ":" not in server:
+            raise ValueError("server string must be 'host:port'")
         host, _, port_text = server.rpartition(":")
-        host, port = host.strip("[]"), int(port_text)
+        host = host.strip("[]").strip()
+        try:
+            port = int(port_text)
+        except ValueError as exc:
+            raise ValueError("server port must be an integer") from exc
+        if not host or not (1 <= port <= 65535):
+            raise ValueError("server string must have non-empty host and port in 1..65535")
+    else:
+        raise TypeError("server must be a (host, port) tuple or 'host:port' string")
     info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_DGRAM)
     return info[0][4][0], info[0][4][1]
 
 
 def outbound_interface_ip(target: Address) -> str:
     """Local IP the OS would use to reach `target` (UDP connect sends no packets)."""
+    _validate_address_tuple(target, "target")
     probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         probe.connect(target)
@@ -492,6 +546,19 @@ def stun_transaction(
         return message, data, (time.perf_counter() - t0) * 1000.0
 
 
+def _validate_address_tuple(addr: object, field_name: str) -> None:
+    if (
+        not isinstance(addr, tuple)
+        or len(addr) != 2
+        or not isinstance(addr[0], str)
+        or not addr[0].strip()
+        or isinstance(addr[1], bool)
+        or not isinstance(addr[1], int)
+        or not (0 <= addr[1] <= 65535)
+    ):
+        raise ValueError(f"{field_name} must be a (non-empty host, port in 0..65535) tuple")
+
+
 @dataclass
 class StunBindingResult:
     server: Address
@@ -499,9 +566,34 @@ class StunBindingResult:
     mapped: Address
     rtt_ms: float
 
+    def __post_init__(self) -> None:
+        _validate_address_tuple(self.server, "server")
+        _validate_address_tuple(self.local, "local")
+        _validate_address_tuple(self.mapped, "mapped")
+        if (
+            isinstance(self.rtt_ms, bool)
+            or not isinstance(self.rtt_ms, (int, float))
+            or not math.isfinite(float(self.rtt_ms))
+            or float(self.rtt_ms) < 0.0
+        ):
+            raise ValueError("rtt_ms must be a finite non-negative number")
+
 
 def stun_binding(sock: socket.socket, server: ServerSpec, timeout: float = 3.0) -> StunBindingResult:
     """Send an RFC 5389 Binding request and return the server-reflexive address it reports."""
+    if not (
+        callable(getattr(sock, "sendto", None))
+        and callable(getattr(sock, "recvfrom", None))
+        and callable(getattr(sock, "getsockname", None))
+    ):
+        raise TypeError("sock must be a UDP socket with sendto, recvfrom, and getsockname")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+    ):
+        raise ValueError("timeout must be a positive finite number")
     server_addr = resolve(server)
     request = StunMessage(BINDING, REQUEST).add(SOFTWARE, SOFTWARE_NAME.encode("utf-8"))
     message, _, rtt_ms = stun_transaction(
@@ -532,6 +624,26 @@ class NatMapping:
     servers: List[Address]
     rtt_ms: List[float] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        if self.behaviour not in ("no_nat", "endpoint_independent", "address_dependent", "unknown"):
+            raise ValueError(
+                "behaviour must be one of ('no_nat', 'endpoint_independent', 'address_dependent', 'unknown')"
+            )
+        _validate_address_tuple(self.local, "local")
+        if not isinstance(self.mapped, list) or not self.mapped:
+            raise ValueError("mapped must be a non-empty list of Address tuples")
+        for m in self.mapped:
+            _validate_address_tuple(m, "mapped item")
+        if not isinstance(self.servers, list) or not self.servers:
+            raise ValueError("servers must be a non-empty list of Address tuples")
+        for s in self.servers:
+            _validate_address_tuple(s, "servers item")
+        if not isinstance(self.rtt_ms, list) or any(
+            isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)) or float(x) < 0.0
+            for x in self.rtt_ms
+        ):
+            raise ValueError("rtt_ms must be a list of finite non-negative numbers")
+
     @property
     def nat_type(self) -> str:
         return {
@@ -549,6 +661,21 @@ def classify_nat_mapping(
     sock: socket.socket, servers: Sequence[ServerSpec], timeout: float = 2.0
 ) -> NatMapping:
     """Compare the mappings two STUN servers report for the same local socket."""
+    if not (
+        callable(getattr(sock, "sendto", None))
+        and callable(getattr(sock, "recvfrom", None))
+        and callable(getattr(sock, "getsockname", None))
+    ):
+        raise TypeError("sock must be a UDP socket with sendto, recvfrom, and getsockname")
+    if isinstance(servers, (str, bytes)) or not isinstance(servers, Sequence) or len(servers) == 0:
+        raise ValueError("servers must be a non-empty sequence of ServerSpec")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+    ):
+        raise ValueError("timeout must be a positive finite number")
     results: List[StunBindingResult] = []
     for server in servers:
         try:
@@ -586,6 +713,26 @@ class PunchResult:
     rtt_ms: Optional[float]
     probes_sent: int
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.succeeded, bool):
+            raise ValueError("succeeded must be a boolean")
+        if self.peer is not None:
+            _validate_address_tuple(self.peer, "peer")
+        elif self.succeeded:
+            raise ValueError("peer cannot be None when succeeded is True")
+        if self.rtt_ms is not None:
+            if (
+                isinstance(self.rtt_ms, bool)
+                or not isinstance(self.rtt_ms, (int, float))
+                or not math.isfinite(float(self.rtt_ms))
+                or float(self.rtt_ms) < 0.0
+            ):
+                raise ValueError("rtt_ms must be None or a finite non-negative number")
+        elif self.succeeded:
+            raise ValueError("rtt_ms cannot be None when succeeded is True")
+        if isinstance(self.probes_sent, bool) or not isinstance(self.probes_sent, int) or self.probes_sent < 0:
+            raise ValueError("probes_sent must be a non-negative integer")
+
 
 def udp_hole_punch(
     sock: socket.socket,
@@ -602,6 +749,35 @@ def udp_hole_punch(
     answered from the address it arrived on, which is the hole the peer's NAT just opened. A
     side succeeds when it receives that answer, then lingers briefly to answer late probes.
     """
+    if not (callable(getattr(sock, "sendto", None)) and callable(getattr(sock, "recvfrom", None))):
+        raise TypeError("sock must provide callable sendto and recvfrom methods")
+    if isinstance(candidates, (str, bytes)) or not isinstance(candidates, Sequence):
+        raise TypeError("candidates must be a Sequence of Address tuples")
+    for cand in candidates:
+        _validate_address_tuple(cand, "candidates item")
+    if not isinstance(session, (bytes, bytearray)) or len(session) == 0:
+        raise ValueError("session must be non-empty bytes")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+    ):
+        raise ValueError("timeout must be a positive finite number")
+    if (
+        isinstance(interval, bool)
+        or not isinstance(interval, (int, float))
+        or not math.isfinite(float(interval))
+        or float(interval) < 0.0
+    ):
+        raise ValueError("interval must be a non-negative finite number")
+    if (
+        isinstance(linger, bool)
+        or not isinstance(linger, (int, float))
+        or not math.isfinite(float(linger))
+        or float(linger) < 0.0
+    ):
+        raise ValueError("linger must be a non-negative finite number")
     syn = PUNCH_MAGIC + b"S" + session
     ack = PUNCH_MAGIC + b"A" + session
     deadline = time.monotonic() + timeout
@@ -804,9 +980,12 @@ class TurnClient:
         return self.relayed
 
     def create_permission(self, peer_ip: str) -> None:
+        if not isinstance(peer_ip, str) or not peer_ip.strip():
+            raise ValueError("peer_ip must be a non-empty IP address string")
+        ipaddress.ip_address(peer_ip.strip())
         self._request(
             CREATE_PERMISSION,
-            [(XOR_PEER_ADDRESS, lambda txid: encode_xor_address((peer_ip, 0), txid))],
+            [(XOR_PEER_ADDRESS, lambda txid: encode_xor_address((peer_ip.strip(), 0), txid))],
         )
 
     def refresh(self, lifetime: int = 600) -> int:
@@ -819,6 +998,9 @@ class TurnClient:
 
     def send_to(self, peer: Address, payload: bytes) -> None:
         """Relay `payload` to `peer` through the allocation (Send indication, RFC 5766 §10.1)."""
+        _validate_address_tuple(peer, "peer")
+        if not isinstance(payload, (bytes, bytearray)):
+            raise TypeError("payload must be bytes")
         indication = StunMessage(SEND, INDICATION)
         indication.add(XOR_PEER_ADDRESS, encode_xor_address(peer, indication.transaction_id))
         indication.add(DATA_ATTR, payload)
@@ -832,6 +1014,7 @@ class TurnClient:
         already bound to `peer` (a refresh, §11.2) or the lowest free one. Binding also
         installs the peer permission, so no separate CreatePermission is needed.
         """
+        _validate_address_tuple(peer, "peer")
         if channel_number is None:
             channel_number = self.channels.get(peer)
             if channel_number is None:
@@ -856,6 +1039,9 @@ class TurnClient:
 
     def send_channel(self, peer: Address, payload: bytes) -> None:
         """Send `payload` to `peer` over the channel bound to it (RFC 5766 §11.4)."""
+        _validate_address_tuple(peer, "peer")
+        if not isinstance(payload, (bytes, bytearray)):
+            raise TypeError("payload must be bytes")
         channel_number = self.channels.get(peer)
         if channel_number is None:
             raise StunError("no TURN channel is bound to that peer")
@@ -863,6 +1049,13 @@ class TurnClient:
 
     def recv_from(self, timeout: float = 2.0) -> Tuple[Address, bytes]:
         """Wait for the next relayed payload and return `(peer, payload)`."""
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not math.isfinite(float(timeout))
+            or float(timeout) < 0.0
+        ):
+            raise ValueError("timeout must be a non-negative finite number")
         deadline = time.monotonic() + timeout
         while not self._inbox:
             remaining = deadline - time.monotonic()
@@ -1470,6 +1663,11 @@ class DeterministicFaultProxy:
         profile: Optional[FaultProfile] = None,
         host: str = "127.0.0.1",
     ) -> None:
+        _validate_address_tuple(upstream, "upstream")
+        if profile is not None and not isinstance(profile, FaultProfile):
+            raise TypeError("profile must be None or a FaultProfile")
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("host must be a non-empty string")
         self.upstream = upstream
         self.profile = profile if profile is not None else FaultProfile()
         self.host = host

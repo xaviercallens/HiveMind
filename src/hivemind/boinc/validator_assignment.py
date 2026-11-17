@@ -132,6 +132,21 @@ class ValidatorRegistry:
         return None, self.default_fallback, f"no validator with class key {key}; fallback {self.default_fallback.value}"
 
 
+def _validate_class_key(key: Any, name: str = "class_key") -> ClassKey:
+    if not isinstance(key, tuple) or len(key) != 4:
+        raise ValueError(f"{name} must be a 4-tuple (device_class, compute_capability, torch_version, dtype)")
+    dev_cls, cc, tv, dt = key
+    if dev_cls not in DEVICE_CLASSES:
+        raise ValueError(f"{name}[0] (device_class) must be one of {sorted(DEVICE_CLASSES)}")
+    if cc is not None and (not isinstance(cc, str) or not cc.strip()):
+        raise ValueError(f"{name}[1] (compute_capability) must be None or a non-empty string")
+    if not isinstance(tv, str) or not tv.strip():
+        raise ValueError(f"{name}[2] (torch_version) must be a non-empty string")
+    if not isinstance(dt, str) or not dt.strip():
+        raise ValueError(f"{name}[3] (dtype) must be a non-empty string")
+    return key
+
+
 class EpsilonTable:
     """Per class-pair eps. Same class: 1e-4 default; cross class: None (not comparable)."""
 
@@ -149,6 +164,8 @@ class EpsilonTable:
         self.flags: list[str] = []
 
     def set_eps(self, a: ClassKey, b: ClassKey, eps: float | None) -> None:
+        _validate_class_key(a, "a")
+        _validate_class_key(b, "b")
         if eps is not None and (
             isinstance(eps, bool)
             or not isinstance(eps, (int, float))
@@ -159,6 +176,8 @@ class EpsilonTable:
         self._overrides[tuple(sorted((a, b), key=repr))] = float(eps) if eps is not None else None  # type: ignore[assignment]
 
     def eps_for(self, a: ClassKey, b: ClassKey) -> float | None:
+        _validate_class_key(a, "a")
+        _validate_class_key(b, "b")
         pair = tuple(sorted((a, b), key=repr))
         if pair in self._overrides:
             return self._overrides[pair]  # type: ignore[index]
@@ -167,11 +186,15 @@ class EpsilonTable:
     @classmethod
     def from_e12_report(cls, path: str | Path) -> "EpsilonTable":
         """Record E12 measured divergences; eps stays at its default (report eps is noted, not applied)."""
+        if not isinstance(path, (str, Path)) or not str(path).strip():
+            raise ValueError("path must be a non-empty Path or string")
         table = cls()
         p = Path(path)
         if not p.exists():
             return table
         report = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(report, dict):
+            raise ValueError("E12 report must be a JSON object")
         eps = report.get("eps", DEFAULT_EPS)
         kinds = {
             "A_same_process_T4": "same_class",

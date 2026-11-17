@@ -66,6 +66,41 @@ class SpeculativeDecodingStepResult:
     effective_speedup_factor: float
     speedup_measurement_kind: str = "model"
 
+    def __post_init__(self) -> None:
+        if isinstance(self.draft_k, bool) or not isinstance(self.draft_k, int) or self.draft_k < 1:
+            raise ValueError("draft_k must be a positive integer")
+        if (
+            isinstance(self.accepted_count, bool)
+            or not isinstance(self.accepted_count, int)
+            or self.accepted_count < 0
+            or self.accepted_count > self.draft_k
+        ):
+            raise ValueError("accepted_count must be an integer in [0, draft_k]")
+        if isinstance(self.bonus_token_id, bool) or not isinstance(self.bonus_token_id, int) or self.bonus_token_id < 0:
+            raise ValueError("bonus_token_id must be a non-negative integer")
+        if (
+            not isinstance(self.emitted_tokens, tuple)
+            or len(self.emitted_tokens) == 0
+            or any(isinstance(t, bool) or not isinstance(t, int) or t < 0 for t in self.emitted_tokens)
+        ):
+            raise ValueError("emitted_tokens must be a non-empty tuple of non-negative integers")
+        if (
+            isinstance(self.acceptance_rate, bool)
+            or not isinstance(self.acceptance_rate, (int, float))
+            or not math.isfinite(float(self.acceptance_rate))
+            or not (0.0 <= float(self.acceptance_rate) <= 1.0)
+        ):
+            raise ValueError("acceptance_rate must be a finite number in [0.0, 1.0]")
+        if (
+            isinstance(self.effective_speedup_factor, bool)
+            or not isinstance(self.effective_speedup_factor, (int, float))
+            or not math.isfinite(float(self.effective_speedup_factor))
+            or float(self.effective_speedup_factor) <= 0.0
+        ):
+            raise ValueError("effective_speedup_factor must be a finite positive number")
+        if not isinstance(self.speedup_measurement_kind, str) or not self.speedup_measurement_kind.strip():
+            raise ValueError("speedup_measurement_kind must be a non-empty string")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -80,6 +115,12 @@ def sample_residual_token_distribution(
         raise ValueError("target_probs must be a non-empty dictionary")
     if not isinstance(draft_probs, dict):
         raise ValueError("draft_probs must be a dictionary")
+    for d_name, d_map in (("target_probs", target_probs), ("draft_probs", draft_probs)):
+        for k, v in d_map.items():
+            if isinstance(k, bool) or not isinstance(k, int) or k < 0:
+                raise ValueError(f"{d_name} keys must be non-negative integers")
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or float(v) < 0.0:
+                raise ValueError(f"{d_name} values must be finite non-negative numbers")
     if (
         isinstance(uniform_draw, bool)
         or not isinstance(uniform_draw, (int, float))

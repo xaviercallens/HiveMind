@@ -47,8 +47,15 @@ class Outcome:
     cost_tokens: int = 0
 
     def __post_init__(self) -> None:
-        if not str(self.cluster_id).strip() or not str(self.expert_id).strip():
-            raise ValueError("cluster_id and expert_id must be non-empty")
+        if (
+            not isinstance(self.cluster_id, str)
+            or not self.cluster_id.strip()
+            or any(c in self.cluster_id for c in ("\r", "\n", "\x00"))
+            or not isinstance(self.expert_id, str)
+            or not self.expert_id.strip()
+            or any(c in self.expert_id for c in ("\r", "\n", "\x00"))
+        ):
+            raise ValueError("cluster_id and expert_id must be non-empty strings without control characters")
         if not isinstance(self.verified, bool) or not isinstance(self.success, bool):
             raise ValueError("verified and success must be booleans")
         if isinstance(self.cost_tokens, bool) or not isinstance(self.cost_tokens, int) or self.cost_tokens < 0:
@@ -71,6 +78,28 @@ class BetaArm:
     verified_n: int = 0
     verified_successes: int = 0
     ignored_unverified: int = 0
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.alpha, bool)
+            or not isinstance(self.alpha, (int, float))
+            or not math.isfinite(float(self.alpha))
+            or float(self.alpha) <= 0.0
+            or isinstance(self.beta, bool)
+            or not isinstance(self.beta, (int, float))
+            or not math.isfinite(float(self.beta))
+            or float(self.beta) <= 0.0
+        ):
+            raise ValueError("alpha and beta must be finite and > 0")
+        for name, val in (
+            ("verified_n", self.verified_n),
+            ("verified_successes", self.verified_successes),
+            ("ignored_unverified", self.ignored_unverified),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{name} must be an integer >= 0")
+        if self.verified_successes > self.verified_n:
+            raise ValueError("verified_successes cannot exceed verified_n")
 
     @property
     def mean(self) -> float:
@@ -102,6 +131,8 @@ class BanditStrategy:
         self.arms: dict[tuple[str, str], BetaArm] = {}
 
     def arm(self, cluster_id: str, expert_id: str) -> BetaArm:
+        if not isinstance(cluster_id, str) or not cluster_id.strip() or not isinstance(expert_id, str) or not expert_id.strip():
+            raise ValueError("cluster_id and expert_id must be non-empty strings")
         key = (cluster_id, expert_id)
         if key not in self.arms:
             self.arms[key] = BetaArm(self.prior_alpha, self.prior_beta)
@@ -141,6 +172,8 @@ class BanditStrategy:
         return touched
 
     def choose(self, cluster_id: str, candidates: Sequence[str], rng: random.Random) -> str:
+        if not isinstance(rng, random.Random):
+            raise TypeError("rng must be a random.Random instance")
         if isinstance(candidates, (str, bytes)) or not candidates or any(not isinstance(c, str) or not c.strip() for c in candidates):
             raise ValueError("candidates must be non-empty")
         best, best_score = candidates[0], -1.0
@@ -152,6 +185,8 @@ class BanditStrategy:
         return best
 
     def observe(self, outcome: Outcome) -> None:
+        if not isinstance(outcome, Outcome):
+            raise ValueError("outcome must be an Outcome")
         arm = self.arm(outcome.cluster_id, outcome.expert_id)
         if not outcome.verified:
             arm.ignored_unverified += 1
@@ -168,6 +203,14 @@ class BanditStrategy:
         """One signed record per (cluster, expert) with at least one verified trial, from this client's own counts.
         `served_by[expert]` names the producer that served the expert; a mismatch with the expert id is left in the record
         for the aggregator to reject, never silently fixed."""
+        if not isinstance(served_by, Mapping) or not isinstance(cost_per_1k, Mapping):
+            raise TypeError("served_by and cost_per_1k must be Mappings")
+        if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+            raise ValueError("epoch must be a non-negative integer")
+        if not isinstance(verifier_kind, str) or not verifier_kind.strip() or not isinstance(signer_id, str) or not signer_id.strip():
+            raise ValueError("verifier_kind and signer_id must be non-empty strings")
+        if not isinstance(secret, (bytes, bytearray)) or not secret:
+            raise ValueError("secret must be non-empty bytes")
         out: list[DanceRecord] = []
         for (cluster_id, expert_id), arm in sorted(self.arms.items()):
             if arm.verified_n == 0:
@@ -199,8 +242,21 @@ class PreferencePair:
     def __post_init__(self) -> None:
         from hivemind.queenbee.dance import VERIFIER_KINDS
 
-        if not str(self.prompt_id).strip() or not str(self.cluster_id).strip():
-            raise ValueError("prompt_id and cluster_id must be non-empty")
+        if (
+            not isinstance(self.prompt_id, str)
+            or not self.prompt_id.strip()
+            or any(c in self.prompt_id for c in ("\r", "\n", "\x00"))
+            or not isinstance(self.cluster_id, str)
+            or not self.cluster_id.strip()
+            or any(c in self.cluster_id for c in ("\r", "\n", "\x00"))
+        ):
+            raise ValueError("prompt_id and cluster_id must be non-empty strings without control characters")
+        if not isinstance(self.rejected, str) or not isinstance(self.chosen, str):
+            raise ValueError("rejected and chosen must be strings")
+        if not isinstance(self.verified, bool):
+            raise ValueError("verified must be a boolean")
+        if not isinstance(self.verifier_receipt_sha256, str) or any(c in self.verifier_receipt_sha256 for c in ("\r", "\n", "\x00")):
+            raise ValueError("verifier_receipt_sha256 must be a string without control characters")
         if self.verifier_kind not in VERIFIER_KINDS:
             raise ValueError(f"verifier_kind must be one of {sorted(VERIFIER_KINDS)}")
         if self.verified and (
@@ -253,6 +309,8 @@ class PreferencePairStrategy:
     name = "preference_pairs"
 
     def __init__(self, router: BanditStrategy | None = None) -> None:
+        if router is not None and not isinstance(router, BanditStrategy):
+            raise ValueError("router must be a BanditStrategy or None")
         self.router = router or BanditStrategy()
         self.pairs: list[PreferencePair] = []
         self.rejected_unverified = 0
@@ -266,6 +324,12 @@ class PreferencePairStrategy:
     def observe_correction(self, prompt_id: str, cluster_id: str, rejected: str, chosen: str, *, verifier_kind: str,
                            chosen_verified: bool, verifier_receipt_sha256: str | None = None) -> bool:
         """Keep the pair only when the verifier accepted the corrected candidate. Returns whether it was kept."""
+        if not isinstance(prompt_id, str) or not prompt_id.strip() or not isinstance(cluster_id, str) or not cluster_id.strip():
+            raise ValueError("prompt_id and cluster_id must be non-empty strings")
+        if not isinstance(rejected, str) or not isinstance(chosen, str):
+            raise ValueError("rejected and chosen must be strings")
+        if not isinstance(chosen_verified, bool):
+            raise ValueError("chosen_verified must be a boolean")
         if not chosen_verified:
             self.rejected_unverified += 1
             return False
@@ -294,12 +358,20 @@ class PreferencePairStrategy:
 
     def training_mix(self, unverified_pairs: Sequence[PreferencePair]) -> list[PreferencePair]:
         """Verified pairs plus at most `max_unverified_rows(len(verified))` unverified ones, in the order given."""
+        if (
+            not isinstance(unverified_pairs, Sequence)
+            or isinstance(unverified_pairs, (str, bytes))
+            or any(not isinstance(p, PreferencePair) for p in unverified_pairs)
+        ):
+            raise ValueError("unverified_pairs must be a sequence of PreferencePair")
         allowed = max_unverified_rows(len(self.pairs))
         extra = [PreferencePair(p.prompt_id, p.cluster_id, p.rejected, p.chosen, p.verifier_kind, verified=False)
                  for p in unverified_pairs[:allowed]]
         return list(self.pairs) + extra
 
     def export_jsonl(self, path: Path | str, unverified_pairs: Sequence[PreferencePair] = ()) -> int:
+        if not isinstance(path, (Path, str)) or not str(path).strip():
+            raise ValueError("path must be a non-empty Path or string")
         mix = self.training_mix(unverified_pairs)
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -321,6 +393,14 @@ class ClipReport:
     clipped: bool
     sigma: float
 
+    def __post_init__(self) -> None:
+        for field_name in ("pre_norm", "post_norm", "sigma"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if not isinstance(self.clipped, bool):
+            raise ValueError("clipped must be a boolean")
+
 
 def clip_and_noise(delta: Mapping[str, Any], clip_norm: float, sigma: float, generator: Any) -> tuple[dict[str, Any], ClipReport]:
     """Scale the whole delta to L2 norm at most `clip_norm`, then add N(0, sigma^2) noise per coordinate. Torch tensors.
@@ -328,14 +408,16 @@ def clip_and_noise(delta: Mapping[str, Any], clip_norm: float, sigma: float, gen
     not claim a (epsilon, delta) guarantee)."""
     import torch
 
-    if clip_norm <= 0.0 or not math.isfinite(clip_norm):
+    if isinstance(clip_norm, bool) or not isinstance(clip_norm, (int, float)) or clip_norm <= 0.0 or not math.isfinite(clip_norm):
         raise ValueError("clip_norm must be finite and > 0")
-    if sigma < 0.0 or not math.isfinite(sigma):
+    if isinstance(sigma, bool) or not isinstance(sigma, (int, float)) or sigma < 0.0 or not math.isfinite(sigma):
         raise ValueError("sigma must be finite and >= 0")
-    if not delta:
+    if not isinstance(delta, Mapping) or not delta:
         raise ValueError("delta must be non-empty")
     sq = 0.0
-    for t in delta.values():
+    for k, t in delta.items():
+        if not isinstance(k, str) or not k.strip() or not isinstance(t, torch.Tensor) or t.dtype == torch.bool or t.numel() == 0:
+            raise ValueError("delta must map non-empty string keys to non-empty numeric torch.Tensor values")
         td = t.detach().to(torch.float64)
         if not bool(torch.isfinite(td).all()):
             raise ValueError("delta tensor contains NaN or inf; refusing to clip and noise it")
@@ -362,6 +444,40 @@ class PrivacyBudgetReport:
     max_epsilon: float
     best_alpha: float
     within_budget: bool
+
+    def __post_init__(self) -> None:
+        if isinstance(self.steps, bool) or not isinstance(self.steps, int) or self.steps < 0:
+            raise ValueError("steps must be a non-negative integer")
+        if (
+            isinstance(self.delta, bool)
+            or not isinstance(self.delta, (int, float))
+            or not math.isfinite(float(self.delta))
+            or not (0.0 < float(self.delta) < 1.0)
+        ):
+            raise ValueError("delta must be a finite number in (0.0, 1.0)")
+        if (
+            isinstance(self.epsilon, bool)
+            or not isinstance(self.epsilon, (int, float))
+            or math.isnan(float(self.epsilon))
+            or float(self.epsilon) < 0.0
+        ):
+            raise ValueError("epsilon must be a non-negative number (or +inf)")
+        if (
+            isinstance(self.max_epsilon, bool)
+            or not isinstance(self.max_epsilon, (int, float))
+            or not math.isfinite(float(self.max_epsilon))
+            or float(self.max_epsilon) <= 0.0
+        ):
+            raise ValueError("max_epsilon must be a finite positive number")
+        if (
+            isinstance(self.best_alpha, bool)
+            or not isinstance(self.best_alpha, (int, float))
+            or not math.isfinite(float(self.best_alpha))
+            or float(self.best_alpha) <= 1.0
+        ):
+            raise ValueError("best_alpha must be a finite number > 1.0")
+        if not isinstance(self.within_budget, bool):
+            raise ValueError("within_budget must be a boolean")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -394,6 +510,12 @@ class PrivacyAccountant:
         self.steps: int = 0
 
     def _step_rdp(self, alpha: float, clip_norm: float, sigma: float) -> float:
+        if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(float(alpha)) or float(alpha) <= 1.0:
+            raise ValueError("alpha must be a finite number > 1.0")
+        if isinstance(clip_norm, bool) or not isinstance(clip_norm, (int, float)) or not math.isfinite(float(clip_norm)) or float(clip_norm) <= 0.0:
+            raise ValueError("clip_norm must be finite and > 0")
+        if isinstance(sigma, bool) or not isinstance(sigma, (int, float)) or not math.isfinite(float(sigma)) or float(sigma) < 0.0:
+            raise ValueError("sigma must be finite and >= 0")
         if sigma <= 0.0:
             return math.inf
         noise_multiplier = sigma / clip_norm
@@ -460,10 +582,22 @@ def aggregate_lora_product_exact(
     """
     import torch
 
+    if not isinstance(admitted_deltas, Mapping):
+        raise ValueError("admitted_deltas must be a Mapping")
+    if not isinstance(accepted_workers, Sequence) or isinstance(accepted_workers, (str, bytes)):
+        raise ValueError("accepted_workers must be a Sequence of worker ids")
     if not accepted_workers:
         return {}
+    if any(not isinstance(w, str) or not w.strip() or w not in admitted_deltas for w in accepted_workers):
+        raise ValueError("every accepted worker must be a non-empty string key present in admitted_deltas")
     first = admitted_deltas[accepted_workers[0]]
+    if not isinstance(first, Mapping) or not first:
+        raise ValueError("each worker delta mapping must be non-empty")
     keys = sorted(first)
+    for w in accepted_workers:
+        w_map = admitted_deltas[w]
+        if not isinstance(w_map, Mapping) or sorted(w_map) != keys:
+            raise ValueError("all accepted workers in admitted_deltas must share the same parameter keys")
     out: dict[str, Any] = {}
     handled: set[str] = set()
     for k in keys:
@@ -475,8 +609,27 @@ def aggregate_lora_product_exact(
             if b_key in first:
                 handled.add(k)
                 handled.add(b_key)
-                a_stack = [admitted_deltas[w][k].to(torch.float32) for w in accepted_workers]
-                b_stack = [admitted_deltas[w][b_key].to(torch.float32) for w in accepted_workers]
+                a_stack = []
+                b_stack = []
+                for w in accepted_workers:
+                    a_t = admitted_deltas[w][k]
+                    b_t = admitted_deltas[w][b_key]
+                    if (
+                        not isinstance(a_t, torch.Tensor)
+                        or not isinstance(b_t, torch.Tensor)
+                        or a_t.dtype == torch.bool
+                        or b_t.dtype == torch.bool
+                        or a_t.ndim != 2
+                        or b_t.ndim != 2
+                        or a_t.numel() == 0
+                        or b_t.numel() == 0
+                        or int(b_t.shape[1]) != int(a_t.shape[0])
+                        or not bool(torch.isfinite(a_t).all())
+                        or not bool(torch.isfinite(b_t).all())
+                    ):
+                        raise ValueError("LoRA factor pair (lora_A, lora_B) must be finite 2D numeric tensors with matching inner rank")
+                    a_stack.append(a_t.to(torch.float32))
+                    b_stack.append(b_t.to(torch.float32))
                 rank = int(a_stack[0].shape[0])
                 exact_prod = torch.stack([b_i @ a_i for b_i, a_i in zip(b_stack, a_stack)]).mean(dim=0)
                 u, s, vh = torch.linalg.svd(exact_prod, full_matrices=False)
@@ -503,6 +656,16 @@ class ShareAggregation:
     rejected_by_krum: tuple[str, ...]
     aggregate: Mapping[str, Any] | None = field(repr=False, default=None)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.quorum_reached, bool):
+            raise ValueError("quorum_reached must be a boolean")
+        for field_name in ("admitted", "deferred", "accepted_by_krum", "rejected_by_krum"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, tuple) or any(not isinstance(item, str) or not item.strip() for item in seq):
+                raise ValueError(f"{field_name} must be a tuple of non-empty strings")
+        if self.aggregate is not None and not isinstance(self.aggregate, Mapping):
+            raise ValueError("aggregate must be a Mapping or None")
+
     def to_dict(self) -> dict[str, Any]:
         return {"quorum_reached": self.quorum_reached, "admitted": list(self.admitted), "deferred": list(self.deferred),
                 "accepted_by_krum": list(self.accepted_by_krum), "rejected_by_krum": list(self.rejected_by_krum)}
@@ -514,6 +677,10 @@ def aggregate_shared_updates(deltas: Mapping[str, Mapping[str, Any]], arrival_ti
     """Admit contributors with the DiLoCo quorum rule, filter the admitted deltas with Multi-Krum, average the survivors.
     When `exact_lora_product=True` (HM-S15-06 / #176), LoRA factor pairs `(lora_A, lora_B)` are aggregated in exact
     product space `mean(B_i @ A_i)` with SVD refactoring and residual preservation."""
+    if not isinstance(deltas, Mapping) or not isinstance(arrival_times, Mapping):
+        raise TypeError("deltas and arrival_times must be Mappings")
+    if not isinstance(exact_lora_product, bool):
+        raise TypeError("exact_lora_product must be a boolean")
     import torch
 
     from hivemind.core.diloco_outer import filter_byzantine_deltas_multikrum
@@ -568,6 +735,10 @@ class FederatedShareStrategy:
                  accountant: PrivacyAccountant | None = None) -> None:
         if isinstance(clip_norm, bool) or not isinstance(clip_norm, (int, float)) or not math.isfinite(float(clip_norm)) or clip_norm <= 0.0 or isinstance(sigma, bool) or not isinstance(sigma, (int, float)) or not math.isfinite(float(sigma)) or sigma < 0.0:
             raise ValueError("clip_norm (> 0) and sigma (>= 0) must be finite")
+        if router is not None and not isinstance(router, BanditStrategy):
+            raise TypeError("router must be None or a BanditStrategy")
+        if accountant is not None and not isinstance(accountant, PrivacyAccountant):
+            raise TypeError("accountant must be None or a PrivacyAccountant")
         self.clip_norm = clip_norm
         self.sigma = sigma
         self.router = router or BanditStrategy()
@@ -582,6 +753,8 @@ class FederatedShareStrategy:
         self.router.observe(outcome)
 
     def prepare_share(self, delta: Mapping[str, Any], generator: Any) -> dict[str, Any]:
+        if not isinstance(delta, Mapping) or not delta:
+            raise ValueError("delta must be a non-empty Mapping")
         if self.accountant is not None:
             self.last_privacy = self.accountant.record_step(self.clip_norm, self.sigma, enforce_budget=True)
         shared, self.last_clip = clip_and_noise(delta, self.clip_norm, self.sigma, generator)
@@ -609,8 +782,15 @@ class VerifiedSubtask:
     def __post_init__(self) -> None:
         from hivemind.queenbee.dance import VERIFIER_KINDS
 
-        if not self.subtask_id or not self.cluster_id:
-            raise ValueError("subtask_id and cluster_id must be non-empty")
+        if (
+            not isinstance(self.subtask_id, str)
+            or not self.subtask_id.strip()
+            or any(c in self.subtask_id for c in ("\r", "\n", "\x00"))
+            or not isinstance(self.cluster_id, str)
+            or not self.cluster_id.strip()
+            or any(c in self.cluster_id for c in ("\r", "\n", "\x00"))
+        ):
+            raise ValueError("subtask_id and cluster_id must be non-empty strings without control characters")
         if self.verifier_kind not in VERIFIER_KINDS:
             raise ValueError(f"verifier_kind must be one of {sorted(VERIFIER_KINDS)}")
         if isinstance(self.weight, bool) or not isinstance(self.weight, (int, float)) or not math.isfinite(self.weight) or self.weight <= 0.0:
@@ -621,6 +801,8 @@ class TaskDecompositionRouter:
     """Decompose a composite task into verified subtasks and route each subtask to its best cluster expert (HM-S15-04 / #174)."""
 
     def __init__(self, bandit: BanditStrategy | None = None) -> None:
+        if bandit is not None and not isinstance(bandit, BanditStrategy):
+            raise TypeError("bandit must be None or a BanditStrategy")
         self.bandit = bandit or BanditStrategy()
 
     def route_subtasks(
@@ -629,7 +811,7 @@ class TaskDecompositionRouter:
         candidates: Sequence[str],
         rng: random.Random,
     ) -> dict[str, str]:
-        if not subtasks:
+        if isinstance(subtasks, (str, bytes)) or not isinstance(subtasks, Sequence) or not subtasks or any(not isinstance(st, VerifiedSubtask) for st in subtasks):
             raise ValueError("subtasks must be non-empty")
         return {st.subtask_id: self.bandit.choose(st.cluster_id, candidates, rng) for st in subtasks}
 
@@ -640,8 +822,10 @@ class TaskDecompositionRouter:
         outcomes: Mapping[str, tuple[bool, bool]],
     ) -> bool:
         """Record per-subtask `(verified, success)` outcomes and return True iff all subtasks passed verification."""
-        if not subtasks:
+        if isinstance(subtasks, (str, bytes)) or not isinstance(subtasks, Sequence) or not subtasks or any(not isinstance(st, VerifiedSubtask) for st in subtasks):
             raise ValueError("subtasks must be non-empty")
+        if not isinstance(assignments, Mapping) or not isinstance(outcomes, Mapping):
+            raise TypeError("assignments and outcomes must be Mappings")
         all_ok = True
         for st in subtasks:
             expert_id = assignments[st.subtask_id]
@@ -676,6 +860,12 @@ class VerifiedIDECorrectionFlow:
         chosen_verified: bool,
         verifier_receipt_sha256: str | None = None,
     ) -> bool:
+        if not isinstance(prompt_id, str) or not prompt_id.strip() or not isinstance(cluster_id, str) or not cluster_id.strip():
+            raise ValueError("prompt_id and cluster_id must be non-empty strings")
+        if not isinstance(rejected, str) or not isinstance(chosen, str):
+            raise ValueError("rejected and chosen must be strings")
+        if not isinstance(chosen_verified, bool):
+            raise ValueError("chosen_verified must be a boolean")
         if not self.opt_in:
             return False
         return self.strategy.observe_correction(
@@ -701,6 +891,10 @@ class VerifiedIDECorrectionFlow:
 
         if not self.opt_in:
             raise ValueError("VerifiedIDECorrectionFlow requires opt_in=True before training a local adapter")
+        if not isinstance(baseline_outcomes, Mapping) or not isinstance(candidate_outcomes, Mapping):
+            raise TypeError("baseline_outcomes and candidate_outcomes must be Mappings")
+        if isinstance(step_size, bool) or not isinstance(step_size, (int, float)) or not math.isfinite(float(step_size)) or float(step_size) <= 0.0:
+            raise ValueError("step_size must be a finite positive number")
         mix = self.strategy.training_mix(unverified_pairs)
         v_count = sum(1 for p in mix if p.verified)
         u_count = sum(1 for p in mix if not p.verified)
@@ -789,6 +983,10 @@ class BeeMoESystemRouter:
         *,
         pack_to_adapter: Mapping[str, str] | None = None,
     ) -> None:
+        if isinstance(admitted_adapters, (str, bytes)) or not isinstance(admitted_adapters, Sequence) or any(not isinstance(a, str) or not a.strip() for a in admitted_adapters):
+            raise ValueError("admitted_adapters must be a sequence of non-empty strings")
+        if pack_to_adapter is not None and not isinstance(pack_to_adapter, Mapping):
+            raise TypeError("pack_to_adapter must be None or a Mapping")
         self.admitted_adapters: set[str] = {str(a) for a in admitted_adapters}
         self.pack_to_adapter: dict[str, str] = dict(
             pack_to_adapter
@@ -806,6 +1004,8 @@ class BeeMoESystemRouter:
     @staticmethod
     def classify_prompt_domain(messages: Sequence[Mapping[str, str]]) -> str:
         """Deterministically classify a chat prompt into its Night-MoE evaluation domain."""
+        if isinstance(messages, (str, bytes)) or not isinstance(messages, Sequence) or any(not isinstance(m, Mapping) for m in messages):
+            raise TypeError("messages must be a sequence of Mappings")
         joined = " ".join(str(m.get("content", "")) for m in messages).lower()
         if "verdict: confirmed" in joined or "kepler transit signal" in joined or "orbital period (days)" in joined:
             return "exoplanet"
@@ -825,6 +1025,10 @@ class BeeMoESystemRouter:
 
     def route_pack(self, pack: str, *, enforce_gate: bool = True) -> str:
         """Return the adapter id to serve for `pack` (`base` when `enforce_gate=True` and the candidate is not admitted)."""
+        if not isinstance(pack, str) or not pack.strip():
+            raise ValueError("pack must be a non-empty string")
+        if not isinstance(enforce_gate, bool):
+            raise TypeError("enforce_gate must be a boolean")
         candidate = self.pack_to_adapter.get(pack, pack)
         if not enforce_gate:
             return candidate
@@ -848,6 +1052,27 @@ class ServedExpertTask:
     tests: tuple[str, ...]
     expert_candidates: Mapping[str, str]
     cost_per_1k: Mapping[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for field_name in ("task_id", "cluster_id", "prompt"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.tests, tuple) or len(self.tests) == 0 or any(not isinstance(t, str) or not t.strip() for t in self.tests):
+            raise ValueError("tests must be a non-empty tuple of non-empty strings")
+        if (
+            not isinstance(self.expert_candidates, Mapping)
+            or len(self.expert_candidates) == 0
+            or any(not isinstance(k, str) or not k.strip() or not isinstance(v, str) or not v.strip() for k, v in self.expert_candidates.items())
+        ):
+            raise ValueError("expert_candidates must be a non-empty mapping of non-empty strings")
+        if not isinstance(self.cost_per_1k, Mapping):
+            raise ValueError("cost_per_1k must be a mapping")
+        for k, v in self.cost_per_1k.items():
+            if not isinstance(k, str) or not k.strip():
+                raise ValueError("cost_per_1k keys must be non-empty strings")
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or float(v) < 0.0:
+                raise ValueError("cost_per_1k values must be finite non-negative numbers")
 
 
 def verify_python_candidate_isolated(code: str, tests: Sequence[str], *, timeout_s: float = 4.0) -> bool:

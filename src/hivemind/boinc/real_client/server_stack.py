@@ -325,4 +325,6 @@ def launcher(venv_python: str, repo_src: Path, module: str, args: list[str], env
 
 
 def copy_tree(src: Path, dst: Path) -> None:
+    if not isinstance(src, Path) or not isinstance(dst, Path):
+        raise TypeError("src and dst must be Path instances")
     shutil.copytree(src, dst, dirs_exist_ok=True)

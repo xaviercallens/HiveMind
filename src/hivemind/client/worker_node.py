@@ -48,6 +48,12 @@ class HiveMindWorkerNode:
             raise ValueError("steam_id64 must be a non-empty string")
         if not isinstance(persona_name, str) or not persona_name.strip():
             raise ValueError("persona_name must be a non-empty string")
+        if not isinstance(model, nn.Module):
+            raise TypeError("model must be an nn.Module")
+        if steamworks is not None and not isinstance(steamworks, SteamworksSDKBridge):
+            raise TypeError("steamworks must be a SteamworksSDKBridge or None")
+        if daemon is not None and not isinstance(daemon, ZeroIntrusionDaemon):
+            raise TypeError("daemon must be a ZeroIntrusionDaemon or None")
         if not isinstance(enable_error_feedback, bool):
             raise ValueError("enable_error_feedback must be a boolean")
         if isinstance(account_spend_usd, bool) or not isinstance(account_spend_usd, (int, float)) or not math.isfinite(float(account_spend_usd)) or float(account_spend_usd) < 0.0:
@@ -83,6 +89,10 @@ class HiveMindWorkerNode:
         One buffer per branch: a residual is only meaningful against the branch whose
         pseudo-gradients produced it.
         """
+        if not isinstance(branch_name, str) or not branch_name.strip():
+            raise ValueError("branch_name must be a non-empty string")
+        if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not math.isfinite(float(topk_ratio)) or not (0.0 < float(topk_ratio) <= 1.0):
+            raise ValueError("topk_ratio must be finite and in (0, 1]")
         if not self.enable_error_feedback:
             return None
         buffer = self.error_feedback_buffers.get(branch_name)
@@ -97,6 +107,8 @@ class HiveMindWorkerNode:
 
     def _record_ef21_telemetry(self, result: InnerLoopResult) -> None:
         """Store the measured residual state of the branch this upload came from."""
+        if result is None or not hasattr(result, "error_feedback_residual_norm"):
+            raise TypeError("result must be an InnerLoopResult")
         if result.error_feedback_residual_norm is None:
             return
         buffer = self.error_feedback_buffers[result.branch_name]
@@ -161,6 +173,12 @@ class HiveMindWorkerNode:
         muon_ns_steps: int = 5,
     ) -> InnerLoopResult:
         """Verify Steam ticket & Parquet shard, execute H local AdamW steps, and emit compressed delta."""
+        if not isinstance(global_lora_state, dict):
+            raise TypeError("global_lora_state must be a dict")
+        if not isinstance(use_paged_8bit_adamw, bool):
+            raise ValueError("use_paged_8bit_adamw must be a bool")
+        if not isinstance(use_muon_lora_preconditioner, bool):
+            raise ValueError("use_muon_lora_preconditioner must be a bool")
         self._validate_inner_hyperparams(
             lr=lr,
             weight_decay=weight_decay,
@@ -172,6 +190,8 @@ class HiveMindWorkerNode:
         ok, msg = self.steamworks.verify_sybil_resistance(self.auth_ticket)
         if not ok:
             raise PermissionError(f"Worker {self.worker_id} blocked by Steam Sybil guard: {msg}")
+        if not isinstance(workunit, BOINCWorkunit):
+            raise TypeError("workunit must be a BOINCWorkunit")
 
         token_sequences = verify_and_load_parquet_shard(
             shard_path=workunit.data_shard_parquet,
@@ -215,6 +235,8 @@ class HiveMindWorkerNode:
 
     def get_seti_lifecycle_state(self, consumer_query_active: bool = False) -> str:
         """Return the current 3-state SETI-Swarm agent lifecycle state."""
+        if not isinstance(consumer_query_active, bool):
+            raise ValueError("consumer_query_active must be a bool")
         return self.daemon.resolve_seti_agent_state(consumer_query_active=consumer_query_active).value
 
     def execute_cas_shard(
@@ -241,6 +263,22 @@ class HiveMindWorkerNode:
             topk_ratio=topk_ratio,
             muon_ns_steps=muon_ns_steps,
         )
+        if not isinstance(domain_name, str) or not domain_name.strip():
+            raise ValueError("domain_name must be a non-empty string")
+        if not isinstance(token_sequences, torch.Tensor) or token_sequences.ndim != 2 or token_sequences.numel() == 0:
+            raise ValueError("token_sequences must be a non-empty 2D Tensor")
+        if not isinstance(global_lora_state, dict):
+            raise TypeError("global_lora_state must be a dict")
+        if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 1:
+            raise ValueError("outer_step must be a positive integer")
+        if isinstance(inner_steps_H, bool) or not isinstance(inner_steps_H, int) or inner_steps_H < 1:
+            raise ValueError("inner_steps_H must be a positive integer")
+        if isinstance(spot_check_interval_s, bool) or not isinstance(spot_check_interval_s, int) or spot_check_interval_s < 1:
+            raise ValueError("spot_check_interval_s must be a positive integer")
+        if isinstance(rng_seed, bool) or not isinstance(rng_seed, int) or rng_seed < 0:
+            raise ValueError("rng_seed must be a non-negative integer")
+        if not isinstance(use_muon_lora_preconditioner, bool):
+            raise ValueError("use_muon_lora_preconditioner must be a bool")
         ok, msg = self.steamworks.verify_sybil_resistance(self.auth_ticket)
         if not ok:
             raise PermissionError(f"Worker {self.worker_id} blocked by Steam Sybil guard: {msg}")

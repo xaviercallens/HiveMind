@@ -32,7 +32,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -92,6 +92,8 @@ SEASON_3_DOMAIN_EXPERT_SPECS: Dict[str, Dict[str, Any]] = {
 
 def _keyword_hit(keyword: str, text_lower: str) -> bool:
     """True when ``keyword`` occurs in ``text_lower`` as a whole word or phrase (no match inside a longer word)."""
+    if not isinstance(keyword, str) or not isinstance(text_lower, str):
+        raise ValueError("keyword and text_lower must be strings")
     kw = keyword.strip().lower()
     if not kw:
         return False
@@ -157,15 +159,48 @@ class RegisteredDomainExpert:
     compressed_bytes: int
     lora_state_dict: Dict[str, torch.Tensor] = field(repr=False)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.domain_name, str) or not self.domain_name.strip() or not isinstance(self.dataset_id, str) or not self.dataset_id.strip():
+            raise ValueError("domain_name and dataset_id must be non-empty strings")
+        if not isinstance(self.expert_cid, str) or not self.expert_cid.strip() or not isinstance(self.shard_cid, str) or not self.shard_cid.strip():
+            raise ValueError("expert_cid and shard_cid must be non-empty strings")
+        if (
+            isinstance(self.lora_rank_r, bool)
+            or not isinstance(self.lora_rank_r, int)
+            or self.lora_rank_r < 1
+            or isinstance(self.lora_alpha, bool)
+            or not isinstance(self.lora_alpha, int)
+            or self.lora_alpha < 1
+        ):
+            raise ValueError("lora_rank_r and lora_alpha must be positive integers")
+        for loss_name, loss_val in (("initial_loss", self.initial_loss), ("final_loss", self.final_loss)):
+            if isinstance(loss_val, bool) or not isinstance(loss_val, (int, float)) or not math.isfinite(float(loss_val)) or float(loss_val) < 0.0:
+                raise ValueError(f"{loss_name} must be a non-negative finite number")
+        if (
+            isinstance(self.compression_ratio, bool)
+            or not isinstance(self.compression_ratio, (int, float))
+            or not math.isfinite(float(self.compression_ratio))
+            or float(self.compression_ratio) <= 0.0
+        ):
+            raise ValueError("compression_ratio must be a positive finite number")
+        if isinstance(self.compressed_bytes, bool) or not isinstance(self.compressed_bytes, int) or self.compressed_bytes < 0:
+            raise ValueError("compressed_bytes must be a non-negative integer")
+        if not isinstance(self.lora_state_dict, dict):
+            raise ValueError("lora_state_dict must be a dict")
+
 
 class ProjectedLoRAStateDict(dict):
     """Dict of projected LoRA tensors that also exposes metadata keys (`state_dict`, `factors`, `target_rank`, `parameter_bytes`)."""
 
     def __init__(self, tensors: Dict[str, torch.Tensor], meta: Dict[str, Any]) -> None:
+        if not isinstance(tensors, Mapping) or not isinstance(meta, Mapping):
+            raise ValueError("tensors and meta must be Mappings")
         super().__init__(tensors)
         self._meta = meta
 
     def __getitem__(self, key: str) -> Any:
+        if not isinstance(key, str) or not key.strip():
+            raise KeyError(key)
         if super().__contains__(key):
             return super().__getitem__(key)
         if key == "state_dict":
@@ -281,6 +316,10 @@ def project_lora_rank_svd_with_report(
     target_lora_alpha: float | None = None,
 ) -> Tuple[Dict[str, torch.Tensor], SVDLoARankProjectionReport]:
     """Same as `project_lora_rank_svd` but also returns the spectral-energy report."""
+    if not isinstance(lora_state_dict, dict):
+        raise ValueError("lora_state_dict must be a dict")
+    if isinstance(target_rank_r, bool) or not isinstance(target_rank_r, int) or target_rank_r < 1:
+        raise ValueError("target_rank_r must be positive")
     return project_lora_state_dict_to_rank(
         lora_state_dict,
         target_rank_r=target_rank_r,
@@ -296,6 +335,8 @@ class Season3DomainExpertRegistry:
         self.experts: Dict[str, RegisteredDomainExpert] = {}
 
     def register_expert(self, expert: RegisteredDomainExpert) -> None:
+        if not isinstance(expert, RegisteredDomainExpert):
+            raise ValueError("expert must be a RegisteredDomainExpert")
         self.experts[expert.domain_name] = expert
 
     def list_domains(self) -> List[str]:
@@ -314,6 +355,12 @@ class Season3DomainExpertRegistry:
                 canonical rank with `project_lora_rank_svd` (`HM-S4-05`), so
                 heterogeneous community ranks can coexist without VRAM bloat.
         """
+        if not isinstance(moe_model, UpcycledSparseMoEModel):
+            raise ValueError("moe_model must be an UpcycledSparseMoEModel")
+        if target_rank_r is not None and (
+            isinstance(target_rank_r, bool) or not isinstance(target_rank_r, int) or target_rank_r < 1
+        ):
+            raise ValueError("target_rank_r must be a positive integer when provided")
         initial_experts = moe_model.num_experts
         plugged_domains: List[str] = []
         for domain_name, exp in self.experts.items():
@@ -353,8 +400,10 @@ class Season3DomainExpertRegistry:
 
 def _even_cluster_sizes(total: int, num_clusters: int) -> List[int]:
     """Split `total` experts into `num_clusters` groups whose sizes differ by at most one."""
-    if num_clusters < 1:
+    if isinstance(num_clusters, bool) or not isinstance(num_clusters, int) or num_clusters < 1:
         raise ValueError("num_clusters must be >= 1")
+    if isinstance(total, bool) or not isinstance(total, int) or total < 1:
+        raise ValueError("total must be >= 1")
     base, extra = divmod(int(total), int(num_clusters))
     return [base + (1 if i < extra else 0) for i in range(int(num_clusters))]
 
@@ -363,6 +412,10 @@ def _stack_ragged_gates(
     gates: "nn.ModuleList", hidden_size: int
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Zero-pad per-cluster gate matrices to a common width; padded rows are masked out."""
+    if not isinstance(gates, nn.ModuleList) or len(gates) < 1:
+        raise ValueError("gates must be a non-empty nn.ModuleList")
+    if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 1:
+        raise ValueError("hidden_size must be a positive integer")
     width = max(g.out_features for g in gates)
     device = gates[0].weight.device
     stacked = torch.zeros((len(gates), width, hidden_size), dtype=torch.float32, device=device)
@@ -375,6 +428,8 @@ def _stack_ragged_gates(
 
 def _grow_gate(gate: nn.Linear) -> nn.Linear:
     """Return a copy of `gate` with one extra output row initialised to the mean row."""
+    if not isinstance(gate, nn.Linear):
+        raise ValueError("gate must be an nn.Linear")
     old_out = gate.out_features
     new_gate = nn.Linear(
         gate.in_features, old_out + 1, bias=False, dtype=torch.float32, device=gate.weight.device
@@ -479,6 +534,14 @@ class HierarchicalMoERouter(nn.Module):
         self, hidden_states: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Compute hierarchical Top-k routing weights, global expert indices `[0..E-1]`, and aux loss."""
+        if (
+            not isinstance(hidden_states, torch.Tensor)
+            or hidden_states.ndim != 2
+            or hidden_states.shape[0] < 1
+            or hidden_states.shape[1] != self.hidden_size
+            or not bool(torch.isfinite(hidden_states).all().item())
+        ):
+            raise ValueError("hidden_states must be a finite 2D tensor of shape [N, hidden_size]")
         hs_fp32 = hidden_states.to(torch.float32)
         device = hs_fp32.device
 
@@ -627,6 +690,13 @@ class ThreeTierHierarchicalMoERouter(nn.Module):
         self, hs_fp32: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return super probs/idx, macro probs/idx and the masked micro logits of the winning path."""
+        if (
+            not isinstance(hs_fp32, torch.Tensor)
+            or hs_fp32.ndim != 2
+            or hs_fp32.shape[0] < 1
+            or hs_fp32.shape[1] != self.hidden_size
+        ):
+            raise ValueError("hs_fp32 must be a 2D torch.Tensor of shape [N, hidden_size]")
         super_probs = F.softmax(self.super_gate(hs_fp32), dim=-1, dtype=torch.float32)
         super_prob, super_idx = torch.max(super_probs, dim=-1)
 
@@ -645,6 +715,14 @@ class ThreeTierHierarchicalMoERouter(nn.Module):
         self, hidden_states: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Compute 3-tier Top-k routing weights, global expert indices `[0..E-1]`, and aux loss."""
+        if (
+            not isinstance(hidden_states, torch.Tensor)
+            or hidden_states.ndim != 2
+            or hidden_states.shape[0] < 1
+            or hidden_states.shape[1] != self.hidden_size
+            or not bool(torch.isfinite(hidden_states).all().item())
+        ):
+            raise ValueError("hidden_states must be a finite 2D tensor of shape [N, hidden_size]")
         hs_fp32 = hidden_states.to(torch.float32)
         super_probs, super_prob, macro_probs, macro_prob, cluster_idx, micro_logits = self._route_path(hs_fp32)
 
@@ -678,6 +756,14 @@ class ThreeTierHierarchicalMoERouter(nn.Module):
         `P(super) * P(macro | super) * softmax(micro logits)[e]`, so the values are a proper
         sub-distribution (they sum to at most 1). Used to decide which experts to prefetch.
         """
+        if (
+            not isinstance(hidden_states, torch.Tensor)
+            or hidden_states.numel() == 0
+            or hidden_states.shape[-1] != self.hidden_size
+        ):
+            raise ValueError("hidden_states must be a non-empty torch.Tensor with last dimension == hidden_size")
+        if top_n is not None and (isinstance(top_n, bool) or not isinstance(top_n, int) or top_n < 1):
+            raise ValueError("top_n must be a positive integer when provided")
         hs_fp32 = hidden_states.to(torch.float32).reshape(-1, self.hidden_size)
         _, super_prob, _, macro_prob, cluster_idx, micro_logits = self._route_path(hs_fp32)
         micro_probs = F.softmax(micro_logits, dim=-1, dtype=torch.float32)
@@ -750,6 +836,10 @@ class FP8PagedKVCache:
 
     @staticmethod
     def _quantize_page_fp8(tensor: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        if not isinstance(tensor, torch.Tensor) or tensor.dtype == torch.bool or tensor.numel() == 0:
+            raise ValueError("tensor must be a non-empty torch.Tensor")
+        if not bool(torch.isfinite(tensor).all().item()):
+            raise ValueError("tensor must contain only finite values")
         t_fp32 = tensor.detach().to(torch.float32)
         absmax = t_fp32.abs().amax(dim=-1, keepdim=True).clamp_min(1e-6)
         scale = (absmax / 448.0).to(torch.float16)
@@ -764,6 +854,8 @@ class FP8PagedKVCache:
     def _dequantize_page_fp8(
         q: torch.Tensor, scale: torch.Tensor, target_dtype: torch.dtype = torch.float16
     ) -> torch.Tensor:
+        if not isinstance(q, torch.Tensor) or not isinstance(scale, torch.Tensor) or q.dtype == torch.bool or scale.dtype == torch.bool or q.numel() == 0 or scale.numel() == 0:
+            raise ValueError("q and scale must be torch.Tensors")
         if hasattr(torch, "float8_e4m3fn") and q.dtype == torch.float8_e4m3fn:
             return (q.to(torch.float32) * scale.to(torch.float32)).to(target_dtype)
         return ((q.to(torch.float32) / 127.0) * 448.0 * scale.to(torch.float32)).to(target_dtype)
@@ -776,6 +868,19 @@ class FP8PagedKVCache:
         target_bits_per_dim: float = 4.0,
     ) -> Tuple[torch.Tensor, torch.Tensor, float, float]:
         """Quantize `tensor` under `codec`, returning `(stored_q, scale_t, rate_bits_per_dim, relative_mse)`."""
+        if not isinstance(tensor, torch.Tensor) or tensor.dtype == torch.bool or tensor.numel() == 0:
+            raise ValueError("tensor must be a non-empty torch.Tensor")
+        if not bool(torch.isfinite(tensor).all().item()):
+            raise ValueError("tensor must contain only finite values")
+        if codec not in cls.VALID_CODECS:
+            raise ValueError(f"codec must be one of {cls.VALID_CODECS}, got {codec!r}")
+        if (
+            isinstance(target_bits_per_dim, bool)
+            or not isinstance(target_bits_per_dim, (int, float))
+            or not math.isfinite(float(target_bits_per_dim))
+            or target_bits_per_dim <= 0.0
+        ):
+            raise ValueError("target_bits_per_dim must be > 0")
         t_fp32 = tensor.detach().to(torch.float32)
         orig_shape = t_fp32.shape
         flat = t_fp32.reshape(-1).cpu()
@@ -828,7 +933,14 @@ class FP8PagedKVCache:
             raise ValueError(f"layer_idx must be an integer >= 0, got {layer_idx!r}")
         if isinstance(page_idx, bool) or not isinstance(page_idx, int) or page_idx < 0:
             raise ValueError(f"page_idx must be an integer >= 0, got {page_idx!r}")
-        if k_tensor.numel() == 0 or v_tensor.numel() == 0:
+        if (
+            not isinstance(k_tensor, torch.Tensor)
+            or not isinstance(v_tensor, torch.Tensor)
+            or k_tensor.dtype == torch.bool
+            or v_tensor.dtype == torch.bool
+            or k_tensor.numel() == 0
+            or v_tensor.numel() == 0
+        ):
             raise ValueError("k_tensor and v_tensor must be non-empty")
         if not bool(torch.isfinite(k_tensor).all().item()) or not bool(torch.isfinite(v_tensor).all().item()):
             raise ValueError("k_tensor and v_tensor must contain only finite values")
@@ -880,6 +992,10 @@ class FP8PagedKVCache:
         self, layer_idx: int, page_idx: int, target_dtype: torch.dtype = torch.float16
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Dequantize and return a stored `(K, V)` page."""
+        if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0:
+            raise ValueError(f"layer_idx must be an integer >= 0, got {layer_idx!r}")
+        if isinstance(page_idx, bool) or not isinstance(page_idx, int) or page_idx < 0:
+            raise ValueError(f"page_idx must be an integer >= 0, got {page_idx!r}")
         qk, sk = self._pages_k[(layer_idx, page_idx)]
         qv, sv = self._pages_v[(layer_idx, page_idx)]
         if self.codec == "fp8_e4m3":
@@ -901,6 +1017,22 @@ class FP8PagedKVCache:
         target_bits_per_dim: float = 4.0,
     ) -> Dict[str, Any]:
         """Compare all 5 KV-cache page codecs (`HM-S10-05` / E11) with positive/negative controls."""
+        if (
+            not isinstance(k_tensor, torch.Tensor)
+            or not isinstance(v_tensor, torch.Tensor)
+            or k_tensor.dtype == torch.bool
+            or v_tensor.dtype == torch.bool
+            or k_tensor.numel() == 0
+            or v_tensor.numel() == 0
+        ):
+            raise ValueError("k_tensor and v_tensor must be non-empty torch.Tensors")
+        if (
+            isinstance(target_bits_per_dim, bool)
+            or not isinstance(target_bits_per_dim, (int, float))
+            or not math.isfinite(float(target_bits_per_dim))
+            or target_bits_per_dim <= 0.0
+        ):
+            raise ValueError("target_bits_per_dim must be > 0")
         results: Dict[str, Dict[str, float]] = {}
         for codec in cls.VALID_CODECS:
             _, _, rk, mk = cls._encode_decode_with_codec(k_tensor, codec, target_bits_per_dim)
@@ -933,6 +1065,8 @@ class FP8PagedKVCache:
 
 
 def _install_router_on_blocks(moe_model: UpcycledSparseMoEModel, make_router) -> None:
+    if not hasattr(moe_model, "moe_blocks") or not callable(make_router):
+        raise ValueError("moe_model must be an UpcycledSparseMoEModel and make_router must be callable")
     for block in moe_model.moe_blocks:
         dev = next(block.router.parameters()).device
         block.router = make_router().to(dev)
@@ -940,6 +1074,15 @@ def _install_router_on_blocks(moe_model: UpcycledSparseMoEModel, make_router) ->
 
 def _footprint_report(moe_model: UpcycledSparseMoEModel, vram_ceiling_gb: float) -> Dict[str, Any]:
     """Parameter-byte footprint, plus live CUDA allocation only when CUDA is actually in use."""
+    if not callable(getattr(moe_model, "parameters", None)):
+        raise ValueError("moe_model must be an UpcycledSparseMoEModel")
+    if (
+        isinstance(vram_ceiling_gb, bool)
+        or not isinstance(vram_ceiling_gb, (int, float))
+        or not math.isfinite(float(vram_ceiling_gb))
+        or float(vram_ceiling_gb) <= 0.0
+    ):
+        raise ValueError("vram_ceiling_gb must be a positive finite float")
     stats = measure_moe_vram_footprint_gb(moe_model)
     on_cuda = next(moe_model.parameters()).device.type == "cuda" and torch.cuda.is_available()
     report: Dict[str, Any] = {
@@ -976,6 +1119,10 @@ def hotplug_hierarchical_experts(
         raise ValueError("community_adapters must be a dict")
     if isinstance(canonical_rank_r, bool) or not isinstance(canonical_rank_r, int) or canonical_rank_r < 1:
         raise ValueError("canonical_rank_r must be a positive integer")
+    if isinstance(num_macro_domains, bool) or not isinstance(num_macro_domains, int) or num_macro_domains < 1:
+        raise ValueError("num_macro_domains must be a positive integer")
+    if isinstance(experts_per_domain, bool) or not isinstance(experts_per_domain, int) or experts_per_domain < 1:
+        raise ValueError("experts_per_domain must be a positive integer")
     if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
         raise ValueError("top_k must be a positive integer")
     if (
@@ -1041,6 +1188,13 @@ def hotplug_three_tier_experts(
         raise ValueError("community_adapters must be a dict")
     if isinstance(canonical_rank_r, bool) or not isinstance(canonical_rank_r, int) or canonical_rank_r < 1:
         raise ValueError("canonical_rank_r must be a positive integer")
+    for tier_name, tier_val in (
+        ("num_super_clusters", num_super_clusters),
+        ("macro_per_super", macro_per_super),
+        ("micro_per_macro", micro_per_macro),
+    ):
+        if isinstance(tier_val, bool) or not isinstance(tier_val, int) or tier_val < 1:
+            raise ValueError(f"{tier_name} must be a positive integer")
     if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
         raise ValueError("top_k must be a positive integer")
     if (

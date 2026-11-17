@@ -41,6 +41,51 @@ class Top1PctDCTPacket:
     conservation_max_abs_err: float
     packet_sha256: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.division_id, str) or not self.division_id.strip():
+            raise ValueError("division_id must be a non-empty string")
+        if isinstance(self.step_index, bool) or not isinstance(self.step_index, int) or self.step_index < 0:
+            raise ValueError("step_index must be a non-negative integer")
+        if isinstance(self.total_elements, bool) or not isinstance(self.total_elements, int) or self.total_elements < 1:
+            raise ValueError("total_elements must be a positive integer")
+        if (
+            isinstance(self.retained_k, bool)
+            or not isinstance(self.retained_k, int)
+            or self.retained_k < 1
+            or self.retained_k > self.total_elements
+        ):
+            raise ValueError("retained_k must be an integer in [1, total_elements]")
+        if isinstance(self.quantization_bits, bool) or self.quantization_bits not in (2, 4):
+            raise ValueError("quantization_bits must be 2 or 4")
+        for seq_name in ("indices", "q_levels"):
+            seq = getattr(self, seq_name)
+            if (
+                not isinstance(seq, tuple)
+                or len(seq) != self.retained_k
+                or any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in seq)
+            ):
+                raise ValueError(f"{seq_name} must be a tuple of {self.retained_k} non-negative integers")
+        for pos_field in ("scale", "compression_ratio"):
+            val = getattr(self, pos_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{pos_field} must be a finite positive number")
+        if isinstance(self.zero_point, bool) or not isinstance(self.zero_point, (int, float)) or not math.isfinite(float(self.zero_point)):
+            raise ValueError("zero_point must be a finite number")
+        for byte_field in ("raw_bytes_fp32", "wire_bytes"):
+            val = getattr(self, byte_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{byte_field} must be a positive integer")
+        for nn_field in ("ef21_contraction_factor", "conservation_max_abs_err"):
+            val = getattr(self, nn_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{nn_field} must be a finite non-negative number")
+        if (
+            not isinstance(self.packet_sha256, str)
+            or len(self.packet_sha256) != 64
+            or any(c not in "0123456789abcdefABCDEF" for c in self.packet_sha256)
+        ):
+            raise ValueError("packet_sha256 must be a 64-character hex string")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

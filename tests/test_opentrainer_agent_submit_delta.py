@@ -174,3 +174,71 @@ def test_loader_rejects_missing_delta_file(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="delta file unreadable"):
         agent.load_round_report(str(report))
+
+
+def test_train_mode_executes_real_round_and_fails_closed_without_cached_weights(
+    gateway: _StubGateway,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """End-user --train runs real PyTorch MoE steps, writes measured safetensors+JSON, and fails closed without weights."""
+    work_dir = tmp_path / "ot_work"
+    rc_ok = agent.main(
+        [
+            "--gateway",
+            gateway.url,
+            "--train",
+            "--small-arch",
+            "--cpu-only",
+            "--offline",
+            "--work-dir",
+            str(work_dir),
+            "--inner-steps",
+            "2",
+            "--seq-len",
+            "16",
+            "--once",
+        ]
+    )
+    assert rc_ok == 0
+    deltas = gateway.submit_delta_posts()
+    assert len(deltas) == 1
+    body = deltas[0]
+    assert body["round_id"] == 3
+    assert body["inner_steps"] == 2
+    assert body["loss_before"] > 0.0
+    assert body["loss_after"] > 0.0
+    assert body["delta_norm"] >= 1e-6
+
+    ckpt_file = work_dir / "opentrainer_round_3.safetensors"
+    report_file = work_dir / "opentrainer_round_3_report.json"
+    assert ckpt_file.is_file()
+    assert report_file.is_file()
+    assert body["delta_sha256"] == hashlib.sha256(ckpt_file.read_bytes()).hexdigest()
+
+    # Negative control: offline without --small-arch and no cached multi-key weights fails closed (exit 2)
+    empty_cache = tmp_path / "empty_hf_cache"
+    snap = empty_cache / "models--Vxtzq--Crowd-v1" / "snapshots" / "58a33099424efc0a07fbdc16eaaf99a07dc95fb9"
+    snap.mkdir(parents=True)
+    # Single-key raw blob must be rejected by _safetensors_named_key_count
+    header = json.dumps({"weights": {"dtype": "F32", "shape": [4], "data_offsets": [0, 16]}}).encode("utf-8")
+    import struct
+
+    (snap / "model_fp32.safetensors").write_bytes(struct.pack("<Q", len(header)) + header + b"\x00" * 16)
+    rc_fail = agent.main(
+        [
+            "--gateway",
+            gateway.url,
+            "--train",
+            "--cpu-only",
+            "--offline",
+            "--cache-dir",
+            str(empty_cache),
+            "--work-dir",
+            str(tmp_path / "ot_work_fail"),
+            "--once",
+        ]
+    )
+    assert rc_fail == 2
+    assert "No cached multi-key Vxtzq/Crowd-v1" in capsys.readouterr().err
+    assert len(gateway.submit_delta_posts()) == 1

@@ -42,6 +42,54 @@ class BeeEnergyEvaluation:
     total_energy: float
     receipt_sha256: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate_id, str) or not self.candidate_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in self.candidate_id):
+            raise ValueError("candidate_id must be a non-empty string")
+        if not isinstance(self.response_text, str):
+            raise ValueError("response_text must be a string")
+        if isinstance(self.tests_passed, bool) or not isinstance(self.tests_passed, int) or self.tests_passed < 0:
+            raise ValueError("tests_passed must be a non-negative integer")
+        if isinstance(self.tests_total, bool) or not isinstance(self.tests_total, int) or self.tests_total < 0:
+            raise ValueError("tests_total must be a non-negative integer")
+        if self.tests_passed > self.tests_total:
+            raise ValueError("tests_passed cannot exceed tests_total")
+        if (
+            isinstance(self.latency_ms, bool)
+            or not isinstance(self.latency_ms, (int, float))
+            or not math.isfinite(float(self.latency_ms))
+            or float(self.latency_ms) < 0.0
+        ):
+            raise ValueError("latency_ms must be a finite number >= 0.0")
+        if (
+            isinstance(self.memory_mb, bool)
+            or not isinstance(self.memory_mb, (int, float))
+            or not math.isfinite(float(self.memory_mb))
+            or float(self.memory_mb) < 0.0
+        ):
+            raise ValueError("memory_mb must be a finite number >= 0.0")
+        if isinstance(self.invariant_residual, bool) or not isinstance(self.invariant_residual, (int, float)):
+            raise ValueError("invariant_residual must be a numeric float or int")
+        if not isinstance(self.is_stub_or_invalid, bool):
+            raise ValueError("is_stub_or_invalid must be a boolean")
+        if self.failure_reason is not None and (
+            not isinstance(self.failure_reason, str) or not self.failure_reason.strip()
+        ):
+            raise ValueError("failure_reason must be None or a non-empty string")
+        if (
+            isinstance(self.total_energy, bool)
+            or not isinstance(self.total_energy, (int, float))
+            or float(self.total_energy) < 0.0
+            or math.isinf(float(self.total_energy))
+        ):
+            raise ValueError("total_energy must be a finite number >= 0.0")
+        if (
+            not isinstance(self.receipt_sha256, str)
+            or self.receipt_sha256 != self.receipt_sha256.strip()
+            or len(self.receipt_sha256) != 64
+            or not all(c in "0123456789abcdefABCDEF" for c in self.receipt_sha256)
+        ):
+            raise ValueError("receipt_sha256 must be a 64-character SHA-256 hex digest")
+
     @property
     def passed_all_tests(self) -> bool:
         return (
@@ -57,6 +105,8 @@ def _strip_lean4_comments(source: str) -> str:
     """Strip Lean 4 block comments (`/- ... -/`) and line comments (`-- ...`)."""
     import re
 
+    if not isinstance(source, str):
+        raise ValueError("source must be a string")
     no_block = re.sub(r"/-[\s\S]*?-/", " ", source)
     return "\n".join(line.split("--", 1)[0] for line in no_block.splitlines())
 
@@ -64,6 +114,10 @@ def _strip_lean4_comments(source: str) -> str:
 def _has_ast_stub_or_syntax_error(code: str, *, domain: str = "code") -> tuple[bool, str | None]:
     import re
 
+    if not isinstance(code, str):
+        raise ValueError("code must be a string")
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string")
     stripped = code.strip()
     if not stripped:
         return True, "EMPTY_RESPONSE"
@@ -347,11 +401,13 @@ def evaluate_bee_candidate_energy(
         and float(memory_mb) >= 0.0
     )
     if is_stub or tests_total <= 0 or not metrics_valid:
+        clamped_invalid_total = max(0, int(tests_total))
+        clamped_invalid_passed = max(0, min(clamped_invalid_total, int(tests_passed)))
         return BeeEnergyEvaluation(
             candidate_id=candidate_id,
             response_text=response_text,
-            tests_passed=max(0, int(tests_passed)),
-            tests_total=max(0, int(tests_total)),
+            tests_passed=clamped_invalid_passed,
+            tests_total=clamped_invalid_total,
             latency_ms=max(0.0, float(latency_ms)) if math.isfinite(float(latency_ms)) else 0.0,
             memory_mb=max(0.0, float(memory_mb)) if math.isfinite(float(memory_mb)) else 0.0,
             invariant_residual=float(invariant_residual),
@@ -424,8 +480,10 @@ def select_best_so_far_d3(
     Never returns a degraded final retry when an earlier attempt had lower energy,
     and triggers early stop when `E_1 > early_stop_energy_ceiling` or `E_t > E_{t-1}`.
     """
-    if not attempts:
+    if not isinstance(attempts, Sequence) or isinstance(attempts, (str, bytes)) or not attempts:
         raise ValueError("attempts must be non-empty.")
+    if any(not isinstance(a, BeeEnergyEvaluation) for a in attempts):
+        raise ValueError("all attempts must be BeeEnergyEvaluation instances.")
     if isinstance(early_stop_energy_ceiling, bool) or not isinstance(early_stop_energy_ceiling, (int, float)) or not math.isfinite(float(early_stop_energy_ceiling)) or float(early_stop_energy_ceiling) <= 0.0:
         raise ValueError("early_stop_energy_ceiling must be a strictly positive finite float.")
     if any(isinstance(a.total_energy, bool) or not math.isfinite(float(a.total_energy)) for a in attempts):
@@ -451,6 +509,10 @@ def harvest_energy_gap_dpo_pair_d6(
         raise ValueError("prompt must be a non-empty string.")
     if isinstance(min_delta_energy, bool) or not isinstance(min_delta_energy, (int, float)) or not math.isfinite(float(min_delta_energy)) or float(min_delta_energy) <= 0.0:
         raise ValueError("min_delta_energy must be a strictly positive finite float.")
+    if not isinstance(attempts, Sequence) or isinstance(attempts, (str, bytes)):
+        raise ValueError("attempts must be a sequence of BeeEnergyEvaluation instances.")
+    if any(not isinstance(a, BeeEnergyEvaluation) for a in attempts):
+        raise ValueError("all attempts must be BeeEnergyEvaluation instances.")
     if any(isinstance(a.total_energy, bool) or not math.isfinite(float(a.total_energy)) for a in attempts):
         raise ValueError("all attempt energies must be finite.")
     if len(attempts) < 2:
@@ -558,6 +620,33 @@ class AutopoieticPromotionVerdict:
     shuffled_control_gained: bool
     reason: str
     mcnemar_p: float | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.promoted, bool):
+            raise ValueError("promoted must be a boolean")
+        if (
+            isinstance(self.median_delta_energy, bool)
+            or not isinstance(self.median_delta_energy, (int, float))
+            or not math.isfinite(float(self.median_delta_energy))
+        ):
+            raise ValueError("median_delta_energy must be a finite number")
+        if (
+            isinstance(self.parent_regressions_failed, bool)
+            or not isinstance(self.parent_regressions_failed, int)
+            or self.parent_regressions_failed < 0
+        ):
+            raise ValueError("parent_regressions_failed must be a non-negative integer")
+        if not isinstance(self.shuffled_control_gained, bool):
+            raise ValueError("shuffled_control_gained must be a boolean")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+        if self.mcnemar_p is not None and (
+            isinstance(self.mcnemar_p, bool)
+            or not isinstance(self.mcnemar_p, (int, float))
+            or not math.isfinite(float(self.mcnemar_p))
+            or not (0.0 <= float(self.mcnemar_p) <= 1.0)
+        ):
+            raise ValueError("mcnemar_p must be None or a finite float in [0.0, 1.0]")
 
 
 def evaluate_child_bee_promotion(

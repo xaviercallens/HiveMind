@@ -355,6 +355,10 @@ class UsageDrivenQwen35MoEOrchestrator:
         observed_completions_by_cluster: Mapping[str, int] | None = None,
         energy_failure_rate_by_bee: Mapping[str, float] | None = None,
     ) -> None:
+        if observed_completions_by_cluster is not None and not isinstance(observed_completions_by_cluster, Mapping):
+            raise ValueError("observed_completions_by_cluster must be a mapping when provided")
+        if energy_failure_rate_by_bee is not None and not isinstance(energy_failure_rate_by_bee, Mapping):
+            raise ValueError("energy_failure_rate_by_bee must be a mapping when provided")
         # Default to live v3.9.0 OpenRouter telemetry (873 coding, 551 science, 3 multilingual/general)
         raw_obs = dict(
             observed_completions_by_cluster
@@ -362,12 +366,16 @@ class UsageDrivenQwen35MoEOrchestrator:
             else {"coding": 873, "science": 551, "multilingual_byob": 3}
         )
         for k, v in raw_obs.items():
+            if not isinstance(k, str) or not k.strip():
+                raise ValueError("observed_completions_by_cluster keys must be non-empty strings")
             if isinstance(v, bool) or not isinstance(v, int) or v < 0:
                 raise ValueError(f"observed_completions_by_cluster[{k!r}] must be a non-negative integer")
         self.observed_completions = raw_obs
 
         raw_fail = dict(energy_failure_rate_by_bee or {})
         for k, v in raw_fail.items():
+            if not isinstance(k, str) or not k.strip():
+                raise ValueError("energy_failure_rate_by_bee keys must be non-empty strings")
             if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or v < 0.0 or v > 1.0:
                 raise ValueError(f"energy_failure_rate_by_bee[{k!r}] must be a finite number in [0.0, 1.0]")
         self.energy_failure_rate_by_bee = raw_fail
@@ -497,12 +505,20 @@ def project_lora_rank_svd(
     """
     if not isinstance(lora_a, torch.Tensor) or not isinstance(lora_b, torch.Tensor):
         raise ValueError("lora_a and lora_b must be 2D matrices")
-    if lora_a.ndim != 2 or lora_b.ndim != 2:
-        raise ValueError("lora_a and lora_b must be 2D matrices")
+    if (
+        lora_a.dtype == torch.bool
+        or lora_b.dtype == torch.bool
+        or lora_a.ndim != 2
+        or lora_b.ndim != 2
+        or lora_a.numel() == 0
+        or lora_b.numel() == 0
+    ):
+        raise ValueError("lora_a and lora_b must be non-empty non-boolean 2D matrices")
     if lora_b.shape[1] != lora_a.shape[0]:
         raise ValueError(f"Inner rank mismatch: lora_b {lora_b.shape} vs lora_a {lora_a.shape}")
-    if isinstance(target_rank, bool) or not isinstance(target_rank, int) or target_rank <= 0 or target_rank > lora_a.shape[0]:
-        raise ValueError(f"target_rank {target_rank} must be in [1, {lora_a.shape[0]}]")
+    max_rank = min(lora_a.shape[0], lora_b.shape[0], lora_a.shape[1])
+    if isinstance(target_rank, bool) or not isinstance(target_rank, int) or target_rank <= 0 or target_rank > max_rank:
+        raise ValueError(f"target_rank {target_rank} must be in [1, {max_rank}]")
     if not torch.isfinite(lora_a).all() or not torch.isfinite(lora_b).all():
         raise ValueError("lora_a and lora_b must contain finite values")
 

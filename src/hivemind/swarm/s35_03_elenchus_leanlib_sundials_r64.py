@@ -39,6 +39,23 @@ class LeanCommentStrippedAudit:
     classification: str  # "PROVEN_INVARIANT" | "QUARANTINED_AXIOM" | "UNVERIFIED_SORRY"
     is_kernel_clean: bool
 
+    def __post_init__(self) -> None:
+        for i_field in (
+            "raw_sorry_substring_hits",
+            "comment_stripped_sorry_count",
+            "comment_stripped_admit_count",
+            "comment_stripped_native_decide_count",
+            "quarantined_axiom_count",
+            "theorem_count",
+        ):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if self.classification not in ("PROVEN_INVARIANT", "QUARANTINED_AXIOM", "UNVERIFIED_SORRY"):
+            raise ValueError("classification must be 'PROVEN_INVARIANT', 'QUARANTINED_AXIOM', or 'UNVERIFIED_SORRY'")
+        if not isinstance(self.is_kernel_clean, bool):
+            raise ValueError("is_kernel_clean must be a boolean")
+
 
 @dataclass(frozen=True)
 class TierXR64InstrumentReceipt:
@@ -53,6 +70,24 @@ class TierXR64InstrumentReceipt:
     mass_conservation_drift: float
     provenance_sha256: str
     simulated: bool = True
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.tier, str) or not self.tier.strip():
+            raise ValueError("tier must be a non-empty string")
+        for b_field in ("claim_licence", "ran", "stub", "accepted_by_elenchus_bridge", "simulated"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if self.evidentiary_value not in ("tier_x_measured", "none"):
+            raise ValueError("evidentiary_value must be 'tier_x_measured' or 'none'")
+        if (
+            isinstance(self.mass_conservation_drift, bool)
+            or not isinstance(self.mass_conservation_drift, (int, float))
+            or math.isnan(float(self.mass_conservation_drift))
+            or float(self.mass_conservation_drift) < 0.0
+        ):
+            raise ValueError("mass_conservation_drift must be a non-negative number")
+        if not isinstance(self.provenance_sha256, str) or len(self.provenance_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in self.provenance_sha256):
+            raise ValueError("provenance_sha256 must be a 64-character hex string")
 
 
 def strip_lean4_comments(lean_source: str) -> str:

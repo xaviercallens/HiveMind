@@ -128,6 +128,27 @@ class PeerKnowledgeTransferAudit:
     all_peers_leveraged_successfully: bool
     measurement_kind: str = "synthetic_regression"
     loss_metric: str = "mean_squared_error"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.domain_name, str) or not self.domain_name.strip():
+            raise ValueError("domain_name must be a non-empty string")
+        if not isinstance(self.benchmark_id, str) or not self.benchmark_id.strip():
+            raise ValueError("benchmark_id must be a non-empty string")
+        if not isinstance(self.trainer_agent_id, str) or not self.trainer_agent_id.strip():
+            raise ValueError("trainer_agent_id must be a non-empty string")
+        if not isinstance(self.expert_cid, str) or not self.expert_cid.strip():
+            raise ValueError("expert_cid must be a non-empty string")
+        if not isinstance(self.peer_evaluations, list):
+            raise ValueError("peer_evaluations must be a list")
+        if (
+            isinstance(self.royalties_paid_to_trainer_hive, bool)
+            or not isinstance(self.royalties_paid_to_trainer_hive, (int, float))
+            or not math.isfinite(float(self.royalties_paid_to_trainer_hive))
+            or float(self.royalties_paid_to_trainer_hive) < 0.0
+        ):
+            raise ValueError("royalties_paid_to_trainer_hive must be a finite number >= 0.0")
+        if not isinstance(self.all_peers_leveraged_successfully, bool):
+            raise ValueError("all_peers_leveraged_successfully must be a boolean")
     perplexity_status: str = "not_applicable_to_mse"
     hardware_validation_status: str = "not_run"
     transfer_scope: str = "single_process_local_file_load"
@@ -454,6 +475,8 @@ class SwarmKnowledgeTransferEngine:
         """
         if not isinstance(domain_name, str) or not domain_name.strip():
             raise ValueError("domain_name must be a non-empty string")
+        if not isinstance(trainer_agent_id, str) or not trainer_agent_id.strip():
+            raise ValueError("trainer_agent_id must be a non-empty string")
         if not isinstance(reference_lora_state, Mapping) or len(reference_lora_state) == 0:
             raise ValueError("reference_lora_state must be a non-empty mapping")
         if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
@@ -772,6 +795,8 @@ class JoinedSwarmCampaignEngine:
             raise ValueError("reference_lora_state must be a non-empty mapping")
         if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
             raise ValueError("inner_steps must be an integer >= 1")
+        if moe_model is not None and not callable(getattr(moe_model, "hotplug_domain_expert", None)):
+            raise ValueError("moe_model must provide a callable hotplug_domain_expert method when provided")
         t_start = time.perf_counter()
         domains = list(SCIENTIFIC_BENCHMARK_SUITES.keys())
         agents = self.transfer_engine.peer_agent_ids

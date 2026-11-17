@@ -46,6 +46,26 @@ class PortfolioProjectNode:
     role_in_unified_stack: str
     locally_present: bool
 
+    def __post_init__(self) -> None:
+        for s_field in ("name", "github_repo", "role_in_unified_stack"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if self.origin_type not in ("original_core_ip", "community_fork_bridge"):
+            raise ValueError("origin_type must be 'original_core_ip' or 'community_fork_bridge'")
+        if self.layer not in (
+            "L1_Orchestration_Latent",
+            "L2_Compute_Lattice",
+            "L3_FailClosed_Gate",
+            "L4_Formal_Physics_Audit",
+            "B2B_Vertical",
+        ):
+            raise ValueError(f"Unsupported layer: {self.layer!r}")
+        if not isinstance(self.local_xdev_dir, str):
+            raise ValueError("local_xdev_dir must be a string")
+        if not isinstance(self.locally_present, bool):
+            raise ValueError("locally_present must be a boolean")
+
 
 @dataclass(frozen=True)
 class UnifiedEcosystemExecutionReceipt:
@@ -64,6 +84,44 @@ class UnifiedEcosystemExecutionReceipt:
     all_layers_passed: bool
     merkle_root_sha256: str
     simulated: bool = True
+
+    def __post_init__(self) -> None:
+        for i_field in ("original_core_count", "fork_bridge_count", "local_xdev_verified_count"):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if (
+            isinstance(self.layer1_kv_compression_ratio, bool)
+            or not isinstance(self.layer1_kv_compression_ratio, (int, float))
+            or not math.isfinite(float(self.layer1_kv_compression_ratio))
+            or float(self.layer1_kv_compression_ratio) <= 0.0
+        ):
+            raise ValueError("layer1_kv_compression_ratio must be a finite positive number")
+        if (
+            isinstance(self.layer1_a2_rope_mse_gain_pct, bool)
+            or not isinstance(self.layer1_a2_rope_mse_gain_pct, (int, float))
+            or not math.isfinite(float(self.layer1_a2_rope_mse_gain_pct))
+        ):
+            raise ValueError("layer1_a2_rope_mse_gain_pct must be a finite number")
+        for nn_field in ("layer2_peak_citizen_vram_mib", "layer3_final_anse_energy"):
+            val = getattr(self, nn_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{nn_field} must be a finite non-negative number")
+        for b_field in (
+            "layer3_gwaya_a3_verified",
+            "layer4_lean_kernel_clean",
+            "layer4_sundials_tier_x_accepted",
+            "all_layers_passed",
+            "simulated",
+        ):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if (
+            not isinstance(self.merkle_root_sha256, str)
+            or len(self.merkle_root_sha256) != 64
+            or any(c not in "0123456789abcdefABCDEF" for c in self.merkle_root_sha256)
+        ):
+            raise ValueError("merkle_root_sha256 must be a 64-character hex string")
 
 
 def classify_repo_origin(repo_name: str) -> str:

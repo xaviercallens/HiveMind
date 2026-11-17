@@ -39,6 +39,8 @@ FORBIDDEN_CALLS = frozenset({
 def _validate_relative_repo_path(value: str, field_name: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string")
+    if "\\" in value or any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ValueError(f"{field_name} must not contain control characters or backslashes")
     p = Path(value)
     if p.is_absolute() or ".." in p.parts:
         raise ValueError(f"{field_name} must be a relative path without '..' traversal")
@@ -62,13 +64,15 @@ class RoadmapPRSpec:
             raise ValueError("pr_order must be a positive integer")
         for field_name in ("roadmap_id", "title", "openrouter_model"):
             val = getattr(self, field_name)
-            if not isinstance(val, str) or not val.strip():
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 or ord(c) == 127 for c in val):
                 raise ValueError(f"{field_name} must be a non-empty string")
         _validate_relative_repo_path(self.module_path, "module_path")
         _validate_relative_repo_path(self.test_path, "test_path")
         for opt_name in ("openrouter_completion_id", "openrouter_request_id"):
             opt_val = getattr(self, opt_name)
-            if opt_val is not None and (not isinstance(opt_val, str) or not opt_val.strip()):
+            if opt_val is not None and (
+                not isinstance(opt_val, str) or not opt_val.strip() or any(ord(c) < 32 or ord(c) == 127 for c in opt_val)
+            ):
                 raise ValueError(f"{opt_name} must be None or a non-empty string")
 
 
@@ -87,13 +91,15 @@ class PRVerificationReceipt:
     ready_to_merge: bool
 
     def __post_init__(self) -> None:
-        if not isinstance(self.roadmap_id, str) or not self.roadmap_id.strip():
+        if not isinstance(self.roadmap_id, str) or not self.roadmap_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in self.roadmap_id):
             raise ValueError("roadmap_id must be a non-empty string")
         _validate_relative_repo_path(self.module_path, "module_path")
         _validate_relative_repo_path(self.test_path, "test_path")
         for opt_name in ("openrouter_completion_id", "openrouter_request_id"):
             opt_val = getattr(self, opt_name)
-            if opt_val is not None and (not isinstance(opt_val, str) or not opt_val.strip()):
+            if opt_val is not None and (
+                not isinstance(opt_val, str) or not opt_val.strip() or any(ord(c) < 32 or ord(c) == 127 for c in opt_val)
+            ):
                 raise ValueError(f"{opt_name} must be None or a non-empty string")
         if not isinstance(self.ast_security_clean, bool):
             raise ValueError("ast_security_clean must be a boolean")

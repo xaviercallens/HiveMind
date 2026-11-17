@@ -94,6 +94,33 @@ class QuorumSelection:
     quorum_reached_at_s: Optional[float]
     window_close_s: Optional[float]
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.reached, bool):
+            raise TypeError("reached must be a bool")
+        if isinstance(self.min_quorum_k, bool) or not isinstance(self.min_quorum_k, int) or self.min_quorum_k < 1:
+            raise ValueError("min_quorum_k must be an integer >= 1")
+        if (
+            isinstance(self.grace_window_s, bool)
+            or not isinstance(self.grace_window_s, (int, float))
+            or not math.isfinite(float(self.grace_window_s))
+            or float(self.grace_window_s) < 0.0
+        ):
+            raise ValueError("grace_window_s must be a non-negative finite number")
+        if not isinstance(self.admitted_learner_ids, tuple) or any(
+            not isinstance(lid, str) or not lid.strip() for lid in self.admitted_learner_ids
+        ):
+            raise ValueError("admitted_learner_ids must be a tuple of non-empty strings")
+        if not isinstance(self.deferred_learner_ids, tuple) or any(
+            not isinstance(lid, str) or not lid.strip() for lid in self.deferred_learner_ids
+        ):
+            raise ValueError("deferred_learner_ids must be a tuple of non-empty strings")
+        for opt_t_name in ("quorum_reached_at_s", "window_close_s"):
+            tval = getattr(self, opt_t_name)
+            if tval is not None and (
+                isinstance(tval, bool) or not isinstance(tval, (int, float)) or not math.isfinite(float(tval))
+            ):
+                raise ValueError(f"{opt_t_name} must be None or a finite number")
+
 
 @dataclass(frozen=True)
 class SyncerRoundTelemetry:
@@ -113,6 +140,28 @@ class SyncerRoundTelemetry:
     merged_delta_norm: float
     direct_average_norm: float
     mean_learner_delta_norm: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.fragment_name, str) or not self.fragment_name.strip():
+            raise ValueError("fragment_name must be a non-empty string")
+        if self.merge_mode not in ("rda", "direct"):
+            raise ValueError("merge_mode must be 'rda' or 'direct'")
+        for int_name in ("num_arrivals", "num_admitted", "num_deferred", "admitted_tokens", "deferred_tokens"):
+            ival = getattr(self, int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 0:
+                raise ValueError(f"{int_name} must be a non-negative integer")
+        if isinstance(self.min_quorum_k, bool) or not isinstance(self.min_quorum_k, int) or self.min_quorum_k < 1:
+            raise ValueError("min_quorum_k must be an integer >= 1")
+        for float_name in ("grace_window_s", "merged_delta_norm", "direct_average_norm", "mean_learner_delta_norm"):
+            fval = getattr(self, float_name)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)) or float(fval) < 0.0:
+                raise ValueError(f"{float_name} must be a non-negative finite number")
+        if not isinstance(self.admitted_learner_ids, tuple) or any(
+            not isinstance(lid, str) or not lid.strip() for lid in self.admitted_learner_ids
+        ):
+            raise ValueError("admitted_learner_ids must be a tuple of non-empty strings")
+        if not isinstance(self.learner_weights, dict):
+            raise TypeError("learner_weights must be a dict")
 
 
 def token_weighted_quality_weight(
@@ -387,6 +436,8 @@ class DecoupledDiLoCoQuorumSyncer:
             raise ValueError("min_quorum_k must satisfy 1 <= K <= M")
         if merge_mode not in self.MERGE_MODES:
             raise ValueError(f"merge_mode must be one of {self.MERGE_MODES}")
+        if grace_controller is not None and not isinstance(grace_controller, AdaptiveGraceWindowController):
+            raise TypeError("grace_controller must be an AdaptiveGraceWindowController or None")
         self.num_learners_m = int(num_learners_m)
         self.min_quorum_k = int(min_quorum_k)
         self.merge_mode = merge_mode

@@ -124,6 +124,38 @@ class SymplecticBenchmarkReport:
     apoapsis_au: float
     symplectic_gate_passed: bool
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.target_body, str) or not self.target_body.strip():
+            raise ValueError("target_body must be a non-empty string")
+        if isinstance(self.steps, bool) or not isinstance(self.steps, int) or self.steps < 10:
+            raise ValueError("steps must be an integer >= 10")
+        for pos_field in (
+            "dt_yr",
+            "total_simulated_yr",
+            "verlet_over_euler_improvement_ratio",
+            "periapsis_au",
+            "apoapsis_au",
+        ):
+            val = getattr(self, pos_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{pos_field} must be a finite positive number")
+        for fin_field in ("initial_energy", "final_energy_verlet"):
+            val = getattr(self, fin_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{fin_field} must be a finite number")
+        for nn_field in (
+            "max_relative_energy_drift_verlet",
+            "max_relative_energy_drift_euler",
+            "angular_momentum_relative_drift",
+        ):
+            val = getattr(self, nn_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{nn_field} must be a finite non-negative number")
+        if float(self.apoapsis_au) < float(self.periapsis_au):
+            raise ValueError("apoapsis_au must be >= periapsis_au")
+        if not isinstance(self.symplectic_gate_passed, bool):
+            raise ValueError("symplectic_gate_passed must be a boolean")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -189,12 +221,16 @@ class SymplecticVelocityVerletIntegrator:
         return float(x_au) * inv_r3, float(y_au) * inv_r3
 
     def specific_energy(self, state: Kepler442bOrbitalState) -> float:
+        if not isinstance(state, Kepler442bOrbitalState):
+            raise ValueError("state must be a Kepler442bOrbitalState")
         kinetic = 0.5 * (state.vx_au_yr * state.vx_au_yr + state.vy_au_yr * state.vy_au_yr)
         potential = -self.mu / state.radius_au
         return kinetic + potential
 
     @staticmethod
     def specific_angular_momentum(state: Kepler442bOrbitalState) -> float:
+        if not isinstance(state, Kepler442bOrbitalState):
+            raise ValueError("state must be a Kepler442bOrbitalState")
         return state.x_au * state.vy_au_yr - state.y_au * state.vx_au_yr
 
     def step_velocity_verlet(self, state: Kepler442bOrbitalState, dt_yr: float) -> Kepler442bOrbitalState:

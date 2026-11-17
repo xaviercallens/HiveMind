@@ -97,8 +97,10 @@ def fetch_hf_domain_subset(
     """Pull a real domain dataset subset from Hugging Face Hub (`sahil2801/CodeAlpaca-20k` or `qiaojin/PubMedQA`)."""
     if not isinstance(dataset_id, str) or not dataset_id.strip():
         raise ValueError("dataset_id must be a non-empty string")
-    if isinstance(num_samples, bool) or int(num_samples) < 1:
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples < 1:
         raise ValueError("num_samples must be a positive integer")
+    if hf_token is not None and (isinstance(hf_token, bool) or not isinstance(hf_token, str)):
+        raise ValueError("hf_token must be a string or None")
     from huggingface_hub import hf_hub_download
 
     samples: list[str] = []
@@ -160,11 +162,16 @@ def _create_tokenized_parquet_shard(
     """Tokenize real domain strings with the Hugging Face tokenizer and write a signed Parquet shard."""
     if not isinstance(domain, str) or not domain.strip():
         raise ValueError("domain must be a non-empty string")
-    if not texts or not any(isinstance(t, str) and t.strip() for t in texts):
+    if (
+        isinstance(texts, (str, bytes))
+        or not isinstance(texts, (list, tuple))
+        or not texts
+        or not any(isinstance(t, str) and t.strip() for t in texts)
+    ):
         raise ValueError("texts must contain at least one non-empty string")
-    if isinstance(seq_len, bool) or int(seq_len) < 1:
+    if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 1:
         raise ValueError("seq_len must be a positive integer")
-    if isinstance(num_sequences, bool) or int(num_sequences) < 1:
+    if isinstance(num_sequences, bool) or not isinstance(num_sequences, int) or num_sequences < 1:
         raise ValueError("num_sequences must be a positive integer")
     if isinstance(shard_path, bool) or not isinstance(shard_path, Path):
         raise ValueError("shard_path must be a Path")
@@ -247,15 +254,15 @@ def run_huggingface_rtx2070_poc(
         raise ValueError("model_id must be a non-empty string")
     if not isinstance(hf_dataset_id, str) or not hf_dataset_id.strip():
         raise ValueError("hf_dataset_id must be a non-empty string")
-    if isinstance(hf_subset_size, bool) or int(hf_subset_size) < 1:
+    if isinstance(hf_subset_size, bool) or not isinstance(hf_subset_size, int) or hf_subset_size < 1:
         raise ValueError("hf_subset_size must be a positive integer")
-    if isinstance(lora_rank_r, bool) or int(lora_rank_r) < 1:
+    if isinstance(lora_rank_r, bool) or not isinstance(lora_rank_r, int) or lora_rank_r < 1:
         raise ValueError("lora_rank_r must be a positive integer")
-    if isinstance(lora_alpha, bool) or int(lora_alpha) < 1:
+    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, int) or lora_alpha < 1:
         raise ValueError("lora_alpha must be a positive integer")
-    if isinstance(inner_steps_H, bool) or int(inner_steps_H) < 1:
+    if isinstance(inner_steps_H, bool) or not isinstance(inner_steps_H, int) or inner_steps_H < 1:
         raise ValueError("inner_steps_H must be a positive integer")
-    if isinstance(spot_check_interval_s, bool) or int(spot_check_interval_s) < 1:
+    if isinstance(spot_check_interval_s, bool) or not isinstance(spot_check_interval_s, int) or spot_check_interval_s < 1:
         raise ValueError("spot_check_interval_s must be a positive integer")
     t0 = time.perf_counter()
     cfg = HiveMindConfig.from_yaml()

@@ -407,6 +407,8 @@ def load_kafka_client() -> ModuleType:
 
 def kafka_transport_readiness(env: Mapping[str, str] | None = None) -> dict[str, Any]:
     """Report whether the real broker path can run here: READY, or BLOCKED with the reason. Does not connect."""
+    if env is not None and not isinstance(env, Mapping):
+        raise ValueError("env must be a Mapping or None")
     try:
         settings = KafkaSettings.from_env(env)
     except KafkaConfigError as exc:
@@ -459,6 +461,10 @@ class KafkaBrokerTransport:
         return cls(KafkaSettings.from_env(env))
 
     def publish(self, topic: str, key: bytes, value: bytes) -> dict[str, Any]:
+        if not isinstance(topic, str) or not topic.strip():
+            raise ValueError("topic must be a non-empty string")
+        if not isinstance(key, (bytes, bytearray)) or not isinstance(value, (bytes, bytearray)):
+            raise TypeError("key and value must be bytes or bytearray")
         report: dict[str, Any] = {}
 
         def _on_delivery(err: Any, msg: Any) -> None:
@@ -478,9 +484,14 @@ class KafkaBrokerTransport:
         return {"topic": msg.topic(), "partition": msg.partition(), "offset": msg.offset()}
 
     def subscribe(self, topics: Iterable[str]) -> None:
+        if isinstance(topics, (str, bytes)) or not isinstance(topics, Iterable):
+            raise ValueError("topics must be an iterable of topic strings")
+        topic_list = list(topics)
+        if not topic_list or not all(isinstance(t, str) and t.strip() for t in topic_list):
+            raise ValueError("topics must be a non-empty iterable of non-empty topic strings")
         if self._consumer is None:
             self._consumer = self._mod.Consumer(self.settings.consumer_config())
-        self._consumer.subscribe(list(topics))
+        self._consumer.subscribe(topic_list)
 
     def _require_consumer(self) -> Any:
         if self._consumer is None:
@@ -488,6 +499,15 @@ class KafkaBrokerTransport:
         return self._consumer
 
     def poll(self, max_records: int, timeout_s: float) -> list[TransportRecord]:
+        if isinstance(max_records, bool) or not isinstance(max_records, int) or max_records < 1:
+            raise ValueError("max_records must be an integer >= 1")
+        if (
+            isinstance(timeout_s, bool)
+            or not isinstance(timeout_s, (int, float))
+            or not math.isfinite(float(timeout_s))
+            or float(timeout_s) < 0.0
+        ):
+            raise ValueError("timeout_s must be a finite number >= 0")
         consumer = self._require_consumer()
         try:
             messages = consumer.consume(num_messages=max_records, timeout=timeout_s)
@@ -504,6 +524,8 @@ class KafkaBrokerTransport:
         return out
 
     def commit(self, record: TransportRecord) -> None:
+        if not isinstance(record, TransportRecord):
+            raise TypeError("record must be a TransportRecord")
         consumer = self._require_consumer()
         tp = self._mod.TopicPartition(record.topic, record.partition, record.offset + 1)
         try:
@@ -512,6 +534,12 @@ class KafkaBrokerTransport:
             raise TransportError(f"commit failed: {exc}") from exc
 
     def seek(self, topic: str, partition: int, offset: int) -> None:
+        if not isinstance(topic, str) or not topic.strip():
+            raise ValueError("topic must be a non-empty string")
+        if isinstance(partition, bool) or not isinstance(partition, int) or partition < 0:
+            raise ValueError("partition must be an integer >= 0")
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ValueError("offset must be an integer >= 0")
         consumer = self._require_consumer()
         try:
             consumer.seek(self._mod.TopicPartition(topic, partition, offset))
@@ -872,6 +900,14 @@ class VerifiedEvent:
     key_id: str
     record: TransportRecord
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.event, AMCPKafkaEvent):
+            raise TypeError("event must be an AMCPKafkaEvent")
+        if not isinstance(self.key_id, str) or not self.key_id.strip():
+            raise ValueError("key_id must be a non-empty string")
+        if not isinstance(self.record, TransportRecord):
+            raise TypeError("record must be a TransportRecord")
+
 
 class EnvelopeVerifier:
     """Verify consumed records; raise ``EnvelopeRejected`` with a dead-letter reason on any failure."""
@@ -884,6 +920,8 @@ class EnvelopeVerifier:
         max_skew_s: float = MAX_CLOCK_SKEW_S,
         clock: Callable[[], float] = time.time,
     ) -> None:
+        if not isinstance(keyring, HMACKeyring):
+            raise TypeError("keyring must be an HMACKeyring")
         if (
             isinstance(max_ttl_s, bool)
             or not isinstance(max_ttl_s, (int, float))
@@ -970,6 +1008,10 @@ class AMCPPublisher:
         ttl_s: float = DEFAULT_EVENT_TTL_S,
         mirror: InMemoryKafkaBridge | None = None,
     ) -> None:
+        if not isinstance(keyring, HMACKeyring):
+            raise TypeError("keyring must be an HMACKeyring")
+        if mirror is not None and not isinstance(mirror, InMemoryKafkaBridge):
+            raise TypeError("mirror must be an InMemoryKafkaBridge or None")
         if (
             isinstance(ttl_s, bool)
             or not isinstance(ttl_s, (int, float))
@@ -983,6 +1025,8 @@ class AMCPPublisher:
         self.mirror = mirror
 
     def publish(self, event: AMCPKafkaEvent) -> dict[str, Any]:
+        if not isinstance(event, AMCPKafkaEvent):
+            raise TypeError("event must be an AMCPKafkaEvent")
         validate_event_dict(event.to_dict(), event.topic)
         value = canonical_json(sign_envelope(event, self.keyring, self.ttl_s))
         if len(value) > MAX_ENVELOPE_BYTES:
@@ -1092,6 +1136,22 @@ class ConsumerStats:
     dlq_errors: int = 0
     dead_lettered: dict[str, int] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        for field_name, iv in (
+            ("polled", self.polled),
+            ("delivered", self.delivered),
+            ("duplicates_dropped", self.duplicates_dropped),
+            ("handler_failures", self.handler_failures),
+            ("rewinds", self.rewinds),
+            ("committed", self.committed),
+            ("commit_errors", self.commit_errors),
+            ("dlq_errors", self.dlq_errors),
+        ):
+            if isinstance(iv, bool) or not isinstance(iv, int) or iv < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        if not isinstance(self.dead_lettered, dict):
+            raise TypeError("dead_lettered must be a dict")
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "polled": self.polled,
@@ -1189,6 +1249,10 @@ class AMCPConsumer:
         return self._stop.is_set()
 
     def _dead_letter(self, record: TransportRecord, reason: str, detail: str) -> bool:
+        if not isinstance(record, TransportRecord):
+            raise TypeError("record must be a TransportRecord")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("reason must be a non-empty string")
         try:
             self.transport.publish(self.dlq_topic, record.key or b"", build_dead_letter(record, reason, detail, self._clock()))
         except TransportError:
@@ -1198,6 +1262,8 @@ class AMCPConsumer:
         return True
 
     def _commit(self, record: TransportRecord) -> None:
+        if not isinstance(record, TransportRecord):
+            raise TypeError("record must be a TransportRecord")
         try:
             self.transport.commit(record)
         except TransportError:
@@ -1206,6 +1272,10 @@ class AMCPConsumer:
         self.stats.committed += 1
 
     def _rewind(self, record: TransportRecord, held: set[tuple[str, int]]) -> None:
+        if not isinstance(record, TransportRecord):
+            raise TypeError("record must be a TransportRecord")
+        if not isinstance(held, set):
+            raise TypeError("held must be a set")
         self.transport.seek(record.topic, record.partition, record.offset)
         held.add((record.topic, record.partition))
         self.stats.rewinds += 1

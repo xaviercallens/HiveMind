@@ -175,6 +175,8 @@ def create_signed_6domain_parquet_shard(
     secret_key: bytes = DEFAULT_COORDINATOR_SECRET,
 ) -> Tuple[Path, str, str, List[str], Dict[str, Any]]:
     """Screen via Phase S-2 guard, encode into deterministic Parquet shard, and HMAC-SHA256 sign."""
+    if not isinstance(shard_path, (Path, str)) or not str(shard_path).strip():
+        raise ValueError("shard_path must be a non-empty Path or string")
     if isinstance(rng_seed, bool) or not isinstance(rng_seed, int) or rng_seed < 0:
         raise ValueError("rng_seed must be a non-negative integer")
     if isinstance(num_sequences, bool) or not isinstance(num_sequences, int) or num_sequences <= 0:
@@ -238,6 +240,10 @@ def create_signed_6domain_parquet_shard(
 
 @torch.no_grad()
 def _eval_loss(model: torch.nn.Module, token_sequences: torch.Tensor, device: torch.device) -> float:
+    if not isinstance(model, torch.nn.Module):
+        raise TypeError("model must be a torch.nn.Module")
+    if not isinstance(token_sequences, torch.Tensor) or token_sequences.ndim != 2 or token_sequences.size(0) < 1:
+        raise ValueError("token_sequences must be a non-empty 2D Tensor")
     model.eval()
     batch = token_sequences[: min(8, token_sequences.size(0))].to(device, dtype=torch.long)
     out = model(input_ids=batch, labels=batch)
@@ -258,6 +264,12 @@ COSMOLOGY_PARAMETERS_SOURCE = "fixed input constants, not a fit"
 
 def _insert_after_key(entry: Dict[str, Any], after: str, key: str, value: Any) -> Dict[str, Any]:
     """Return `entry` with `key` placed directly after `after` (or appended when `after` is absent)."""
+    if not isinstance(entry, dict):
+        raise TypeError("entry must be a dict")
+    if not isinstance(after, str) or not after.strip():
+        raise ValueError("after must be a non-empty string")
+    if not isinstance(key, str) or not key.strip():
+        raise ValueError("key must be a non-empty string")
     if after not in entry:
         out = dict(entry)
         out[key] = value

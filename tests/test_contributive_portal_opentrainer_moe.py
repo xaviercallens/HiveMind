@@ -191,3 +191,20 @@ def test_portal_renders_contributive_community_hub_section() -> None:
     assert 'id="contributiveHubBtn"' in html
     assert 'value="byom-2-to-4-local-gpus"' in html
     assert "/v1/hivemind/contributive-hub" in html
+
+
+
+def test_progress_is_one_trajectory_per_campaign_not_a_mix() -> None:
+    """IP-295: an uninitialised run's 11.929 must not become the 'latest loss' of another campaign's trajectory."""
+    rounds = [
+        {"round_index": 1, "eval_loss": 3.407136, "tokens_trained": 100, "run_id": "granite-moe-v1", "submitted_utc": 100.0},
+        {"round_index": 2, "eval_loss": 0.568909, "tokens_trained": 100, "run_id": "granite-moe-v1", "submitted_utc": 200.0},
+        {"round_index": 114, "eval_loss": 11.929456, "tokens_trained": 0, "run_id": "CROWDGPT-GCP-T4-DILOCO", "submitted_utc": 300.0},
+    ]
+    prog = summarize_moe_self_training_progress(recent_rounds=rounds, opentrainer_nodes=[], now_utc=400.0)
+    assert prog["trajectory_campaign"] == "CROWDGPT-GCP-T4-DILOCO"
+    assert prog["initial_eval_loss"] == prog["latest_eval_loss"] == 11.929456  # its own single round, not 3.407 -> 11.929
+    by = {c["run_id"]: c for c in prog["campaign_trajectories"]}
+    assert by["granite-moe-v1"]["initial_eval_loss"] == 3.407136 and by["granite-moe-v1"]["best_eval_loss"] == 0.568909
+    assert by["granite-moe-v1"]["improved"] is True and by["CROWDGPT-GCP-T4-DILOCO"]["rounds"] == 1
+    assert prog["evidence"].startswith("client_reported_unverified")

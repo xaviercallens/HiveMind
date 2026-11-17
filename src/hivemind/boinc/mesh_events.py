@@ -249,6 +249,8 @@ class AMCPMeshEventBus:
         return self._dispatch(event)
 
     def _dispatch(self, event: BOINCMeshEvent) -> BOINCMeshEvent:
+        if not isinstance(event, BOINCMeshEvent):
+            raise TypeError("event must be a BOINCMeshEvent")
         digest_before = self._ledger.credit_digest()
         self._published_events.append(event)
         for handler in self._subscribers[event.topic]:
@@ -316,6 +318,12 @@ def publish_validated_and_assimilated_round(
     timestamp_utc: str,
 ) -> tuple[BOINCMeshEvent, BOINCMeshEvent]:
     """Record a validated + assimilated workunit in the BOINC chain ledger and publish both AMCP mesh events."""
+    if not isinstance(ledger, BOINCChainLedger):
+        raise TypeError("ledger must be a BOINCChainLedger")
+    if not isinstance(bus, AMCPMeshEventBus):
+        raise TypeError("bus must be an AMCPMeshEventBus")
+    if not isinstance(host_id, str) or not host_id.strip():
+        raise ValueError("host_id must be a non-empty string")
     pointer = AdapterPointer(
         chain_stem=chain_stem,
         round_index=round_index,

@@ -39,6 +39,32 @@ class PCIeMoEStreamingPlan:
     overlap_efficiency_pct: float
     within_citizen_vram_cap: bool
 
+    def __post_init__(self) -> None:
+        if isinstance(self.total_experts, bool) or not isinstance(self.total_experts, int) or self.total_experts < 1:
+            raise ValueError("total_experts must be an integer >= 1")
+        if (
+            isinstance(self.active_top_k_experts, bool)
+            or not isinstance(self.active_top_k_experts, int)
+            or not (1 <= self.active_top_k_experts <= self.total_experts)
+        ):
+            raise ValueError("active_top_k_experts must satisfy 1 <= active_top_k_experts <= total_experts")
+        for pos_field in ("single_expert_mib", "pcie_bandwidth_gbps", "raw_pcie_transfer_ms"):
+            _validate_positive_float(getattr(self, pos_field), pos_field, allow_zero=False)
+        for nn_field in (
+            "shared_prelude_mib",
+            "turboquant_kv_cache_mib",
+            "double_buffer_staging_mib",
+            "peak_active_vram_mib",
+            "overlapped_compute_ms",
+            "effective_stall_ms",
+            "overlap_efficiency_pct",
+        ):
+            _validate_positive_float(getattr(self, nn_field), nn_field, allow_zero=True)
+        if isinstance(self.vram_headroom_mib, bool) or not isinstance(self.vram_headroom_mib, (int, float)) or not math.isfinite(float(self.vram_headroom_mib)):
+            raise ValueError("vram_headroom_mib must be a finite real number")
+        if not isinstance(self.within_citizen_vram_cap, bool):
+            raise ValueError("within_citizen_vram_cap must be a boolean")
+
 
 @dataclass(frozen=True)
 class NativeCrossPlatformWorkerSpec:
@@ -51,6 +77,18 @@ class NativeCrossPlatformWorkerSpec:
     steam_preemption_ms: float
     openai_compatible_endpoint: str
     basis: str = "planning_targets"
+
+    def __post_init__(self) -> None:
+        for s_field in ("os_family", "runtime_engine", "openai_compatible_endpoint", "basis"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if not self.openai_compatible_endpoint.startswith(("http://", "https://")):
+            raise ValueError("openai_compatible_endpoint must start with http:// or https://")
+        if not isinstance(self.requires_python_or_wsl, bool):
+            raise ValueError("requires_python_or_wsl must be a boolean")
+        _validate_positive_float(self.active_vram_cap_mib, "active_vram_cap_mib", allow_zero=False)
+        _validate_positive_float(self.steam_preemption_ms, "steam_preemption_ms", allow_zero=False)
 
 
 def _validate_positive_float(val: object, name: str, *, allow_zero: bool = False) -> float:

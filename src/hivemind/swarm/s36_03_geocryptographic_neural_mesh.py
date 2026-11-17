@@ -107,6 +107,18 @@ class GeoMeshRouteDecision:
     cosine_similarity: float
     adapter_verified: bool
 
+    def __post_init__(self) -> None:
+        _validate_mesh_str(self.selected_node_id, "selected_node_id")
+        _validate_mesh_str(self.region, "region")
+        _validate_mesh_str(self.expert_domain, "expert_domain")
+        _validate_finite_num(self.predicted_rtt_ms, "predicted_rtt_ms", positive=True)
+        _validate_finite_num(self.central_gateway_rtt_ms, "central_gateway_rtt_ms", positive=True)
+        sim = _validate_finite_num(self.cosine_similarity, "cosine_similarity")
+        if sim < -1.0001 or sim > 1.0001:
+            raise ValueError("cosine_similarity must be in [-1.0, 1.0]")
+        if not isinstance(self.adapter_verified, bool):
+            raise ValueError("adapter_verified must be a boolean")
+
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
@@ -227,6 +239,22 @@ class GeocryptographicNeuralMeshRouter:
         client_coord: VivaldiCoord3D | None = None,
     ) -> dict[str, object]:
         """Benchmark p95 RTT reduction across regional client clusters."""
+        if central_gateway_coord is not None and not isinstance(central_gateway_coord, VivaldiCoord3D):
+            raise ValueError("central_gateway_coord must be a VivaldiCoord3D or None")
+        if client_coord is not None and not isinstance(client_coord, VivaldiCoord3D):
+            raise ValueError("client_coord must be a VivaldiCoord3D or None")
+        if regional_coords is not None:
+            if isinstance(regional_coords, (str, bytes)) or not isinstance(regional_coords, Sequence) or not regional_coords:
+                raise ValueError("regional_coords must be a non-empty sequence of (region, VivaldiCoord3D) pairs")
+            for item in regional_coords:
+                if (
+                    not isinstance(item, tuple)
+                    or len(item) != 2
+                    or not isinstance(item[0], str)
+                    or not item[0].strip()
+                    or not isinstance(item[1], VivaldiCoord3D)
+                ):
+                    raise ValueError("regional_coords must contain (non-empty str, VivaldiCoord3D) tuples")
         domain = "astrophysics_transits"
         digest = hashlib.sha256(b"canonical-bee-stars-v36").hexdigest()
         self.register_canonical_adapter(domain, digest)

@@ -83,14 +83,35 @@ class ExemplarBYOBBee:
             val = getattr(self, attr)
             if not isinstance(val, str) or not val.strip():
                 raise ValueError(f"{attr} must be a non-empty string")
+        for id_attr in (
+            "bee_id",
+            "public_id",
+            "domain",
+            "base_hf_repo",
+            "base_tier_id",
+            "hf_repo_id",
+            "revision",
+            "author_handle",
+            "license",
+        ):
+            ival = getattr(self, id_attr)
+            if any(ord(c) < 32 or ord(c) == 127 for c in ival):
+                raise ValueError(f"{id_attr} must not contain control characters")
         for num_attr in ("parameters_b", "test_accuracy_gain", "mcnemar_p_value"):
             nval = getattr(self, num_attr)
             if isinstance(nval, bool) or not isinstance(nval, (int, float)) or not math.isfinite(float(nval)):
                 raise ValueError(f"{num_attr} must be a finite numeric value")
         if self.parameters_b <= 0.0:
             raise ValueError("parameters_b must be positive")
+        if not (-1.0 < self.test_accuracy_gain <= 1.0):
+            raise ValueError("test_accuracy_gain must be in (-1.0, 1.0]")
         if not (0.0 <= self.mcnemar_p_value <= 1.0):
             raise ValueError("mcnemar_p_value must be in [0.0, 1.0]")
+        if self.public_id != f"hivemind/{self.bee_id}":
+            raise ValueError("public_id must equal 'hivemind/<bee_id>'")
+        rev = self.revision.strip()
+        if len(rev) != 40 or any(c not in "0123456789abcdefABCDEF" for c in rev):
+            raise ValueError("revision must be a 40-character hexadecimal commit SHA")
 
     def to_manifest(self) -> BeeManifest:
         """Generate the signed BeeManifest for this bee."""
@@ -225,13 +246,19 @@ class ExemplarBYOBRegistryManager:
     """Manages evaluation, attestation, and promotion of BYOB bees into the live swarm."""
 
     def __init__(self, expert_registry: ExpertRegistry | None = None) -> None:
+        if expert_registry is not None and not isinstance(expert_registry, ExpertRegistry):
+            raise TypeError("expert_registry must be an ExpertRegistry or None")
         self._expert_registry = expert_registry if expert_registry is not None else ExpertRegistry()
         self._live_exemplars: dict[str, ExemplarBYOBBee] = {b.bee_id: b for b in EXEMPLAR_BYOB_BEES}
         self._attestation_hashes: dict[str, str] = {}
 
     def get_bee(self, bee_id: str) -> ExemplarBYOBBee | None:
-        if not isinstance(bee_id, str) or not bee_id.strip():
-            raise ValueError("bee_id must be a non-empty string")
+        if (
+            not isinstance(bee_id, str)
+            or not bee_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in bee_id)
+        ):
+            raise ValueError("bee_id must be a non-empty string without control characters")
         return self._live_exemplars.get(bee_id)
 
     def list_live_bees(self) -> list[ExemplarBYOBBee]:
@@ -273,7 +300,11 @@ class ExemplarBYOBRegistryManager:
             ).hexdigest()
 
         if paired_outcomes is not None:
-            if not paired_outcomes:
+            if (
+                isinstance(paired_outcomes, (str, bytes))
+                or not isinstance(paired_outcomes, Sequence)
+                or not paired_outcomes
+            ):
                 raise ValueError("paired_outcomes must not be empty when provided")
             for pair in paired_outcomes:
                 if (

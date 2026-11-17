@@ -327,7 +327,11 @@ def select_dream_phase_teacher_for_vram(
     for field_name, val in (("vram_gb", vram_gb), ("system_ram_gb", system_ram_gb)):
         if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or val <= 0:
             raise ValueError(f"{field_name} must be a positive finite number")
-    if not isinstance(domain_or_cluster, str) or not domain_or_cluster.strip() or any(ord(c) < 32 for c in domain_or_cluster):
+    if (
+        not isinstance(domain_or_cluster, str)
+        or not domain_or_cluster.strip()
+        or any(ord(c) < 32 or ord(c) == 127 for c in domain_or_cluster)
+    ):
         raise ValueError("domain_or_cluster must be a non-empty printable string")
     dom = domain_or_cluster.strip().lower()
     is_code_or_formal = any(
@@ -556,7 +560,7 @@ NOCTURNAL_20_MOE_TARGETS: tuple[str, ...] = (
 
 def resolve_domain_canonical(domain: str) -> str:
     """Resolve a domain alias or name to its canonical HF_EXPERT_CATALOG key."""
-    if not isinstance(domain, str) or not domain.strip() or any(ord(c) < 32 for c in domain):
+    if not isinstance(domain, str) or not domain.strip() or any(ord(c) < 32 or ord(c) == 127 for c in domain):
         raise ValueError("domain must be a non-empty printable string")
     canonical = DOMAIN_ALIASES.get(domain, domain)
     if canonical not in HF_EXPERT_CATALOG:
@@ -593,7 +597,7 @@ class AutoImprovementWorkunit:
             ("base_model_id", self.base_model_id),
             ("target_adapter_name", self.target_adapter_name),
         ):
-            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 for c in val):
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 or ord(c) == 127 for c in val):
                 raise ValueError(f"{field_name} must be a non-empty printable string")
         for field_name, val in (("rank", self.rank), ("num_samples", self.num_samples), ("inner_steps", self.inner_steps)):
             if isinstance(val, bool) or not isinstance(val, int) or val < 1:
@@ -607,6 +611,19 @@ class AutoImprovementWorkunit:
         ):
             if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or val <= 0:
                 raise ValueError(f"{field_name} must be a positive finite number")
+        for opt_field, opt_val in (("hf_dataset", self.hf_dataset), ("cluster", self.cluster)):
+            if not isinstance(opt_val, str) or any(ord(c) < 32 or ord(c) == 127 for c in opt_val):
+                raise ValueError(f"{opt_field} must be a printable string")
+        if not isinstance(self.sample_pairs, list) or any(not isinstance(item, dict) for item in self.sample_pairs):
+            raise ValueError("sample_pairs must be a list of dicts")
+        if not isinstance(self.sha256_digest, str) or (
+            self.sha256_digest
+            and (
+                len(self.sha256_digest) != 64
+                or not all(c in "0123456789abcdefABCDEF" for c in self.sha256_digest)
+            )
+        ):
+            raise ValueError("sha256_digest must be a 64-character hex string when provided")
         canonical = resolve_domain_canonical(self.domain)
         meta = HF_EXPERT_CATALOG[canonical]
         if not self.hf_dataset:
@@ -652,6 +669,50 @@ class AutoImprovementExecutionResult:
     simulated: bool = False
     telemetry_source: str = "observed_worker_telemetry"
 
+    def __post_init__(self) -> None:
+        for s_name in (
+            "wu_id",
+            "domain",
+            "worker_id",
+            "account_id",
+            "delta_weights_hash",
+            "base_model_id",
+            "telemetry_source",
+        ):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 or ord(c) == 127 for c in val):
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for opt_name in ("hf_dataset", "cluster"):
+            opt_val = getattr(self, opt_name)
+            if not isinstance(opt_val, str) or any(ord(c) < 32 or ord(c) == 127 for c in opt_val):
+                raise ValueError(f"{opt_name} must be a printable string")
+        if isinstance(self.steps_completed, bool) or not isinstance(self.steps_completed, int) or self.steps_completed < 0:
+            raise ValueError("steps_completed must be a non-negative integer")
+        for f_name in (
+            "loss_initial",
+            "loss_final",
+            "accuracy_base",
+            "accuracy_adapted",
+            "mcnemar_p_value",
+            "contributed_tflops",
+            "peak_vram_mb",
+            "duration_seconds",
+            "completed_utc",
+        ):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        for prob_name in ("accuracy_base", "accuracy_adapted", "mcnemar_p_value"):
+            val = float(getattr(self, prob_name))
+            if not (0.0 <= val <= 1.0):
+                raise ValueError(f"{prob_name} must be in [0.0, 1.0]")
+        for nonneg_name in ("contributed_tflops", "peak_vram_mb", "duration_seconds"):
+            if float(getattr(self, nonneg_name)) < 0.0:
+                raise ValueError(f"{nonneg_name} must be non-negative")
+        for b_name in ("gate_passed", "simulated"):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
+
     @property
     def delta_nll(self) -> float:
         return round(self.loss_final - self.loss_initial, 4)
@@ -681,6 +742,40 @@ class RetrofitReport:
     timestamp_utc: float
     audit_log: list[str] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        for i_name in ("total_workunits", "newly_credited_count", "already_credited_count"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        if self.newly_credited_count + self.already_credited_count > self.total_workunits:
+            raise ValueError("newly_credited_count + already_credited_count cannot exceed total_workunits")
+        for f_name in ("total_hmt_granted", "total_tflops_attested", "timestamp_utc"):
+            val = getattr(self, f_name)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a finite non-negative number")
+        if not isinstance(self.credited_accounts, dict):
+            raise ValueError("credited_accounts must be a dict")
+        if any(
+            not isinstance(k, str)
+            or not k.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in k)
+            or isinstance(v, bool)
+            or not isinstance(v, (int, float))
+            or not math.isfinite(float(v))
+            or float(v) < 0.0
+            for k, v in self.credited_accounts.items()
+        ):
+            raise ValueError("credited_accounts must map non-empty account IDs to finite non-negative numbers")
+        if not isinstance(self.ledger_verified, bool):
+            raise ValueError("ledger_verified must be a boolean")
+        if not isinstance(self.audit_log, list) or any(not isinstance(e, str) for e in self.audit_log):
+            raise ValueError("audit_log must be a list of strings")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -694,7 +789,7 @@ class NocturnalAutoImprovementScheduler:
         default_rank: int = 16,
         target_vram_ceiling_gb: float = 8.0,
     ) -> None:
-        if not isinstance(base_model_id, str) or not base_model_id.strip() or any(ord(c) < 32 for c in base_model_id):
+        if not isinstance(base_model_id, str) or not base_model_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in base_model_id):
             raise ValueError("base_model_id must be a non-empty printable string")
         if isinstance(default_rank, bool) or not isinstance(default_rank, int) or default_rank < 1:
             raise ValueError("default_rank must be an integer >= 1")
@@ -714,6 +809,8 @@ class NocturnalAutoImprovementScheduler:
     @staticmethod
     def _canonical_base_model(model_or_tag: str) -> str:
         """Resolve short tags like 'gemma-2-9b', 'qwen-3.5-9b', 'qwen-2.5-coder-14b' to HF identifiers."""
+        if not isinstance(model_or_tag, str) or not model_or_tag.strip() or any(ord(c) < 32 or ord(c) == 127 for c in model_or_tag):
+            raise ValueError("model_or_tag must be a non-empty printable string")
         tag = model_or_tag.strip().lower()
         if tag in ALL_BASE_MODELS:
             return ALL_BASE_MODELS[tag]["model_id"]
@@ -744,6 +841,16 @@ class NocturnalAutoImprovementScheduler:
         """Identify producers with sufficient VRAM and fresh heartbeats to replace preempted cloud VMs."""
         if not isinstance(connected_producers, Sequence) or isinstance(connected_producers, (str, bytes)):
             raise ValueError("connected_producers must be a sequence of mappings")
+        for p in connected_producers:
+            if not isinstance(p, Mapping):
+                raise ValueError("each entry in connected_producers must be a Mapping")
+            if (
+                "account_id" not in p
+                or not isinstance(p["account_id"], str)
+                or not p["account_id"].strip()
+                or any(ord(c) < 32 or ord(c) == 127 for c in p["account_id"])
+            ):
+                raise ValueError("each producer entry must have a non-empty string account_id")
         for field_name, val in (("min_vram_gb", min_vram_gb), ("max_heartbeat_age_s", max_heartbeat_age_s)):
             if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0:
                 raise ValueError(f"{field_name} must be a positive finite number")
@@ -815,6 +922,10 @@ class NocturnalAutoImprovementScheduler:
             or time_budget_minutes <= 0
         ):
             raise ValueError("time_budget_minutes must be a positive finite number")
+        if base_model_id is not None and (
+            not isinstance(base_model_id, str) or not base_model_id.strip() or any(ord(c) < 32 for c in base_model_id)
+        ):
+            raise ValueError("base_model_id must be a non-empty printable string")
         canonical_domain = resolve_domain_canonical(domain)
         meta = HF_EXPERT_CATALOG[canonical_domain]
 
@@ -854,6 +965,11 @@ class NocturnalAutoImprovementScheduler:
         self, canonical_domain: str, num_samples: int, seed: int
     ) -> list[dict[str, str]]:
         """Generate structured prompt-solution refinement pairs mapped to real Hugging Face dataset schemas."""
+        canonical_domain = resolve_domain_canonical(canonical_domain)
+        if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples < 1:
+            raise ValueError("num_samples must be an integer >= 1")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         rng = np.random.default_rng(seed)
         pairs: list[dict[str, str]] = []
         meta = HF_EXPERT_CATALOG[canonical_domain]
@@ -1065,6 +1181,12 @@ class NocturnalAutoImprovementScheduler:
                 raise ValueError(f"{field_name} must be a non-negative integer")
         if isinstance(total_eval_samples, bool) or not isinstance(total_eval_samples, int) or total_eval_samples < 1:
             raise ValueError("total_eval_samples must be an integer >= 1")
+        if base_correct > total_eval_samples:
+            raise ValueError("base_correct cannot exceed total_eval_samples")
+        if adapted_correct > total_eval_samples:
+            raise ValueError("adapted_correct cannot exceed total_eval_samples")
+        if base_only_correct + adapted_only_correct > total_eval_samples:
+            raise ValueError("base_only_correct + adapted_only_correct cannot exceed total_eval_samples")
         if (
             isinstance(significance_alpha, bool)
             or not isinstance(significance_alpha, (int, float))
@@ -1099,7 +1221,7 @@ class NocturnalAutoImprovementScheduler:
             ("account_id", account_id),
             ("execution_class", execution_class),
         ):
-            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 for c in val):
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 or ord(c) == 127 for c in val):
                 raise ValueError(f"{field_name} must be a non-empty printable string")
         if observed_telemetry is not None and not isinstance(observed_telemetry, Mapping):
             raise ValueError("observed_telemetry must be a Mapping when provided")
@@ -1233,6 +1355,8 @@ class PointsRetrofitManager:
         for r in results:
             if not isinstance(r, AutoImprovementExecutionResult):
                 raise ValueError("results must contain only AutoImprovementExecutionResult instances")
+        if store is None or not hasattr(store, "verify_chain") or not hasattr(store, "get_account") or not hasattr(store, "grant"):
+            raise ValueError("store must be a valid RouterStore-like object")
         credited_accounts: dict[str, float] = {}
         audit_log: list[str] = []
         newly_credited = 0

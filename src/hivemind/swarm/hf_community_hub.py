@@ -61,6 +61,34 @@ class SharedCommunityExpertEntry:
     relative_loss_reduction_pct: float
     tensor_sha256: str
 
+    def __post_init__(self) -> None:
+        for s_field in (
+            "domain_name",
+            "dataset_id",
+            "author_gamer_tag",
+            "author_contributor_handle",
+            "expert_cid",
+            "tensor_sha256",
+        ):
+            sval = getattr(self, s_field)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        for i_field in ("source_rank_r", "canonical_rank_r", "lora_alpha"):
+            ival = getattr(self, i_field)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{i_field} must be a positive integer")
+        if (
+            isinstance(self.spectral_energy_retained, bool)
+            or not isinstance(self.spectral_energy_retained, (int, float))
+            or not math.isfinite(float(self.spectral_energy_retained))
+            or not (0.0 <= float(self.spectral_energy_retained) <= 1.0 + 1e-6)
+        ):
+            raise ValueError("spectral_energy_retained must be a finite number in [0.0, 1.0]")
+        for f_field in ("baseline_loss", "trained_loss", "relative_loss_reduction_pct"):
+            fval = getattr(self, f_field)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)):
+                raise ValueError(f"{f_field} must be a finite number")
+
 
 @dataclass
 class CommunityAdapterBundle:
@@ -79,6 +107,33 @@ class CommunityAdapterBundle:
     bundle_sha256: str
     ties_merged_included: bool = True
 
+    def __post_init__(self) -> None:
+        for s_field in ("bundle_id", "bundle_title", "hf_repo_id", "base_model_id", "guild_id", "bundle_sha256"):
+            sval = getattr(self, s_field)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if isinstance(self.canonical_rank_r, bool) or not isinstance(self.canonical_rank_r, int) or self.canonical_rank_r < 1:
+            raise ValueError("canonical_rank_r must be a positive integer")
+        if (
+            isinstance(self.created_at_epoch, bool)
+            or not isinstance(self.created_at_epoch, (int, float))
+            or not math.isfinite(float(self.created_at_epoch))
+            or float(self.created_at_epoch) < 0.0
+        ):
+            raise ValueError("created_at_epoch must be a finite non-negative number")
+        for list_field in ("authors", "contributors"):
+            lval = getattr(self, list_field)
+            if not isinstance(lval, list) or not lval or any(not isinstance(x, str) or not x.strip() for x in lval):
+                raise ValueError(f"{list_field} must be a non-empty list of non-empty strings")
+        if (
+            not isinstance(self.entries, list)
+            or not self.entries
+            or any(not isinstance(e, SharedCommunityExpertEntry) for e in self.entries)
+        ):
+            raise ValueError("entries must be a non-empty list of SharedCommunityExpertEntry")
+        if not isinstance(self.ties_merged_included, bool):
+            raise ValueError("ties_merged_included must be a boolean")
+
 
 @dataclass
 class SwarmMiningGuild:
@@ -96,6 +151,34 @@ class SwarmMiningGuild:
     guild_total_hive: float = 0.0
     bundles_published: int = 0
     peer_imports_served: int = 0
+
+    def __post_init__(self) -> None:
+        for s_field in ("guild_id", "guild_name", "guild_motto", "region_hub"):
+            sval = getattr(self, s_field)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        for list_field in ("member_miners", "member_contributors", "shared_domains"):
+            lval = getattr(self, list_field)
+            if not isinstance(lval, list) or not lval or any(not isinstance(x, str) or not x.strip() for x in lval):
+                raise ValueError(f"{list_field} must be a non-empty list of non-empty strings")
+        if (
+            isinstance(self.synergy_multiplier, bool)
+            or not isinstance(self.synergy_multiplier, (int, float))
+            or not math.isfinite(float(self.synergy_multiplier))
+            or float(self.synergy_multiplier) < 1.0
+        ):
+            raise ValueError("synergy_multiplier must be a finite number >= 1.0")
+        for nonneg_int in ("guild_total_pts", "bundles_published", "peer_imports_served"):
+            ival = getattr(self, nonneg_int)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 0:
+                raise ValueError(f"{nonneg_int} must be a non-negative integer")
+        if (
+            isinstance(self.guild_total_hive, bool)
+            or not isinstance(self.guild_total_hive, (int, float))
+            or not math.isfinite(float(self.guild_total_hive))
+            or float(self.guild_total_hive) < 0.0
+        ):
+            raise ValueError("guild_total_hive must be a finite non-negative number")
 
 
 DEFAULT_SWARM_GUILDS: List[SwarmMiningGuild] = [

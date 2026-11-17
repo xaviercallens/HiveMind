@@ -57,6 +57,38 @@ class MultiBeeDebateVerdict:
     turns: tuple[BeeDebateTurn, ...]
     transcript_sha256: str
 
+    def __post_init__(self) -> None:
+        for s_field in ("subject_id", "amcp_topic"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if not isinstance(self.accepted, bool):
+            raise ValueError("accepted must be a boolean")
+        if not isinstance(self.vetoed_by, tuple) or any(not isinstance(v, str) or not v.strip() for v in self.vetoed_by):
+            raise ValueError("vetoed_by must be a tuple of non-empty strings")
+        if (
+            isinstance(self.bayesian_posterior_confidence, bool)
+            or not isinstance(self.bayesian_posterior_confidence, (int, float))
+            or not math.isfinite(float(self.bayesian_posterior_confidence))
+            or not (0.0 <= float(self.bayesian_posterior_confidence) <= 1.0)
+        ):
+            raise ValueError("bayesian_posterior_confidence must be a finite number in [0.0, 1.0]")
+        if (
+            isinstance(self.max_residual_error, bool)
+            or not isinstance(self.max_residual_error, (int, float))
+            or math.isnan(float(self.max_residual_error))
+            or float(self.max_residual_error) < 0.0
+        ):
+            raise ValueError("max_residual_error must be a non-negative number")
+        if not isinstance(self.turns, tuple) or len(self.turns) < 2 or any(not isinstance(t, BeeDebateTurn) for t in self.turns):
+            raise ValueError("turns must be a tuple of at least 2 BeeDebateTurn instances")
+        if (
+            not isinstance(self.transcript_sha256, str)
+            or len(self.transcript_sha256) != 64
+            or any(c not in "0123456789abcdefABCDEF" for c in self.transcript_sha256)
+        ):
+            raise ValueError("transcript_sha256 must be a 64-character hex string")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

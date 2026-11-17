@@ -73,15 +73,26 @@ def ledger_evidence(ledger: str) -> dict:
 
 
 def metering_eval() -> dict:
-    from hivemind.router.gateway import meter_usage
+    from hivemind.router.gateway import RECOUNT_SLACK, meter_usage
 
     # an honest producer reports ~1 token per 4 bytes. A dishonest one reports a huge number.
     completion_bytes = 4000
-    honest = meter_usage(0, completion_bytes // 4, 0, completion_bytes, 1024)[1]
-    inflated = meter_usage(0, 10**9, 0, completion_bytes, 10**6)[1]
-    return {"kind": "measured on gateway.meter_usage", "completion_bytes": completion_bytes, "honest_billed_tokens": honest, "max_billable_tokens_for_these_bytes": inflated,
-            "max_inflation_factor": round(inflated / max(honest, 1), 2),
-            "note": "capped by the completion BYTES (a token is at least one byte), so a producer can still overstate by up to the bytes-per-token ratio (about 4x for English); there is no tokenizer-based cross-check yet"}
+    honest_count = completion_bytes // 4  # what the gateway's own tokenizer counts for this text (model-dependent)
+    honest = meter_usage(0, honest_count, 0, completion_bytes, 1024)[1]
+    inflated_bytes_only = meter_usage(0, 10**9, 0, completion_bytes, 10**6)[1]
+    inflated_recount = meter_usage(0, 10**9, 0, completion_bytes, 10**6, counted_completion=honest_count)[1]
+    deploy_files = [ROOT / "deploy" / "gcp_openrouter" / n for n in ("deploy.sh", "Dockerfile", "entrypoint.sh")]
+    deployed = any("HIVEMIND_TOKENIZER_DIR" in f.read_text(encoding="utf-8") for f in deploy_files if f.is_file())
+    return {"kind": "measured on gateway.meter_usage", "completion_bytes": completion_bytes, "honest_billed_tokens": honest,
+            "bytes_cap_only": {"max_billable_tokens": inflated_bytes_only,
+                               "max_inflation_factor": round(inflated_bytes_only / max(honest, 1), 2)},
+            "tokenizer_recount": {"slack": RECOUNT_SLACK, "max_billable_tokens": inflated_recount,
+                                  "max_inflation_factor": round(inflated_recount / max(honest, 1), 2)},
+            "tokenizer_recount_deployed": deployed,
+            "max_inflation_factor": round((inflated_recount if deployed else inflated_bytes_only) / max(honest, 1), 2),
+            "note": ("with HIVEMIND_TOKENIZER_DIR the gateway recounts completions with the model's tokenizer and bills at most "
+                     f"{RECOUNT_SLACK}x its own count; without it (or for a model with no tokenizer file) the bytes cap allows "
+                     "about 4x for English. The factor above is the one the deploy configuration actually gives.")}
 
 
 def wired_eval() -> dict:
@@ -101,7 +112,7 @@ def run(ledger: str = DEFAULT_LEDGER) -> dict:
         "honest_workunit_verified_live": led.get("honest_verified") is True,
         "lazy_worker_rejected_live": led.get("lazy_rejected") is True,
         "poisoned_delta_rejected_live": live_poison,
-        "billing_inflation_within_1_5x": met["max_inflation_factor"] <= 1.5,  # the bytes cap allows about 4x over an honest report until a tokenizer cross-check exists
+        "billing_inflation_within_1_5x": met["max_inflation_factor"] <= 1.5,  # needs the tokenizer recount deployed
     }
     failed = [k for k, v in checks.items() if not v]
     return {"criterion": "E2", "multikrum": mk, "ledger": led, "metering": met, "wired": wired, "checks": checks, "passed": not failed,

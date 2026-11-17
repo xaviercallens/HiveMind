@@ -52,6 +52,31 @@ class DecoupledDiLoCoStepResult:
     max_staleness_steps: int
     Updated_parameters: tuple[float, ...]
 
+    def __post_init__(self) -> None:
+        for vec_name in ("aggregated_vector", "Updated_parameters"):
+            vec = getattr(self, vec_name)
+            if (
+                not isinstance(vec, tuple)
+                or len(vec) == 0
+                or any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)) for x in vec)
+            ):
+                raise ValueError(f"{vec_name} must be a non-empty tuple of finite numbers")
+        if len(self.aggregated_vector) != len(self.Updated_parameters):
+            raise ValueError("aggregated_vector and Updated_parameters must have equal length")
+        for pos_field in ("radial_norm", "norm_preservation_ratio", "effective_worker_count"):
+            val = getattr(self, pos_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{pos_field} must be a finite positive number")
+        if (
+            isinstance(self.naive_mean_norm, bool)
+            or not isinstance(self.naive_mean_norm, (int, float))
+            or not math.isfinite(float(self.naive_mean_norm))
+            or float(self.naive_mean_norm) < 0.0
+        ):
+            raise ValueError("naive_mean_norm must be a finite non-negative number")
+        if isinstance(self.max_staleness_steps, bool) or not isinstance(self.max_staleness_steps, int) or self.max_staleness_steps < 0:
+            raise ValueError("max_staleness_steps must be a non-negative integer")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -107,6 +132,10 @@ class StragglerFreeDecoupledDiLoCoAggregator:
             raise ValueError("current_params must be non-empty")
         if any(isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p) for p in current_params):
             raise ValueError("current_params must contain only finite numbers")
+        if not isinstance(contributions, (list, tuple)) or any(
+            not isinstance(c, WorkerPseudoGradient) for c in contributions
+        ):
+            raise ValueError("contributions must be a sequence of WorkerPseudoGradient instances")
         dim = len(current_params)
         valid = [
             c

@@ -113,7 +113,7 @@ def _encode_synthetic_regression_batch(
     """
     import math
 
-    if not isinstance(samples, (list, tuple)) or any(not isinstance(s, str) for s in samples):
+    if not isinstance(samples, (list, tuple)) or any(not isinstance(s, str) or "\x00" in s for s in samples):
         raise ValueError("samples must be a sequence of strings")
     if isinstance(in_features, bool) or not isinstance(in_features, int) or in_features < 1:
         raise ValueError("in_features must be a positive integer")
@@ -244,6 +244,14 @@ def train_single_domain_lora_adapter(
             prefix_groups.setdefault(prefix, {})["B"] = v.detach().clone().to(torch.float32)
             prefix_groups[prefix]["key_B"] = k  # type: ignore[assignment]
 
+    if not prefix_groups:
+        raise ValueError("reference_lora_state must contain at least one (lora_A, lora_B) adapter pair")
+    for prefix, grp in prefix_groups.items():
+        if "A" not in grp or "B" not in grp:
+            raise ValueError(f"reference_lora_state prefix {prefix!r} is missing a matched lora_A/lora_B pair")
+        if grp["A"].ndim != 2 or grp["B"].ndim != 2 or int(grp["A"].shape[0]) != int(grp["B"].shape[1]):
+            raise ValueError(f"reference_lora_state prefix {prefix!r} must have 2D (lora_A, lora_B) with matching rank")
+
     init_state = {k: v.detach().clone().to(torch.float32) for k, v in reference_lora_state.items()}
     trained_state: Dict[str, torch.Tensor] = {}
 
@@ -370,9 +378,10 @@ def train_and_publish_season3_domain_experts(
     if domains is not None and (
         not isinstance(domains, (list, tuple))
         or len(domains) == 0
-        or any(not isinstance(d, str) or not d.strip() for d in domains)
+        or any(not isinstance(d, str) or not d.strip() or any(ord(c) < 32 for c in d) for d in domains)
+        or len({d.strip() for d in domains}) != len(domains)
     ):
-        raise ValueError("domains must be None or a non-empty sequence of non-empty strings")
+        raise ValueError("domains must be None or a non-empty sequence of unique non-empty strings")
     target_domains = list(domains) if domains is not None else list(SEASON_3_DOMAIN_EXPERT_SPECS.keys())
     registry = Season3DomainExpertRegistry()
     receipts: Dict[str, Dict[str, Any]] = {}
@@ -451,9 +460,10 @@ def train_and_publish_astrophysics_domain_experts(
     if domains is not None and (
         not isinstance(domains, (list, tuple))
         or len(domains) == 0
-        or any(not isinstance(d, str) or not d.strip() for d in domains)
+        or any(not isinstance(d, str) or not d.strip() or any(ord(c) < 32 for c in d) for d in domains)
+        or len({d.strip() for d in domains}) != len(domains)
     ):
-        raise ValueError("domains must be None or a non-empty sequence of non-empty strings")
+        raise ValueError("domains must be None or a non-empty sequence of unique non-empty strings")
     target_domains = (
         list(domains) if domains is not None else list(ASTROPHYSICS_DOMAIN_EXPERT_SPECS.keys())
     )

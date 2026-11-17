@@ -47,9 +47,12 @@ def recruitment_weight(verified: int, n: int) -> tuple[float, str]:
 
 def track_record(verdicts: Iterable[str]) -> dict:
     """Summarise a bee's verdict history. Unknown verdict strings raise ValueError."""
-    if isinstance(verdicts, (str, bytes)):
+    if isinstance(verdicts, (str, bytes)) or not isinstance(verdicts, Iterable):
         raise ValueError("verdicts must be an iterable of verdict strings, not a single str/bytes")
-    counts = Counter(verdicts)
+    verdict_list = list(verdicts)
+    if not all(isinstance(v, str) for v in verdict_list):
+        raise ValueError("all verdicts must be strings")
+    counts = Counter(verdict_list)
     unknown = set(counts) - set(VERDICTS)
     if unknown:
         raise ValueError(f"unknown verdict(s): {sorted(unknown)}")

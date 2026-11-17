@@ -63,6 +63,10 @@ def prepare_data_dir(
 ) -> dict[str, Any]:
     """Client data dir. ``install_apps=False`` writes no ``app_info.xml``: the client then fetches the project's
     signed app versions itself (use with a real server and the ``authenticator`` its web stack returned)."""
+    if not isinstance(data_dir, (Path, str)) or not str(data_dir).strip():
+        raise ValueError("data_dir must be a non-empty Path or string")
+    if not isinstance(src_root, (Path, str)) or not str(src_root).strip():
+        raise ValueError("src_root must be a non-empty Path or string")
     if not isinstance(master_url, str) or not master_url.strip():
         raise ValueError("master_url must be a non-empty string")
     if not isinstance(python, str) or not python.strip():
@@ -71,6 +75,12 @@ def prepare_data_dir(
         raise ValueError("gpu_flops must be a positive finite number")
     if not isinstance(install_apps, bool):
         raise ValueError("install_apps must be a bool")
+    if authenticator is not None and (not isinstance(authenticator, str) or not authenticator.strip()):
+        raise ValueError("authenticator must be a non-empty string when provided")
+    if apps is not None and (not isinstance(apps, list) or not apps or not all(isinstance(a, dict) for a in apps)):
+        raise ValueError("apps must be a non-empty list of dicts when provided")
+    data_dir = Path(data_dir)
+    src_root = Path(src_root)
     data_dir.mkdir(parents=True, exist_ok=True)
     pdir = data_dir / "projects" / project_dir_name(master_url)
     pdir.mkdir(parents=True, exist_ok=True)
@@ -124,11 +134,14 @@ def prepare_data_dir(
 
 class Client:
     def __init__(self, boinc_bin: Path, lib_dir: Path, data_dir: Path, rpc_port: int) -> None:
+        for pname, pval in (("boinc_bin", boinc_bin), ("lib_dir", lib_dir), ("data_dir", data_dir)):
+            if not isinstance(pval, (Path, str)) or not str(pval).strip():
+                raise ValueError(f"{pname} must be a non-empty Path or string")
         if isinstance(rpc_port, bool) or not isinstance(rpc_port, int) or not (1 <= rpc_port <= 65535):
             raise ValueError("rpc_port must be an integer in [1, 65535]")
-        self.bin, self.lib, self.dir, self.port = boinc_bin, lib_dir, data_dir, rpc_port
+        self.bin, self.lib, self.dir, self.port = Path(boinc_bin), Path(lib_dir), Path(data_dir), rpc_port
         self.proc: subprocess.Popen | None = None
-        self.log_path = data_dir / "client_stdout.log"
+        self.log_path = self.dir / "client_stdout.log"
 
     def _env(self) -> dict[str, str]:
         return dict(os.environ, LD_LIBRARY_PATH=str(self.lib))
@@ -141,6 +154,10 @@ class Client:
         )
 
     def cmd(self, *args: str, timeout: int = 20) -> str:
+        if any(not isinstance(a, str) or not a.strip() for a in args):
+            raise ValueError("args must be non-empty strings")
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) <= 0.0:
+            raise ValueError("timeout must be a finite positive number")
         pw = (self.dir / "gui_rpc_auth.cfg").read_text().strip()
         cc = self.bin.with_name("boinccmd")
         r = subprocess.run([str(cc), "--host", f"127.0.0.1:{self.port}", "--passwd", pw, *args], capture_output=True, text=True, env=self._env(), timeout=timeout)
@@ -153,6 +170,8 @@ class Client:
             self.proc.wait()
 
     def quit(self, timeout: int = 60) -> None:
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) <= 0.0:
+            raise ValueError("timeout must be a finite positive number")
         if not self.proc or self.proc.poll() is not None:
             return
         try:
@@ -162,6 +181,8 @@ class Client:
             self.kill()
 
     def wait_rpc(self, timeout: int = 60) -> bool:
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) < 0.0:
+            raise ValueError("timeout must be a finite non-negative number")
         end = time.time() + timeout
         while time.time() < end:
             try:

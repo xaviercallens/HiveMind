@@ -32,6 +32,29 @@ class E21CrossoverRow:
     energy_reduction_pct: float
     zk_dominates: bool
 
+    def __post_init__(self) -> None:
+        if isinstance(self.swarm_nodes_n, bool) or not isinstance(self.swarm_nodes_n, int) or self.swarm_nodes_n < 2:
+            raise ValueError("swarm_nodes_n must be an integer >= 2")
+        for f_field in (
+            "multikrum_pairwise_ms",
+            "gpu_replay_10pct_ms",
+            "legacy_total_ms",
+            "zk_opoi_v5_total_ms",
+            "speedup_ratio",
+        ):
+            val = getattr(self, f_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{f_field} must be a finite non-negative number")
+        if (
+            isinstance(self.energy_reduction_pct, bool)
+            or not isinstance(self.energy_reduction_pct, (int, float))
+            or not math.isfinite(float(self.energy_reduction_pct))
+            or not (0.0 <= float(self.energy_reduction_pct) <= 100.0)
+        ):
+            raise ValueError("energy_reduction_pct must be a finite number in [0.0, 100.0]")
+        if not isinstance(self.zk_dominates, bool):
+            raise ValueError("zk_dominates must be a boolean")
+
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
@@ -49,6 +72,31 @@ class E21CrossoverBenchmarkReport:
     energy_reduction_at_10k_pct: float
     rows: tuple[E21CrossoverRow, ...]
     gate_passed: bool
+
+    def __post_init__(self) -> None:
+        for s_field in ("experiment_id", "estimation_mode"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        for p_field in ("measured_flop_ms_coeff", "measured_single_zk_verify_ms"):
+            val = getattr(self, p_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{p_field} must be a positive finite number")
+        if isinstance(self.measured_proof_bytes, bool) or not isinstance(self.measured_proof_bytes, int) or self.measured_proof_bytes < 1:
+            raise ValueError("measured_proof_bytes must be an integer >= 1")
+        if isinstance(self.crossover_node_count_n, bool) or not isinstance(self.crossover_node_count_n, int) or self.crossover_node_count_n < 2:
+            raise ValueError("crossover_node_count_n must be an integer >= 2")
+        if (
+            isinstance(self.energy_reduction_at_10k_pct, bool)
+            or not isinstance(self.energy_reduction_at_10k_pct, (int, float))
+            or not math.isfinite(float(self.energy_reduction_at_10k_pct))
+            or not (0.0 <= float(self.energy_reduction_at_10k_pct) <= 100.0)
+        ):
+            raise ValueError("energy_reduction_at_10k_pct must be a finite number in [0.0, 100.0]")
+        if not isinstance(self.rows, tuple) or len(self.rows) == 0 or not all(isinstance(r, E21CrossoverRow) for r in self.rows):
+            raise ValueError("rows must be a non-empty tuple of E21CrossoverRow instances")
+        if not isinstance(self.gate_passed, bool):
+            raise ValueError("gate_passed must be a boolean")
 
     def to_dict(self) -> dict[str, object]:
         return {

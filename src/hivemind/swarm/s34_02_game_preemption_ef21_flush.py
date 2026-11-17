@@ -34,6 +34,32 @@ class GamePreemptionFlushReceipt:
     invariant_4_satisfied: bool
     state_digest_sha256: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.trigger_process, str) or not self.trigger_process.strip():
+            raise ValueError("trigger_process must be a non-empty string")
+        for b_field in ("preempted", "invariant_4_satisfied"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        for f_field in ("eviction_latency_ms", "reconstruction_l2_error"):
+            val = getattr(self, f_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{f_field} must be a finite non-negative number")
+        for i_field in ("vram_before_mib", "residual_vram_after_mib"):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if (
+            not isinstance(self.ef21_top_k_transmitted, tuple)
+            or not isinstance(self.ef21_host_ram_error_buffer, tuple)
+            or len(self.ef21_top_k_transmitted) == 0
+            or len(self.ef21_top_k_transmitted) != len(self.ef21_host_ram_error_buffer)
+            or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in self.ef21_top_k_transmitted)
+            or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in self.ef21_host_ram_error_buffer)
+        ):
+            raise ValueError("ef21_top_k_transmitted and ef21_host_ram_error_buffer must be equal-length non-empty tuples of finite numbers")
+        if not isinstance(self.state_digest_sha256, str) or len(self.state_digest_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in self.state_digest_sha256):
+            raise ValueError("state_digest_sha256 must be a 64-character hex string")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

@@ -39,6 +39,20 @@ class A2RoPEQuantizationReport:
     theoretical_fejes_toth_gain_pct: float
     beats_z2_in_mse: bool
 
+    def __post_init__(self) -> None:
+        if isinstance(self.num_2d_planes, bool) or not isinstance(self.num_2d_planes, int) or self.num_2d_planes < 1:
+            raise ValueError("num_2d_planes must be an integer >= 1")
+        for f_field in ("mse_z2", "mse_a2"):
+            val = getattr(self, f_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{f_field} must be a finite non-negative number")
+        for p_field in ("empirical_mse_reduction_pct", "theoretical_fejes_toth_gain_pct"):
+            val = getattr(self, p_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{p_field} must be a finite number")
+        if not isinstance(self.beats_z2_in_mse, bool):
+            raise ValueError("beats_z2_in_mse must be a boolean")
+
 
 @dataclass(frozen=True)
 class AMCPLatentKVCacheEnvelope:
@@ -56,6 +70,23 @@ class AMCPLatentKVCacheEnvelope:
     mse_z8_scalar: float
     e8_vs_z8_mse_reduction_pct: float
     payload_sha256: str
+
+    def __post_init__(self) -> None:
+        _validate_agent_id(self.sender_agent_id, "sender_agent_id")
+        _validate_agent_id(self.receiver_agent_id, "receiver_agent_id")
+        for i_field in ("num_tokens", "head_dim", "raw_fp16_bytes", "compressed_latent_bytes"):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_field} must be an integer >= 1")
+        for pos_field in ("bits_per_dim", "compression_ratio"):
+            _validate_finite_float(getattr(self, pos_field), pos_field, positive=True)
+        for nn_field in ("mse_e8_klt", "mse_z8_scalar"):
+            val = _validate_finite_float(getattr(self, nn_field), nn_field)
+            if val < 0.0:
+                raise ValueError(f"{nn_field} must be >= 0.0")
+        _validate_finite_float(self.e8_vs_z8_mse_reduction_pct, "e8_vs_z8_mse_reduction_pct")
+        if not isinstance(self.payload_sha256, str) or len(self.payload_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in self.payload_sha256):
+            raise ValueError("payload_sha256 must be a 64-character hex string")
 
 
 def _validate_finite_float(val: object, name: str, *, positive: bool = False) -> float:

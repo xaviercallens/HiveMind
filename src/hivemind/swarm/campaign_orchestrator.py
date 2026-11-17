@@ -106,6 +106,8 @@ class CampaignRequest:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> CampaignRequest:
+        if not isinstance(data, Mapping):
+            raise TypeError("data must be a Mapping")
         return cls(
             action=str(data.get("action", "join")),
             participant_id=str(data["participant_id"]),
@@ -169,12 +171,29 @@ class CampaignPolicy:
 
 @dataclass(frozen=True)
 class JoinDecision:
-    decision: str  # ADMITTED | ALREADY_MEMBER | LEFT | NOT_MEMBER | REJECTED
+    decision: str  # ADMITTED | ALREADY_MEMBER | LEFT | NOT_MEMBER | REJECTED | EXPIRED
     reason: str
     campaign_id: str
     participant_id: str
     event: dict[str, Any] = field(default_factory=dict)
     delivery: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.decision, str) or self.decision not in (
+            "ADMITTED",
+            "ALREADY_MEMBER",
+            "LEFT",
+            "NOT_MEMBER",
+            "REJECTED",
+            "EXPIRED",
+        ):
+            raise ValueError(f"invalid decision {self.decision!r}")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+        if not isinstance(self.campaign_id, str) or not isinstance(self.participant_id, str):
+            raise TypeError("campaign_id and participant_id must be strings")
+        if not isinstance(self.event, dict) or not isinstance(self.delivery, dict):
+            raise TypeError("event and delivery must be dicts")
 
     @property
     def accepted(self) -> bool:
@@ -185,6 +204,8 @@ class JoinDecision:
 
 
 def _membership_key(campaign_id: str, participant_id: str) -> str:
+    if not isinstance(campaign_id, str) or not campaign_id.strip() or not isinstance(participant_id, str) or not participant_id.strip():
+        raise ValueError("campaign_id and participant_id must be non-empty strings")
     return f"{campaign_id}|{participant_id}"
 
 
@@ -223,6 +244,10 @@ class CampaignOrchestrator:
         keys = [secret] if isinstance(secret, bytes) else list(secret.values())
         if not keys or any(not isinstance(k, bytes) or len(k) < MIN_SECRET_BYTES for k in keys):
             raise ValueError(f"HMAC secret must be at least {MIN_SECRET_BYTES} bytes")
+        if not callable(publish):
+            raise TypeError("publish must be callable")
+        if policy is not None and not isinstance(policy, CampaignPolicy):
+            raise TypeError("policy must be a CampaignPolicy or None")
         self.state_path = Path(state_path)
         self._secret: bytes | dict[str, bytes] = secret if isinstance(secret, bytes) else dict(secret)
         self.publish = publish
@@ -293,6 +318,10 @@ class CampaignOrchestrator:
 
     def handle(self, request: CampaignRequest, now_utc: float) -> JoinDecision:
         """Decide a join or leave request, persist the outcome, and emit it as an AMCP event."""
+        if not isinstance(request, CampaignRequest):
+            raise TypeError("request must be a CampaignRequest")
+        if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+            raise ValueError("now_utc must be a finite number")
         self.expire(now_utc)
         self._prune_nonces(now_utc)
         problem = self._validate(request, now_utc)
@@ -424,6 +453,16 @@ class NightWindow:
     end: datetime
     tz: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.start, datetime) or self.start.tzinfo is None:
+            raise ValueError("start must be a timezone-aware datetime")
+        if not isinstance(self.end, datetime) or self.end.tzinfo is None:
+            raise ValueError("end must be a timezone-aware datetime")
+        if self.end.astimezone(UTC) <= self.start.astimezone(UTC):
+            raise ValueError("end must be strictly after start")
+        if not isinstance(self.tz, str) or not self.tz.strip():
+            raise ValueError("tz must be a non-empty string")
+
     @property
     def start_utc(self) -> datetime:
         return self.start.astimezone(UTC)
@@ -498,13 +537,23 @@ class DomainEvidence:
     task_kind: str = "label"  # "label" (classification-style) or "generative"
     consumed_verified: int = 0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.domain, str) or not _DOMAIN_RE.match(self.domain):
+            raise ValueError(f"invalid domain name {self.domain!r}")
+        if self.task_kind not in ("label", "generative"):
+            raise ValueError(f"{self.domain}: task_kind must be 'label' or 'generative'")
+        for count_name in ("verified_accept", "verified_reject", "unverified", "heldout_eval_items", "consumed_verified"):
+            cval = getattr(self, count_name)
+            if isinstance(cval, bool) or not isinstance(cval, int) or cval < 0:
+                raise ValueError(f"{self.domain}: counts must be non-negative")
+
     @property
     def new_verified(self) -> int:
         return max(0, self.verified_accept - self.consumed_verified)
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> DomainEvidence:
-        ev = cls(
+        return cls(
             domain=str(d["domain"]),
             verified_accept=int(d["verified_accept"]),
             verified_reject=int(d.get("verified_reject", 0)),
@@ -513,14 +562,6 @@ class DomainEvidence:
             task_kind=str(d.get("task_kind", "label")),
             consumed_verified=int(d.get("consumed_verified", 0)),
         )
-        if not _DOMAIN_RE.match(ev.domain):
-            raise ValueError(f"invalid domain name {ev.domain!r}")
-        if ev.task_kind not in ("label", "generative"):
-            raise ValueError(f"{ev.domain}: task_kind must be 'label' or 'generative'")
-        counts = (ev.verified_accept, ev.verified_reject, ev.unverified, ev.heldout_eval_items, ev.consumed_verified)
-        if min(counts) < 0:
-            raise ValueError(f"{ev.domain}: counts must be non-negative")
-        return ev
 
 
 def load_episode_ledger(path: Path | str) -> list[DomainEvidence]:
@@ -602,7 +643,9 @@ class DreamPolicy:
 
 
 def check_hold_file(hold_file: Path | None) -> str:
-    if hold_file is not None and hold_file.exists():
+    if hold_file is not None and not isinstance(hold_file, (Path, str)):
+        raise TypeError("hold_file must be a Path, string, or None")
+    if hold_file is not None and Path(hold_file).exists():
         return f"operator HOLD file present at {hold_file}"
     return ""
 
@@ -611,10 +654,18 @@ def check_governor_state(
     path: Path | None, now_utc: float, max_age_s: float, max_future_s: float = 60.0
 ) -> tuple[str, dict[str, Any]]:
     """Return (blocking reason or "", what was read). Fail-closed: anything unreadable blocks."""
+    if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+        raise ValueError("now_utc must be a finite number")
+    if isinstance(max_age_s, bool) or not isinstance(max_age_s, (int, float)) or not math.isfinite(float(max_age_s)) or float(max_age_s) <= 0.0:
+        raise ValueError("max_age_s must be a positive finite number")
+    if isinstance(max_future_s, bool) or not isinstance(max_future_s, (int, float)) or not math.isfinite(float(max_future_s)) or float(max_future_s) < 0.0:
+        raise ValueError("max_future_s must be a non-negative finite number")
     if path is None:
         return "no producer governor state path given", {}
+    if not isinstance(path, (Path, str)):
+        raise TypeError("path must be a Path, string, or None")
     try:
-        snap = json.loads(path.read_text(encoding="utf-8"))
+        snap = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         return f"producer governor state not readable: {type(exc).__name__}", {}
     if not isinstance(snap, dict) or not isinstance(snap.get("state"), str):
@@ -634,6 +685,8 @@ def check_governor_state(
 
 
 def _seed(night_date: str, domain: str, salt: str) -> int:
+    if not isinstance(night_date, str) or not night_date.strip() or not isinstance(domain, str) or not domain.strip() or not isinstance(salt, str) or not salt.strip():
+        raise ValueError("night_date, domain, and salt must be non-empty strings")
     return int(hashlib.sha256(f"{night_date}:{domain}:{salt}".encode()).hexdigest()[:8], 16)
 
 
@@ -644,6 +697,10 @@ def _select_domains(
 
     The third list is the donor pool for cross-domain controls: a donor needs qualifying verified rows, not a job tonight, so a
     domain DEFERRED by ``max_jobs`` is still a valid donor."""
+    if not isinstance(policy, DreamPolicy):
+        raise TypeError("policy must be a DreamPolicy")
+    if isinstance(ledger, (str, bytes)) or not isinstance(ledger, Sequence) or not all(isinstance(e, DomainEvidence) for e in ledger):
+        raise TypeError("ledger must be a sequence of DomainEvidence")
     considered: list[dict[str, Any]] = []
     picked: list[DomainEvidence] = []
     qualified_names = {
@@ -680,6 +737,10 @@ def _select_domains(
 
 
 def _producers(members: Iterable[Mapping[str, Any]], policy: DreamPolicy, campaigns: Mapping[str, SubjectCampaign]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if not isinstance(policy, DreamPolicy):
+        raise TypeError("policy must be a DreamPolicy")
+    if not isinstance(campaigns, Mapping):
+        raise TypeError("campaigns must be a Mapping")
     by_id: dict[str, dict[str, Any]] = {}
     for m in members:
         if m.get("participant_kind") != "gpu_producer" or m.get("status", "active") != "active":

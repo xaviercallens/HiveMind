@@ -162,6 +162,8 @@ def _as_scenario(sc: "Scenario | dict[str, Any]") -> Scenario:
 
 
 def _norm(v: list[float]) -> float:
+    if not isinstance(v, (list, tuple)) or any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) for x in v):
+        raise ValueError("v must be a sequence of finite numbers")
     acc = 0.0
     for x in v:
         acc += x * x
@@ -170,6 +172,8 @@ def _norm(v: list[float]) -> float:
 
 def build_domains(sc: Scenario) -> tuple[list[list[float]], list[list[float]], list[float]]:
     """Return (a, c, c_shared): per-domain curvatures and optima plus the shared structure, drawn from Rng(seed) in the documented order."""
+    if not isinstance(sc, Scenario):
+        raise ValueError("sc must be a Scenario")
     rng, d = Rng(sc.seed), sc.dim
     shared = [rng.gauss() for _ in range(d)]
     a_all, c_all = [], []
@@ -187,6 +191,20 @@ def build_domains(sc: Scenario) -> tuple[list[list[float]], list[list[float]], l
 
 
 def domain_loss(theta: list[float], a: list[float], c: list[float]) -> float:
+    if (
+        not isinstance(theta, list)
+        or not isinstance(a, list)
+        or not isinstance(c, list)
+        or not theta
+        or len(theta) != len(a)
+        or len(theta) != len(c)
+    ):
+        raise ValueError("theta, a, and c must be equal-length non-empty lists")
+    for vec in (theta, a, c):
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in vec):
+            raise ValueError("theta, a, and c must contain finite numbers")
+    if any(float(ak) < 0.0 for ak in a):
+        raise ValueError("a curvatures must be non-negative")
     acc = 0.0
     for k in range(len(theta)):
         e = theta[k] - c[k]
@@ -195,6 +213,8 @@ def domain_loss(theta: list[float], a: list[float], c: list[float]) -> float:
 
 
 def losses(theta: list[float], a_all: list[list[float]], c_all: list[list[float]]) -> tuple[float, list[float]]:
+    if not isinstance(a_all, list) or not isinstance(c_all, list) or not a_all or len(a_all) != len(c_all):
+        raise ValueError("a_all and c_all must be equal-length non-empty lists")
     per = [domain_loss(theta, a_all[i], c_all[i]) for i in range(len(a_all))]
     tot = 0.0
     for x in per:
@@ -204,13 +224,23 @@ def losses(theta: list[float], a_all: list[list[float]], c_all: list[list[float]
 
 def merge_deltas(items: list[tuple[list[float], float]], mode: str) -> list[float]:
     """Weighted merge of (delta, weight) items in the given order; 'rda' multiplies the weighted mean by r = sum w|D| / |sum w D| (>= 1)."""
-    if not items:
+    if not isinstance(items, (list, tuple)) or not items:
         raise ValueError("items must be non-empty")
     if mode not in ("direct", "rda"):
         raise ValueError("mode must be 'direct' or 'rda'")
-    d = len(items[0][0])
+    first = items[0]
+    if not isinstance(first, (list, tuple)) or len(first) != 2 or not isinstance(first[0], (list, tuple)) or not first[0]:
+        raise ValueError("each item must be a (non-empty delta, positive finite weight) pair")
+    d = len(first[0])
     wsum, s, num = 0.0, [0.0] * d, 0.0
-    for delta, w in items:
+    for item in items:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ValueError("each item must be a (non-empty delta, positive finite weight) pair")
+        delta, w = item
+        if not isinstance(delta, (list, tuple)) or len(delta) != d:
+            raise ValueError("all deltas in items must be equal-length non-empty sequences")
+        if isinstance(w, bool) or not isinstance(w, (int, float)) or not math.isfinite(float(w)) or float(w) <= 0.0:
+            raise ValueError("item weight w must be a finite positive number")
         wsum += w
         num += w * _norm(delta)
         for k in range(d):
@@ -225,6 +255,24 @@ def merge_deltas(items: list[tuple[list[float], float]], mode: str) -> list[floa
 
 def carried_weights(queue: list[dict[str, Any]], rnd: int) -> tuple[list[dict[str, Any]], int]:
     """Queue entries usable in round ``rnd`` as (entry with weight, n dropped as too stale), ordered by (base round, worker)."""
+    if not isinstance(queue, list):
+        raise ValueError("queue must be a list")
+    if isinstance(rnd, bool) or not isinstance(rnd, int) or rnd < 1:
+        raise ValueError("rnd must be an integer >= 1")
+    for e in queue:
+        if not isinstance(e, dict) or "base" not in e or "worker" not in e:
+            raise ValueError("each queue entry must be a dict containing 'base' and 'worker'")
+        base, worker = e["base"], e["worker"]
+        if (
+            isinstance(base, bool)
+            or not isinstance(base, int)
+            or base < 1
+            or base > rnd
+            or isinstance(worker, bool)
+            or not isinstance(worker, int)
+            or worker < 0
+        ):
+            raise ValueError("queue entry 'base' must be in 1..rnd and 'worker' must be an integer >= 0")
     keep, dropped = [], 0
     for e in sorted(queue, key=lambda e: (e["base"], e["worker"])):
         s = rnd - e["base"]
@@ -307,16 +355,26 @@ def _run(sc: Scenario) -> dict[str, Any]:
 
 
 def _digest(curve: list[float]) -> str:
+    if (
+        not isinstance(curve, (list, tuple))
+        or not curve
+        or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in curve)
+    ):
+        raise ValueError("curve must be a non-empty sequence of finite numbers")
     return hashlib.sha256(",".join("%.9f" % v for v in curve).encode("utf-8")).hexdigest()[:16]
 
 
 def contract_digest(scenario: "Scenario | dict[str, Any]") -> str:
     """Short hash (16 hex chars) of the loss curve rounded to 9 decimals: the value a JavaScript port compares against."""
+    if not isinstance(scenario, (Scenario, dict)):
+        raise ValueError("scenario must be a Scenario or dict")
     return _digest(_run(_as_scenario(scenario))["loss_curve"])
 
 
 def simulate(scenario: "Scenario | dict[str, Any]") -> dict[str, Any]:
     """Run one scenario; returns a JSON-serialisable dict (curve, per-round rows, retention against the synchronous reference, total simulated time)."""
+    if not isinstance(scenario, (Scenario, dict)):
+        raise ValueError("scenario must be a Scenario or dict")
     sc = _as_scenario(scenario)
     res = _run(sc)
     ref = dataclasses.replace(sc, K=sc.M, straggle="none", policy="discard", churn_start=0, churn_end=0)
@@ -329,6 +387,10 @@ def simulate(scenario: "Scenario | dict[str, Any]") -> dict[str, Any]:
 def compare_policies(base: "Scenario | dict[str, Any] | None" = None, policies: tuple[str, ...] = POLICIES,
                      straggles: tuple[str, ...] = STRAGGLES) -> list[dict[str, Any]]:
     """Table rows (policy x straggle mode) with retention, final loss, total simulated time and late/carried counts; other fields from ``base``."""
+    if not isinstance(policies, (list, tuple)) or not policies or any(p not in POLICIES for p in policies):
+        raise ValueError(f"policies must be a non-empty subset of {POLICIES}")
+    if not isinstance(straggles, (list, tuple)) or not straggles or any(s not in STRAGGLES for s in straggles):
+        raise ValueError(f"straggles must be a non-empty subset of {STRAGGLES}")
     sc = _as_scenario(base if base is not None else Scenario())
     rows = []
     for st in straggles:

@@ -137,6 +137,28 @@ Deux nouvelles avancées issues de la recherche d'octobre/juin 2026 viennent ren
 
 ---
 
+## 🔬 5. Et après : des mathématiques vérifiables pour le bien commun (proposition)
+
+> **Statut : proposition, pas encore branchée sur l'Essaim.** Rien dans cette section n'est une promesse de résultat.
+
+Certaines recherches mathématiques ont une propriété rare : **trouver** la réponse coûte des heures de calcul, mais la **vérifier** prend quelques secondes sur n'importe quelle machine. C'est exactement ce qu'il faut à un essaim de bénévoles : on n'a pas besoin de faire confiance à celui qui a calculé, ni de refaire le calcul deux fois. Le certificat se vérifie tout seul.
+
+Exemple réel (programme Elenchus, novembre 2026) : un contre-exemple à la conjecture du « coureur solitaire décalé » pour n = 63, trouvé par recherche exacte, vérifié par trois programmes indépendants et par le noyau de Lean 4. Publié avec ses limites : [doi:10.5281/zenodo.24051700](https://doi.org/10.5281/zenodo.24051700). La même semaine, trois autres pistes sur quatre n'ont rien donné de nouveau, et c'est écrit aussi.
+
+Cinq directions proposées, choisies parce que le résultat sert d'entrée à un domaine utile à tous :
+
+- ⚡ **Énergie** : fenêtres de fonctionnement de la fusion avec barres d'erreur certifiées ; bornes exactes pour les modèles de batteries ; coût énergétique du calcul lui-même.
+- 🧱 **Nouveaux matériaux** : quel réseau cristallin minimise l'énergie en 3D, et à quel paramètre exact le minimum bascule ; audits exacts des bases de données publiques de matériaux.
+- 🌌 **Optimisation en physique** : solutions numériques accompagnées d'un encadrement garanti (plasma, N corps, cosmologie).
+- 🧬 **Génétique** : probabilités exactes de fixation d'une mutation selon la structure d'une population ; recensement des petits réseaux de réactions capables de se comporter en interrupteur.
+- 🎗️ **Oncologie (modèles mathématiques uniquement)** : théorèmes sur des équations, jamais de conseil de traitement, jamais de dose. **Rien n'est publié avant relecture par un médecin.**
+
+Règles, les mêmes partout : recherche de l'existant avant tout calcul, plan écrit et daté avant l'essai, contrôles positifs et négatifs, vérificateur différent du producteur, résultats négatifs publiés, jamais « percée » ni « résolu ». Les auteurs et relecteurs sont des agents IA ; l'absence de relecture humaine est dite quand c'est le cas.
+
+**English:** proposal only, not yet wired into the swarm. Exact searches are costly to run and cheap to verify, so volunteer machines can contribute without redundancy: only a certificate that passes the public checker is accepted. Five proposed fields: energy, new materials, physics optimisation, genetics, and oncology (mathematical models only; nothing published before a physician has read it). Negative results are published too.
+
+---
+
 ## 🛠️ Guide Rapide : Comment Participer en 1 Commande ?
 
 ### Option 1 — Sans aucune installation (Navigateur WebGPU)

@@ -81,6 +81,42 @@ class LifelongRatchetVerdict:
     ewc_fisher_penalty: Optional[float]
     ratchet_certificate_sha256: str
 
+    def __post_init__(self) -> None:
+        for s_field in ("checkpoint_id", "reason"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if not isinstance(self.promoted, bool):
+            raise ValueError("promoted must be a boolean")
+        for pos_field in ("baseline_anchor_perplexity", "candidate_anchor_perplexity"):
+            val = getattr(self, pos_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{pos_field} must be a finite positive number")
+        for fin_field in ("relative_anchor_perplexity_drift", "domain_nll_delta"):
+            val = getattr(self, fin_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{fin_field} must be a finite number")
+        if (
+            isinstance(self.max_allowed_anchor_drift, bool)
+            or not isinstance(self.max_allowed_anchor_drift, (int, float))
+            or not math.isfinite(float(self.max_allowed_anchor_drift))
+            or float(self.max_allowed_anchor_drift) < 0.0
+        ):
+            raise ValueError("max_allowed_anchor_drift must be a finite non-negative number")
+        if self.ewc_fisher_penalty is not None and (
+            isinstance(self.ewc_fisher_penalty, bool)
+            or not isinstance(self.ewc_fisher_penalty, (int, float))
+            or not math.isfinite(float(self.ewc_fisher_penalty))
+            or float(self.ewc_fisher_penalty) < 0.0
+        ):
+            raise ValueError("ewc_fisher_penalty must be None or a finite non-negative number")
+        if (
+            not isinstance(self.ratchet_certificate_sha256, str)
+            or len(self.ratchet_certificate_sha256) != 64
+            or any(c not in "0123456789abcdefABCDEF" for c in self.ratchet_certificate_sha256)
+        ):
+            raise ValueError("ratchet_certificate_sha256 must be a 64-character hex string")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

@@ -379,6 +379,33 @@ class SparseLoCoDCT2BitPacket:
         ):
             if not isinstance(val, str) or not val.strip():
                 raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            not isinstance(self.shape, tuple)
+            or len(self.shape) != 2
+            or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.shape)
+        ):
+            raise ValueError("shape must be a 2-tuple of positive integers")
+        if (
+            not isinstance(self.q_levels, tuple)
+            or len(self.q_levels) != 4
+            or any(
+                isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v))
+                for v in self.q_levels
+            )
+        ):
+            raise ValueError("q_levels must be a 4-tuple of finite numbers")
+        if (
+            not isinstance(self.scale_row, list)
+            or len(self.scale_row) != self.shape[0]
+            or any(
+                isinstance(v, bool)
+                or not isinstance(v, (int, float))
+                or not math.isfinite(float(v))
+                or float(v) <= 0.0
+                for v in self.scale_row
+            )
+        ):
+            raise ValueError("scale_row must be a list of positive finite numbers matching shape[0]")
         if not isinstance(self.packed_2bit_codes, bytes) or len(self.packed_2bit_codes) == 0:
             raise ValueError("packed_2bit_codes must be non-empty bytes")
         for field_name, val in (("raw_fp32_bytes", self.raw_fp32_bytes), ("wire_bytes", self.wire_bytes)):
@@ -690,6 +717,7 @@ class QLoRAVisionAdapter(nn.Module):
         """Factorize an aggregated $(D, D)$ delta matrix back into Rank-r (`lora_B`, `lora_A`) via SVD."""
         if (
             not isinstance(delta_matrix, np.ndarray)
+            or delta_matrix.dtype == np.bool_
             or delta_matrix.shape != (self.hidden_dim, self.hidden_dim)
             or not np.all(np.isfinite(delta_matrix))
         ):
@@ -697,13 +725,15 @@ class QLoRAVisionAdapter(nn.Module):
                 f"delta_matrix must be a finite ({self.hidden_dim}, {self.hidden_dim}) numpy ndarray"
             )
         u, s, vt = np.linalg.svd(delta_matrix.astype(np.float32) / self.scaling, full_matrices=False)
-        r = self.rank
+        r = min(self.rank, self.hidden_dim)
         sqrt_s = np.sqrt(np.maximum(s[:r], 0.0)).astype(np.float32)
         b_new = u[:, :r] * sqrt_s[None, :]
         a_new = sqrt_s[:, None] * vt[:r, :]
         with torch.no_grad():
-            self.lora_B.copy_(torch.from_numpy(b_new))
-            self.lora_A.copy_(torch.from_numpy(a_new))
+            self.lora_B.zero_()
+            self.lora_A.zero_()
+            self.lora_B[:, :r].copy_(torch.from_numpy(b_new))
+            self.lora_A[:r, :].copy_(torch.from_numpy(a_new))
 
 
 def quantize_adamw_state_8bit(tensor: torch.Tensor) -> Tuple[np.ndarray, float]:
@@ -719,7 +749,13 @@ def quantize_adamw_state_8bit(tensor: torch.Tensor) -> Tuple[np.ndarray, float]:
 
 
 def dequantize_adamw_state_8bit(q8: np.ndarray, scale: float, device: torch.device) -> torch.Tensor:
-    return torch.from_numpy(q8.astype(np.float32) * scale).to(device)
+    if not isinstance(q8, np.ndarray) or q8.size == 0:
+        raise ValueError("q8 must be a non-empty numpy ndarray")
+    if isinstance(scale, bool) or not isinstance(scale, (int, float)) or not math.isfinite(float(scale)) or float(scale) <= 0.0:
+        raise ValueError("scale must be a finite positive number")
+    if not isinstance(device, (torch.device, str)) or (isinstance(device, str) and not device.strip()):
+        raise ValueError("device must be a torch.device or non-empty device string")
+    return torch.from_numpy(q8.astype(np.float32) * float(scale)).to(device)
 
 
 def build_cluster_synthetic_shard(
@@ -736,6 +772,18 @@ def build_cluster_synthetic_shard(
     Classes 0..5 belong to `expert_1_aesthetics_art`, 6..11 to `expert_2_social_meme_culture`,
     and 12..17 to `expert_3_technical_infographics`.
     """
+    if not isinstance(cluster_id, str) or cluster_id not in REDDIT_VISION_EXPERT_CLUSTERS:
+        raise ValueError(f"unknown cluster_id: {cluster_id!r}")
+    if isinstance(bee_index, bool) or not isinstance(bee_index, int) or bee_index < 0:
+        raise ValueError("bee_index must be a non-negative integer")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples < 1:
+        raise ValueError("num_samples must be an integer >= 1")
+    if isinstance(vision_dim, bool) or not isinstance(vision_dim, int) or vision_dim < 38:
+        raise ValueError("vision_dim must be an integer >= 38")
+    if isinstance(num_classes, bool) or not isinstance(num_classes, int) or num_classes < 18:
+        raise ValueError("num_classes must be an integer >= 18")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     rng = np.random.default_rng(seed + bee_index * 31)
     cluster_meta = REDDIT_VISION_EXPERT_CLUSTERS[cluster_id]
     c_idx = int(cluster_meta["cluster_index"])
@@ -793,6 +841,36 @@ class BeeDiLoCoTrainingResult:
     dht_packet: SparseLoCoDCT2BitPacket
     effective_delta: np.ndarray
 
+    def __post_init__(self) -> None:
+        for field_name in ("bee_id", "cluster_id", "hf_dataset", "backbone_key", "backbone_model_id"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name in ("rank", "inner_steps"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        for field_name in ("alpha", "peak_vram_mib"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        for field_name in ("loss_before", "loss_after", "loss_reduction_pct"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{field_name} must be a finite number")
+        for field_name in ("accuracy_before", "accuracy_after"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+                raise ValueError(f"{field_name} must be a finite number in [0.0, 1.0]")
+        for field_name in ("within_8gb_consumer_ceiling", "base_freeze_verified"):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
+        if not isinstance(self.dht_packet, SparseLoCoDCT2BitPacket):
+            raise ValueError("dht_packet must be a SparseLoCoDCT2BitPacket")
+        if not isinstance(self.effective_delta, np.ndarray) or self.effective_delta.size == 0 or not np.all(np.isfinite(self.effective_delta)):
+            raise ValueError("effective_delta must be a non-empty finite numpy ndarray")
+
 
 def run_diloco_qlora_worker_training(
     backbone: FrozenVisionLanguageBackbone,
@@ -811,10 +889,29 @@ def run_diloco_qlora_worker_training(
     After `inner_steps` local steps, compresses the outer delta into 2-bit SparseLoCo-DCT and
     publishes it to the HiveMind DHT (`dht_registry`).
     """
-    assert backbone.verify_base_freeze(), "Stage 1 violation: Base Vision/Attention must be frozen!"
+    if not isinstance(backbone, FrozenVisionLanguageBackbone):
+        raise ValueError("backbone must be a FrozenVisionLanguageBackbone")
+    if not backbone.verify_base_freeze():
+        raise ValueError("Stage 1 violation: Base Vision/Attention must be frozen!")
+    if not isinstance(bee_meta, Mapping) or "bee_id" not in bee_meta or "backbone_key" not in bee_meta:
+        raise ValueError("bee_meta must be a Mapping containing bee_id and backbone_key")
+    if not isinstance(cluster_id, str) or cluster_id not in REDDIT_VISION_EXPERT_CLUSTERS:
+        raise ValueError(f"unknown cluster_id: {cluster_id!r}")
+    if not isinstance(dht_registry, DHTDeltaRegistry):
+        raise ValueError("dht_registry must be a DHTDeltaRegistry")
+    for field_name, val in (("inner_steps", inner_steps), ("rank", rank), ("batch_size", batch_size)):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            raise ValueError(f"{field_name} must be an integer >= 1")
+    for field_name, val in (("alpha", alpha), ("learning_rate", learning_rate)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a finite positive number")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
 
     bee_id = str(bee_meta["bee_id"])
     backbone_key = str(bee_meta["backbone_key"])
+    if not bee_id.strip() or backbone_key not in REDDIT_VISION_BASE_MODELS:
+        raise ValueError("bee_meta must have non-empty bee_id and valid backbone_key")
     backbone_info = REDDIT_VISION_BASE_MODELS[backbone_key]
     bee_idx = 0 if "01" in bee_id or "03" in bee_id or "05" in bee_id else 1
 
@@ -937,6 +1034,52 @@ class ByzantineConsensusReport:
     consensus_passed: bool
     aggregated_delta: np.ndarray
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.cluster_id, str) or not self.cluster_id.strip():
+            raise ValueError("cluster_id must be a non-empty string")
+        if isinstance(self.honest_worker_count, bool) or not isinstance(self.honest_worker_count, int) or self.honest_worker_count < 1:
+            raise ValueError("honest_worker_count must be an integer >= 1")
+        for field_name in ("byzantine_worker_count", "validation_replay_samples"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name in ("selected_honest_indices", "rejected_byzantine_indices"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, list) or any(isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in seq):
+                raise ValueError(f"{field_name} must be a list of non-negative integers")
+        if (
+            isinstance(self.poison_rejection_rate_pct, bool)
+            or not isinstance(self.poison_rejection_rate_pct, (int, float))
+            or not math.isfinite(float(self.poison_rejection_rate_pct))
+            or not (0.0 <= float(self.poison_rejection_rate_pct) <= 100.0)
+        ):
+            raise ValueError("poison_rejection_rate_pct must be a finite number in [0.0, 100.0]")
+        if (
+            isinstance(self.validation_replay_fraction, bool)
+            or not isinstance(self.validation_replay_fraction, (int, float))
+            or not math.isfinite(float(self.validation_replay_fraction))
+            or not (0.0 < float(self.validation_replay_fraction) <= 1.0)
+        ):
+            raise ValueError("validation_replay_fraction must be a finite number in (0.0, 1.0]")
+        if (
+            isinstance(self.replay_cosine_similarity, bool)
+            or not isinstance(self.replay_cosine_similarity, (int, float))
+            or not math.isfinite(float(self.replay_cosine_similarity))
+            or not (-1.0001 <= float(self.replay_cosine_similarity) <= 1.0001)
+        ):
+            raise ValueError("replay_cosine_similarity must be a finite number in [-1.0, 1.0]")
+        if (
+            isinstance(self.replay_l2_drift, bool)
+            or not isinstance(self.replay_l2_drift, (int, float))
+            or not math.isfinite(float(self.replay_l2_drift))
+            or float(self.replay_l2_drift) < 0.0
+        ):
+            raise ValueError("replay_l2_drift must be a finite non-negative number")
+        if not isinstance(self.consensus_passed, bool):
+            raise ValueError("consensus_passed must be a boolean")
+        if not isinstance(self.aggregated_delta, np.ndarray) or self.aggregated_delta.size == 0 or not np.all(np.isfinite(self.aggregated_delta)):
+            raise ValueError("aggregated_delta must be a non-empty finite numpy ndarray")
+
 
 class ByzantineMultiKrumAggregator:
     """Stage 4: Multi-Krum gradient/delta aggregator with 10% deterministic validation replay."""
@@ -980,6 +1123,27 @@ class ByzantineMultiKrumAggregator:
         backbone: FrozenVisionLanguageBackbone,
     ) -> ByzantineConsensusReport:
         """Filter out Byzantine poisoned deltas via Multi-Krum and run a 10% deterministic replay."""
+        if not isinstance(cluster_id, str) or not cluster_id.strip():
+            raise ValueError("cluster_id must be a non-empty string")
+        if not isinstance(backbone, FrozenVisionLanguageBackbone):
+            raise TypeError("backbone must be a FrozenVisionLanguageBackbone")
+        if isinstance(honest_deltas, (str, bytes)) or not isinstance(honest_deltas, Sequence) or len(honest_deltas) == 0:
+            raise ValueError("honest_deltas must be a non-empty sequence of 2D finite numeric numpy arrays")
+        if isinstance(byzantine_deltas, (str, bytes)) or not isinstance(byzantine_deltas, Sequence):
+            raise ValueError("byzantine_deltas must be a sequence of 2D finite numeric numpy arrays")
+        expected_shape = (backbone.hidden_dim, backbone.hidden_dim)
+        for label, group in (("honest_deltas", honest_deltas), ("byzantine_deltas", byzantine_deltas)):
+            for idx, d in enumerate(group):
+                if (
+                    not isinstance(d, np.ndarray)
+                    or d.dtype.kind == "b"
+                    or not np.issubdtype(d.dtype, np.number)
+                    or d.shape != expected_shape
+                    or not bool(np.all(np.isfinite(d)))
+                ):
+                    raise ValueError(
+                        f"{label}[{idx}] must be a finite numeric numpy ndarray of shape {expected_shape}"
+                    )
         n_honest = len(honest_deltas)
         n_byz = len(byzantine_deltas)
         all_deltas = [d.astype(np.float32) for d in honest_deltas] + [
@@ -1078,6 +1242,15 @@ class UpcycledRedditVisionSparseMoE(nn.Module):
         top_k: int = 2,
     ) -> None:
         super().__init__()
+        if not isinstance(backbone, FrozenVisionLanguageBackbone):
+            raise TypeError("backbone must be a FrozenVisionLanguageBackbone")
+        if not isinstance(expert_deltas, Mapping) or len(expert_deltas) == 0:
+            raise ValueError("expert_deltas must be a non-empty mapping")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be an integer >= 1")
+        for name in expert_deltas.keys():
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("expert_deltas keys must be non-empty strings")
         self.backbone = backbone
         self.expert_names: List[str] = list(expert_deltas.keys())
         self.num_experts = len(self.expert_names)
@@ -1196,6 +1369,67 @@ class NocturnalRedditVisionCampaignReport:
     report_sha256: str = ""
     la_ruche_1500mb_vmoe_summary: Dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        for field_name in ("campaign_id", "title", "timestamp_utc", "stage5_router_type"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.report_sha256, str):
+            raise ValueError("report_sha256 must be a string")
+        for field_name in (
+            "inner_diloco_steps",
+            "lora_rank",
+            "base_models_catalog_count",
+            "expert_clusters_count",
+            "sub_bees_trained_count",
+            "stage5_top_k_active",
+            "stage5_total_experts",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if self.stage5_top_k_active > self.stage5_total_experts:
+            raise ValueError("stage5_top_k_active must be <= stage5_total_experts")
+        for field_name in (
+            "lora_alpha",
+            "stage2_max_consumer_vram_mib",
+            "stage3_mean_compression_ratio",
+            "stage5_upcycled_moe_loss",
+            "stage5_single_model_baseline_loss",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        for field_name in (
+            "stage2_mean_loss_reduction_pct",
+            "stage3_mean_sqnr_db",
+            "stage4_poison_rejection_rate_pct",
+            "stage4_replay_cosine_similarity",
+            "stage4_replay_l2_drift",
+            "stage5_cluster_routing_accuracy",
+            "stage5_moe_vs_baseline_gain_pct",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{field_name} must be a finite number")
+        for field_name in (
+            "stage1_all_base_frozen",
+            "stage2_invariant_i1_satisfied",
+            "stage4_all_consensus_passed",
+            "overall_gate_passed",
+        ):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
+        if not isinstance(self.stage3_dht_keys_published, list) or len(self.stage3_dht_keys_published) == 0 or any(not isinstance(k, str) or not k.strip() for k in self.stage3_dht_keys_published):
+            raise ValueError("stage3_dht_keys_published must be a non-empty list of non-empty strings")
+        for field_name in ("bee_training_results", "byzantine_consensus_reports"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, list) or len(seq) == 0 or any(not isinstance(item, dict) for item in seq):
+                raise ValueError(f"{field_name} must be a non-empty list of dicts")
+        if not isinstance(self.la_ruche_1500mb_vmoe_summary, dict):
+            raise ValueError("la_ruche_1500mb_vmoe_summary must be a dict")
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
@@ -1298,6 +1532,28 @@ class ZKOPoITrainingReceipt:
     commitment_scheme: str = "sha256_transcript_commitment"
     zero_knowledge: bool = False
 
+    def __post_init__(self) -> None:
+        for field_name in (
+            "bee_id",
+            "specialization_id",
+            "optimizer_name",
+            "seed_commitment",
+            "initial_weight_sha256",
+            "final_delta_sha256",
+            "dct_packet_sha256",
+            "proof_commitment_hash",
+            "commitment_scheme",
+        ):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.inner_steps, bool) or not isinstance(self.inner_steps, int) or self.inner_steps < 1:
+            raise ValueError("inner_steps must be an integer >= 1")
+        for field_name in ("verified", "zero_knowledge"):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
+
 
 def newton_schulz_orthogonalize_muon(
     grad: np.ndarray,
@@ -1374,6 +1630,21 @@ def generate_zk_opoi_training_receipt(
     dct_packet_sha256: str,
 ) -> ZKOPoITrainingReceipt:
     """Generate a deterministic ZK-OPoI cryptographic training receipt for a Bee node."""
+    for field_name, val in (
+        ("bee_id", bee_id),
+        ("specialization_id", specialization_id),
+        ("optimizer_name", optimizer_name),
+        ("dct_packet_sha256", dct_packet_sha256),
+    ):
+        if not isinstance(val, str) or not val.strip():
+            raise ValueError(f"{field_name} must be a non-empty string")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be an integer >= 1")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+    for arr_name, arr in (("initial_delta", initial_delta), ("final_delta", final_delta)):
+        if not isinstance(arr, np.ndarray) or arr.size == 0 or not np.all(np.isfinite(arr)):
+            raise ValueError(f"{arr_name} must be a non-empty finite numpy ndarray")
     seed_commit = hashlib.sha256(f"la-ruche-seed:{bee_id}:{seed}".encode("utf-8")).hexdigest()
     init_hash = hashlib.sha256(np.ascontiguousarray(initial_delta, dtype=np.float32).tobytes()).hexdigest()
     final_hash = hashlib.sha256(np.ascontiguousarray(final_delta, dtype=np.float32).tobytes()).hexdigest()
@@ -1401,7 +1672,11 @@ def verify_zk_opoi_training_receipt(
     expected_final_delta: Optional[np.ndarray] = None,
 ) -> bool:
     """Verify a ZK-OPoI receipt commitment hash and optional reconstructed delta digest."""
+    if not isinstance(receipt, ZKOPoITrainingReceipt):
+        raise ValueError("receipt must be a ZKOPoITrainingReceipt")
     if expected_final_delta is not None:
+        if not isinstance(expected_final_delta, np.ndarray) or expected_final_delta.size == 0 or not np.all(np.isfinite(expected_final_delta)):
+            raise ValueError("expected_final_delta must be a non-empty finite numpy ndarray when provided")
         calc_final = hashlib.sha256(
             np.ascontiguousarray(expected_final_delta, dtype=np.float32).tobytes()
         ).hexdigest()
@@ -1434,6 +1709,10 @@ def run_la_ruche_1500mb_patch_vmoe_pipeline(
     - 2-bit SparseLoCo / DCT DeMo delta compression + ZK-OPoI formal receipt verification.
     - BTM weight averaging of self-attention layers + FoMoE Top-2 Softmax patch router.
     """
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be an integer >= 1")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     hidden_dim = 64
     num_patches = 16
     branch_attention_states: List[Dict[str, torch.Tensor]] = []

@@ -1,4 +1,4 @@
-# 🗺️ Project HiveMind — Master Roadmap (Seasons 1–21; active: S16 live operations, S17 CrowdSwarm, S18 Energy-Bees, S21 Kafka-Hive)
+# 🗺️ Project HiveMind — Master Roadmap (active plan: planetary scale in 11 streams, from paper v4.3.0; Seasons 1–33 below are the history and backlog)
 
 <div align="center">
 <img src="docs/assets/hivemind_strategy_improvement_engine.svg" alt="Project HiveMind v2.0.0 — 63/63 Merged PRs, 120 Lean 4 Theorems, E1-E4 + H1-H11 Checks & Season 9 Roadmap" width="100%"/>
@@ -10,6 +10,34 @@
 > All references to **"Points" (`PTS`)**, **`$HIVE`**, **"Bounties"**, or **"PoUW Credits"** are **strictly non-monetary, symbolic compute-reciprocity accounting units** (like SETI@home or BOINC credits). They provide **only computing processing benefits**—priority Sparse MoE inference tokens, speculative decoding throughput, and distributed QLoRA fine-tuning quota—**when the live production HiveMind Swarm is deployed, available, and actively used by a large community**.
 >
 > **⏱️ 1-Hour Autonomous Human & Agent Orchestrator (`0 * * * *`):** Due to the rapid increase in community attention and contributor velocity (`63/63` merged PRs across Waves 1–7), [`community_orchestrator.py`](src/hivemind/cli/community_orchestrator.py) now runs **every 1 hour (`0 * * * *`)** to audit open Pull Requests with the 5-Layer `PRSecurityScanner`, coordinate branch claims in GitHub Discussions, and verify all `120` Lean 4 proofs (`0 sorry`), `10/10` architectural hypotheses (`H1`–`H10`), and `4/4` experimental suites (`E1`–`E4`).
+
+---
+
+## 🌍 0a. Active plan (2026-11-07): planetary scale, in 11 contributor streams
+
+**Read this first:** [`docs/roadmap/PLANETARY_SCALE_PLAN.md`](docs/roadmap/PLANETARY_SCALE_PLAN.md), generated from [`docs/roadmap/planetary_streams.json`](docs/roadmap/planetary_streams.json) and validated by `tests/test_planetary_streams.py`. It is derived from the foundation paper v4.3.0 ([doi:10.5281/zenodo.24043016](https://doi.org/10.5281/zenodo.24043016)).
+
+**End state.** At least 10,000 volunteer nodes active in 30 days, in 10 languages and 6 regions, training and serving HiveMind-built experts that are measured to improve on their base models, discoverable and verifiable without the project's gateway, with the project's own cloud spend still within 150 USD/month.
+
+**Where we are (receipts, 2026-11-07).** The training chain has made held-out loss worse since round 171 (median +0.1266 nats per domain, 99% of changes worse); no HiveMind-trained adapter is served to users; two GPUs (one T4, one RTX 2070) do the work; 55 accounts are claimed in public with no receipt yet. The paper's five-wave node counts (47 to 10,000) are forecasts; in this plan a wave is entered only on receipts.
+
+| Stream | Title | Depends on |
+|---|---|---|
+| PS-01 | Make the training chain improve the model | — |
+| PS-02 | Safety and resource guards in code | — |
+| PS-03 | Every public claim backed by a receipt | — |
+| PS-04 | A trainer client volunteers can actually run | PS-02 |
+| PS-05 | Verification that scales: catching cheats and poison | PS-01 |
+| PS-06 | Bandwidth: measure compression on real home internet | PS-01, PS-04 |
+| PS-07 | No single front door: discovery and identity without the gateway | PS-02 |
+| PS-08 | One volunteer fabric: AMCP mesh and BOINC together | PS-03 |
+| PS-09 | The 1,000-node heterogeneous testbed | PS-05, PS-06 |
+| PS-10 | Open science, cost and resilience | — |
+| PS-11 | Parked research candidates, with reopen conditions | PS-01 |
+
+Each stream has an objective, a plain explanation, directions, a definition of done and a validation entry (command, receipt, pass condition) for every done item, and a tracking issue labelled `planetary-stream`. Season numbers in older sections remain valid as item ids; the streams group them.
+
+**Gate status (2026-11-07):** wave W0 (pioneers). W1 needs PS-01, PS-02, PS-03 and PS-04 done and 150 nodes active on a receipt.
 
 ---
 

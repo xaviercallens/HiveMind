@@ -1,0 +1,23 @@
+{
+  "schema": "hivemind.parked_receipt.v1",
+  "idea": "Train Crowd-v1 with CrowdGPT's official client on the T4 while it serves inference",
+  "measured_on": "2026-11-14",
+  "node": "GCP Spot Tesla T4 (socreateai-agora-hermes-node1): llama-server (~4.8 GB, always on) + a producer that loads ~3.6-3.9 GB on demand",
+  "client": "Vxtzq/CrowdGPT client.py 3.2 (commit c3a294c3), --headless --anon --no-update, --vram-gb 4 then 1",
+  "basis": "supervisor.log free-VRAM samples (5 s), its stop lines, and client.log 'Submitted successfully' lines",
+  "runs": [
+    {"run": "20261114T144849Z", "vram_gb": 4, "submitted_rounds": 1, "min_sampled_free_mib": 1821,
+     "stop": "2026-11-14T16:02:11Z free VRAM 1061 < 4300 MiB for >5 s: stopping client",
+     "cause": "a paused client keeps its memory while the producer loaded a model on demand"},
+    {"run": "20261114T160301Z", "vram_gb": 4, "submitted_rounds": 0, "min_sampled_free_mib": 4775,
+     "stop": "killed by the operator (unexpected relaunch without a thermal guard)"},
+    {"run": "20261114T163057Z", "vram_gb": 1, "submitted_rounds": 0, "min_sampled_free_mib": 4095,
+     "stop": "2026-11-14T17:16:00Z free VRAM 3421 < 4300 MiB for >5 s: stopping client",
+     "cause": "at round start the server-assigned fp32 cohort used ~4 GB despite --vram-gb 1; a finished 948.5 MB round was not uploaded"},
+    {"run": "20261114T172522Z", "vram_gb": 1, "submitted_rounds": 3, "min_sampled_free_mib": 5179, "stop": "owner decision"},
+    {"run": "20261114T193526Z", "vram_gb": 1, "submitted_rounds": 1, "min_sampled_free_mib": 5179,
+     "stop": "2026-11-14T20:50:01Z window end (21:50 Paris)"}
+  ],
+  "decision": "Owner stopped T4 contributions on 2026-11-14 19:31 UTC; training left to the RTX 2070 and volunteers' GPUs.",
+  "summary": "5 rounds submitted; 2 floor breaches (1,061 and 3,421 MiB free) stopped by the watchdog. --vram-gb is a planning target, not a cap."
+}

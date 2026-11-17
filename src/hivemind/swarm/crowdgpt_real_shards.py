@@ -60,6 +60,23 @@ def fetch_rows_datasets_server(dataset_id: str, config: str, split: str, offset:
     return [r["row"] for r in body["rows"] if isinstance(r, dict) and isinstance(r.get("row"), dict)]
 
 
+
+def make_gateway_row_fetcher(gateway: str, api_key: str, *, timeout_s: float = 60.0) -> RowFetcher:
+    """A ``RowFetcher`` that reads training rows through the HiveMind gateway (option 2) instead of Hugging Face."""
+    base = gateway.rstrip("/")
+
+    def fetch(dataset_id: str, config: str, split: str, offset: int, length: int) -> list[Mapping[str, Any]]:
+        q = urllib.parse.urlencode({"dataset": dataset_id, "config": config, "split": split, "offset": int(offset),
+                                    "length": int(min(length, ROWS_PER_REQUEST))})
+        req = urllib.request.Request(f"{base}/v1/hivemind/training-data/rows?{q}",
+                                     headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310 - the configured gateway
+            body = json.loads(resp.read().decode("utf-8"))
+        return [r["row"] for r in body.get("rows", []) if isinstance(r, dict) and isinstance(r.get("row"), dict)]
+
+    return fetch
+
+
 def row_to_text(row: Mapping[str, Any]) -> str:
     """Plain text of one dataset row: its ``text`` field if present, else 'key: value' lines of its content fields."""
     text = row.get("text")

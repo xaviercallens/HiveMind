@@ -97,3 +97,92 @@ The receipt is `artifacts/experiments/E_B3_MOE_MIDROW_2026-11-18.json`. It recor
 - the gates;
 - start and end times;
 - a `deviations` list.
+
+---
+
+## Results (added after the run; the sections above and the JSON spec are unchanged)
+
+- **Order of events:**
+  - pre-registration commit `0a3d267d1c96b68da72407721e9d91e6be3a6e61`, pushed 2026-11-18 16:19:03 UTC;
+  - script commit `649784ff` pushed next;
+  - the evaluation started 16:22:49 UTC and finished 17:04:23 UTC (2,495 s wall, CPU only, 4 threads, fp32 trunk,
+    `nice 19`).
+- **Receipt:** [`artifacts/experiments/E_B3_MOE_MIDROW_2026-11-18.json`](../artifacts/experiments/E_B3_MOE_MIDROW_2026-11-18.json),
+  with spec sha256 `dce3b43e…cd5369`, chunk-id sha256 `5a01d534…b439a43` and `deviations: []`.
+- **Gates:**
+  - every registered hash matched;
+  - the row-order check passed on all 4 local sources;
+  - causality gate: 4.715310 vs 4.715309 on chunk 0;
+  - base-equivalence gate: 4.749634, identical to dense.
+
+**N = 240** (40 per expert; no expert below the minimum of 20). Rows used:
+
+| Expert | Rows | Scanned / too short |
+|---|---|---|
+| E0 | fineweb-edu 440–482 | 43 / 3 |
+| E1 | CodeAlpaca 3246–3457 | 218 / 178 (self-oss-instruct not needed) |
+| E2 | NuminaMath 340–379 | 40 / 0 |
+| E5 | exoplanet-transit 140–179 | 40 / 0 |
+| E6 | sspp-dr9 540–579 | 40 / 0 |
+| E7 | Code_Vulnerability_Security_DPO 940–980 | 41 / 1 |
+
+E3 was skipped (never trained) and E4 was skipped (no rows after 370).
+
+### Primary (checkpoint `0778b9ee…`, the one #944 used): mid-row tokens 64..127
+
+| | Base NLL | MoE NLL | Mean d | Change | MoE lower / higher |
+|---|---|---|---|---|---|
+| E0 general | 4.1468 | 4.0939 | −0.0529 | −1.28 % | 27 / 13 |
+| E1 code | 4.7649 | 4.4470 | −0.3179 | −6.67 % | 32 / 8 |
+| E2 math | 3.8721 | 3.9450 | **+0.0729** | **+1.88 %** | 14 / 26 |
+| E5 exoplanets | 4.1822 | 4.2260 | **+0.0438** | **+1.05 %** | 10 / 30 |
+| E6 stars | 3.2597 | 3.2854 | +0.0257 | +0.79 % | 8 / 32 |
+| E7 security | 5.4926 | 5.3478 | −0.1448 | −2.64 % | 30 / 10 |
+| **All** | **4.2864** | **4.2242** | **−0.0622** | | **121 / 119** |
+
+- **Mean paired difference:** −0.0622 nats, bootstrap 95 % CI **[−0.0897, −0.0349]** (10,000 resamples, seed
+  20261118). The sign test is informational: p = 0.95.
+- **Verdict under the registered rule: PASS** (the CI upper bound is below 0).
+- **Domain guard: FAILS.**
+  - E2 math is +1.88 % and E5 exoplanets is +1.05 % mid-row, both above the +1 % limit.
+  - So under the B3 rule (PASS **and** guard), this mid-row evaluation would **not** support B3. This follow-up does
+    not change #944's verdict or the scorecard; that is an owner decision.
+- **Format-vs-content label: MOSTLY_FORMAT_SOME_CONTENT.**
+  - The verdict is PASS, but mean d = −0.0622 is above the −0.1653 threshold: the gain mid-row is 19 % of #944's
+    −0.3306.
+  - **Plainly: most of the #944 gain came from the row start (format/template).**
+  - A smaller average gain remains mid-row. It is concentrated in E1 code and E7 security; the mid-row loss is higher
+    on E2, E5 and E6.
+
+### Same-row control (informational)
+
+This is the #944 metric (first 64 tokens) on the same 240 rows.
+
+- **Base vs MoE:** base 4.9037, MoE 4.5715.
+- **Mean d:** −0.3322, CI [−0.3871, −0.2793]. That is the #944 effect again, so the longer-row selection does not
+  explain the drop.
+- **Mid/start ratio:** 0.19 overall.
+
+| Expert | Ratio mid / start |
+|---|---|
+| E0 | 1.26 |
+| E1 | 0.27 (row start −22.9 %, mid-row −6.7 %) |
+| E2 | −0.53 |
+| E5 | −0.28 |
+| E6 | −0.13 |
+| E7 | 0.52 |
+
+Mid-row base NLL is lower than row-start NLL (4.29 vs 4.90), as stated in advance. In relative terms the change is also
+much smaller, and the sign flips on three experts, so extra context alone does not explain it.
+
+### Secondary (current package checkpoint `58696cfe…`, reported, not decisive)
+
+- **Mid-row:** mean d −0.0788, CI [−0.1084, −0.0498].
+- **Rule label:** PASS, with the domain guard failing (E2 +1.74 %, E6 +1.27 %).
+- **Per expert:**
+
+  | E0 | E1 | E2 | E5 | E6 | E7 |
+  |---|---|---|---|---|---|
+  | −1.06 % | −7.70 % | +1.74 % | +0.11 % | +1.27 % | −3.19 % |
+
+- **Same-row row-start d:** −0.3436, a ratio of 0.23. The newer checkpoint shows the same pattern.

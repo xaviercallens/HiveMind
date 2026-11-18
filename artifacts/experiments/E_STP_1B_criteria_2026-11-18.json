@@ -1,0 +1,125 @@
+{
+  "E-STP-1": {
+    "model": "crowd",
+    "rule": "A1 (2026-11-15)",
+    "fractions": {
+      "1": {
+        "n_sft": 3,
+        "n_stp": 3,
+        "sft_acc": [
+          14.1,
+          15.0,
+          16.2
+        ],
+        "stp_acc": [
+          14.8,
+          14.8,
+          16.4
+        ],
+        "sft_mean": 15.1,
+        "stp_mean": 15.333,
+        "diff": 0.233,
+        "pooled_sd": 0.991,
+        "interpretable": true,
+        "state": "interpretable",
+        "gain_over_2sd": false,
+        "sft_far_mean": 8.7927,
+        "stp_far_mean": 9.2569,
+        "guard_rail": "fail",
+        "health": "not_evaluable"
+      },
+      "0.25": {
+        "n_sft": 3,
+        "n_stp": 3,
+        "sft_acc": [
+          14.1,
+          14.2,
+          14.7
+        ],
+        "stp_acc": [
+          14.7,
+          14.7,
+          14.8
+        ],
+        "sft_mean": 14.333,
+        "stp_mean": 14.733,
+        "diff": 0.4,
+        "pooled_sd": 0.231,
+        "interpretable": true,
+        "state": "interpretable",
+        "gain_over_2sd": false,
+        "sft_far_mean": 8.2058,
+        "stp_far_mean": 9.5764,
+        "guard_rail": "fail",
+        "health": "not_evaluable"
+      },
+      "0.0625": {
+        "n_sft": 3,
+        "n_stp": 3,
+        "sft_acc": [
+          10.2,
+          9.8,
+          10.5
+        ],
+        "stp_acc": [
+          10.5,
+          9.8,
+          11.1
+        ],
+        "sft_mean": 10.167,
+        "stp_mean": 10.467,
+        "diff": 0.3,
+        "pooled_sd": 0.523,
+        "interpretable": true,
+        "state": "interpretable",
+        "gain_over_2sd": false,
+        "sft_far_mean": 12.3209,
+        "stp_far_mean": 12.2017,
+        "guard_rail": "pass",
+        "health": "not_evaluable"
+      }
+    },
+    "interpretable_fractions": [
+      "1",
+      "0.25",
+      "0.0625"
+    ],
+    "fractions_with_gain": [],
+    "primary_fraction_gain": false,
+    "verdict": "fail_guard_rail",
+    "notes": [
+      "health() is not defined in the executed code: that clause is not evaluable",
+      "a negative verdict ends this branch of the program (CITIZEN_AI_JEPA_PROGRAM.md)"
+    ]
+  },
+  "E-STP-2": {
+    "model": "qwen",
+    "rule": "A1 (2026-11-15)",
+    "fractions": {
+      "1": {
+        "n_sft": 0,
+        "n_stp": 0,
+        "state": "incomplete"
+      },
+      "0.25": {
+        "n_sft": 0,
+        "n_stp": 0,
+        "state": "incomplete"
+      },
+      "0.0625": {
+        "n_sft": 0,
+        "n_stp": 0,
+        "state": "incomplete"
+      }
+    },
+    "interpretable_fractions": [],
+    "fractions_with_gain": [],
+    "primary_fraction_gain": false,
+    "verdict": "incomplete",
+    "notes": [
+      "health() is not defined in the executed code: that clause is not evaluable",
+      "a negative verdict ends this branch of the program (CITIZEN_AI_JEPA_PROGRAM.md)"
+    ]
+  },
+  "M4_gate": "undecided"
+}

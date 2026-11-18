@@ -74,6 +74,10 @@ _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 def urllib_get(url: str, headers: Mapping[str, str]) -> tuple[int, bytes]:
     """Plain HTTPS GET returning (status, body); an HTTP error status is returned, not raised."""
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("url must be a non-empty string")
+    if not isinstance(headers, Mapping):
+        raise TypeError("headers must be a Mapping")
     req = urllib.request.Request(url, headers={"User-Agent": "hivemind-base-model-catalog", **dict(headers)})
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -107,6 +111,10 @@ def read_safetensors_header(http_get: HttpGet, url: str) -> dict[str, tuple[list
 
 def classify_tensor(name: str, shape: Sequence[int]) -> str:
     """Component of a checkpoint tensor: vision / mtp / embedding / linear (an nn.Linear weight NF4 would quantise) / other."""
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("name must be a non-empty string")
+    if not isinstance(shape, Sequence) or isinstance(shape, (str, bytes)):
+        raise ValueError("shape must be a sequence of integers")
     if ".visual." in name or name.startswith(("visual.", "vision_tower.", "model.vision")):
         return "vision"
     if name.startswith("mtp.") or ".mtp." in name:
@@ -120,6 +128,8 @@ def classify_tensor(name: str, shape: Sequence[int]) -> str:
 
 def summarize_header(tensors: Mapping[str, tuple[Sequence[int], str]]) -> dict[str, int]:
     """Parameter split per component plus the LoRA geometry (sum of in+out over the text linear layers) from header shapes."""
+    if not isinstance(tensors, Mapping):
+        raise ValueError("tensors must be a Mapping")
     acc = {"params_total": 0, "params_text_linear": 0, "params_embedding": 0, "params_text_other": 0, "params_vision": 0,
            "params_mtp": 0, "lora_in_plus_out_all_linear": 0, "lora_in_plus_out_mlp": 0, "max_linear_elements": 0,
            "n_tensors": 0}
@@ -142,9 +152,13 @@ def summarize_header(tensors: Mapping[str, tuple[Sequence[int], str]]) -> dict[s
 
 def architecture_from_config(cfg: Mapping[str, Any]) -> dict[str, Any]:
     """Text-model geometry from a ``config.json`` (``text_config`` when the model is multimodal)."""
+    if not isinstance(cfg, Mapping):
+        raise TypeError("cfg must be a Mapping")
     t = dict(cfg.get("text_config") or cfg)
     hidden, layers = int(t["hidden_size"]), int(t["num_hidden_layers"])
     heads = int(t["num_attention_heads"])
+    if hidden <= 0 or layers <= 0 or heads <= 0:
+        raise ValueError("hidden_size, num_hidden_layers, and num_attention_heads must be positive")
     layer_types = list(t.get("layer_types") or [])
     n_full = sum(1 for x in layer_types if x == "full_attention") if layer_types else layers
     return {
@@ -172,6 +186,14 @@ def architecture_from_config(cfg: Mapping[str, Any]) -> dict[str, Any]:
 
 def fetch_catalog_entry(model_id: str, role: str, http_get: HttpGet, retrieved_at: str) -> dict[str, Any]:
     """One catalog entry fetched from the Hub, or ``{"exists": False, "http_status": ...}`` when the id is not served."""
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    if not isinstance(role, str) or not role.strip():
+        raise ValueError("role must be a non-empty string")
+    if not callable(http_get):
+        raise TypeError("http_get must be callable")
+    if not isinstance(retrieved_at, str) or not retrieved_at.strip():
+        raise ValueError("retrieved_at must be a non-empty string")
     api_url = f"{HF_BASE}/api/models/{model_id}?blobs=true"
     status, info = _get_json(http_get, api_url)
     if status != 200 or not isinstance(info, dict):
@@ -217,6 +239,12 @@ def fetch_catalog_entry(model_id: str, role: str, http_get: HttpGet, retrieved_a
 def build_catalog(http_get: HttpGet, requested: Sequence[tuple[str, str]] = REQUESTED_MODELS,
                   now: datetime | None = None) -> dict[str, Any]:
     """Fetch every requested model; ids the Hub does not serve go to ``not_found`` instead of ``models``."""
+    if not callable(http_get):
+        raise TypeError("http_get must be callable")
+    if not isinstance(requested, Sequence) or isinstance(requested, (str, bytes)):
+        raise TypeError("requested must be a Sequence of (model_id, role) pairs")
+    if now is not None and not isinstance(now, datetime):
+        raise TypeError("now must be a datetime or None")
     stamp = (now or datetime.now(UTC)).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     models: list[dict[str, Any]] = []
     missing: list[dict[str, Any]] = []
@@ -229,6 +257,8 @@ def build_catalog(http_get: HttpGet, requested: Sequence[tuple[str, str]] = REQU
 
 def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
     """Problems that make a catalog unusable (an empty list means it passes). Header totals must match the Hub's own count."""
+    if not isinstance(catalog, Mapping):
+        raise TypeError("catalog must be a Mapping")
     problems: list[str] = []
     if catalog.get("schema") != SCHEMA:
         problems.append(f"schema is {catalog.get('schema')!r}, expected {SCHEMA!r}")
@@ -327,12 +357,51 @@ class ModelGeometry:
     linear_value_head_dim: int
     linear_conv_kernel_dim: int
 
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.model_id, str)
+            or not self.model_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.model_id)
+        ):
+            raise ValueError("model_id must be a non-empty string")
+        for i_pos in ("params_text_linear", "hidden", "layers", "intermediate", "vocab"):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+        for i_nonneg in (
+            "params_embedding",
+            "params_text_other",
+            "params_vision",
+            "params_mtp",
+            "lora_in_plus_out_all_linear",
+            "lora_in_plus_out_mlp",
+            "max_linear_elements",
+            "n_kv_heads",
+            "head_dim",
+            "n_full_attention_layers",
+            "n_linear_attention_layers",
+            "linear_num_key_heads",
+            "linear_num_value_heads",
+            "linear_key_head_dim",
+            "linear_value_head_dim",
+            "linear_conv_kernel_dim",
+        ):
+            val = getattr(self, i_nonneg)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_nonneg} must be a non-negative integer")
+        if self.n_full_attention_layers + self.n_linear_attention_layers != self.layers:
+            raise ValueError("n_full_attention_layers + n_linear_attention_layers must equal layers")
+        if self.lora_in_plus_out_mlp > self.lora_in_plus_out_all_linear:
+            raise ValueError("lora_in_plus_out_mlp cannot exceed lora_in_plus_out_all_linear")
+
     @property
     def params_text(self) -> int:
         return self.params_text_linear + self.params_embedding + self.params_text_other
 
 
 def geometry_from_entry(entry: Mapping[str, Any]) -> ModelGeometry:
+    if not isinstance(entry, Mapping):
+        raise TypeError("entry must be a Mapping")
     h, a = entry["header"], entry["architecture"]
     return ModelGeometry(
         model_id=str(entry["model_id"]), params_text_linear=int(h["params_text_linear"]), params_embedding=int(h["params_embedding"]),
@@ -361,13 +430,16 @@ class TrainRecipe:
     load_aux_towers: bool = True  # vision + MTP weights loaded at 16-bit (conservative: a text-only loader may drop them)
 
     def __post_init__(self) -> None:
-        if self.seq_len < 1 or self.micro_batch < 1 or self.lora_rank < 1:
-            raise ValueError("seq_len, micro_batch and lora_rank must be >= 1")
+        for name, val in (("seq_len", self.seq_len), ("micro_batch", self.micro_batch), ("lora_rank", self.lora_rank)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError("seq_len, micro_batch and lora_rank must be >= 1")
+        if not isinstance(self.gradient_checkpointing, bool) or not isinstance(self.load_aux_towers, bool):
+            raise ValueError("gradient_checkpointing and load_aux_towers must be bool")
         if self.targets not in ("all_linear", "mlp"):
             raise ValueError("targets must be 'all_linear' or 'mlp'")
         if self.optimizer not in OPTIMIZER_BYTES:
             raise ValueError(f"optimizer must be one of {sorted(OPTIMIZER_BYTES)}")
-        if self.act_scale <= 0:
+        if isinstance(self.act_scale, bool) or not isinstance(self.act_scale, (int, float)) or not math.isfinite(float(self.act_scale)) or self.act_scale <= 0:
             raise ValueError("act_scale must be > 0")
 
     @property
@@ -384,8 +456,9 @@ class ServeConfig:
 
     def __post_init__(self) -> None:
         gguf_bytes_per_weight(self.quant)
-        if self.context_len < 1 or self.n_parallel < 1:
-            raise ValueError("context_len and n_parallel must be >= 1")
+        for val in (self.context_len, self.n_parallel):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError("context_len and n_parallel must be >= 1")
 
     @property
     def label(self) -> str:
@@ -402,12 +475,41 @@ class VramEstimate:
     kind: str = "ESTIMATE"
     note: str = "analytic estimate; nothing ran on a GPU"
 
+    def __post_init__(self) -> None:
+        for s_name in ("model_id", "mode", "config", "kind", "note"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 or ord(c) == 127 for c in val):
+                raise ValueError(f"{s_name} must be a non-empty string")
+        if not isinstance(self.components_mib, dict) or not self.components_mib:
+            raise ValueError("components_mib must be a non-empty dict")
+        for ck, cv in self.components_mib.items():
+            if (
+                not isinstance(ck, str)
+                or not ck.strip()
+                or isinstance(cv, bool)
+                or not isinstance(cv, (int, float))
+                or not math.isfinite(float(cv))
+                or float(cv) < 0.0
+            ):
+                raise ValueError("components_mib must map non-empty component names to finite non-negative numbers")
+        if (
+            isinstance(self.total_mib, bool)
+            or not isinstance(self.total_mib, (int, float))
+            or not math.isfinite(float(self.total_mib))
+            or float(self.total_mib) < 0.0
+        ):
+            raise ValueError("total_mib must be a finite non-negative number")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 def estimate_qlora_training(g: ModelGeometry, r: TrainRecipe) -> VramEstimate:
     """Peak-VRAM ESTIMATE for NF4 QLoRA training of ``g`` with recipe ``r`` (process level, context allowance included)."""
+    if not isinstance(g, ModelGeometry):
+        raise ValueError("g must be a ModelGeometry")
+    if not isinstance(r, TrainRecipe):
+        raise ValueError("r must be a TrainRecipe")
     lora_params = r.lora_rank * (g.lora_in_plus_out_all_linear if r.targets == "all_linear" else g.lora_in_plus_out_mlp)
     tokens = r.seq_len * r.micro_batch
     per_layer = tokens * (ATTN_ELEMS * g.hidden + MLP_ELEMS * g.intermediate) * FP16_BYTES / MIB
@@ -430,6 +532,10 @@ def estimate_qlora_training(g: ModelGeometry, r: TrainRecipe) -> VramEstimate:
 
 def estimate_gguf_serving(g: ModelGeometry, s: ServeConfig) -> VramEstimate:
     """VRAM ESTIMATE for serving the text model as a GGUF of type ``s.quant`` (vision projector not loaded)."""
+    if not isinstance(g, ModelGeometry):
+        raise ValueError("g must be a ModelGeometry")
+    if not isinstance(s, ServeConfig):
+        raise ValueError("s must be a ServeConfig")
     bpw = gguf_bytes_per_weight(s.quant)
     seqs = s.n_parallel
     kv = seqs * s.context_len * 2 * g.n_full_attention_layers * g.n_kv_heads * g.head_dim * FP16_BYTES / MIB
@@ -456,9 +562,33 @@ class FitVerdict:
     budget_mib: float
     margin: float
 
+    def __post_init__(self) -> None:
+        if self.verdict not in (FITS, MARGINAL, DOES_NOT_FIT):
+            raise ValueError(f"verdict must be one of {(FITS, MARGINAL, DOES_NOT_FIT)}")
+        if not isinstance(self.fits, bool):
+            raise ValueError("fits must be a boolean")
+        if self.fits != (self.verdict == FITS):
+            raise ValueError("fits must equal (verdict == 'FITS')")
+        for f_name in ("estimate_mib", "required_with_margin_mib", "budget_mib", "margin"):
+            val = getattr(self, f_name)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a finite non-negative number")
+        if float(self.budget_mib) <= 0.0:
+            raise ValueError("budget_mib must be positive")
+        if float(self.required_with_margin_mib) + 1e-6 < float(self.estimate_mib):
+            raise ValueError("required_with_margin_mib must be >= estimate_mib")
+
 
 def fit_verdict(estimate_mib: float, budget_mib: float, margin: float = DEFAULT_MARGIN) -> FitVerdict:
     """FITS when estimate x (1 + margin) <= budget; MARGINAL when only the bare estimate fits; else DOES_NOT_FIT."""
+    for val in (estimate_mib, budget_mib, margin):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError("margin >= 0, budget > 0 and estimate >= 0 are required")
     if margin < 0 or budget_mib <= 0 or estimate_mib < 0:
         raise ValueError("margin >= 0, budget > 0 and estimate >= 0 are required")
     need = estimate_mib * (1.0 + margin)
@@ -481,6 +611,30 @@ class CalibrationRecord:
     source: str
     recorded_at: str
 
+    def __post_init__(self) -> None:
+        for s_name in ("model_id", "mode", "config", "measured_kind", "gpu", "source", "recorded_at"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for f_pos in ("estimate_mib", "measured_peak_mib", "ratio_measured_to_estimate"):
+            val = getattr(self, f_pos)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) <= 0.0
+            ):
+                raise ValueError(f"{f_pos} must be a finite positive number")
+        if (
+            isinstance(self.margin, bool)
+            or not isinstance(self.margin, (int, float))
+            or not math.isfinite(float(self.margin))
+            or float(self.margin) < 0.0
+        ):
+            raise ValueError("margin must be a finite non-negative number")
+        if not isinstance(self.within_margin, bool):
+            raise ValueError("within_margin must be a boolean")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -495,11 +649,13 @@ def calibrate_from_measurement(estimate: VramEstimate, measured_peak_mib: float,
     ``torch_max_allocated`` excludes the CUDA context, so it is compared against the estimate minus the context allowance.
     ``within_margin`` is False when the measurement exceeds the estimate by more than the margin: the estimator undershot.
     """
-    if measured_peak_mib <= 0 or not math.isfinite(measured_peak_mib):
+    if isinstance(measured_peak_mib, bool) or not isinstance(measured_peak_mib, (int, float)) or measured_peak_mib <= 0 or not math.isfinite(float(measured_peak_mib)):
         raise ValueError("measured_peak_mib must be a positive finite number")
+    if isinstance(margin, bool) or not isinstance(margin, (int, float)) or not math.isfinite(float(margin)) or margin < 0:
+        raise ValueError("margin must be a non-negative finite number")
     if measured_kind not in MEASURED_KINDS:
         raise ValueError(f"measured_kind must be one of {MEASURED_KINDS}")
-    if not source.strip() or not gpu.strip():
+    if not isinstance(source, str) or not isinstance(gpu, str) or not source.strip() or not gpu.strip():
         raise ValueError("a calibration needs the GPU and the source of the measurement")
     est = estimate.total_mib
     if measured_kind == "torch_max_allocated":
@@ -532,6 +688,8 @@ PROMOTE, HOLD, INSUFFICIENT = "PROMOTE", "HOLD", "INSUFFICIENT"
 
 def binom_half_lower_tail(k: int, n: int) -> float:
     """P(X <= k) for X ~ Binomial(n, 1/2), exact (integer arithmetic until the final division)."""
+    if isinstance(k, bool) or not isinstance(k, int) or isinstance(n, bool) or not isinstance(n, int) or n < 0:
+        raise ValueError("k and n must be integers with n >= 0")
     if k < 0:
         return 0.0
     if k >= n:
@@ -541,7 +699,7 @@ def binom_half_lower_tail(k: int, n: int) -> float:
 
 def mcnemar_exact_p(losses: int, wins: int) -> float:
     """Two-sided exact McNemar p from the discordant counts (same definition as ``swarm.verified_update_gate.exact_paired_p``)."""
-    if losses < 0 or wins < 0:
+    if isinstance(losses, bool) or not isinstance(losses, int) or isinstance(wins, bool) or not isinstance(wins, int) or losses < 0 or wins < 0:
         raise ValueError("discordant counts must be >= 0")
     n = losses + wins
     return 1.0 if n == 0 else min(1.0, 2 * binom_half_lower_tail(min(losses, wins), n))
@@ -555,8 +713,11 @@ class PromotionPolicy:
     tolerated_guard_net_loss: int = 0  # guard losses minus guard wins allowed
 
     def __post_init__(self) -> None:
-        if not 0.0 < self.alpha < 1.0:
+        if isinstance(self.alpha, bool) or not isinstance(self.alpha, (int, float)) or not math.isfinite(float(self.alpha)) or not 0.0 < self.alpha < 1.0:
             raise ValueError("alpha must be in (0, 1)")
+        for val in (self.min_items, self.min_guard_items, self.tolerated_guard_net_loss):
+            if isinstance(val, bool) or not isinstance(val, int):
+                raise ValueError("min_items, min_guard_items >= 1 and tolerated_guard_net_loss >= 0 are required")
         if self.min_items < 1 or self.min_guard_items < 1 or self.tolerated_guard_net_loss < 0:
             raise ValueError("min_items, min_guard_items >= 1 and tolerated_guard_net_loss >= 0 are required")
 
@@ -578,6 +739,31 @@ class PromotionReceipt:
     guard_p_regression: float  # one-sided exact P(X >= guard_losses), X ~ Binomial(guard discordant, 1/2)
     policy: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if self.decision not in (PROMOTE, HOLD, INSUFFICIENT):
+            raise ValueError(f"decision must be one of {(PROMOTE, HOLD, INSUFFICIENT)}")
+        if not isinstance(self.reasons, list) or any(not isinstance(r, str) for r in self.reasons):
+            raise ValueError("reasons must be a list of strings")
+        for i_name in ("n_items", "wins", "losses", "guard_items", "guard_wins", "guard_losses"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        if self.wins + self.losses > self.n_items:
+            raise ValueError("wins + losses cannot exceed n_items")
+        if self.guard_wins + self.guard_losses > self.guard_items:
+            raise ValueError("guard_wins + guard_losses cannot exceed guard_items")
+        for p_name in ("p_two_sided", "guard_p_regression"):
+            val = getattr(self, p_name)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or not (0.0 <= float(val) <= 1.0)
+            ):
+                raise ValueError(f"{p_name} must be a finite probability in [0.0, 1.0]")
+        if not isinstance(self.policy, dict):
+            raise ValueError("policy must be a dict")
+
     @property
     def promoted(self) -> bool:
         return self.decision == PROMOTE
@@ -588,6 +774,8 @@ class PromotionReceipt:
 
 def _discordant(candidate: Mapping[str, bool], incumbent: Mapping[str, bool]) -> tuple[int, int, int, bool]:
     for name, m in (("candidate", candidate), ("incumbent", incumbent)):
+        if not isinstance(m, Mapping):
+            raise ValueError(f"{name} must be a Mapping of item_id -> bool")
         bad = [k for k, v in m.items() if not isinstance(v, bool)]
         if bad:
             raise ValueError(f"{name} outcomes must be booleans (first offending item: {bad[0]!r})")
@@ -606,6 +794,8 @@ def promotion_gate(candidate: Mapping[str, bool], incumbent: Mapping[str, bool],
     (3) candidate wins > losses there, and (4) on the guard pack losses - wins <= tolerated and no one-sided significant
     regression. A pairing or size failure is INSUFFICIENT; anything else that is not a promotion is HOLD.
     """
+    if not isinstance(policy, PromotionPolicy):
+        raise ValueError("policy must be a PromotionPolicy")
     n, wins, losses, paired = _discordant(candidate, incumbent)
     gn, gwins, glosses, gpaired = _discordant(guard_candidate, guard_incumbent)
     p = mcnemar_exact_p(losses, wins)
@@ -647,6 +837,22 @@ class GpuTier:
     budget_mib: int
     source: str
 
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.tier_id, str)
+            or not self.tier_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.tier_id)
+        ):
+            raise ValueError("tier_id must be a non-empty string")
+        if isinstance(self.budget_mib, bool) or not isinstance(self.budget_mib, int) or self.budget_mib < 1:
+            raise ValueError("budget_mib must be a positive integer")
+        if (
+            not isinstance(self.source, str)
+            or not self.source.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.source)
+        ):
+            raise ValueError("source must be a non-empty string")
+
 
 # Budgets with their origin. The std/big/xl values equal QWEN35_HARDWARE_TIERS[*]["max_wddm_safe_mib"] (a test asserts it).
 GPU_TIERS: tuple[GpuTier, ...] = (
@@ -669,6 +875,12 @@ SERVE_LADDER: tuple[ServeConfig, ...] = (ServeConfig("Q8_0", 4096), ServeConfig(
 
 
 def _first_fit(estimates: Sequence[VramEstimate], budget: int, margin: float) -> dict[str, Any] | None:
+    if (
+        not isinstance(estimates, Sequence)
+        or isinstance(estimates, (str, bytes))
+        or any(not isinstance(e, VramEstimate) for e in estimates)
+    ):
+        raise ValueError("estimates must be a sequence of VramEstimate")
     for est in estimates:
         v = fit_verdict(est.total_mib, budget, margin)
         if v.fits:
@@ -680,6 +892,24 @@ def recommend_upgrade_plan(catalog: Mapping[str, Any], tiers: Sequence[GpuTier] 
                            train_ladder: Sequence[TrainRecipe] = TRAIN_LADDER, serve_ladder: Sequence[ServeConfig] = SERVE_LADDER,
                            margin: float = DEFAULT_MARGIN) -> dict[str, Any]:
     """For each tier: what fits to train and serve, and which candidate (if any) goes to the promotion gate."""
+    if not isinstance(tiers, Sequence) or isinstance(tiers, (str, bytes)) or len(tiers) == 0 or any(not isinstance(t, GpuTier) for t in tiers):
+        raise ValueError("tiers must be a non-empty sequence of GpuTier")
+    if (
+        not isinstance(train_ladder, Sequence)
+        or isinstance(train_ladder, (str, bytes))
+        or len(train_ladder) == 0
+        or any(not isinstance(r, TrainRecipe) for r in train_ladder)
+    ):
+        raise ValueError("train_ladder must be a non-empty sequence of TrainRecipe")
+    if (
+        not isinstance(serve_ladder, Sequence)
+        or isinstance(serve_ladder, (str, bytes))
+        or len(serve_ladder) == 0
+        or any(not isinstance(s, ServeConfig) for s in serve_ladder)
+    ):
+        raise ValueError("serve_ladder must be a non-empty sequence of ServeConfig")
+    if isinstance(margin, bool) or not isinstance(margin, (int, float)) or not math.isfinite(float(margin)) or not (0.0 <= float(margin) < 1.0):
+        raise ValueError("margin must be in [0, 1)")
     problems = validate_catalog(catalog)
     if problems:
         raise ValueError("invalid base-model catalog: " + "; ".join(problems))
@@ -715,6 +945,15 @@ def recommend_upgrade_plan(catalog: Mapping[str, Any], tiers: Sequence[GpuTier] 
 
 
 def render_plan(plan: Mapping[str, Any]) -> str:
+    if not isinstance(plan, Mapping):
+        raise TypeError("plan must be a Mapping")
+    for req_key in ("kind", "margin", "catalog_retrieved_at", "tiers", "not_found"):
+        if req_key not in plan:
+            raise ValueError(f"plan missing required key '{req_key}'")
+    if isinstance(plan["margin"], bool) or not isinstance(plan["margin"], (int, float)) or not math.isfinite(float(plan["margin"])):
+        raise ValueError("plan['margin'] must be a finite number")
+    if not isinstance(plan["tiers"], Sequence) or isinstance(plan["tiers"], (str, bytes)):
+        raise ValueError("plan['tiers'] must be a sequence of tier dicts")
     lines = [f"Upgrade plan ({plan['kind']}, margin {plan['margin']:.0%}, catalog retrieved {plan['catalog_retrieved_at']})"]
     for t in plan["tiers"]:
         lines.append(f"- {t['tier_id']} ({t['budget_mib']} MiB): train={t['train_candidate']} serve={t['serve_candidate']} :: {t['action']}")
@@ -728,6 +967,8 @@ def render_plan(plan: Mapping[str, Any]) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    if argv is not None and (isinstance(argv, (str, bytes)) or not isinstance(argv, Sequence) or any(not isinstance(x, str) for x in argv)):
+        raise ValueError("argv must be a sequence of strings or None")
     ap = argparse.ArgumentParser(description="Print the per-tier base-model upgrade plan (an ESTIMATE) from a catalog file.")
     ap.add_argument("--catalog", default="configs/base_models_s21.json")
     ap.add_argument("--margin", type=float, default=DEFAULT_MARGIN)

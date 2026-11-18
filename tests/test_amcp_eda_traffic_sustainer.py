@@ -108,6 +108,22 @@ def test_select_100_node_optimal_producer_prefers_warm_residency_and_same_region
     assert res["warmup_recommended"] is False
 
     mesh = plan_100_producer_mesh_scaling(active_producers=100, endpoints_per_producer=2, heartbeat_interval_s=30.0)
+    assert mesh["basis"] == "closed_form_model"
     assert mesh["total_live_endpoints"] == 200
     assert mesh["sqlite_lock_reduction_factor"] == 50.0
+
+
+def test_ip232_scale_100_status_empty_store_reports_zero_live_endpoints(tmp_path: Path) -> None:
+    """IP-232: scale-100-status with an empty store must report 0 live endpoints under live labels and basis=closed_form_model."""
+    store = RouterStore(tmp_path / "empty_router.db", b"k" * 32)
+    app = create_router_app(store, allow_private_producers=True)
+    client = TestClient(app)
+
+    resp = client.get("/v1/hivemind/producers/scale-100-status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["live_store_scale_status"]["live_endpoints"] == 0
+    assert body["amcp_mesh_scaling"]["total_live_endpoints"] == 0
+    assert body["amcp_mesh_scaling"]["active_producers"] == 0
+    assert body["amcp_mesh_scaling"]["basis"] == "closed_form_model"
 

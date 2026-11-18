@@ -93,6 +93,23 @@ class CloudEventEnvelope:
     specversion: str = "1.0"
     datacontenttype: str = "application/json"
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("id", self.id),
+            ("source", self.source),
+            ("type", self.type),
+            ("correlation_id", self.correlation_id),
+            ("subject", self.subject),
+            ("specversion", self.specversion),
+            ("datacontenttype", self.datacontenttype),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.time, bool) or not isinstance(self.time, (int, float)) or not math.isfinite(float(self.time)) or float(self.time) <= 0.0:
+            raise ValueError("time must be a positive finite timestamp")
+        if not isinstance(self.data, dict):
+            raise TypeError("data must be a dict")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -110,6 +127,26 @@ class AMCPMobilityCommand:
     expected_warm_latency_s: float
     reason: str
     event_id: str
+
+    def __post_init__(self) -> None:
+        if self.verb not in ("dispatch", "clone", "replicate", "migrate", "retract", "federateWith"):
+            raise ValueError(f"Unsupported AMCPMobilityVerb: {self.verb!r}")
+        for field_name, val in (
+            ("bee_id", self.bee_id),
+            ("model_id", self.model_id),
+            ("source_node_id", self.source_node_id),
+            ("target_node_id", self.target_node_id),
+            ("reason", self.reason),
+            ("event_id", self.event_id),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, num in (
+            ("adapter_size_mib", self.adapter_size_mib),
+            ("expected_warm_latency_s", self.expected_warm_latency_s),
+        ):
+            if isinstance(num, bool) or not isinstance(num, (int, float)) or not math.isfinite(float(num)) or float(num) <= 0.0:
+                raise ValueError(f"{field_name} must be a positive finite number")
 
 
 @dataclass(frozen=True)
@@ -130,12 +167,48 @@ class ElasticEDAScalingResult:
     cold_start_504_prevented_by_pr249: int
     mobility_commands_emitted: list[dict[str, Any]]
     sustained_without_drops: bool
+    basis: str = "closed_form_model"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.wave_name, str) or not self.wave_name.strip():
+            raise ValueError("wave_name must be a non-empty string")
+        if not isinstance(self.basis, str) or not self.basis.strip():
+            raise ValueError("basis must be a non-empty string")
+        for field_name, iv in (
+            ("base_resident_producers_c0", self.base_resident_producers_c0),
+            ("effective_active_producers_c", self.effective_active_producers_c),
+        ):
+            if isinstance(iv, bool) or not isinstance(iv, int) or iv < 1:
+                raise ValueError(f"{field_name} must be a positive integer")
+        for field_name, iv in (
+            ("standby_prosumer_pool", self.standby_prosumer_pool),
+            ("activated_amcp_replicas", self.activated_amcp_replicas),
+            ("eda_buffered_burst_requests", self.eda_buffered_burst_requests),
+            ("cold_start_504_prevented_by_pr249", self.cold_start_504_prevented_by_pr249),
+        ):
+            if isinstance(iv, bool) or not isinstance(iv, int) or iv < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name, num in (
+            ("peak_arrival_req_per_s", self.peak_arrival_req_per_s),
+            ("static_service_rate_req_per_s", self.static_service_rate_req_per_s),
+            ("elastic_service_rate_req_per_s", self.elastic_service_rate_req_per_s),
+            ("static_utilization_rho", self.static_utilization_rho),
+            ("elastic_eda_utilization_rho", self.elastic_eda_utilization_rho),
+        ):
+            if isinstance(num, bool) or not isinstance(num, (int, float)) or not math.isfinite(float(num)) or float(num) <= 0.0:
+                raise ValueError(f"{field_name} must be a positive finite number")
+        if not isinstance(self.mobility_commands_emitted, list) or any(not isinstance(c, dict) for c in self.mobility_commands_emitted):
+            raise TypeError("mobility_commands_emitted must be a list of dicts")
+        if not isinstance(self.sustained_without_drops, bool):
+            raise ValueError("sustained_without_drops must be a boolean")
 
 
 class AMCPEventDrivenTrafficSustainer:
     """Event-Driven Architecture (EDA) broker and AMCP Strong Mobility controller for HiveMind."""
 
     def __init__(self, max_buffer_events: int = 4096) -> None:
+        if isinstance(max_buffer_events, bool) or not isinstance(max_buffer_events, int) or max_buffer_events <= 0:
+            raise ValueError("max_buffer_events must be a positive integer")
         self.max_buffer_events = max_buffer_events
         self._event_log: deque[CloudEventEnvelope] = deque(maxlen=max_buffer_events)
         self._mobility_history: list[AMCPMobilityCommand] = []
@@ -149,8 +222,15 @@ class AMCPEventDrivenTrafficSustainer:
         correlation_id: str | None = None,
     ) -> CloudEventEnvelope:
         """Publish a CloudEvents 1.0 compliant event onto the AMCP/EDA bus."""
+        for name, val in (("event_type", event_type), ("source", source), ("subject", subject)):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{name} must be a non-empty string")
         if not event_type.startswith("io.hivemind.amcp."):
             raise ValueError("event_type must use the 'io.hivemind.amcp.*' CloudEvents namespace")
+        if not isinstance(data, dict):
+            raise ValueError("data must be a dict")
+        if correlation_id is not None and (not isinstance(correlation_id, str) or not correlation_id.strip()):
+            raise ValueError("correlation_id must be a non-empty string when provided")
         env = CloudEventEnvelope(
             id=f"ce-{uuid.uuid4().hex[:16]}",
             source=source,
@@ -176,6 +256,33 @@ class AMCPEventDrivenTrafficSustainer:
         hot_model_id: str = "hivemind/coder",
     ) -> ElasticEDAScalingResult:
         """Compute and emit AMCP `replicate()`, `migrate()`, and `federateWith()` events to sustain peak traffic."""
+        for name, val in (("wave_name", wave_name), ("hot_bee_id", hot_bee_id), ("hot_model_id", hot_model_id)):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if (
+            isinstance(base_resident_producers_c0, bool)
+            or not isinstance(base_resident_producers_c0, int)
+            or base_resident_producers_c0 <= 0
+        ):
+            raise ValueError("base_resident_producers_c0 must be a positive integer")
+        if (
+            isinstance(standby_prosumer_pool, bool)
+            or not isinstance(standby_prosumer_pool, int)
+            or standby_prosumer_pool < 0
+        ):
+            raise ValueError("standby_prosumer_pool must be a non-negative integer")
+        for name, val in (
+            ("peak_arrival_req_per_s", peak_arrival_req_per_s),
+            ("mean_tokens_per_req", mean_tokens_per_req),
+            ("mean_producer_tok_per_s", mean_producer_tok_per_s),
+            ("target_rho", target_rho),
+        ):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{name} must be a finite numeric value")
+        if peak_arrival_req_per_s <= 0.0 or mean_tokens_per_req <= 0.0 or mean_producer_tok_per_s <= 0.0:
+            raise ValueError("peak_arrival_req_per_s, mean_tokens_per_req, and mean_producer_tok_per_s must be positive")
+        if not (0.0 < target_rho < 1.0):
+            raise ValueError("target_rho must be in (0.0, 1.0)")
         mu_single = mean_producer_tok_per_s / mean_tokens_per_req
         static_mu_tot = base_resident_producers_c0 * mu_single
         static_rho = peak_arrival_req_per_s / max(static_mu_tot, 1e-6)
@@ -365,11 +472,24 @@ def select_100_node_optimal_producer(
        augmented by regional affinity (`region == client_region`) and normalized inflight queue load:
        `score = (inflight + 1.0) / max(1.0, capacity_1k) + (0.0 if same_region else 0.15) + rtt_ms / 1000.0`.
     """
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    if not isinstance(client_region, str) or not client_region.strip():
+        raise ValueError("client_region must be a non-empty string")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+    if not isinstance(candidates, (list, tuple)):
+        raise ValueError("candidates must be a list or tuple of dicts")
     eligible: list[dict[str, Any]] = []
     for idx, cand in enumerate(candidates):
+        if not isinstance(cand, dict):
+            raise ValueError("each candidate must be a dict")
         if bool(cand.get("paused", False)):
             continue
-        cap = int(cand.get("capacity_1k", 10))
+        raw_cap = cand.get("capacity_1k", 10)
+        if isinstance(raw_cap, bool) or not isinstance(raw_cap, int):
+            raise ValueError("capacity_1k must be an integer")
+        cap = int(raw_cap)
         if cap <= 0:
             continue
         models = cand.get("models")
@@ -389,8 +509,14 @@ def select_100_node_optimal_producer(
 
         reg = str(cand.get("region", "eu-west"))
         same_region = reg == client_region
-        inflight = max(0, int(cand.get("inflight", 0)))
-        rtt_ms = float(cand.get("rtt_ms", 20.0 if same_region else 85.0))
+        raw_inflight = cand.get("inflight", 0)
+        if isinstance(raw_inflight, bool) or not isinstance(raw_inflight, int) or raw_inflight < 0:
+            raise ValueError("inflight must be a non-negative integer")
+        inflight = int(raw_inflight)
+        raw_rtt = cand.get("rtt_ms", 20.0 if same_region else 85.0)
+        if isinstance(raw_rtt, bool) or not isinstance(raw_rtt, (int, float)) or not math.isfinite(float(raw_rtt)) or raw_rtt < 0.0:
+            raise ValueError("rtt_ms must be a finite non-negative number")
+        rtt_ms = float(raw_rtt)
         load_score = (inflight + 1.0) / max(1.0, float(cap)) + (0.0 if same_region else 0.15) + (rtt_ms / 1000.0)
         eligible.append(
             {
@@ -446,23 +572,50 @@ def plan_100_producer_mesh_scaling(
     active_producers: int = 100,
     endpoints_per_producer: int = 2,
     heartbeat_interval_s: float = 30.0,
+    *,
+    live_endpoints: int | None = None,
 ) -> dict[str, Any]:
-    """Compute AMCP v1.5 topic-partitioned heartbeat & P2C dispatch scaling metrics for 100 producer nodes."""
-    c = max(1, int(active_producers))
+    """Compute AMCP v1.5 topic-partitioned heartbeat & P2C dispatch scaling metrics for producer nodes."""
+    if isinstance(active_producers, bool) or not isinstance(active_producers, int):
+        raise ValueError("active_producers must be an integer")
+    if live_endpoints is None and active_producers < 1:
+        raise ValueError("active_producers must be >= 1 when live_endpoints is not provided")
+    if active_producers < 0:
+        raise ValueError("active_producers must be non-negative")
+    if (
+        isinstance(endpoints_per_producer, bool)
+        or not isinstance(endpoints_per_producer, int)
+        or not (1 <= endpoints_per_producer <= 8)
+    ):
+        raise ValueError("endpoints_per_producer must be an integer in [1, 8]")
+    if (
+        isinstance(heartbeat_interval_s, bool)
+        or not isinstance(heartbeat_interval_s, (int, float))
+        or not math.isfinite(float(heartbeat_interval_s))
+        or heartbeat_interval_s <= 0.0
+    ):
+        raise ValueError("heartbeat_interval_s must be a positive finite number")
+    if live_endpoints is not None:
+        if isinstance(live_endpoints, bool) or not isinstance(live_endpoints, int) or live_endpoints < 0:
+            raise ValueError("live_endpoints must be a non-negative integer")
+    c = max(0, int(active_producers)) if live_endpoints is not None else max(1, int(active_producers))
     ep_per_prod = max(1, min(8, int(endpoints_per_producer)))
-    total_endpoints = c * ep_per_prod
+    modeled_endpoints = max(1, int(active_producers)) * ep_per_prod
+    total_endpoints = max(0, int(live_endpoints)) if live_endpoints is not None else modeled_endpoints
     interval_s = max(5.0, float(heartbeat_interval_s))
 
-    unbatched_wal_writes_per_s = round(total_endpoints / interval_s, 4)
+    unbatched_wal_writes_per_s = round(modeled_endpoints / interval_s, 4)
     regional_partitions = 4  # eu-west, us-east, us-west, ap-northeast
     batched_wal_commits_per_s = round(regional_partitions / interval_s, 4)
-    sqlite_lock_reduction_factor = round(total_endpoints / regional_partitions, 2)
+    sqlite_lock_reduction_factor = round(modeled_endpoints / regional_partitions, 2)
 
     return {
+        "basis": "closed_form_model",
         "active_producers": c,
         "endpoints_per_producer": ep_per_prod,
         "total_live_endpoints": total_endpoints,
-        "max_supported_endpoints": c * 8,
+        "modeled_target_endpoints": modeled_endpoints,
+        "max_supported_endpoints": max(1, int(active_producers)) * 8,
         "amcp_topic_partitions": [
             "io.hivemind.amcp.heartbeat.eu-west",
             "io.hivemind.amcp.heartbeat.us-east",

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
 
@@ -33,6 +34,32 @@ class GamePreemptionFlushReceipt:
     invariant_4_satisfied: bool
     state_digest_sha256: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.trigger_process, str) or not self.trigger_process.strip():
+            raise ValueError("trigger_process must be a non-empty string")
+        for b_field in ("preempted", "invariant_4_satisfied"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        for f_field in ("eviction_latency_ms", "reconstruction_l2_error"):
+            val = getattr(self, f_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{f_field} must be a finite non-negative number")
+        for i_field in ("vram_before_mib", "residual_vram_after_mib"):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if (
+            not isinstance(self.ef21_top_k_transmitted, tuple)
+            or not isinstance(self.ef21_host_ram_error_buffer, tuple)
+            or len(self.ef21_top_k_transmitted) == 0
+            or len(self.ef21_top_k_transmitted) != len(self.ef21_host_ram_error_buffer)
+            or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in self.ef21_top_k_transmitted)
+            or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in self.ef21_host_ram_error_buffer)
+        ):
+            raise ValueError("ef21_top_k_transmitted and ef21_host_ram_error_buffer must be equal-length non-empty tuples of finite numbers")
+        if not isinstance(self.state_digest_sha256, str) or len(self.state_digest_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in self.state_digest_sha256):
+            raise ValueError("state_digest_sha256 must be a 64-character hex string")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -41,9 +68,19 @@ class GamePreemptionEF21CircuitBreaker:
     """Sub-1.5s GPU eviction circuit-breaker with exact EF21 error-feedback preservation in Host RAM."""
 
     def __init__(self, *, pcie_dma_bandwidth_gbps: float = 12.8, top_k_ratio: float = 0.25) -> None:
-        if pcie_dma_bandwidth_gbps <= 0.0:
+        if (
+            isinstance(pcie_dma_bandwidth_gbps, bool)
+            or not isinstance(pcie_dma_bandwidth_gbps, (int, float))
+            or not math.isfinite(pcie_dma_bandwidth_gbps)
+            or pcie_dma_bandwidth_gbps <= 0.0
+        ):
             raise ValueError("pcie_dma_bandwidth_gbps must be > 0")
-        if not (0.0 < top_k_ratio <= 1.0):
+        if (
+            isinstance(top_k_ratio, bool)
+            or not isinstance(top_k_ratio, (int, float))
+            or not math.isfinite(top_k_ratio)
+            or not (0.0 < top_k_ratio <= 1.0)
+        ):
             raise ValueError("top_k_ratio must be in (0, 1]")
         self.pcie_dma_bandwidth_gbps = float(pcie_dma_bandwidth_gbps)
         self.top_k_ratio = float(top_k_ratio)
@@ -54,8 +91,16 @@ class GamePreemptionEF21CircuitBreaker:
         prev_error_buffer: Sequence[float],
     ) -> tuple[tuple[float, ...], tuple[float, ...], float]:
         """Apply Top-K sparsification with EF21 error feedback: ``u = g + e_prev``, ``c = TopK(u)``, ``e_next = u - c``."""
-        if len(gradient) != len(prev_error_buffer) or not gradient:
+        if (
+            not isinstance(gradient, (list, tuple))
+            or not isinstance(prev_error_buffer, (list, tuple))
+            or len(gradient) != len(prev_error_buffer)
+            or not gradient
+        ):
             raise ValueError("gradient and prev_error_buffer must have identical non-zero length")
+        for seq_name, seq in (("gradient", gradient), ("prev_error_buffer", prev_error_buffer)):
+            if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in seq):
+                raise ValueError(f"{seq_name} must contain only finite numbers")
         n = len(gradient)
         k = max(1, int(round(n * self.top_k_ratio)))
         combined = [float(g) + float(e) for g, e in zip(gradient, prev_error_buffer)]
@@ -77,10 +122,37 @@ class GamePreemptionEF21CircuitBreaker:
         inflight_gradient: Sequence[float],
         prev_error_buffer: Sequence[float],
         kernel_drain_ms: float = 42.0,
+        cuda_device_available: bool | None = None,
     ) -> GamePreemptionFlushReceipt:
         """Evict all GPU tensors to Host RAM under 1.5s and preserve EF21 state."""
-        if allocated_vram_mib < 0 or allocated_vram_mib > 8192:
+        if not isinstance(trigger_process, str) or not trigger_process.strip():
+            raise ValueError("trigger_process must be a non-empty string")
+        if (
+            isinstance(allocated_vram_mib, bool)
+            or not isinstance(allocated_vram_mib, int)
+            or allocated_vram_mib < 0
+            or allocated_vram_mib > 8192
+        ):
             raise ValueError("allocated_vram_mib must be within [0, 8192] MiB")
+        if (
+            isinstance(kernel_drain_ms, bool)
+            or not isinstance(kernel_drain_ms, (int, float))
+            or not math.isfinite(kernel_drain_ms)
+            or kernel_drain_ms < 0.0
+        ):
+            raise ValueError("kernel_drain_ms must be a non-negative finite number")
+        if cuda_device_available is not None and not isinstance(cuda_device_available, bool):
+            raise ValueError("cuda_device_available must be None or a boolean")
+
+        if cuda_device_available is None:
+            try:
+                import torch
+
+                has_cuda = bool(torch.cuda.is_available())
+            except Exception:
+                has_cuda = False
+        else:
+            has_cuda = bool(cuda_device_available)
 
         transmitted, host_error, recon_err = self.compress_ef21(inflight_gradient, prev_error_buffer)
         dma_flush_ms = (allocated_vram_mib / 1024.0) / self.pcie_dma_bandwidth_gbps * 1000.0
@@ -101,7 +173,7 @@ class GamePreemptionEF21CircuitBreaker:
 
         return GamePreemptionFlushReceipt(
             trigger_process=trigger_process,
-            preempted=True,
+            preempted=has_cuda,
             eviction_latency_ms=total_latency_ms,
             vram_before_mib=allocated_vram_mib,
             residual_vram_after_mib=residual_vram,

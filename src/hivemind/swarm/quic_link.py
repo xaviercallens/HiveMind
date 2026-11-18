@@ -28,7 +28,7 @@ import struct
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
 from aioquic.asyncio import serve
@@ -72,7 +72,12 @@ class DeliveryUncertainError(ConnectionError):
 
 
 def _validate_timeout(timeout: float) -> None:
-    if not math.isfinite(timeout) or timeout <= 0:
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0
+    ):
         raise ValueError("link timeout must be finite and positive")
 
 
@@ -119,12 +124,24 @@ class LinkIdentity:
     certificate: x509.Certificate
     private_key: ec.EllipticCurvePrivateKey
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.ca_certificate, x509.Certificate):
+            raise TypeError("ca_certificate must be an x509.Certificate")
+        if not isinstance(self.certificate, x509.Certificate):
+            raise TypeError("certificate must be an x509.Certificate")
+        if not isinstance(self.private_key, ec.EllipticCurvePrivateKey):
+            raise TypeError("private_key must be an EllipticCurvePrivateKey")
+
     @property
     def ca_pem(self) -> str:
         return self.ca_certificate.public_bytes(serialization.Encoding.PEM).decode("ascii")
 
     @classmethod
     def generate(cls, server_name: str = SERVER_NAME, days: int = 7) -> "LinkIdentity":
+        if not isinstance(server_name, str) or not server_name.strip():
+            raise ValueError("server_name must be a non-empty string")
+        if isinstance(days, bool) or not isinstance(days, int) or days < 1:
+            raise ValueError("days must be a positive integer >= 1")
         now = datetime.datetime.now(datetime.timezone.utc)
         ca_key = ec.generate_private_key(ec.SECP256R1())
         ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "HiveMind link CA")])
@@ -208,9 +225,16 @@ class FrameEnvelope:
         """Serialise the envelope."""
         if isinstance(self.sequence, bool) or not isinstance(self.sequence, int) or self.sequence < 0:
             raise ValueError("frame sequence number must be a non-negative integer")
-        if not math.isfinite(self.sent_at):
+        if (
+            isinstance(self.sent_at, bool)
+            or not isinstance(self.sent_at, (int, float))
+            or not math.isfinite(float(self.sent_at))
+            or float(self.sent_at) <= 0.0
+        ):
             raise ValueError("frame send timestamp must be finite")
-        return ENVELOPE_HEADER.pack(self.sent_at, self.sequence) + self.payload
+        if not isinstance(self.payload, (bytes, bytearray)):
+            raise TypeError("hidden-state frames must be bytes")
+        return ENVELOPE_HEADER.pack(float(self.sent_at), self.sequence) + bytes(self.payload)
 
     @classmethod
     def decode(cls, frame: bytes) -> "FrameEnvelope":
@@ -236,23 +260,32 @@ class _ServerProtocol(QuicConnectionProtocol):
         self._deadlines: Dict[int, asyncio.TimerHandle] = {}
         self._failed = False
 
-    def close(self, *args, **kwargs) -> None:
+    def _clear_stream_state(self) -> None:
         for timer in self._deadlines.values():
             timer.cancel()
         self._deadlines.clear()
         self._buffers.clear()
         self._counts.clear()
         self._totals.clear()
+
+    def _finish_close_if_pending(self) -> None:
+        if self._quic._close_event is not None:
+            self._clear_stream_state()
+            if self._quic._close_at is not None and self._timer is not None:
+                self._handle_timer()
+
+    def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
+        super().datagram_received(data, addr)
+        self._finish_close_if_pending()
+
+    def close(self, *args, **kwargs) -> None:
+        self._clear_stream_state()
         super().close(*args, **kwargs)
+        self._finish_close_if_pending()
 
     def _fail(self, reason: str) -> None:
         self._failed = True
-        for timer in self._deadlines.values():
-            timer.cancel()
-        self._deadlines.clear()
-        self._buffers.clear()
-        self._counts.clear()
-        self._totals.clear()
+        self._clear_stream_state()
         self.close(error_code=0x100, reason_phrase=reason)
 
     def quic_event_received(self, event: QuicEvent) -> None:
@@ -305,12 +338,27 @@ class _ServerProtocol(QuicConnectionProtocol):
                 self._quic.send_stream_data(event.stream_id, _LENGTH.pack(count), end_stream=True)
                 self.transmit()
         elif isinstance(event, ConnectionTerminated):
-            for timer in self._deadlines.values():
-                timer.cancel()
-            self._deadlines.clear()
-            self._buffers.clear()
-            self._counts.clear()
-            self._totals.clear()
+            self._clear_stream_state()
+
+
+async def await_quic_closed(protocol: QuicConnectionProtocol, timeout: float = 1.0) -> None:
+    """Wait for a QUIC protocol to send or receive CONNECTION_CLOSE and finish its drain timer immediately."""
+    _validate_timeout(timeout)
+    deadline = time.monotonic() + timeout
+    while not protocol._closed.is_set():
+        if getattr(protocol._quic, "_close_event", None) is not None:
+            if getattr(protocol._quic, "_close_at", None) is not None and getattr(protocol, "_timer", None) is not None:
+                protocol._handle_timer()
+            if protocol._closed.is_set():
+                return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0:
+            raise TimeoutError("Timed out waiting for QUIC CONNECTION_CLOSE completion")
+        try:
+            await asyncio.wait_for(protocol.wait_closed(), min(0.01, remaining))
+            return
+        except TimeoutError:
+            continue
 
 
 class QuicHiddenStateServer:
@@ -323,6 +371,12 @@ class QuicHiddenStateServer:
         port: int = 0,
         on_frame: Optional[FrameHandler] = None,
     ) -> None:
+        if not isinstance(identity, LinkIdentity):
+            raise TypeError("identity must be a LinkIdentity")
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("host must be a non-empty string")
+        if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
+            raise ValueError("port must be an integer in [0, 65535]")
         self.identity = identity
         self.host = host
         self.port = port
@@ -432,6 +486,21 @@ class QuicSendReport:
     handshake_latency_s: Optional[float] = None
     """Time from the first byte on the wire to the completed TLS handshake."""
 
+    def __post_init__(self) -> None:
+        if isinstance(self.delivered, bool) or not isinstance(self.delivered, int) or self.delivered < 0:
+            raise ValueError("delivered must be a non-negative integer")
+        if isinstance(self.elapsed_s, bool) or not isinstance(self.elapsed_s, (int, float)) or not math.isfinite(float(self.elapsed_s)) or float(self.elapsed_s) < 0.0:
+            raise ValueError("elapsed_s must be a finite non-negative number")
+        if not isinstance(self.session_resumed, bool) or not isinstance(self.early_data_accepted, bool):
+            raise ValueError("session_resumed and early_data_accepted must be booleans")
+        if self.handshake_latency_s is not None and (
+            isinstance(self.handshake_latency_s, bool)
+            or not isinstance(self.handshake_latency_s, (int, float))
+            or not math.isfinite(float(self.handshake_latency_s))
+            or float(self.handshake_latency_s) < 0.0
+        ):
+            raise ValueError("handshake_latency_s must be None or a finite non-negative number")
+
 
 async def quic_send_frames(
     host: str,
@@ -536,6 +605,23 @@ class Quic0RttProbe:
     elapsed_s: float = 0.0
     ticket: Optional[SessionTicket] = None
     error: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        for int_name in ("frames_sent", "frames_delivered", "server_early_frames"):
+            ival = getattr(self, int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 0:
+                raise ValueError(f"{int_name} must be a non-negative integer")
+        if not isinstance(self.session_resumed, bool) or not isinstance(self.early_data_accepted, bool):
+            raise TypeError("session_resumed and early_data_accepted must be bools")
+        if not isinstance(self.frame_latencies_ms, list):
+            raise TypeError("frame_latencies_ms must be a list")
+        if (
+            isinstance(self.elapsed_s, bool)
+            or not isinstance(self.elapsed_s, (int, float))
+            or not math.isfinite(float(self.elapsed_s))
+            or float(self.elapsed_s) < 0.0
+        ):
+            raise ValueError("elapsed_s must be a non-negative finite number")
 
     @property
     def ok(self) -> bool:
@@ -650,7 +736,7 @@ async def quic_0rtt_resumption_probe(
 
 
 def _uvarint(value: int) -> bytes:
-    if not isinstance(value, int) or not 0 <= value <= 0xFFFFFFFF:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 0xFFFFFFFF:
         raise ValueError("multistream length must be an unsigned 32-bit integer")
     out = bytearray()
     while True:
@@ -697,6 +783,10 @@ class WebSocketHiddenStateServer:
         *, ssl_context: Optional[ssl.SSLContext] = None, timeout: float = STREAM_TIMEOUT_S,
     ) -> None:
         _validate_timeout(timeout)
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("host must be a non-empty string")
+        if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
+            raise ValueError("port must be an integer in [0, 65535]")
         if ssl_context is None and not _is_loopback_ip(host):
             raise ValueError("non-loopback WebSocket listeners require TLS")
         self.host = host
@@ -723,7 +813,7 @@ class WebSocketHiddenStateServer:
         host = f"[{self.host}]" if ":" in self.host else self.host
         return f"{'wss' if self.ssl_context is not None else 'ws'}://{host}:{self.port}"
 
-    async def _handle(self, websocket) -> None:
+    async def _handle(self, websocket: Any) -> None:
         try:
             async with asyncio.timeout(self.timeout):
                 if _parse_multistream(await websocket.recv()) != MULTISTREAM:
@@ -819,6 +909,18 @@ class LinkRun:
     fallback_reason: Optional[str] = None
     handshakes: List[Dict[str, bool]] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        if self.protocol not in ("quic_0rtt", "quic", "libp2p_websocket"):
+            raise ValueError("protocol must be 'quic_0rtt', 'quic', or 'libp2p_websocket'")
+        for i_field in ("frames_sent", "frames_delivered", "server_early_frames"):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if isinstance(self.elapsed_s, bool) or not isinstance(self.elapsed_s, (int, float)) or not math.isfinite(float(self.elapsed_s)) or float(self.elapsed_s) < 0.0:
+            raise ValueError("elapsed_s must be a finite non-negative number")
+        if not isinstance(self.session_resumed, bool) or not isinstance(self.early_data_accepted, bool):
+            raise ValueError("session_resumed and early_data_accepted must be booleans")
+
     @property
     def frames_per_sec(self) -> float:
         return self.frames_delivered / max(self.elapsed_s, 1e-9)
@@ -839,7 +941,14 @@ class LinkEndpoint:
     websocket_url: Optional[str] = None
 
     def __post_init__(self) -> None:
-        if not self.host or not self.server_name or not self.ca_pem:
+        if (
+            not isinstance(self.host, str)
+            or not self.host.strip()
+            or not isinstance(self.server_name, str)
+            or not self.server_name.strip()
+            or not isinstance(self.ca_pem, str)
+            or not self.ca_pem.strip()
+        ):
             raise ValueError("endpoint host, server name and trusted CA are required")
         if isinstance(self.port, bool) or not isinstance(self.port, int) or not 1 <= self.port <= 65535:
             raise ValueError("endpoint port must be between 1 and 65535")
@@ -863,6 +972,8 @@ class RemoteHiddenStateLink:
     """
 
     def __init__(self, endpoint: LinkEndpoint, timeout: float = 3.0) -> None:
+        if not isinstance(endpoint, LinkEndpoint):
+            raise TypeError("endpoint must be a LinkEndpoint")
         _validate_timeout(timeout)
         self.endpoint = endpoint
         self.timeout = timeout

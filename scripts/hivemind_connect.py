@@ -231,6 +231,34 @@ def cmd_check(client: httpx.Client, args: argparse.Namespace, parser: argparse.A
     return 0
 
 
+def cmd_transfer(client: httpx.Client, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    gateway = _gateway(args)
+    headers = {"Authorization": f"Bearer {_key(parser)}"}
+    payload: dict[str, Any] = {
+        "recipient": args.to,
+        "amount": float(args.amount),
+        "memo": args.memo,
+        "notify_amcp": not bool(args.no_amcp),
+    }
+    if args.idempotency_key:
+        payload["idempotency_key"] = args.idempotency_key
+    if args.model_ref:
+        payload["model_ref"] = args.model_ref
+    if args.pr_url:
+        payload["pr_url"] = args.pr_url
+    res = client.post(gateway + "/v1/hivemind/points/transfer", headers=headers, json=payload)
+    if res.status_code != 200:
+        print(f"transfer failed ({res.status_code}): {res.text[:300]}", file=sys.stderr)
+        return 1
+    body = res.json()
+    print(
+        f"transfer {body['transfer_id']}: @{body['sender_handle']} -> @{body['recipient_handle']} "
+        f"{body['amount_hmt']:.2f} HMT ({body['memo']}) | remaining balance {body['sender_balance_hmt']:.2f} HMT"
+        + (f" | amcp_event {body['amcp_event_id']}" if body.get("amcp_event_id") else "")
+    )
+    return 0
+
+
 def cmd_snippet(client: httpx.Client, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     if args.list or not args.tool:
         print("tools: " + ", ".join(TOOLS))
@@ -276,6 +304,15 @@ def build_parser() -> argparse.ArgumentParser:
     login_g.set_defaults(func=cmd_register_google)
     chk = sub.add_parser("check", help="Verify your key and show balance, live models and tiers")
     chk.set_defaults(func=cmd_check)
+    txf = sub.add_parser("transfer", help="Send HMT Reflexion Points to another HiveMinder")
+    txf.add_argument("--to", required=True, help="Recipient @handle, handle, email, or account_id")
+    txf.add_argument("--amount", type=float, required=True, help="Positive HMT amount to transfer")
+    txf.add_argument("--memo", default="peer-hiveminder-support", help="Short note describing the transfer")
+    txf.add_argument("--idempotency-key", help="Optional idempotency key to prevent duplicate sends")
+    txf.add_argument("--model-ref", help="Optional model id being tested (e.g. hivemind/crowd-v1)")
+    txf.add_argument("--pr-url", help="Optional GitHub PR URL attached to the AMCP event")
+    txf.add_argument("--no-amcp", action="store_true", help="Skip emitting an AMCP/Kafka collaboration message")
+    txf.set_defaults(func=cmd_transfer)
     snip = sub.add_parser("snippet", help="Print settings for an editor or library")
     snip.add_argument("tool", nargs="?", choices=TOOLS)
     snip.add_argument("--model", default=DEFAULT_MODEL, help="tier id such as coder, coder-lite, moe-coder, or auto")

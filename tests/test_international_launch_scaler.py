@@ -213,11 +213,32 @@ def test_five_wave_international_launch_roadmap_and_compliance_matrix() -> None:
     assert roadmap["scalability_milestones"]["wave4_100k_leaf_plan"]["total_leaf_nodes"] == 100_000
 
 
-def test_nocturnal_image_moe_evolution_monitor_and_dashboard_routes(tmp_path: Path) -> None:
+def test_nocturnal_image_moe_evolution_monitor_and_dashboard_routes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Verify Nocturnal Image-MoE Pareto evolution monitor, Tesla T4 VRAM guard, and FastAPI endpoints."""
+    import subprocess
+
+    # IP-147 negative control: when nvidia-smi raises, guard must fail closed (not substitute 10,521 MiB)
+    def _raise_no_nvidia_smi(*_args: object, **_kwargs: object) -> str:
+        raise FileNotFoundError("nvidia-smi not found")
+
+    monkeypatch.setattr(subprocess, "check_output", _raise_no_nvidia_smi)
+    vram_unavail = query_local_tesla_t4_vram_guard()
+    assert vram_unavail["vram_headroom_guard_passed"] is False
+    assert vram_unavail["free_vram_mib"] is None
+    assert vram_unavail["probe_status"] == "NVIDIA_SMI_UNAVAILABLE"
+
+    # Positive control with measured nvidia-smi output
+    monkeypatch.setattr(
+        subprocess,
+        "check_output",
+        lambda *_a, **_kw: "NVIDIA Tesla T4, 15360, 4839, 10521\n",
+    )
     vram = query_local_tesla_t4_vram_guard()
     assert vram["min_required_free_vram_mib"] == TESLA_T4_MIN_FREE_VRAM_MIB
     assert vram["vram_headroom_guard_passed"] is True
+    assert vram["probe_status"] == "MEASURED_NVIDIA_SMI"
 
     mon = monitor_nocturnal_image_moe_evolution(
         generations=2,
@@ -227,8 +248,25 @@ def test_nocturnal_image_moe_evolution_monitor_and_dashboard_routes(tmp_path: Pa
     )
     assert mon["status"] == "ACTIVE_EVOLVING_GREEN"
     assert mon["generations_executed"] == 2
+    assert mon["rejected_generations"] == 0
     assert mon["pareto_ratchet_monotone_verified"] is True
     assert (tmp_path / "artifacts" / "nocturnal_image_moe_evolution_monitor.json").exists()
+
+    # IP-231 negative control: strictly worsening candidate losses must NOT report verified or GREEN
+    worsening = monitor_nocturnal_image_moe_evolution(
+        generations=2,
+        base_inner_steps=15,
+        repo_root=tmp_path,
+        save_artifacts=False,
+        candidate_losses_override=[
+            {"reddit": 1.0, "astro": 1.0, "massive": 1.0},
+            {"reddit": 1.5, "astro": 1.5, "massive": 1.5},
+        ],
+    )
+    assert worsening["pareto_ratchet_monotone_verified"] is False
+    assert worsening["candidate_losses_monotone"] is False
+    assert worsening["rejected_generations"] == 1
+    assert worsening["status"] != "ACTIVE_EVOLVING_GREEN"
 
     app = create_hivemind_at_home_app()
     client = TestClient(app)
@@ -277,10 +315,14 @@ def test_nocturnal_image_moe_evolution_monitor_and_dashboard_routes(tmp_path: Pa
     assert r_evo.status_code == 200
     assert r_evo.json()["pareto_ratchet_monotone_verified"] is True
 
-    # Also verify pre-registered E20 report exists and passed all predictions
+    # Also execute E20 benchmark suite live and verify all predictions pass (IP-122)
+    import sys
+
     repo_root = Path(__file__).resolve().parents[1]
-    e20_report_path = repo_root / "artifacts" / "experiments" / "E20_international_launch_split_dct_report.json"
-    assert e20_report_path.exists()
-    e20_data = json.loads(e20_report_path.read_text(encoding="utf-8"))
+    if str(repo_root / "scripts") not in sys.path:
+        sys.path.insert(0, str(repo_root / "scripts"))
+    from run_international_launch_and_vmoe_monitor import run_e20_benchmark_suite
+
+    e20_data = run_e20_benchmark_suite()
     assert e20_data["status"] == "VERIFIED_PASS"
     assert all(e20_data["predictions_check"].values())

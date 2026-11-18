@@ -100,11 +100,21 @@ def fetch_jwks(url: str, client: httpx.Client | None = None) -> tuple[Mapping[st
     return body, min(max(ttl, MIN_JWKS_TTL_S), MAX_JWKS_TTL_S)
 
 
+_B64URL_PART = re.compile(r"[A-Za-z0-9_-]+")
+
+
 def _b64url(part: str) -> bytes:
+    """Strict, canonical unpadded base64url: padding, other characters or unused trailing bits are refused, so one signed
+    token has exactly one accepted spelling (otherwise ``tok + "=="`` or a flipped last bit replays a used token)."""
+    if not _B64URL_PART.fullmatch(part):
+        raise OidcAuthError("malformed_token")
     try:
-        return base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))
+        raw = base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))
     except (binascii.Error, ValueError):
         raise OidcAuthError("malformed_token") from None
+    if base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii") != part:
+        raise OidcAuthError("malformed_token")
+    return raw
 
 
 def _json_object(part: str) -> dict[str, Any]:
@@ -213,7 +223,8 @@ class OidcIdTokenVerifier:
         if self.provider.require_verified_email and claims.get("email_verified") is not True:
             raise OidcAuthError("email_not_verified")
 
-        digest = hashlib.sha256(token.encode("ascii")).hexdigest()
+        # keyed on the signed bytes (header.claims), not the raw string: no re-encoding of a used token gets a second use
+        digest = hashlib.sha256(f"{parts[0]}.{parts[1]}".encode("ascii")).hexdigest()
         with self._lock:
             for old in [d for d, until in self._seen.items() if until < now]:
                 del self._seen[old]

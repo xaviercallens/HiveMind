@@ -16,6 +16,7 @@ column and the HiveMind ledger cannot disagree.
 from __future__ import annotations
 
 import base64
+import math
 import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -23,7 +24,7 @@ from typing import Any
 
 from hivemind.boinc.real_client.app import run
 from hivemind.boinc.validator import verify_fixed_point_q16_digest
-from hivemind.economy.compute_coin import CreditClaim, CreditGrant, verified_credit
+from hivemind.economy.compute_coin import CreditClaim, CreditGrant, claim_figures_are_finite_and_positive, verified_credit
 
 # Measured peak of the class, in GFLOPS, for the credit cap. Conservative: well above what the tiny adapter
 # reaches, so the cap only bites on an inflated claim.
@@ -40,6 +41,27 @@ class Verdict:
     cross_class_max_ulp: float | None
     grant: dict[str, Any]
     detail: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for s_name in ("wu_id", "host", "reason"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        if not isinstance(self.valid, bool):
+            raise ValueError("valid must be a boolean")
+        if self.same_class_exact is not None and not isinstance(self.same_class_exact, bool):
+            raise ValueError("same_class_exact must be None or a boolean")
+        if self.cross_class_max_ulp is not None and (
+            isinstance(self.cross_class_max_ulp, bool)
+            or not isinstance(self.cross_class_max_ulp, (int, float))
+            or not math.isfinite(float(self.cross_class_max_ulp))
+            or float(self.cross_class_max_ulp) < 0.0
+        ):
+            raise ValueError("cross_class_max_ulp must be None or a finite non-negative number")
+        if not isinstance(self.grant, dict):
+            raise ValueError("grant must be a dict")
+        if not isinstance(self.detail, dict):
+            raise ValueError("detail must be a dict")
 
     @property
     def credit(self) -> float:
@@ -72,11 +94,21 @@ def _replay(spec: dict[str, Any], device: str) -> dict[str, Any]:
 
 
 def _peak(fingerprint_class: str) -> float:
+    if not isinstance(fingerprint_class, str) or not fingerprint_class.strip():
+        raise ValueError("fingerprint_class must be a non-empty string")
     return CLASS_PEAK_GFLOPS.get(fingerprint_class, 50.0)
 
 
 def validate_result(spec: dict[str, Any], result: dict[str, Any], host: str, *, replay_devices: tuple[str, ...] = ("cpu", "cuda")) -> Verdict:
     """Spot-check one volunteer result against independent replays and compute the credit grant."""
+    if not isinstance(spec, dict) or not isinstance(spec.get("wu_id"), str) or not spec["wu_id"].strip():
+        raise ValueError("spec must contain a non-empty string wu_id")
+    if not isinstance(result, dict):
+        raise ValueError("result must be a dict")
+    if not isinstance(host, str) or not host.strip():
+        raise ValueError("host must be a non-empty string")
+    if not replay_devices or not all(d in ("cpu", "cuda") for d in replay_devices):
+        raise ValueError("replay_devices must be a non-empty sequence of 'cpu' or 'cuda'")
     wu = spec["wu_id"]
 
     def reject(reason: str, exact: bool | None = None, ulp: float | None = None) -> Verdict:
@@ -92,10 +124,14 @@ def validate_result(spec: dict[str, Any], result: dict[str, Any], host: str, *, 
     except Exception as exc:  # malformed upload is a rejection, never a crash of the validator
         return reject(f"unreadable state: {exc}")
 
-    volunteer_class = result["fingerprint"]["accelerator_class"]
+    fp = result.get("fingerprint")
+    if not isinstance(fp, dict) or not isinstance(fp.get("accelerator_class"), str) or not fp["accelerator_class"].strip():
+        return reject("missing or invalid fingerprint")
+    volunteer_class = fp["accelerator_class"]
     exact: bool | None = None
     worst_ulp = 0.0
     cross_seen = False
+    replayed_classes: list[str] = []
     for dev in replay_devices:
         if dev == "cuda":
             import torch
@@ -103,7 +139,9 @@ def validate_result(spec: dict[str, Any], result: dict[str, Any], host: str, *, 
             if not torch.cuda.is_available():
                 continue
         ref = _replay(spec, dev)
-        same_class = ref["fingerprint"]["accelerator_class"] == volunteer_class and ref["fingerprint"]["torch_build"] == result["fingerprint"]["torch_build"]
+        ref_class = str(ref["fingerprint"]["accelerator_class"])
+        replayed_classes.append(ref_class)
+        same_class = ref_class == volunteer_class and ref["fingerprint"]["torch_build"] == result["fingerprint"]["torch_build"]
         cmp = verify_fixed_point_q16_digest(claimed, _state(ref), max_ulp_drift=0 if same_class else 1)
         if same_class:
             exact = bool(cmp["exact_digest_match"])
@@ -114,8 +152,16 @@ def validate_result(spec: dict[str, Any], result: dict[str, Any], host: str, *, 
             worst_ulp = max(worst_ulp, float(cmp["max_ulp_diff"]))
             if not cmp["passed"]:
                 return reject(f"cross-class replay on {dev} differs by {cmp['max_ulp_diff']} Q16 units (> 1)", exact, float(cmp["max_ulp_diff"]))
+    cap_peak = _peak(volunteer_class) if exact else min(_peak(volunteer_class), max((_peak(c) for c in replayed_classes), default=50.0))
+    try:
+        raw_flops = float(result["flops_claimed"])
+        raw_wall = float(result["wall_seconds"])
+    except (KeyError, TypeError, ValueError) as exc:
+        return reject(f"invalid credit figures: {exc}", exact, worst_ulp if cross_seen else None)
     claim = CreditClaim(
-        host, wu, float(result["flops_claimed"]), max(float(result["wall_seconds"]), 1e-6), _peak(volunteer_class), True, True
+        host, wu, raw_flops, raw_wall, cap_peak, True, True
     )
+    if not claim_figures_are_finite_and_positive(claim):
+        return reject(f"non-finite or non-positive wall_seconds/flops_claimed: {raw_wall!r}, {raw_flops!r}", exact, worst_ulp if cross_seen else None)
     grant: CreditGrant = verified_credit(claim)
     return Verdict(wu, host, True, "verified", exact, worst_ulp if cross_seen else None, grant.to_dict())

@@ -5,6 +5,8 @@ After=hivemind-boinc-db.service hivemind-boinc-apache.service
 Requires=hivemind-boinc-db.service hivemind-boinc-apache.service
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 Type=oneshot
 RemainAfterExit=yes
 User=callensxavier_gmail_com

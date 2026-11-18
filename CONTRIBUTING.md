@@ -152,3 +152,13 @@ If you have a consumer GPU (`NVIDIA RTX 20/30/40/50`, `AMD Radeon RX 6000/7000 R
 uv run python scripts/run_community_gpu_benchmark.py --contributor-handle <your-github-handle>
 uv run pytest tests/test_community_gpu_benchmark.py -v
 ```
+
+## 8. Co-Training Over the AMCP Bus (Federation v2) & Trainer Registration
+
+You can contribute a GPU (or a CPU, for a smoke test) to co-training rounds that run over the project's AMCP bus on Kafka. A coordinator publishes signed task offers; your learner verifies each one **before running anything** (code pin, base-model hash, deadline), trains a LoRA delta on its own shard, and sends back only the delta. It needs only an **outbound** connection and never runs code from a message.
+
+* How to join, step by step: `docs/FEDERATION_V2_AMCP_AGLETS.md` (section 8). Getting onto the overlay (a home machine behind NAT included): `docs/OVERLAY_OPEN_SOURCE_TUNNELS.md`.
+* Learners work only 22:00-07:00 Paris with `--night-only`, never while the T4 governor reports inference in flight, and never below 4,300 MiB of free VRAM.
+* **Never** put the shared signing key (`HIVEMIND_AMCP_HMAC_KEYS`) or a WireGuard private key in a commit, an issue, a chat or a log. Agents and coding assistants: `check_offer`, `check_result` and `RoundBook` in `src/hivemind/swarm/federation_agents.py` are the trust boundary; do not bypass them.
+* No points are earned for these rounds yet: with fewer than five learners no Byzantine filter can verify a delta.
+* A web "trainer" registration must respect the contract in `docs/FEDERATION_V2_AMCP_AGLETS.md` section 9.

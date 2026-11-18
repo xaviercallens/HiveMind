@@ -92,7 +92,39 @@ def test_retry_merge_never_calls_gh_for_a_held_or_dry_run_head(monkeypatch) -> N
     assert dry["merged"] is False and calls == []
     live = g.retry_merge(pr, "ACCEPT", merge=True, dry_run=False)
     assert live["merged"] is True and live["merge_retry"] is True
-    assert calls == [["gh", "pr", "merge", "7", "--merge", "--admin"]]
+    # the merge is pinned to the commit that was gated: a push after the checks makes GitHub refuse it
+    assert calls == [["gh", "pr", "merge", "7", "--merge", "--admin", "--match-head-commit", "f" * 40]]
+
+
+def test_environment_for_pr_code_has_no_credentials() -> None:
+    env = {"PATH": "/usr/bin", "HOME": "/home/x", "GH_TOKEN": "t", "GITHUB_TOKEN": "t", "GITHUB_KEY": "k", "HF_TOKEN": "t",
+           "AWS_SECRET_ACCESS_KEY": "s", "HIVEMIND_API_KEY": "k", "DB_PASSWORD": "p", "OPENAI_API_KEY": "k", "LANG": "C"}
+    clean = g.without_secrets(env)
+    assert clean == {"PATH": "/usr/bin", "HOME": "/home/x", "LANG": "C"}
+    assert env["GH_TOKEN"] == "t"  # the caller's environment is not modified
+
+
+def test_a_pr_that_is_not_owner_authored_never_has_its_code_executed(monkeypatch, tmp_path: Path) -> None:
+    executed: list[str] = []
+    monkeypatch.setattr(g, "run_pytest", lambda *a, **k: executed.append("pytest") or {"passed": True, "targets": [], "summary": ""})
+    monkeypatch.setattr(g, "run_lean", lambda *a, **k: executed.append("lean") or {"passed": True})
+    monkeypatch.setattr(g, "run_pipeline", lambda *a, **k: executed.append("pipeline") or {"passed": True})
+    monkeypatch.setattr(g, "gwaya_audit", lambda *a, **k: {"passed": True})
+    monkeypatch.setattr(g, "commit_signatures", lambda pr: [])
+    monkeypatch.setattr(g.tempfile, "mkdtemp", lambda prefix="": str(tmp_path))
+
+    def fake_sh(cmd, **kw):  # type: ignore[no-untyped-def]
+        if cmd[:3] == ["git", "diff", "--name-only"]:
+            return 0, "tests/test_x.py\nlean4/X.lean\npaper/x.py\n"
+        return 0, ""
+
+    monkeypatch.setattr(g, "sh", fake_sh)
+    pr = {"number": 9, "headRefOid": "e" * 40, "title": "t", "body": "", "isDraft": False, "mergeable": "MERGEABLE",
+          **_pr("someone-else", ["stranger@example.org"])}
+    result = g.gate_pr(pr, merge=True, dry_run=True)
+    assert executed == []
+    assert result["decision"].startswith("HOLD (not owner-authored")
+    assert result["pytest"]["skipped"] is True and result["lean"]["skipped"] is True and result["pipeline"]["skipped"] is True
 
 
 def test_signature_policy_can_only_withdraw_trust_never_grant_it() -> None:
@@ -129,3 +161,50 @@ def test_lean_check_refuses_a_build_that_uses_sorry_even_when_lake_exits_zero(mo
 def test_lean_check_accepts_a_clean_build_as_its_negative_control(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(g, "sh", lambda cmd, cwd=None, timeout=600, env=None: (0, LEAN_CLEAN_BUILD))
     assert g.run_lean(tmp_path)["passed"] is True
+
+
+def test_jblam62122_and_vxtzq_can_merge_webui_scoped_prs_without_waiting(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(g, "run_pytest", lambda *a, **k: {"passed": True, "targets": ["tests/test_web_v32.py"], "summary": "1 passed"})
+    monkeypatch.setattr(g, "run_lean", lambda *a, **k: {"passed": True, "skipped": True})
+    monkeypatch.setattr(g, "run_pipeline", lambda *a, **k: {"passed": True, "skipped": True})
+    monkeypatch.setattr(g, "gwaya_audit", lambda *a, **k: {"passed": True})
+    monkeypatch.setattr(g, "commit_signatures", lambda pr: [])
+    monkeypatch.setattr(g.tempfile, "mkdtemp", lambda prefix="": str(tmp_path))
+
+    for login, email in (
+        ("jblam-O", "43570951+jblam-O@users.noreply.github.com"),
+        ("Vxtzq", "116555319+vxtzq@users.noreply.github.com"),
+    ):
+        # 1. WebUI-scoped PR from jblam-O / Vxtzq -> ACCEPT (auto-merges without waiting)
+        monkeypatch.setattr(
+            g,
+            "sh",
+            lambda cmd, **kw: (0, "src/hivemind/web_v32/static/app.js\ntests/test_web_v32.py\n")
+            if cmd[:3] == ["git", "diff", "--name-only"]
+            else (0, ""),
+        )
+        pr_webui = {
+            "number": 42,
+            "headRefOid": "d" * 40,
+            "title": "feat(webui): improve UI component",
+            "body": "",
+            "isDraft": False,
+            "mergeable": "MERGEABLE",
+            **_pr(login, [email]),
+        }
+        res_ok = g.gate_pr(pr_webui, merge=True, dry_run=True)
+        assert res_ok["decision"] == "ACCEPT", (login, res_ok)
+        assert res_ok["trust"]["webui_maintainer"]["webui_authorized"] is True
+
+        # 2. Non-WebUI PR from jblam-O / Vxtzq touching core security -> HOLD
+        monkeypatch.setattr(
+            g,
+            "sh",
+            lambda cmd, **kw: (0, "src/hivemind/security/pr_security_scanner.py\n")
+            if cmd[:3] == ["git", "diff", "--name-only"]
+            else (0, ""),
+        )
+        res_hold = g.gate_pr(pr_webui, merge=True, dry_run=True)
+        assert res_hold["decision"].startswith("HOLD"), (login, res_hold)
+        assert res_hold["trust"]["webui_maintainer"]["webui_authorized"] is False
+

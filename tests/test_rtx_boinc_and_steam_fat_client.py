@@ -26,12 +26,35 @@ sys.modules["hivemind_boinc_idle_worker"] = worker
 _spec.loader.exec_module(worker)  # type: ignore[union-attr]
 
 
-def test_rtx_gpu_status_and_telemetry() -> None:
+_T4_CSV = "Tesla T4, 5, 52, 15360, 612, 28.4, 550.54.15\n"
+_REAL_PROBE_GPU = worker.probe_gpu  # captured before any monkeypatch replaces worker.probe_gpu
+
+
+def _ready_probe() -> object:
+    """A READY probe built from real nvidia-smi csv through the injected-runner path (external I/O faked only)."""
+    return _REAL_PROBE_GPU(
+        run=lambda *a, **k: subprocess.CompletedProcess(args=["nvidia-smi"], returncode=0, stdout=_T4_CSV, stderr=""),
+        which=lambda _name: "/usr/bin/nvidia-smi",
+    )
+
+
+def test_rtx_gpu_status_and_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Positive: a real nvidia-smi line is parsed faithfully. Negative: no nvidia-smi means unavailable, never an invented card."""
+    monkeypatch.setattr(worker.shutil, "which", lambda _name: "/usr/bin/nvidia-smi")
+    monkeypatch.setattr(
+        worker.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(args=["nvidia-smi"], returncode=0, stdout=_T4_CSV, stderr=""),
+    )
     gpu = worker.query_nvidia_gpu_status()
+    assert gpu["available"] is True
     assert gpu["total_mib"] >= 3500.0
     assert 0.0 <= gpu["utilization_pct"] <= 100.0
     assert 0.0 < gpu["temp_c"] < 105.0
-    assert "NVIDIA" in gpu["gpu_model"].upper()
+    assert gpu["gpu_model"] == "Tesla T4"
+
+    monkeypatch.setattr(worker.shutil, "which", lambda _name: None)
+    assert worker.query_nvidia_gpu_status()["available"] is False
 
 
 @pytest.mark.parametrize(
@@ -60,7 +83,8 @@ def test_cuda_ptx_bls_kernel_folds_all_eight_nasa_exoplanet_targets(planet: str,
 
 
 def test_active_gameplay_preempts_boinc_gpu_with_zero_cuda_allocation(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda: 0.15)
+    monkeypatch.setattr(worker, "probe_gpu", lambda *a, **k: _ready_probe())
+    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda *a, **k: 0.15)
     rep = worker.run_one_idle_gpu_boinc_cycle(
         commander="Cmdr_Gamer_Active_60FPS",
         idle_threshold_seconds=4.0,
@@ -73,27 +97,28 @@ def test_active_gameplay_preempts_boinc_gpu_with_zero_cuda_allocation(monkeypatc
 
 
 def test_idle_gpu_automatically_resumes_cuda_ptx_boinc_folding(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda: 8.5)
-    monkeypatch.setattr(
-        worker,
-        "query_nvidia_gpu_status",
-        lambda: {
-            "gpu_model": "NVIDIA GeForce RTX 2070",
-            "utilization_pct": 12.0,
-            "used_mib": 1400.0,
-            "total_mib": 8192.0,
-            "temp_c": 52.0,
-        },
-    )
+    """On a host with a working CUDA driver this runs the real kernel and must be READY on the CUDA backend; on a host without one the
+    cycle must be BLOCKED (cuda_fold_unavailable) and never report boinc_active=True for a CPU loop."""
+    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda *a, **k: 8.5)
+    monkeypatch.setattr(worker, "probe_gpu", lambda *a, **k: _ready_probe())
+    boinc_calls: list[bool] = []
+    monkeypatch.setattr(worker, "set_boinc_client_gpu_mode", lambda enable: boinc_calls.append(enable) or "test_driver")
     rep = worker.run_one_idle_gpu_boinc_cycle(
         commander="Cmdr_Gamer_Idle_BOINC",
         idle_threshold_seconds=4.0,
         target_planet="LHS 1140 b",
         force_fold=False,
     )
-    assert rep["boinc_active"] is True
-    assert rep["cuda_fold"]["n_points_folded"] == 16384
-    assert abs(rep["cuda_fold"]["recovered_transit_depth_ppm"] - 5385.0) < 1.0
+    if rep["status"] == "READY":
+        assert rep["boinc_active"] is True and boinc_calls == [True]
+        assert rep["cuda_fold"]["backend"] == worker.CUDA_BACKEND
+        assert rep["cuda_fold"]["cuda_device"] not in ("", "CPU")
+        assert rep["cuda_fold"]["n_points_folded"] == 16384
+        assert abs(rep["cuda_fold"]["recovered_transit_depth_ppm"] - 5385.0) < 1.0
+    else:
+        assert rep["status"] == "BLOCKED" and rep["reason"] == "cuda_fold_unavailable"
+        assert rep["boinc_active"] is False and boinc_calls == []
+        assert rep["cuda_fold"]["backend"] == "cpu_fallback"
 
 
 def test_cli_pause_now_and_resume_now_flags(capsys: pytest.CaptureFixture[str]) -> None:
@@ -155,7 +180,7 @@ def test_portal_free_steam_game_registration_login_and_boinc_contribution(tmp_pa
     # 2. Verify /v1/hivemind/steam/status
     st = client.get("/v1/hivemind/steam/status").json()
     assert st["app_id"] == 3133700
-    assert st["portal_registration_status"] == "REGISTERED_AND_LIVE"
+    assert st["portal_registration_status"] == "NOT_REGISTERED"
 
     # 3. Simulate first-time Registration of Free Steam Game player
     reg = client.post(
@@ -174,9 +199,14 @@ def test_portal_free_steam_game_registration_login_and_boinc_contribution(tmp_pa
     assert reg["steam_session_ticket"].startswith("STEAM-3133700-")
     initial_bal = float(reg["balance_hmt"])
 
-    # 4. Simulate returning Login with the same handle
+    # 4. A returning login on the handle alone is refused (it used to return the key to anyone from the same address);
+    #    with the account's own key it signs in.
+    anon = client.post("/v1/hivemind/steam/register-login", json={"handle": "Cmdr_RTX2070_Test", "steam_id64": "76561198031337001"})
+    assert anon.status_code == 409
+    assert "api_key" not in anon.text
     login = client.post(
         "/v1/hivemind/steam/register-login",
+        headers={"Authorization": f"Bearer {reg['api_key']}"},
         json={
             "handle": "Cmdr_RTX2070_Test",
             "steam_id64": "76561198031337001",
@@ -187,20 +217,21 @@ def test_portal_free_steam_game_registration_login_and_boinc_contribution(tmp_pa
     assert login["created"] is False
     assert login["account_id"] == reg["account_id"]
 
-    # 5. Contribute a real CUDA PTX BOINC workunit and verify HMT points are credited
+    # 5. A contribution is recorded but earns no HMT until it can be verified server-side (client receipts minted credit).
     contrib = client.post(
         "/v1/hivemind/steam/contribute-boinc",
         headers={"Authorization": f"Bearer {login['api_key']}"},
         json={"handle": "Cmdr_RTX2070_Test", "target_planet": "K2-18 b", "app_id": 3133700},
     ).json()
     assert contrib["ok"] is True
-    assert contrib["hmt_awarded"] == 250.0
-    assert contrib["cobblestones_awarded"] == 45.0
-    assert abs(float(contrib["balance_hmt"]) - (initial_bal + 250.0)) < 1e-6
+    assert contrib["hmt_awarded"] == 0.0
+    assert contrib["credit_status"] == "pending_verification"
+    assert abs(float(contrib["balance_hmt"]) - initial_bal) < 1e-6
 
-    # 6. Verify /v1/hivemind/me reflects the updated balance
+    # 6. Without a key the contribution route refuses (it used to create or pick the account from the body's handle).
+    assert client.post("/v1/hivemind/steam/contribute-boinc", json={"handle": "Cmdr_RTX2070_Test", "receipt_sha256": "1"}).status_code == 401
     me = client.get("/v1/hivemind/me", headers={"Authorization": f"Bearer {login['api_key']}"}).json()
-    assert abs(float(me["balance"]) - (initial_bal + 250.0)) < 1e-6
+    assert abs(float(me["balance"]) - initial_bal) < 1e-6
 
 
 def test_webgpu_zero_install_requires_login_and_credits_wgsl_compute(tmp_path: Path, monkeypatch):
@@ -267,9 +298,13 @@ def test_webgpu_zero_install_requires_login_and_credits_wgsl_compute(tmp_path: P
     assert reg["api_key"].startswith("hm-")
     start_bal = float(reg["balance_hmt"])
 
-    # 5. Returning login with the same handle reuses the account
+    # 5. Returning login: refused on the handle alone, reuses the account with its own key
+    anon = client.post("/v1/hivemind/webgpu/register-login", json={"handle": "Cmdr_WebGPU_ZeroInstall"})
+    assert anon.status_code == 409
+    assert "api_key" not in anon.text
     login = client.post(
         "/v1/hivemind/webgpu/register-login",
+        headers={"Authorization": f"Bearer {reg['api_key']}"},
         json={
             "handle": "Cmdr_WebGPU_ZeroInstall",
             "gpu_adapter": "NVIDIA GeForce RTX 2070 (WebGPU / Dawn D3D12)",
@@ -294,9 +329,9 @@ def test_webgpu_zero_install_requires_login_and_credits_wgsl_compute(tmp_path: P
     assert contrib.status_code == 200
     payload = contrib.json()
     assert payload["ok"] is True
-    assert payload["hmt_awarded"] == 250.0
-    assert payload["cobblestones_awarded"] == 45.0
-    assert abs(float(payload["balance_hmt"]) - (start_bal + 250.0)) < 1e-6
+    assert payload["hmt_awarded"] == 0.0  # recorded, but no credit for a receipt the server cannot verify
+    assert payload["credit_status"] == "pending_verification"
+    assert abs(float(payload["balance_hmt"]) - start_bal) < 1e-6
     assert payload["receipt_sha256"].startswith("489f9ffd9ac611fb")
 
 
@@ -393,12 +428,17 @@ def test_intense_all_10_stitch_planet_keys_vetting_and_bee_moe_scan() -> None:
         ("koi14", "SECTOR-09-KOI-CAND-14", "FALSE_POSITIVE"),
         ("koibin", "SECTOR-10-KOI-BIN-02", "FALSE_POSITIVE"),
     ]
+    # The first accurate discovery of a target earns the award and a repeat by the same tag earns nothing, so each run
+    # needs a tag the persisted ledger has never seen; a fixed tag would pass once and then fail on every later run.
+    import uuid
+
+    gamer_tag = f"IntensePytest-{uuid.uuid4().hex[:12]}"
     for key, expected_sector, classification in expected_planets:
         scan = client.post("/api/astro/bee-moe-scan", json={"target_id": key}).json()
         assert scan["target_id"] == expected_sector
         disc = client.post(
             "/api/astro/discover",
-            json={"target_id": key, "gamer_tag": "IntensePytest", "player_classification": classification},
+            json={"target_id": key, "gamer_tag": gamer_tag, "player_classification": classification},
         ).json()
         assert disc["accurate"] is True
         assert disc["points_earned"] == 600

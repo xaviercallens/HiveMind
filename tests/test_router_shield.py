@@ -11,8 +11,16 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-_PATH = Path(__file__).resolve().parents[1] / "scripts" / "hivemind_producer_shield.py"
-_spec = importlib.util.spec_from_file_location("hivemind_producer_shield", _PATH)
+_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "hivemind"
+    / "router"
+    / "hivemind_producer_shield.py"
+)
+_spec = importlib.util.spec_from_file_location(
+    "hivemind.router.hivemind_producer_shield", _PATH
+)
 assert _spec is not None and _spec.loader is not None
 shield: ModuleType = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(shield)
@@ -74,6 +82,24 @@ def test_oversized_bodies_bad_json_and_unlisted_models_are_refused() -> None:
     assert client.post("/v1/chat/completions", content=b"not json", headers={**AUTH, "content-type": "application/json"}).status_code == 400
     assert client.post("/v1/chat/completions", json={**CHAT, "model": "llama3:70b"}, headers=AUTH).status_code == 403
     assert seen == [] and client.post("/v1/chat/completions", json=CHAT, headers=AUTH).status_code == 200
+
+
+def test_a_model_that_is_not_a_string_is_a_400_not_a_500_and_never_reaches_the_model_server() -> None:
+    client, seen = _app(allowed_models=["qwen2.5-coder:7b"])
+    for bad in ([], ["qwen2.5-coder:7b"], {"a": 1}, 7, None):
+        r = client.post("/v1/chat/completions", headers=AUTH, json={"model": bad, "messages": []})
+        assert r.status_code == 400, bad
+    assert not [s for s in seen if s.url.path == "/v1/chat/completions"]
+
+
+def test_token_limits_are_clamped_before_the_request_reaches_the_model_server() -> None:
+    client, seen = _app()
+    r = client.post("/v1/chat/completions", headers=AUTH, json={**CHAT, "max_tokens": 10**9, "max_completion_tokens": 10**9})
+    assert r.status_code == 200
+    forwarded = json.loads([s for s in seen if s.url.path == "/v1/chat/completions"][-1].content)
+    assert forwarded["max_tokens"] == shield.MAX_TOKENS_CAP and forwarded["max_completion_tokens"] == shield.MAX_TOKENS_CAP
+    assert client.post("/v1/chat/completions", headers=AUTH, json={**CHAT, "max_tokens": 64}).status_code == 200
+    assert json.loads([s for s in seen if s.url.path == "/v1/chat/completions"][-1].content)["max_tokens"] == 64
 
 
 def test_a_busy_producer_answers_429_at_once_and_recovers() -> None:

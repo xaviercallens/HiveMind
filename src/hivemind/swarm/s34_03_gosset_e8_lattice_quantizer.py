@@ -15,6 +15,10 @@ import math
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
 
+import numpy as np
+
+from hivemind.compress.lattice_quantizer import nearest_dn, nearest_e8
+
 
 @dataclass(frozen=True)
 class E8QuantizedBlock:
@@ -27,28 +31,46 @@ class E8QuantizedBlock:
     is_valid_e8_point: bool
     coset: str  # "D8_integer" or "D8_half_integer"
 
+    def __post_init__(self) -> None:
+        for t_field in ("lattice_point", "reconstructed"):
+            seq = getattr(self, t_field)
+            if not isinstance(seq, tuple) or len(seq) != 8 or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in seq):
+                raise ValueError(f"{t_field} must be an 8-element tuple of finite numbers")
+        for f_field in ("scale", "l2_distortion"):
+            val = getattr(self, f_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{f_field} must be a finite non-negative number")
+        if not isinstance(self.is_valid_e8_point, bool):
+            raise ValueError("is_valid_e8_point must be a boolean")
+        if self.coset not in ("D8_integer", "D8_half_integer"):
+            raise ValueError("coset must be 'D8_integer' or 'D8_half_integer'")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
+def _require_finite_8d(x: Sequence[float], label: str) -> None:
+    if not isinstance(x, (list, tuple)) or len(x) != 8:
+        raise ValueError(f"{label} requires an 8D vector")
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in x):
+        raise ValueError(f"{label} must contain only finite numbers")
+
+
 def _nearest_d8(x: Sequence[float]) -> tuple[float, ...]:
-    """Project an 8D vector onto the checkerboard lattice ``D_8 = {z in Z^8 : sum(z_i) even}``."""
-    if len(x) != 8:
-        raise ValueError("D8 projection requires an 8D vector")
-    rounded = [int(math.floor(val + 0.5)) for val in x]
-    if sum(rounded) % 2 != 0:
-        # Flip the coordinate whose rounding error |x_i - r_i| is largest
-        worst_idx = max(range(8), key=lambda i: abs(x[i] - rounded[i]))
-        if x[worst_idx] >= rounded[worst_idx]:
-            rounded[worst_idx] += 1
-        else:
-            rounded[worst_idx] -= 1
-    return tuple(float(r) for r in rounded)
+    """Project an 8D vector onto the checkerboard lattice ``D_8 = {z in Z^8 : sum(z_i) even}`` via canonical ``nearest_dn``."""
+    _require_finite_8d(x, "D8 projection")
+    arr = np.asarray(x, dtype=np.float64).reshape(1, 8)
+    q = nearest_dn(arr)[0]
+    return tuple(float(r) for r in q.tolist())
 
 
 def is_valid_e8_lattice_point(pt: Sequence[float], tol: float = 1e-9) -> bool:
     """Verify whether an 8D point lies on ``E_8 = D_8 U (D_8 + 1/2)``."""
-    if len(pt) != 8:
+    if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(tol) or tol <= 0.0:
+        raise ValueError("tol must be a positive finite number")
+    if not isinstance(pt, (list, tuple)) or len(pt) != 8:
+        return False
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in pt):
         return False
     # Check integer coset D_8
     if all(abs(v - round(v)) <= tol for v in pt):
@@ -63,33 +85,34 @@ def is_valid_e8_lattice_point(pt: Sequence[float], tol: float = 1e-9) -> bool:
 
 
 class GossetE8LatticeQuantizer:
-    """Conway-Sloane O(8 log 8) Gosset E8 lattice vector quantizer for LoRA adapters."""
+    """Conway-Sloane O(8 log 8) Gosset E8 lattice vector quantizer for LoRA adapters (`artifacts/experiments/E10_lattice_diloco.json`)."""
+
+    dense_e8_compression_ratio: float = 16.0
+    reference_artifact: str = "artifacts/experiments/E10_lattice_diloco.json"
 
     def __init__(self, *, codebook_radius: float = 4.0) -> None:
-        if codebook_radius <= 0.0:
+        if (
+            isinstance(codebook_radius, bool)
+            or not isinstance(codebook_radius, (int, float))
+            or not math.isfinite(codebook_radius)
+            or codebook_radius <= 0.0
+        ):
             raise ValueError("codebook_radius must be positive")
         self.codebook_radius = float(codebook_radius)
 
     @staticmethod
     def project_to_e8(x: Sequence[float]) -> tuple[tuple[float, ...], str]:
-        """Exact nearest point in ``E_8 = D_8 U (D_8 + 0.5)``."""
-        if len(x) != 8:
-            raise ValueError("E8 projection requires an 8D vector")
-        cand_int = _nearest_d8(x)
-        shifted = [v - 0.5 for v in x]
-        d8_half = _nearest_d8(shifted)
-        cand_half = tuple(v + 0.5 for v in d8_half)
-
-        dist_int = sum((x[i] - cand_int[i]) ** 2 for i in range(8))
-        dist_half = sum((x[i] - cand_half[i]) ** 2 for i in range(8))
-        if dist_int <= dist_half:
-            return cand_int, "D8_integer"
-        return cand_half, "D8_half_integer"
+        """Exact nearest point in ``E_8 = D_8 U (D_8 + 0.5)`` via canonical ``nearest_e8``."""
+        _require_finite_8d(x, "E8 projection")
+        arr = np.asarray(x, dtype=np.float64).reshape(1, 8)
+        winner_arr = nearest_e8(arr)[0]
+        winner = tuple(float(v) for v in winner_arr.tolist())
+        is_half = abs(winner[0] - round(winner[0])) > 1e-6
+        return winner, ("D8_half_integer" if is_half else "D8_integer")
 
     def quantize_8d(self, vec: Sequence[float]) -> E8QuantizedBlock:
         """Scale and quantize an 8D parameter block onto the Gosset E8 lattice."""
-        if len(vec) != 8:
-            raise ValueError("vec must have length 8")
+        _require_finite_8d(vec, "vec")
         norm = math.sqrt(sum(float(v) * float(v) for v in vec))
         if norm < 1e-12:
             zero8 = (0.0,) * 8

@@ -42,3 +42,27 @@ def test_eco_thermal_ledger_flags_unsafe_gpu_temperature() -> None:
     receipt = ledger.evaluate_sample(sample)
     assert receipt.safe_thermal_envelope is False
     assert receipt.thermal_valorization_efficiency == 0.0
+
+
+def test_non_finite_or_negative_telemetry_is_rejected_and_a_valid_sample_still_passes() -> None:
+    import dataclasses
+    import math
+
+    import pytest
+
+    from hivemind.swarm.s33_03_eco_thermal_carbon_ledger import EcoComputeTelemetrySample, EcoThermalCarbonLedger
+
+    ledger = EcoThermalCarbonLedger()
+    good = EcoComputeTelemetrySample("n", 300.0, 65.0, 5.0, 400.0, 3600.0, 1000)
+    receipt = ledger.evaluate_sample(good)  # positive control
+    assert math.isfinite(receipt.energy_consumed_wh) and receipt.net_avoided_co2_grams >= 0.0
+    for field, bad in (
+        ("gpu_power_watts", float("nan")),
+        ("gpu_temp_celsius", float("nan")),
+        ("outdoor_temp_celsius", float("nan")),
+        ("grid_carbon_intensity_g_per_kwh", float("nan")),
+        ("grid_carbon_intensity_g_per_kwh", -1e9),
+        ("duration_seconds", math.inf),
+    ):
+        with pytest.raises(ValueError):
+            ledger.evaluate_sample(dataclasses.replace(good, **{field: bad}))

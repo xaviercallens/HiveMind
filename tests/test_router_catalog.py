@@ -34,15 +34,63 @@ def test_every_tier_id_is_routable_and_unique_and_ordered_by_memory() -> None:
 
 def test_moe_tiers_exist_and_declare_their_active_parameters() -> None:
     moe = [tier for tier in TIERS if tier.moe]
-    assert {tier.tier_id for tier in moe} == {"bee-ruche-moe", "moe-qwen35-bee", "moe-general", "moe-coder"}
+    assert {tier.tier_id for tier in moe} == {"granite-1b-base", "granite-moe", "bee-ruche-moe", "moe-qwen35-bee", "moe-general", "moe-coder"}
     assert all(tier.active_params_b is not None and tier.active_params_b < 10 for tier in moe)
     assert all(tier.active_params_b is None for tier in TIERS if not tier.moe)
+
+
+def test_every_tier_says_what_it_really_is_base_adapter_or_alias() -> None:
+    from hivemind.router.catalog import catalog_payload
+
+    by_id = {t.tier_id: t for t in TIERS}
+    assert {t.kind for t in TIERS} <= {"base", "adapter", "alias"}
+    assert by_id["bee-stars"].kind == "adapter"  # a LoRA served under a local alias, not an Ollama library tag
+    assert by_id["coder"].kind == "base" and by_id["bee-rusty-sundials"].kind == "alias" and by_id["bee-rusty-sundials"].alias_of == "coder"
+    assert by_id["moe-general"].kind == "base" and by_id["bee-ruche-moe"].alias_of == "moe-general" and by_id["moe-qwen35-bee"].alias_of == "moe-general"
+    for tier in TIERS:  # an alias always points at a base tier that has the very same model tag
+        if tier.kind == "alias":
+            assert by_id[tier.alias_of].kind == "base" and by_id[tier.alias_of].ollama_tag == tier.ollama_tag
+        else:
+            assert tier.alias_of == ""
+    exposed = {t["tier_id"]: t for t in catalog_payload()["tiers"]}
+    assert exposed["bee-rusty-sundials"]["kind"] == "alias" and exposed["bee-rusty-sundials"]["alias_of"] == "coder"
+    # one model tag, several labels: the number of distinct pullable models is smaller than the number of tiers
+    assert len({t.ollama_tag for t in TIERS if t.kind != "adapter"}) < len([t for t in TIERS if t.kind != "adapter"])
+
+
+def test_no_catalog_entry_links_to_an_unpublished_repository_or_claims_training_it_did_not_do() -> None:
+    """Every partner entry whose Hugging Face repository does not exist is shown as unpublished, without a link, a parameter
+    count or a training-token count, and names the off-the-shelf model that actually serves its tier."""
+    from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, UNPUBLISHED_HF_REPOS
+
+    assert UNPUBLISHED_HF_REPOS
+    for entry in PREWIRED_PARTNER_MODELS:
+        assert entry.hf_repo not in UNPUBLISHED_HF_REPOS
+        assert not entry.hf_repo.startswith("xaviercallens/"), entry.public_id
+        if not entry.published:
+            assert entry.hf_repo == "" and entry.parameters_b == 0.0 and entry.tokens_trained_b == 0.0
+            assert entry.status == "UNPUBLISHED_NOT_TRAINED" and entry.title.startswith("Planned, not trained yet")
+        if entry.tier_id in {t.tier_id for t in TIERS}:
+            assert entry.served_by, entry.public_id
+
+
+def test_no_trained_moe_status_on_an_off_the_shelf_tier() -> None:
+    """A status that names a trained MoE is only shown when a HiveMind-built artefact serves the tier; otherwise the
+    entry is exposed as planned, not trained (owner decision, 2026-11-07)."""
+    from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, TRAINED_MOE_STATUSES
+
+    for entry in PREWIRED_PARTNER_MODELS:
+        if entry.status in TRAINED_MOE_STATUSES:
+            assert entry.served_by.startswith("hivemind-"), entry.public_id
+        if not entry.published:
+            assert entry.status == "UNPUBLISHED_NOT_TRAINED" and entry.tokens_trained_b == 0.0, entry.public_id
 
 
 @pytest.mark.parametrize(
     ("vram", "expected"),
     [
-        (3.9, None),
+        (0.4, None),
+        (3.9, "granite-1b-base"),  # the CPU-capable base tier fits any card; it is a text-completion model, not an assistant
         (4.0, "coder-lite"),
         (4.5, "gemma-core"),
         (5.5, "bee-stars"),

@@ -7,6 +7,7 @@ import math
 from hypothesis import given, settings
 from hypothesis import strategies as st
 import numpy as np
+import pytest
 import torch
 
 from hivemind.compress import (
@@ -89,3 +90,16 @@ def test_sign_quantizer_is_one_bit_and_scaled_by_mean_abs() -> None:
     assert torch.allclose(out.dequantized.abs(), torch.full((4,), 1.75))
     assert torch.equal(torch.sign(out.dequantized), torch.sign(v))
     assert out.relative_mse > 0.0
+
+
+@pytest.mark.parametrize("make", [lambda: LatticeDeltaQuantizer("E8", 0.1, error_feedback=True), lambda: SignDeltaQuantizer(error_feedback=True)])
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_delta_is_refused_and_does_not_poison_error_feedback(make, bad) -> None:
+    q = make()
+    v = torch.randn(16)
+    v[3] = bad
+    with pytest.raises(ValueError):
+        q.quantize(v)
+    clean = q.quantize(torch.randn(16))
+    assert bool(torch.isfinite(clean.dequantized).all()) and bool(torch.isfinite(clean.residual).all())
+    assert math.isfinite(clean.relative_mse) and clean.relative_mse > 0.0

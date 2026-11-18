@@ -70,6 +70,20 @@ def test_validator_accepts_honest_and_rejects_forged(tmp_path: Path) -> None:
     assert not v2.valid and v2.grant["cobblestones"] == 0.0 and "differs" in v2.reason
 
 
+def test_validator_caps_cpu_volunteer_declaring_tesla_t4_at_cpu_peak(tmp_path: Path) -> None:
+    # IP-160: an honest CPU result with accelerator_class edited to Tesla_T4 and replay_devices=("cpu",)
+    # must be capped by the validator's replayed CPU class, not 40x higher at the unverified T4 peak.
+    honest_cpu = {**_run(tmp=_sub(tmp_path, "cpu_cap")), "flops_claimed": 1e15, "wall_seconds": 1.0}
+    spoofed_t4 = {
+        **honest_cpu,
+        "fingerprint": {**honest_cpu["fingerprint"], "accelerator_class": "Tesla_T4"},
+    }
+    v_cpu = validate_result(SPEC, honest_cpu, "h-cpu", replay_devices=("cpu",))
+    v_spoof = validate_result(SPEC, spoofed_t4, "h-spoof", replay_devices=("cpu",))
+    assert v_cpu.valid and v_spoof.valid
+    assert v_spoof.grant["cobblestones"] == v_cpu.grant["cobblestones"]
+
+
 def test_validator_rejects_wrong_workunit_and_garbage_state(tmp_path: Path) -> None:
     r = _run(tmp=tmp_path)
     assert not validate_result({**SPEC, "wu_id": "other"}, r, "h", replay_devices=("cpu",)).valid

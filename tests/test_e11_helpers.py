@@ -2,7 +2,8 @@
 
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+_CUDA_VISIBLE_DEVICES_BEFORE = os.environ.get("CUDA_VISIBLE_DEVICES")
+os.environ["CUDA_VISIBLE_DEVICES"] = ""  # for the imports below only; restored after them
 
 import math  # noqa: E402
 import re  # noqa: E402
@@ -16,6 +17,18 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 
 import run_experiment_E11_kv_lattice as e11  # noqa: E402
+
+# Restored right after the imports above: setting it at module level hid the GPU from every test module collected
+# after this one (IP-179); the autouse fixture below keeps this module's own tests CPU-only at run time.
+if _CUDA_VISIBLE_DEVICES_BEFORE is None:
+    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+else:
+    os.environ["CUDA_VISIBLE_DEVICES"] = _CUDA_VISIBLE_DEVICES_BEFORE
+
+
+@pytest.fixture(autouse=True)
+def _cpu_only_for_this_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
 
 
 @pytest.mark.parametrize("bits", [2, 3, 4])

@@ -45,6 +45,18 @@ def _cert(
     *,
     unverified: bool = False,
 ) -> Dict[str, Any]:
+    if not isinstance(spec_id, str) or not spec_id.strip():
+        raise ValueError("spec_id must be a non-empty string")
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string")
+    if not isinstance(checks, list):
+        raise ValueError("checks must be a list")
+    if not isinstance(reasons, list):
+        raise ValueError("reasons must be a list")
+    if not isinstance(payload_for_hash, dict):
+        raise ValueError("payload_for_hash must be a dict")
+    if not isinstance(unverified, bool):
+        raise ValueError("unverified must be a boolean")
     raw_bytes = json.dumps(payload_for_hash, sort_keys=True, default=str).encode("utf-8")
     input_sha256 = hashlib.sha256(raw_bytes).hexdigest()
     if unverified:
@@ -71,7 +83,7 @@ def verify_quantum_fluid_relaxation(
     v_prime_scale: float,
     kappa: float,
     *,
-    reported_defect_charge_sum: int = 0,
+    reported_defect_charge_sum: Optional[int] = None,
     force_rel_tol: float = 1e-9,
     spec_id: str = "wave3-qf",
 ) -> Dict[str, Any]:
@@ -83,6 +95,8 @@ def verify_quantum_fluid_relaxation(
       3. Force convergence `0 <= max_free_force <= force_rel_tol * |V'(a)|`.
       4. Topological defect charge neutrality `sum(q_i) == 0` under periodic/neutral boundary conditions.
     """
+    if not isinstance(spec_id, str) or not spec_id.strip():
+        raise ValueError("spec_id must be a non-empty string")
     payload = {
         "energy_init": energy_init,
         "energy_final": energy_final,
@@ -93,7 +107,17 @@ def verify_quantum_fluid_relaxation(
     }
     if not all(_is_finite_num(v) for v in (energy_init, energy_final, max_free_force, v_prime_scale, kappa)):
         return _cert(spec_id, "science_quantum_fluid", [], ["non-finite quantum fluid parameters"], payload, unverified=True)
-    if isinstance(reported_defect_charge_sum, bool) or not isinstance(reported_defect_charge_sum, int):
+    if not _is_finite_num(force_rel_tol) or float(force_rel_tol) <= 0.0 or float(force_rel_tol) > 1e-2:
+        return _cert(
+            spec_id,
+            "science_quantum_fluid",
+            [{"name": "tolerance_bounds", "status": "fail"}],
+            ["force_rel_tol must be a finite number in (0, 1e-2]"],
+            payload,
+        )
+    if reported_defect_charge_sum is not None and (
+        isinstance(reported_defect_charge_sum, bool) or not isinstance(reported_defect_charge_sum, int)
+    ):
         return _cert(spec_id, "science_quantum_fluid", [], ["reported_defect_charge_sum must be an int"], payload, unverified=True)
 
     checks: List[Dict[str, Any]] = []
@@ -123,6 +147,12 @@ def verify_quantum_fluid_relaxation(
     if not force_ok:
         reasons.append(f"max_free_force={max_free_force:.3e} exceeds bound {force_bound:.3e}")
 
+    if reported_defect_charge_sum is None:
+        if any(c.get("status") == "fail" for c in checks):
+            return _cert(spec_id, "science_quantum_fluid", checks, reasons, payload)
+        reasons.append("reported_defect_charge_sum must be explicitly provided for VERIFIED certificate")
+        return _cert(spec_id, "science_quantum_fluid", checks, reasons, payload, unverified=True)
+
     charge_ok = int(reported_defect_charge_sum) == 0
     checks.append({"name": "topological_charge_neutrality", "status": "pass" if charge_ok else "fail", "charge_sum": int(reported_defect_charge_sum)})
     if not charge_ok:
@@ -149,6 +179,8 @@ def verify_astrophysics_transit_and_orbit(
       2. Hamiltonian energy conservation `max |H(t) - H(0)| / |H(0)| <= conservation_rel_tol`.
       3. Angular momentum conservation `max |L(t) - L(0)| / |L(0)| <= conservation_rel_tol`.
     """
+    if not isinstance(spec_id, str) or not spec_id.strip():
+        raise ValueError("spec_id must be a non-empty string")
     payload = {
         "r_planet_earth": r_planet_earth,
         "r_star_sun": r_star_sun,
@@ -159,14 +191,30 @@ def verify_astrophysics_transit_and_orbit(
     if not all(_is_finite_num(v) for v in (r_planet_earth, r_star_sun, reported_depth_ppm)):
         return _cert(spec_id, "science_astrophysics", [], ["non-finite transit parameters"], payload, unverified=True)
     if (
+        not _is_finite_num(depth_rel_tol)
+        or not _is_finite_num(conservation_rel_tol)
+        or float(depth_rel_tol) <= 0.0
+        or float(depth_rel_tol) > 0.5
+        or float(conservation_rel_tol) <= 0.0
+        or float(conservation_rel_tol) > 1e-2
+    ):
+        return _cert(
+            spec_id,
+            "science_astrophysics",
+            [{"name": "tolerance_bounds", "status": "fail"}],
+            ["depth_rel_tol must be in (0, 0.5] and conservation_rel_tol in (0, 1e-2]"],
+            payload,
+        )
+    if (
         not isinstance(energy_series, (list, tuple))
         or not isinstance(ang_mom_series, (list, tuple))
         or len(energy_series) < 2
         or len(ang_mom_series) < 2
+        or len(energy_series) != len(ang_mom_series)
         or not all(_is_finite_num(v) for v in energy_series)
         or not all(_is_finite_num(v) for v in ang_mom_series)
     ):
-        return _cert(spec_id, "science_astrophysics", [], ["energy_series and ang_mom_series require >= 2 finite numbers"], payload, unverified=True)
+        return _cert(spec_id, "science_astrophysics", [], ["energy_series and ang_mom_series require >= 2 finite numbers of matching length"], payload, unverified=True)
 
     rp, rs, depth = float(r_planet_earth), float(r_star_sun), float(reported_depth_ppm)
     if rp <= 0.0 or rs <= 0.0 or depth <= 0.0:
@@ -224,6 +272,8 @@ def verify_genetic_elenchus_thermodynamics(
       2. Jarzynski-Crooks second-law dissipative bound: `<W> >= delta_F - prob_tol`.
       3. Conway-Sloane E8 lattice quantization of the 8D dicodon feature vector (`nearest_e8` & `is_lattice_point`).
     """
+    if not isinstance(spec_id, str) or not spec_id.strip():
+        raise ValueError("spec_id must be a non-empty string")
     payload = {
         "prob_vector": list(prob_vector) if isinstance(prob_vector, (list, tuple)) else None,
         "mean_work_kbt": mean_work_kbt,
@@ -242,6 +292,14 @@ def verify_genetic_elenchus_thermodynamics(
         or not all(_is_finite_num(x) for x in dicodon_vec_8d)
     ):
         return _cert(spec_id, "science_genetics", [], ["malformed genetic thermodynamic inputs"], payload, unverified=True)
+    if not _is_finite_num(prob_tol) or float(prob_tol) < 0.0 or float(prob_tol) > 1e-2:
+        return _cert(
+            spec_id,
+            "science_genetics",
+            [{"name": "tolerance_bounds", "status": "fail"}],
+            ["prob_tol must be a finite number in [0, 1e-2]"],
+            payload,
+        )
 
     checks: List[Dict[str, Any]] = []
     reasons: List[str] = []
@@ -318,6 +376,8 @@ def verify_topology_tda_and_lattice(
          matching `TriangularRiesz.latticeEnergy_riesz_lt_top`).
       3. Exact nearest-lattice-point optimality on `A2`, `D4`/`Dn`, `E8`, or `Z`.
     """
+    if not isinstance(spec_id, str) or not spec_id.strip():
+        raise ValueError("spec_id must be a non-empty string")
     payload = {
         "betti_numbers": list(betti_numbers) if isinstance(betti_numbers, (list, tuple)) else None,
         "reported_euler_char": reported_euler_char,
@@ -333,6 +393,9 @@ def verify_topology_tda_and_lattice(
         or any(isinstance(b, bool) or not isinstance(b, int) for b in betti_numbers)
         or isinstance(reported_euler_char, bool)
         or not isinstance(reported_euler_char, int)
+        or isinstance(spatial_dim, bool)
+        or not isinstance(spatial_dim, int)
+        or spatial_dim < 1
         or not isinstance(point, (list, tuple))
         or len(point) == 0
         or not all(_is_finite_num(v) for v in point)
@@ -425,14 +488,16 @@ def verify_numeric_solver_trajectory(
     y_coarse: Sequence[Sequence[float]],
     y_fine: Sequence[Sequence[float]],
     *,
-    invariant_drift: float = 0.0,
+    invariant_drift: Optional[float] = None,
     rtol: float = 1e-8,
     atol: float = 1e-10,
     invariant_tol: float = 1e-6,
     spec_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Fail-closed verifier for `bee_numeric_solver_sundials` (Spec grammar + 100x tightening agreement + invariants)."""
-    sid = str(spec_id or (spec.get("id") if isinstance(spec, dict) else "wave3-numeric"))
+    if spec_id is not None and (not isinstance(spec_id, str) or not spec_id.strip()):
+        raise ValueError("spec_id must be None or a non-empty string")
+    sid = str(spec_id or (spec.get("id") if isinstance(spec, dict) and str(spec.get("id") or "").strip() else "wave3-numeric"))
     payload = {
         "spec": spec,
         "y_coarse": y_coarse,
@@ -440,9 +505,38 @@ def verify_numeric_solver_trajectory(
         "invariant_drift": invariant_drift,
     }
     try:
+        if not isinstance(spec, dict):
+            raise SpecInvalid("spec must be a dict")
         validated = validate_spec(dict(spec))
     except (SpecInvalid, TypeError, ValueError) as exc:
         return _cert(sid, "science_numeric_solver", [{"name": "spec_grammar", "status": "fail"}], [str(exc)], payload)
+
+    if (
+        not _is_finite_num(rtol)
+        or not _is_finite_num(atol)
+        or not _is_finite_num(invariant_tol)
+        or float(rtol) <= 0.0
+        or float(atol) <= 0.0
+        or float(invariant_tol) <= 0.0
+        or float(rtol) > 1e-2
+        or float(atol) > 1e-2
+    ):
+        return _cert(
+            sid,
+            "science_numeric_solver",
+            [{"name": "tolerance_bounds", "status": "fail"}],
+            ["rtol and atol must be finite numbers in (0, 1e-2]"],
+            payload,
+        )
+
+    if y_coarse is y_fine:
+        return _cert(
+            sid,
+            "science_numeric_solver",
+            [{"name": "independent_reference", "status": "fail"}],
+            ["y_coarse and y_fine must be independently integrated trajectories, not the same object"],
+            payload,
+        )
 
     n_times = len(validated["t_out"])
     n_dim = len(validated["y0"])
@@ -461,7 +555,8 @@ def verify_numeric_solver_trajectory(
     max_scaled_diff = 0.0
     for row_c, row_f in zip(y_coarse, y_fine):
         if (
-            not isinstance(row_c, (list, tuple))
+            row_c is row_f
+            or not isinstance(row_c, (list, tuple))
             or not isinstance(row_f, (list, tuple))
             or len(row_c) != n_dim
             or len(row_f) != n_dim
@@ -476,7 +571,7 @@ def verify_numeric_solver_trajectory(
 
     checks.append({"name": "shape", "status": "pass" if shape_ok else "fail"})
     if not shape_ok:
-        reasons.append("trajectory rows do not match state dimension or contain non-finite values")
+        reasons.append("trajectory rows do not match state dimension, are self-referential, or contain non-finite values")
         return _cert(sid, "science_numeric_solver", checks, reasons, payload)
 
     tight_ok = max_scaled_diff <= 10.0
@@ -484,8 +579,14 @@ def verify_numeric_solver_trajectory(
     if not tight_ok:
         reasons.append(f"100x tolerance tightening disagreement: max_scaled_diff={max_scaled_diff:.3f} > 10.0")
 
+    if invariant_drift is None:
+        if any(c.get("status") == "fail" for c in checks):
+            return _cert(sid, "science_numeric_solver", checks, reasons, payload)
+        reasons.append("invariant_drift must be explicitly provided for VERIFIED certificate")
+        return _cert(sid, "science_numeric_solver", checks, reasons, payload, unverified=True)
+
     inv_ok = _is_finite_num(invariant_drift) and abs(float(invariant_drift)) <= float(invariant_tol)
-    checks.append({"name": "invariants", "status": "pass" if inv_ok else "fail", "invariant_drift": float(invariant_drift)})
+    checks.append({"name": "invariants", "status": "pass" if inv_ok else "fail", "invariant_drift": float(invariant_drift) if _is_finite_num(invariant_drift) else None})
     if not inv_ok:
         reasons.append(f"invariant drift {invariant_drift} exceeds tolerance {invariant_tol}")
 

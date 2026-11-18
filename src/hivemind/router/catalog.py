@@ -13,7 +13,7 @@ does not yet verify that a producer really serves the model behind a tier id (``
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 # Same shape the gateway accepts for a model id; kept here so a catalog entry can never be unroutable.
@@ -34,6 +34,11 @@ class ModelTier:
     suggested_cost_per_1k: float  # HMT per 1,000 tokens a producer might ask; HMT have no cash value
     suggested_capacity_1k: float  # 1,000-token units per epoch to advertise
     good_for: str
+    # What the tier really is (set by ``_classify_tiers``, never by hand): "base" = an off-the-shelf model you can pull as is; "adapter" = a LoRA
+    # served under a local alias (the tag is a llama-server alias, not a pullable model); "alias" = the same model as another tier under a
+    # different name (``alias_of`` names that tier), so it is a label, not a different model.
+    kind: str = "base"
+    alias_of: str = ""
 
     def __post_init__(self) -> None:
         if not self.tier_id or set(self.tier_id) - _ID_CHARS:
@@ -57,8 +62,16 @@ class ModelTier:
 
 # Ordered by min_vram_gb ascending; ``recommend_tier`` relies on that order (checked by __post_init__ of the tuple below).
 TIERS: tuple[ModelTier, ...] = (
+    # Runs on CPU (no GPU memory): the plain IBM Granite 3.1 1B-A400M BASE model, Q4_K_M GGUF (about 0.8 GB, about 1.2 GB RAM, 68 tokens/s measured on 6 CPU
+    # threads, 2026-11-03). There is no Ollama library tag for the base model: serve the GGUF with deploy/granite_cpu/start.sh. It is NOT instruction tuned.
+    ModelTier("granite-1b-base", "Granite 3.1 1B-A400M base (CPU, text completion)", "granite-3.1-1b-a400m-base", 0.8, 0.5, True, 0.4, 0.05, 30.0,
+              "CPU-only text continuation (it continues your text, it does not follow instructions or chat); the base model the BOINC training chain starts from"),
     ModelTier("crowd-v1", "CrowdGPT Crowd-v1 (1B Generalist Trunk)", "hf.co/Vxtzq/Crowd-v1", 1.1, 4.0, False, None, 0.15, 50.0,
               "1B citizen generalist trunk trained on 7B FineWeb tokens (CrowdGPT x La Ruche joint federation)"),
+    # Real small MoE for 4-8 GB cards: IBM Granite 3.1 MoE, 3.3B parameters with 800M active, Apache-2.0
+    # (Ollama library granite3.1-moe:3b; weights ibm-granite/granite-3.1-3b-a800m-instruct, both checked 2026-11-02).
+    ModelTier("granite-moe", "IBM Granite 3.1 MoE (3B, 800M active)", "granite3.1-moe:3b", 2.0, 4.0, True, 0.8, 0.2, 50.0,
+              "a genuine open mixture-of-experts model small enough for 4-8 GB cards: summaries, tool calls, light code"),
     ModelTier("coder-lite", "Coder Lite (3B)", "qwen2.5-coder:3b", 1.9, 4.0, False, None, 0.2, 40.0,
               "quick edits, explanations and small scripts on entry-level cards"),
     ModelTier("gemma-core", "Google Gemma 3 Core (4B Multimodal & Multilingual)", "gemma3:4b", 3.3, 4.5, False, None, 0.25, 55.0,
@@ -75,11 +88,11 @@ TIERS: tuple[ModelTier, ...] = (
               "everyday Python and simple game code: functions, classes, pygame loops, tracebacks"),
     ModelTier("bee-lean-prover", "Goedel-Prover-V2 & DeepSeek-Prover-V2 Formal Lean 4 Bee (8B)", "hf.co/mradermacher/Goedel-Prover-V2-8B-GGUF:Q6_K", 6.7, 8.5, False, None, 0.55, 60.0,
               "formal Lean 4 theorem proving, sorry elimination, Mathlib4 tactic synthesis and invariant verification"),
-    ModelTier("bee-ruche-moe", "La Ruche 8-Expert Sparse MoE Community Bee (2.4B active)", "gpt-oss:20b", 13.0, 10.0, True, 2.4, 0.65, 75.0,
+    ModelTier("bee-ruche-moe", "La Ruche community tier (served by gpt-oss 20B MoE; HiveMind-trained experts not published yet)", "gpt-oss:20b", 13.0, 10.0, True, 3.6, 0.65, 75.0,
               "8-expert top-2 sparse Mixture-of-Experts community bee combining code, math, astrophysics, fluids and bilingual synthesis"),
     ModelTier("coder-plus", "Coder Plus (14B)", "qwen2.5-coder:14b", 9.0, 12.0, False, None, 0.7, 80.0,
               "larger refactors, multi-file reasoning, tests"),
-    ModelTier("moe-qwen35-bee", "Qwen 3.5 Polyglot-Singularity MoE Bee (3.0B active)", "gpt-oss:20b", 13.0, 15.0, True, 3.0, 0.85, 85.0,
+    ModelTier("moe-qwen35-bee", "Polyglot MoE tier (served by gpt-oss 20B MoE, 3.6B active)", "gpt-oss:20b", 13.0, 15.0, True, 3.6, 0.85, 85.0,
               "high-diversity MoE specialist bee routing across coding, formal proofs, scientific PDEs and multilingual reasoning on large GPU producers"),
     # Measured 2026-10-24 on a Tesla T4 (15,360 MiB): 12,331 MiB resident at 4,096 context with an 8-bit KV cache, flash attention
     # and the card otherwise empty; it does not fit beside a 7B and a 3B beside it is partly on CPU. It thinks before answering.
@@ -88,6 +101,26 @@ TIERS: tuple[ModelTier, ...] = (
     ModelTier("moe-coder", "Coder MoE (Qwen3-Coder 30B, 3.3B active)", "qwen3-coder:30b", 19.0, 24.0, True, 3.3, 1.2, 100.0,
               "the strongest coding tier: agentic edits across files with a long context"),
 )
+
+
+def _classify_tiers(tiers: tuple[ModelTier, ...]) -> tuple[ModelTier, ...]:
+    """Set ``kind``/``alias_of`` from the data: several tiers sharing one model tag are labels of the same model, and a tag that is a local
+    llama-server alias (``hivemind-*``) is a LoRA adapter, not something ``ollama pull`` can fetch."""
+    groups: dict[str, list[ModelTier]] = {}
+    for tier in tiers:
+        groups.setdefault(tier.ollama_tag, []).append(tier)
+    out: list[ModelTier] = []
+    for tier in tiers:
+        if tier.ollama_tag.startswith("hivemind-"):
+            out.append(replace(tier, kind="adapter"))
+            continue
+        group = groups[tier.ollama_tag]
+        base = next((t for t in group if "bee" not in t.tier_id), group[0])  # the plainly named tier is the model, the rest are branded labels of it
+        out.append(tier if base.tier_id == tier.tier_id else replace(tier, kind="alias", alias_of=base.tier_id))
+    return tuple(out)
+
+
+TIERS = _classify_tiers(TIERS)
 
 
 @dataclass(frozen=True)
@@ -108,6 +141,8 @@ class PrewiredPartnerModel:
     license: str
     status: str
     aliases: tuple[str, ...]
+    published: bool = True  # False: the hf_repo named for it does not exist; see UNPUBLISHED_HF_REPOS
+    served_by: str = ""  # the off-the-shelf model that actually answers requests for this entry's tier
 
     def to_dict(self) -> dict[str, Any]:
         out = asdict(self)
@@ -1182,6 +1217,66 @@ PREWIRED_PARTNER_MODELS: tuple[PrewiredPartnerModel, ...] = (
         ),
     ),
 )
+
+# Hugging Face repositories named above that do not exist (checked on 2026-11-02 against huggingface.co/api/models and
+# /api/datasets: both 401/404). The "xaviercallens/*" entries described HiveMind-trained MoE weights with parameter and
+# token counts, but no such weights were ever published; every tier is served by the off-the-shelf model in TIERS.
+UNPUBLISHED_HF_REPOS: frozenset[str] = frozenset({
+    "xaviercallens/hivemind-la-ruche-moe",
+    "xaviercallens/hivemind-moe-coder-polyglot-3tome",
+    "xaviercallens/hivemind-moe-cosmology-dualscale",
+    "xaviercallens/hivemind-moe-cyber-crypto",
+    "xaviercallens/hivemind-moe-frontier-science",
+    "xaviercallens/hivemind-moe-genetics-hopfield",
+    "xaviercallens/hivemind-moe-pde-fluid-quantum",
+    "xaviercallens/hivemind-moe-reasoning-bio",
+    "xaviercallens/hivemind-moe-science-bee-v2",
+    "xaviercallens/hivemind-moe-scientific-wave2",
+    "xaviercallens/hivemind-moe-surrogate-sundials",
+    "xaviercallens/hivemind-moe-systems-formal",
+    "xaviercallens/hivemind-spatiotemporal-video-moe",
+    "xaviercallens/hivemind-vision-image-moe",
+    "xaviercallens/rusty-SUNDIALS",
+    "Qwen/Qwen3.5-2B-Instruct",
+    "Qwen/Qwen3.5-4B-Instruct",
+    "0xPARC/zk-bench",
+    "ASSERT-KTH/DISL-Solidity-Smart-Contracts",
+    "MultimodalUniverse/multimodal_universe",
+    "chainer/zinc250k",
+    "epfl-llm/guidance-biomedical",
+    "giskard_cti/cti-bench",
+    "nasa-impact/hls-foundation",
+    "neuralmagic/LLM_Compression_Code",
+    "vxunderground/malware-analysis-prompts",
+})
+
+
+TRAINED_MOE_STATUSES = frozenset({"LIVE_NOCTURNAL_MOE", "LIVE_WAVE2_SCIENTIFIC_MOE"})
+
+
+def _truthful(entry: PrewiredPartnerModel) -> PrewiredPartnerModel:
+    """Describe an entry by what really exists: an unpublished repository gets no link, no training claim and a status that
+    says so, plus the off-the-shelf model that actually serves its tier."""
+    tier = next((t for t in TIERS if t.tier_id == entry.tier_id), None)
+    served = tier.ollama_tag if tier is not None else ""
+    # A status that says "trained MoE" is only true when a HiveMind-built artefact serves the tier. An off-the-shelf
+    # tag under such a status is relabelled the same way as an unpublished repository (owner decision, 2026-11-07).
+    claims_training_on_off_the_shelf = entry.status in TRAINED_MOE_STATUSES and not served.startswith("hivemind-")
+    if entry.hf_repo not in UNPUBLISHED_HF_REPOS and not claims_training_on_off_the_shelf:
+        return replace(entry, served_by=served)
+    return replace(
+        entry,
+        hf_repo="",
+        title=f"Planned, not trained yet: {entry.title}",
+        parameters_b=0.0,
+        tokens_trained_b=0.0,
+        status="UNPUBLISHED_NOT_TRAINED",
+        published=False,
+        served_by=served,
+    )
+
+
+PREWIRED_PARTNER_MODELS = tuple(_truthful(m) for m in PREWIRED_PARTNER_MODELS)
 
 
 @dataclass(frozen=True)

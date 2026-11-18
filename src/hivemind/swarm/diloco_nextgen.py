@@ -59,7 +59,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import math
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import torch
 
@@ -154,6 +154,29 @@ class CGADStepTelemetry:
     staleness_bias_bound: float
     step_linf_norm: float
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.fragment_name, str) or not self.fragment_name.strip():
+            raise ValueError("fragment_name must be a non-empty string")
+        if not isinstance(self.dropped_by_cutoff, bool):
+            raise TypeError("dropped_by_cutoff must be a bool")
+        for f_name in (
+            "worker_delay_tau",
+            "fragment_age_rounds",
+            "effective_tau",
+            "cosine_gate_gamma",
+            "decay_gate_sigma",
+            "staleness_bias_bound",
+            "step_linf_norm",
+        ):
+            fval = getattr(self, f_name)
+            if (
+                isinstance(fval, bool)
+                or not isinstance(fval, (int, float))
+                or not math.isfinite(float(fval))
+                or float(fval) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a non-negative finite number")
+
 
 class CosineGatedAdamDecayOuterOptimizer:
     """SI-06: Cosine-Gated Adam-Decay (`CGAD` / `PA-CGAD`, `arXiv:2605.09126`).
@@ -173,16 +196,46 @@ class CosineGatedAdamDecayOuterOptimizer:
         weight_decay: float = 0.0,
         momentum_restart_period: Optional[int] = None,
     ) -> None:
-        if lr <= 0.0:
+        if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not math.isfinite(float(lr)) or float(lr) <= 0.0:
             raise ValueError("lr must be > 0")
-        if alpha <= 0.0:
+        if (
+            isinstance(alpha, bool)
+            or not isinstance(alpha, (int, float))
+            or not math.isfinite(float(alpha))
+            or float(alpha) <= 0.0
+        ):
             raise ValueError("alpha must be > 0")
-        if tau_cut <= 0.0:
+        if (
+            isinstance(tau_cut, bool)
+            or not isinstance(tau_cut, (int, float))
+            or not math.isfinite(float(tau_cut))
+            or float(tau_cut) <= 0.0
+        ):
             raise ValueError("tau_cut must be > 0")
-        if weight_decay < 0.0:
+        if (
+            isinstance(eps, bool)
+            or not isinstance(eps, (int, float))
+            or not math.isfinite(float(eps))
+            or float(eps) <= 0.0
+        ):
+            raise ValueError("eps must be > 0")
+        if isinstance(weight_decay, bool) or not isinstance(weight_decay, (int, float)) or weight_decay < 0.0:
             raise ValueError("weight_decay must be >= 0")
-        if momentum_restart_period is not None and int(momentum_restart_period) < 1:
+        if momentum_restart_period is not None and (
+            isinstance(momentum_restart_period, bool)
+            or not isinstance(momentum_restart_period, int)
+            or momentum_restart_period < 1
+        ):
             raise ValueError("momentum_restart_period must be >= 1 when specified")
+        if (
+            not isinstance(betas, (tuple, list))
+            or len(betas) != 2
+            or isinstance(betas[0], bool)
+            or isinstance(betas[1], bool)
+            or not isinstance(betas[0], (int, float))
+            or not isinstance(betas[1], (int, float))
+        ):
+            raise ValueError("betas must be in [0, 1)")
         b1, b2 = float(betas[0]), float(betas[1])
         if not (0.0 <= b1 < 1.0 and 0.0 <= b2 < 1.0):
             raise ValueError("betas must be in [0, 1)")
@@ -215,6 +268,8 @@ class CosineGatedAdamDecayOuterOptimizer:
 
     def compute_gate(self, effective_tau: float) -> Tuple[float, float]:
         """Return `(gamma(tau), sigma(tau))` for effective staleness `effective_tau >= 0`."""
+        if isinstance(effective_tau, bool) or not isinstance(effective_tau, (int, float)) or not math.isfinite(float(effective_tau)):
+            raise ValueError("effective_tau must be a finite number")
         tau = max(0.0, float(effective_tau))
         if tau >= self.tau_cut:
             return 0.0, 0.0
@@ -235,6 +290,10 @@ class CosineGatedAdamDecayOuterOptimizer:
         synced_fragments: Optional[Sequence[str]] = None,
     ) -> Tuple[Dict[str, torch.Tensor], List[CGADStepTelemetry]]:
         """Apply one PA-CGAD outer step across synced parameter fragments."""
+        if not isinstance(params, dict) or not params:
+            raise ValueError("params must be a non-empty dictionary")
+        if not isinstance(pseudo_gradients, dict):
+            raise ValueError("pseudo_gradients must be a dictionary")
         if (
             self.momentum_restart_period is not None
             and self.outer_round_count > 0
@@ -255,7 +314,10 @@ class CosineGatedAdamDecayOuterOptimizer:
 
             g_f = pseudo_gradients[name].detach().to(torch.float32).cpu()
             p_fp32 = param.detach().to(torch.float32).cpu()
-            tau_w = float((worker_delays or {}).get(name, 0.0))
+            raw_tau = (worker_delays or {}).get(name, 0.0)
+            if isinstance(raw_tau, bool) or not isinstance(raw_tau, (int, float)) or not math.isfinite(float(raw_tau)):
+                raise ValueError("worker_delays values must be finite numbers, not bool")
+            tau_w = float(raw_tau)
             eff_tau = max(0.0, tau_w, float(prev_age))
             gamma, sigma = self.compute_gate(eff_tau)
 
@@ -335,10 +397,25 @@ class ReputationWeightedIsoCTSMerger:
         trim_density: float = 0.35,
         scaling_lambda: float = 1.10,
     ) -> None:
-        if not (0.1 <= common_space_fraction <= 1.0):
+        if (
+            isinstance(common_space_fraction, bool)
+            or not isinstance(common_space_fraction, (int, float))
+            or not (0.1 <= float(common_space_fraction) <= 1.0)
+        ):
             raise ValueError("common_space_fraction must be in [0.1, 1.0]")
-        if not (0.0 < trim_density <= 1.0):
+        if (
+            isinstance(trim_density, bool)
+            or not isinstance(trim_density, (int, float))
+            or not (0.0 < float(trim_density) <= 1.0)
+        ):
             raise ValueError("trim_density must be in (0, 1.0]")
+        if (
+            isinstance(scaling_lambda, bool)
+            or not isinstance(scaling_lambda, (int, float))
+            or not math.isfinite(float(scaling_lambda))
+            or float(scaling_lambda) <= 0.0
+        ):
+            raise ValueError("scaling_lambda must be finite and > 0")
         self.common_space_fraction = float(common_space_fraction)
         self.trim_density = float(trim_density)
         self.scaling_lambda = float(scaling_lambda)
@@ -347,6 +424,8 @@ class ReputationWeightedIsoCTSMerger:
     @torch.no_grad()
     def apply_isoc_2d(matrix: torch.Tensor) -> Tuple[torch.Tensor, float, float]:
         """Flatten the singular value spectrum of a 2D delta matrix to its isotropic mean."""
+        if not isinstance(matrix, torch.Tensor):
+            raise TypeError("matrix must be a torch.Tensor")
         if matrix.ndim != 2:
             return matrix.clone(), 1.0, 1.0
         mat_fp32 = matrix.detach().to(torch.float32).cpu()
@@ -366,14 +445,28 @@ class ReputationWeightedIsoCTSMerger:
         worker_reputation_weights: Optional[Sequence[float]] = None,
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
         """Merge worker LoRA states using Reputation-Weighted TIES + ISO-CTS orthogonalization."""
+        if not isinstance(base_lora_state, dict) or not base_lora_state:
+            raise ValueError("base_lora_state must be a non-empty dictionary")
         if not worker_lora_states:
             return {k: v.clone() for k, v in base_lora_state.items()}, {"num_workers": 0}
 
         num_workers = len(worker_lora_states)
-        if worker_reputation_weights is None or len(worker_reputation_weights) != num_workers:
+        if worker_reputation_weights is None:
             weights = [1.0 for _ in range(num_workers)]
         else:
-            weights = [max(1e-4, float(w)) for w in worker_reputation_weights]
+            if isinstance(worker_reputation_weights, (str, bytes)) or len(worker_reputation_weights) != num_workers:
+                raise ValueError(
+                    f"worker_reputation_weights length ({len(worker_reputation_weights)}) "
+                    f"must match worker_lora_states length ({num_workers})"
+                )
+            weights = []
+            for w in worker_reputation_weights:
+                if isinstance(w, bool) or not isinstance(w, (int, float)):
+                    raise ValueError("worker_reputation_weights must be finite numbers, not bool")
+                fw = float(w)
+                if not math.isfinite(fw):
+                    raise ValueError("worker_reputation_weights must be finite")
+                weights.append(max(1e-4, fw))
         w_tensor = torch.tensor(weights, dtype=torch.float32)
         w_tensor = w_tensor / w_tensor.sum().clamp_min(1e-8)
 
@@ -474,7 +567,11 @@ class HeLoCoDirectionCorrector:
     """
 
     def __init__(self, conflict_damping: float = 0.25) -> None:
-        if not (0.0 <= conflict_damping <= 1.0):
+        if (
+            isinstance(conflict_damping, bool)
+            or not isinstance(conflict_damping, (int, float))
+            or not (0.0 <= float(conflict_damping) <= 1.0)
+        ):
             raise ValueError("conflict_damping must be in [0, 1]")
         self.conflict_damping = float(conflict_damping)
 
@@ -485,6 +582,10 @@ class HeLoCoDirectionCorrector:
         outer_momentum_ref: torch.Tensor,
     ) -> Tuple[torch.Tensor, Dict[str, float]]:
         """Align a stale worker pseudo-gradient against `outer_momentum_ref`."""
+        if not isinstance(pseudo_grad, torch.Tensor) or not isinstance(outer_momentum_ref, torch.Tensor):
+            raise TypeError("pseudo_grad and outer_momentum_ref must be torch.Tensor instances")
+        if pseudo_grad.shape != outer_momentum_ref.shape:
+            raise ValueError("pseudo_grad and outer_momentum_ref must have the same shape")
         g = pseudo_grad.detach().to(torch.float32)
         m = outer_momentum_ref.detach().to(torch.float32)
         g_flat = g.reshape(-1)
@@ -534,8 +635,29 @@ class AutoLoCoIntervalCorrector:
         base_outer_lr: float = 0.7,
         base_outer_momentum: float = 0.9,
     ) -> None:
-        if reference_inner_steps_h < 1 or reference_inner_lr <= 0.0:
+        if (
+            isinstance(reference_inner_steps_h, bool)
+            or not isinstance(reference_inner_steps_h, int)
+            or reference_inner_steps_h < 1
+            or isinstance(reference_inner_lr, bool)
+            or not isinstance(reference_inner_lr, (int, float))
+            or not math.isfinite(float(reference_inner_lr))
+            or float(reference_inner_lr) <= 0.0
+        ):
             raise ValueError("reference_inner_steps_h >= 1 and reference_inner_lr > 0 required")
+        if (
+            isinstance(base_outer_lr, bool)
+            or not isinstance(base_outer_lr, (int, float))
+            or not math.isfinite(float(base_outer_lr))
+            or float(base_outer_lr) <= 0.0
+        ):
+            raise ValueError("base_outer_lr must be finite and > 0")
+        if (
+            isinstance(base_outer_momentum, bool)
+            or not isinstance(base_outer_momentum, (int, float))
+            or not (0.0 <= float(base_outer_momentum) < 1.0)
+        ):
+            raise ValueError("base_outer_momentum must be in [0, 1)")
         self.reference_accumulated_lr = float(reference_inner_steps_h) * float(reference_inner_lr)
         self.base_outer_lr = float(base_outer_lr)
         self.base_outer_momentum = float(base_outer_momentum)
@@ -546,7 +668,15 @@ class AutoLoCoIntervalCorrector:
         actual_inner_lr: float,
     ) -> Dict[str, float]:
         """Compute corrected `(outer_lr, outer_momentum)` for the realized inner interval."""
-        if actual_inner_steps_h < 1 or actual_inner_lr <= 0.0:
+        if (
+            isinstance(actual_inner_steps_h, bool)
+            or not isinstance(actual_inner_steps_h, int)
+            or actual_inner_steps_h < 1
+            or isinstance(actual_inner_lr, bool)
+            or not isinstance(actual_inner_lr, (int, float))
+            or not math.isfinite(float(actual_inner_lr))
+            or float(actual_inner_lr) <= 0.0
+        ):
             raise ValueError("actual_inner_steps_h >= 1 and actual_inner_lr > 0 required")
         accum_lr = float(actual_inner_steps_h) * float(actual_inner_lr)
         ratio = accum_lr / self.reference_accumulated_lr
@@ -570,7 +700,15 @@ class FoMoEPartialReplicaPlanner:
     """
 
     def __init__(self, total_experts: int = 128, active_top_k: int = 2) -> None:
-        if total_experts < 2 or active_top_k < 1:
+        if (
+            isinstance(total_experts, bool)
+            or not isinstance(total_experts, int)
+            or total_experts < 2
+            or isinstance(active_top_k, bool)
+            or not isinstance(active_top_k, int)
+            or active_top_k < 1
+            or active_top_k > total_experts
+        ):
             raise ValueError("total_experts >= 2 and active_top_k >= 1 required")
         self.total_experts = int(total_experts)
         self.active_top_k = int(active_top_k)
@@ -584,11 +722,19 @@ class FoMoEPartialReplicaPlanner:
         single_expert_bytes: int = 2 * 1024 * 1024,
     ) -> Dict[str, Any]:
         """Return memory, communication, and Skip-Token FLOP metrics for `(M, O_e, gamma)`."""
-        if num_workers_m < 1:
+        if isinstance(num_workers_m, bool) or not isinstance(num_workers_m, int) or num_workers_m < 1:
             raise ValueError("num_workers_m must be >= 1")
-        if not (1 <= overlap_factor_oe <= num_workers_m):
+        if (
+            isinstance(overlap_factor_oe, bool)
+            or not isinstance(overlap_factor_oe, int)
+            or not (1 <= overlap_factor_oe <= num_workers_m)
+        ):
             raise ValueError("overlap_factor_oe must be in [1, num_workers_m]")
-        if not (0.0 <= reshuffle_frequency_gamma <= 1.0):
+        if (
+            isinstance(reshuffle_frequency_gamma, bool)
+            or not isinstance(reshuffle_frequency_gamma, (int, float))
+            or not (0.0 <= float(reshuffle_frequency_gamma) <= 1.0)
+        ):
             raise ValueError("reshuffle_frequency_gamma must be in [0, 1]")
 
         m = float(num_workers_m)
@@ -682,6 +828,10 @@ class ComputeVisibleSparseLoCoCompressor:
 
     def _resolve_round_scale(self, kind: str, flat_vec: torch.Tensor) -> float:
         """Determine the per-round lattice scale factor, calibrating to `target_bits_per_dim` when enabled."""
+        if kind not in ("E8", "Z"):
+            raise ValueError(f"kind must be 'E8' or 'Z', got {kind!r}")
+        if not isinstance(flat_vec, torch.Tensor) or flat_vec.numel() == 0:
+            raise ValueError("flat_vec must be a non-empty torch.Tensor")
         if self.lattice_scale is not None and not self.adapt_scale_per_round:
             return self.lattice_scale
         std = float(flat_vec.std().item()) if flat_vec.numel() > 1 else float(flat_vec.abs().mean().item())
@@ -796,6 +946,15 @@ class ComputeVisibleSparseLoCoCompressor:
         fragment_name: str = "default",
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """Compress `delta` via PULSE compute-visible gate + configured codec (`centroid_2bit`, `E8`, `Z`, `sign`)."""
+        if not isinstance(delta, torch.Tensor) or delta.numel() == 0:
+            raise ValueError("delta must be a non-empty torch.Tensor")
+        if reference_param is not None and (
+            not isinstance(reference_param, torch.Tensor)
+            or reference_param.numel() != delta.numel()
+        ):
+            raise ValueError("reference_param must be a torch.Tensor matching delta.numel()")
+        if not isinstance(fragment_name, str) or not fragment_name.strip():
+            raise ValueError("fragment_name must be a non-empty string")
         if not _force_centroid and self.codec in ("E8", "Z", "sign"):
             return self.compress_with_lattice_codec(
                 delta,
@@ -900,6 +1059,8 @@ class ChunkedOrthonormalDCTTransform:
     @staticmethod
     def _build_orthonormal_dct_matrix(n: int) -> torch.Tensor:
         """Construct an `n x n` orthonormal Type-II DCT matrix `C` satisfying `C @ C.T = I`."""
+        if isinstance(n, bool) or not isinstance(n, int) or n < 2:
+            raise ValueError("n must be an integer >= 2")
         mat = torch.zeros((n, n), dtype=torch.float32)
         for k in range(n):
             alpha = math.sqrt(1.0 / n) if k == 0 else math.sqrt(2.0 / n)
@@ -1154,9 +1315,13 @@ class CPUOffloadedFlatBucketOuterState:
         inner_params: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
         """Compute outer pseudo-gradients `Delta_k = master_cpu_k - inner_k` on CPU."""
+        if not isinstance(inner_params, Mapping) or set(inner_params) != set(self.keys):
+            raise ValueError("inner_params must match the flat bucket parameter keys")
         pseudo_grads: Dict[str, torch.Tensor] = {}
         for k in self.keys:
             lo, hi = self.offsets[k]
+            if not isinstance(inner_params[k], torch.Tensor) or inner_params[k].shape != self.shapes[k]:
+                raise ValueError(f"inner_params[{k!r}] must be a tensor of shape {self.shapes[k]}")
             master_view = self.flat_master_cpu[lo:hi].view(self.shapes[k])
             inner_cpu = inner_params[k].detach().to(torch.float32).cpu()
             pseudo_grads[k] = master_view - inner_cpu
@@ -1170,9 +1335,13 @@ class CPUOffloadedFlatBucketOuterState:
         """Commit updated outer parameters into the contiguous flat CPU buffer and return
         inner device tensors ready for the next inner round.
         """
+        if not isinstance(updated_master_params, Mapping) or set(updated_master_params) != set(self.keys):
+            raise ValueError("updated_master_params must match the flat bucket parameter keys")
         synced_inner: Dict[str, torch.Tensor] = {}
         for k in self.keys:
             lo, hi = self.offsets[k]
+            if not isinstance(updated_master_params[k], torch.Tensor) or updated_master_params[k].shape != self.shapes[k]:
+                raise ValueError(f"updated_master_params[{k!r}] must be a tensor of shape {self.shapes[k]}")
             up_cpu = updated_master_params[k].detach().to(torch.float32).cpu()
             self.flat_master_cpu[lo:hi].copy_(up_cpu.reshape(-1))
             synced_inner[k] = up_cpu.to(device=self.devices[k], dtype=self.dtypes[k])
@@ -1226,6 +1395,10 @@ class SkipAttentionSpeculativeRouter:
         self.rms_eps = float(rms_eps)
 
     def _rms_norm(self, x: torch.Tensor, norm_weight: torch.Tensor) -> torch.Tensor:
+        if not isinstance(x, torch.Tensor) or not isinstance(norm_weight, torch.Tensor):
+            raise ValueError("x and norm_weight must be torch.Tensors")
+        if x.numel() == 0 or norm_weight.numel() == 0 or x.shape[-1] != norm_weight.shape[-1]:
+            raise ValueError("x and norm_weight must be non-empty and match on their last dimension")
         x_fp32 = x.to(torch.float32)
         rms = torch.rsqrt(x_fp32.pow(2).mean(dim=-1, keepdim=True) + self.rms_eps)
         return x_fp32 * rms * norm_weight.to(torch.float32)
@@ -1238,6 +1411,8 @@ class SkipAttentionSpeculativeRouter:
         next_layer_router_weight: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predict Layer `L+1` top-`k` expert IDs from Layer `L`'s post-FFN residual stream."""
+        if not isinstance(next_layer_router_weight, torch.Tensor) or next_layer_router_weight.ndim != 2:
+            raise ValueError("next_layer_router_weight must be a 2D torch.Tensor")
         normed = self._rms_norm(post_ffn_residual, next_layer_norm_weight)
         logits = normed @ next_layer_router_weight.to(torch.float32).t()
         vals, idx = torch.topk(logits, k=self.top_k, dim=-1, largest=True, sorted=True)
@@ -1253,6 +1428,10 @@ class SkipAttentionSpeculativeRouter:
         baseline_cached_experts: Sequence[int],
     ) -> Dict[str, Any]:
         """Run Skip-Attention prefetch + post-attention routing with Cache-Aware Routing (`CAR`)."""
+        if not isinstance(post_attn_residual, torch.Tensor) or post_attn_residual.shape != post_ffn_residual.shape:
+            raise ValueError("post_attn_residual must be a torch.Tensor matching post_ffn_residual.shape")
+        if isinstance(baseline_cached_experts, (str, bytes)) or not isinstance(baseline_cached_experts, Sequence):
+            raise ValueError("baseline_cached_experts must be a Sequence of expert IDs")
         spec_idx, _ = self.predict_next_layer_experts(
             post_ffn_residual, next_layer_norm_weight, next_layer_router_weight
         )
@@ -1355,6 +1534,8 @@ class MuonNewtonSchulzLoRAPreconditioner:
 
     def _orthogonalize_float32(self, g: torch.Tensor) -> torch.Tensor:
         """Run the quintic Newton-Schulz iteration on an already-float32 2D matrix."""
+        if not isinstance(g, torch.Tensor) or g.ndim != 2 or g.numel() == 0:
+            raise ValueError("g must be a non-empty 2D torch.Tensor")
         transposed = False
         if g.shape[0] > g.shape[1]:
             g = g.t()
@@ -1458,6 +1639,8 @@ class FactoredGossipMix1Mix2Coordinator:
 
     def is_sensitive_fragment(self, fragment_name: str) -> bool:
         """Return True if `fragment_name` matches a `Mix2` sensitive block pattern."""
+        if not isinstance(fragment_name, str) or not fragment_name.strip():
+            raise ValueError("fragment_name must be a non-empty string")
         lowered = fragment_name.lower()
         return any(pat.lower() in lowered for pat in self.sensitive_patterns)
 

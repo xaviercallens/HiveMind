@@ -4,6 +4,8 @@ Description=HiveMind T4 monitor (telemetry + watchdog)
 After=network-online.target
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 ExecStart=/usr/bin/python3 /opt/hivemind/t4/scripts/t4_monitor.py
 Restart=always
 RestartSec=5

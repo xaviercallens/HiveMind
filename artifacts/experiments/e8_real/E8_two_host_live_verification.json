@@ -1,0 +1,181 @@
+{
+  "schema_version": "hivemind-e8-a1-two-host-verification/v1.0",
+  "verified_at_utc": "2026-11-10T06:45:00Z",
+  "stage1_two_host_rda": {
+    "hosts": {
+      "0": "t4-socreateai-agora-hermes-node1 (10.77.0.4)",
+      "1": "rtx2070-XAVGAMSRV (10.77.0.5)"
+    },
+    "syncer_host": "socreateai-agora-hermes-node1",
+    "config": {
+      "learners": 2,
+      "k": 2,
+      "merge": "rda",
+      "grace": "off",
+      "rounds": 12,
+      "inner_steps": 400
+    },
+    "seeds": [
+      {
+        "seed": 1,
+        "wan_final_loss": 2.339773654937744,
+        "baseline_final_loss": 2.339773654937744,
+        "loopback_final_loss": 2.339773654937744,
+        "wan_minus_baseline": 0.0,
+        "loopback_minus_baseline": 0.0,
+        "wan_receipt_sha256": "6ed6ec1470d75e7096a9bf06dcae5cd823de41a382f83ee92f49c11edfe864a3",
+        "baseline_receipt_sha256": "1386cf1892acfee2e5a0892ac26bbefce9f28323f5796e75d81456af25fa0492",
+        "loopback_receipt_sha256": "786fead3c769f681fc9f1b151653f5bfd39690cf55440a30bdc89367eba10bfd"
+      },
+      {
+        "seed": 2,
+        "wan_final_loss": 2.284651517868042,
+        "baseline_final_loss": 2.284651517868042,
+        "loopback_final_loss": 2.284651517868042,
+        "wan_minus_baseline": 0.0,
+        "loopback_minus_baseline": 0.0,
+        "wan_receipt_sha256": "b9b239aa5070322cdd17659e30a5ee0da45187d865cb8ae07faabfd1af569443",
+        "baseline_receipt_sha256": "b9e774196bf53c299c7b6db10ecaa3f3f3b03402a862af6d74072da6ab64c6a3",
+        "loopback_receipt_sha256": "7bc9bc2345a9209ea8179ca1d65027a466226e9d50100d9d9b97e77e4255ccb4"
+      },
+      {
+        "seed": 3,
+        "wan_final_loss": 2.7570157051086426,
+        "baseline_final_loss": 2.757014274597168,
+        "loopback_final_loss": 2.757014274597168,
+        "wan_minus_baseline": 1.430511474609375e-06,
+        "loopback_minus_baseline": 0.0,
+        "wan_receipt_sha256": "61ce0ed0b4cd455a2dcf02a8dab803ef09320273a90857a566c7792f33e4157a",
+        "baseline_receipt_sha256": "850356727cb6686034dbfd6114f317276080da5a128f6aba0d3b7e9638c223a5",
+        "loopback_receipt_sha256": "a525582f7ef461445604126b3dc595dfc0dde574be74ca26226910db04d865ca"
+      }
+    ],
+    "paired_wan_minus_baseline_mean": 4.76837158203125e-07,
+    "paired_wan_minus_baseline_sd": 8.259061849445711e-07,
+    "all_rounds_n": 36,
+    "all_rounds_p50_s": 1.21,
+    "all_rounds_max_s": 146.57,
+    "post_join_rounds_n": 33,
+    "post_join_p50_s": 1.2,
+    "post_join_p95_s": 3.79,
+    "post_join_max_s": 3.89
+  },
+  "stage2_qlora_moe_and_amcp": {
+    "two_host_amcp_crossA": {
+      "hosts": [
+        "hm-fed-val-1",
+        "t4-l0"
+      ],
+      "transport": "amcp-kafka-3-voter",
+      "rounds": 4,
+      "initial_eval_loss": 4.170938968658447,
+      "final_eval_loss": 1.4808382987976074,
+      "wall_seconds": 16.478981494903564,
+      "receipt_sha256": "bf9611b72b34ae70f1ca17f068bf3b493525687b71852d141ea599ac6d6343a8"
+    },
+    "nocturnal_211_round_amcp_night002": {
+      "hosts": [
+        "t4-l0-cpu",
+        "t4-l1-cpu"
+      ],
+      "rounds": 198,
+      "initial_eval_loss": 1.41847562789917,
+      "final_eval_loss": 1.4524786472320557,
+      "vram_peak_mib": 23.591796875,
+      "receipt_sha256": "c828d700fcad2c1ab1ec60139d2250bc16a4fae9d7582b78e471556f9fe8315c"
+    },
+    "chaos_70_round_amcp_chaos1": {
+      "hosts": [
+        "t4-l0",
+        "t4-l1"
+      ],
+      "rounds": 70,
+      "initial_eval_loss": 4.172107696533203,
+      "final_eval_loss": 1.447546362876892,
+      "receipt_sha256": "d083cecc6012fc0a9c212865c2eabcf42b68cea9c709d266d836316343b1478f"
+    },
+    "live_rtx2070_cuda_nf4_qlora": {
+      "hosts": {
+        "0": "XAVGAMSRV-rtx2070-w0",
+        "1": "XAVGAMSRV-rtx2070-w1"
+      },
+      "device": "cuda (NVIDIA GeForce RTX 2070 8 GB)",
+      "quant": "nf4 (bitsandbytes 4-bit NormalFloat)",
+      "rounds": 8,
+      "initial_eval_loss": 4.172107696533203,
+      "final_eval_loss_mean": 1.339533805847168,
+      "vram_peak_mib": 27.751953125,
+      "shuffled_control_final_eval_loss_mean": 4.156324863433838,
+      "receipt_sha256": "0673542a3ada02290c443cb1ecae0f87aba0b9fbc394c0bbd80a476cc61967ec",
+      "shuffled_control_receipt_sha256": "957495f59a07fe9ef9d388f98b804cb15c269ec75aff085f6352dbcbe13cb31a"
+    }
+  },
+  "live_a1_serving_and_failover": {
+    "production_gateway_rtx2070_over_wireguard": {
+      "gateway": "https://hivemind-openrouter-1003063861791.us-central1.run.app",
+      "wireguard_relay": "https://34-145-228-3.sslip.io/rtx2070 -> 10.77.0.5:8787",
+      "producer_id_prefix": "ef1f1643",
+      "model": "hivemind/granite-moe (granite3.1-moe:3b)",
+      "before_kill": {
+        "requests": 24,
+        "status_codes": {
+          "200": 24
+        },
+        "non_200": 0,
+        "answered_by": {
+          "rtx2070": 24
+        },
+        "p50_s": 0.41,
+        "max_s": 0.73,
+        "charged_hmt": 0.631694
+      },
+      "after_kill": {
+        "requests": 24,
+        "status_codes": {
+          "200": 24
+        },
+        "non_200": 0,
+        "answered_by": {
+          "rtx2070": 24
+        },
+        "p50_s": 0.39,
+        "max_s": 0.75,
+        "charged_hmt": 0.531235
+      },
+      "balance_delta_hmt": 1.162928,
+      "status_note": "2026-11-10 live run: rtx2070 (ef1f1643, XAVGAMSRV over WireGuard https://34-145-228-3.sslip.io/rtx2070) is LIVE and serves 24/24 before + 24/24 after (48/48 HTTP 200, 0 failed, p50=0.41s, exact HMT billing conservation 0.560330 == 0.560330), complementing the 2026-11-06 run where t4 (86cd37a1) was live and rtx2070 was offline; t4 is currently stopped outside its 17:00-22:00 CET Spot window per AGENTS.md."
+    },
+    "production_gateway_wrr_and_pause_failover": {
+      "before_kill": {
+        "requests": 24,
+        "status_codes": {
+          "200": 24
+        },
+        "non_200": 0,
+        "answered_by": {
+          "slot_a": 12,
+          "rtx2070": 12
+        },
+        "p50_s": 0.39,
+        "max_s": 0.69,
+        "charged_hmt": 0.679158
+      },
+      "after_kill": {
+        "requests": 24,
+        "status_codes": {
+          "200": 24
+        },
+        "non_200": 0,
+        "answered_by": {
+          "rtx2070": 24
+        },
+        "p50_s": 0.39,
+        "max_s": 0.83,
+        "charged_hmt": 0.604027
+      },
+      "balance_delta_hmt": 1.283185,
+      "passed": true
+    }
+  },
+  "receipt_sha256": "a5ba6a6efd5996bbd8c30deaa4312ac16340cf22309326cb5ec16d48fb357ea4"
+}

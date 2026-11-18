@@ -127,16 +127,25 @@ def test_the_languages_really_differ_declare_themselves_and_french_is_default() 
         assert f'hreflang="{code}"' in fr and f'href="/join?lang={code}"' in fr and name in fr
 
 
-def test_train_and_play_paths_are_available_now_with_working_commands() -> None:
-    assert [cls for _anchor, _title, cls, _status, _summary in PATHS] == ["ok", "ok", "ok", "ok"]
+def test_train_path_is_available_and_the_play_path_says_it_is_a_helper_script_with_no_steam_game() -> None:
+    """Steam's own store API says AppID 3133700 is 'Fantasy Grounds - Raiders of the Ghost Zone' (an add-on by another company), so the page must never offer it as ours."""
+    assert [cls for _anchor, _title, cls, _status, _summary in PATHS] == ["ok", "ok", "ok", "dev"]
     en, fr = page("en"), page("fr")
     assert "pas encore ouvert au public" not in fr and "not open to the public yet" not in en
-    assert "En développement" not in fr and "In development" not in en
-    assert "Disponible maintenant · unités MoE nocturnes et astrophysique" in fr
-    assert "Disponible maintenant · jeu Steam gratuit et pause GPU automatique" in fr
-    assert "Available now · night MoE &amp; astrophysics workunits" in en
-    assert "Available now · Free-to-Play Steam &amp; automatic idle-GPU pause" in en
-    assert "hivemind_boinc_idle_worker.py" in fr and "AppID 3133700" in fr
+    assert "Disponible maintenant · unités d'entraînement nocturnes (BOINC)" in fr.replace("&#x27;", "'")
+    assert "Available now · night training workunits (BOINC)" in en
+    assert "Helper script only · no Steam game yet" in en and "pas encore de jeu Steam" in fr
+    assert "Free-to-Play" not in en and "jeu Steam gratuit" not in fr
+    assert "belongs to an unrelated game add-on (Fantasy Grounds)" in en and "appartient à un autre jeu" in fr
+    assert "hivemind_boinc_idle_worker.py" in fr
+
+
+def test_the_page_does_not_call_the_synthetic_self_check_science_or_training() -> None:
+    """The worker folds a dip it injects into a synthetic curve, and its 'QLoRA delta' is derived from a hash: neither may be described as real data or training."""
+    en = html.unescape(re.sub(r"<[^>]+>", " ", page("en")))
+    assert "not real TESS or JWST data" in en and "It does not train a model" in en and "deterministic placeholder" in en
+    assert "0% GPU overhead" not in en and "60 FPS" not in en
+    assert "assumes you are playing" in en  # unmeasurable input counts as 'playing'
 
 
 def test_every_section_link_points_at_a_section_that_exists() -> None:
@@ -204,8 +213,12 @@ def test_every_script_and_flag_the_page_tells_people_to_use_exists() -> None:
     scripts = set(re.findall(r"scripts/([a-z_]+\.py)", commands))
     assert scripts == {
         "hivemind_boinc_idle_worker.py",
+        "hivemind_federate_node.py",
+        "hivemind_opentrainer_agent.py",
         "hivemind_producer_agent.py",
+        "hivemind_producer_autostart.py",
         "hivemind_producer_shield.py",
+        "hivemind_volunteer_config.py",
         "hivemind_volunteer_preflight.py",
     }
     for name in scripts:
@@ -350,7 +363,7 @@ def test_the_registration_example_is_a_request_the_real_endpoint_accepts() -> No
     assert body is not None
     request = RegisterRequest.model_validate_json(body.group(1))  # extra fields are forbidden by the model, so a typo would fail here
     assert request.role == "consumer" and request.kind is None and request.test is False
-    for role in ("producer", "prosumer"):  # the roles the producer step names: both must be roles the endpoint accepts
+    for role in ("producer", "prosumer", "trainer"):  # the roles the producer & OpenTrainer steps name: all must be roles the endpoint accepts
         RegisterRequest.model_validate({"handle": "x", "role": role})
         assert f'"{role}"' in html.unescape(page("en"))
 
@@ -389,5 +402,44 @@ def test_boinc_train_section_documents_plan_classes_dry_run_and_status_endpoints
     cfg = client.get("/get_project_config.php")
     assert cfg.status_code == 200 and "<project_config>" in cfg.text and "cuda_hivemind" in cfg.text
     st = client.get("/boinc/status")
-    assert st.status_code == 200 and st.json()["status"] == "ONLINE"
+    # IP-177: the state is the probe's result, with its basis; ONLINE only when the Ruche answered
+    assert st.status_code == 200 and (st.json()["status"] in ("ONLINE", "UNREACHABLE") or st.json()["status"].startswith("HTTP_"))
+    assert st.json()["probe"]["probe_url"] == st.json()["master_url"] and "GET " in st.json()["status_basis"]
     assert "end_users" in st.json()["night_training_roles"] and "hivemind_nodes" in st.json()["night_training_roles"]
+
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_newcomers_get_the_co_training_night_slot_procedure_in_every_language(lang: str) -> None:
+    body = page(lang)
+    assert "scripts/hivemind_federate_node.py" in body and "wg genkey" in body
+    assert f'href="{REPO_URL}/issues/431"' in body and f'href="{REPO_URL}/blob/main/docs/TRAINER_JOIN.md"' in body
+    assert "+250" not in body and "250 HMT" not in body
+
+
+def test_trainer_section_lists_all_five_federation_plan_steps_and_statuses() -> None:
+    """Issue #453: Both en and fr render the trainer section, all 5 step names from node_federation_plan, their statuses, and docs/TRAINER_JOIN.md."""
+    from hivemind.boinc.node_federation_plan import build_plan
+
+    plan = build_plan(
+        "RTX 2070",
+        8192.0,
+        coordinator=COORDINATOR_URL,
+        handle="test-trainer",
+    )
+    step_names = [s.name for s in plan.steps]
+    assert step_names == [
+        "preflight",
+        "register",
+        "idle_gate_dry_run",
+        "qlora_training",
+        "cross_host_pilot",
+    ]
+    for lang in ("en", "fr"):
+        rendered = render_join_page(lang)
+        assert '<section id="opentrainer">' in rendered
+        for step_name in step_names:
+            assert f"<code>{step_name}</code>" in rendered, (lang, step_name)
+        for status in ("READY", "BLOCKED", "MANUAL"):
+            assert f"<code>{status}</code>" in rendered, (lang, status)
+        assert "docs/TRAINER_JOIN.md" in rendered
+        assert "+250 HMT" not in rendered and "250 HMT" not in rendered

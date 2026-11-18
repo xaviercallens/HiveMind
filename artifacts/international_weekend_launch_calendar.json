@@ -1,5 +1,5 @@
 {
-  "schema_version": "hivemind.international_launch.v2.15",
+  "schema_version": "hivemind.international_launch.v2.16",
   "event_id": "HIVEMIND-INTL-LAUNCH-WEEKEND-2026-10-30",
   "title": "HiveMind / La Ruche — International Weekend Launch & Global Image-MoE Grand Challenge",
   "window_utc": {
@@ -12,13 +12,40 @@
     "disclaimer_path": "LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md"
   },
   "multilingual_human_announcements": {
-    "en": "Welcome to the HiveMind ('La Ruche') International Launch Weekend (Oct 30 - Nov 1, 2026)! Join with any GPU (>= 1.5 GB VRAM background mode or 8 GB Gamer mode) or deploy an autonomous Scout/Employed/Onlooker agent across our 6 global Super-Peer regions.",
-    "fr": "Bienvenue au week-end de lancement international de HiveMind (« La Ruche », 30 oct. – 1er nov. 2026) ! Participez avec votre PC/GPU (< 1,5 Go VRAM en tâche de fond ou 8 Go en mode Gamer) ou connectez votre agent autonome aux 4 Grands Défis de l'Essaim.",
-    "es": "¡Bienvenidos al Fin de Semana de Lanzamiento Internacional de HiveMind ('La Ruche', 30 oct - 1 nov 2026)! Conecta tu GPU doméstica (< 1.5 GB VRAM) o tu agente autónomo a los 4 Desafíos Globales.",
-    "zh": "欢迎参加 HiveMind（“蜂巢” La Ruche）国际发布周末（2026年10月30日–11月1日）！支持 <1.5 GB 显存轻量后台模式、8 GB 游戏防抢占模式以及 A2A/MCP 自主智能体接入。",
-    "pt": "Bem-vindos ao Fim de Semana de Lançamento Internacional do HiveMind ('La Ruche', 30 out - 1 nov 2026)! Contribua com GPUs Pascal/Turing (FP32) ou Ampere/Ada (BF16) e ganhe créditos utilitários HMT.",
-    "ja": "HiveMind（La Ruche）国際ローンチ・ウィークエンド（2026年10月30日〜11月1日）へようこそ！1.5GB未満のバックグラウンドVRAMモードまたは自律型AIエージェントで世界の4大チャレンジに参加しましょう。"
+    "en": "Welcome to the HiveMind ('La Ruche') International Launch Weekend (Oct 30 - Nov 1, 2026)! Join with any GPU (>= 1.5 GB VRAM background mode or 8 GB Gamer mode), attach your BOINC client, or deploy an autonomous Scout/Employed/Onlooker agent across our 6 global Super-Peer regions.",
+    "fr": "Bienvenue au week-end de lancement international de HiveMind (« La Ruche », 30 oct. – 1er nov. 2026) ! Participez avec votre PC/GPU (< 1,5 Go VRAM en tâche de fond, 8 Go en mode Gamer ou client BOINC) ou connectez votre agent autonome aux 4 Grands Défis de l'Essaim.",
+    "es": "¡Bienvenidos al Fin de Semana de Lanzamiento Internacional de HiveMind ('La Ruche', 30 oct - 1 nov 2026)! Conecta tu GPU doméstica (< 1.5 GB VRAM), tu cliente BOINC o tu agente autónomo a los 4 Desafíos Globales.",
+    "de": "Willkommen zum internationalen Startwochenende von HiveMind ('La Ruche', 30. Okt. – 1. Nov. 2026)! Verbinden Sie Ihre GPU (< 1,5 GB Hintergrundmodus oder 8 GB Gamer-Modus mit < 412 ms Präemption), Ihren BOINC-Client oder einen autonomen A2A/MCP-Agenten über unsere 6 globalen Super-Peer-Regionen.",
+    "zh": "欢迎参加 HiveMind（“蜂巢” La Ruche）国际发布周末（2026年10月30日–11月1日）！支持 <1.5 GB 显存轻量后台模式、8 GB 游戏防抢占模式、BOINC 志愿计算客户端以及 A2A/MCP 自主智能体接入。",
+    "pt": "Bem-vindos ao Fim de Semana de Lançamento Internacional do HiveMind ('La Ruche', 30 out - 1 nov 2026)! Contribua com GPUs Pascal/Turing (FP32), Ampere/Ada (BF16) ou cliente BOINC e ganhe créditos utilitários HMT.",
+    "ja": "HiveMind（La Ruche）国際ローンチ・ウィークエンド（2026年10月30日〜11月1日）へようこそ！1.5GB未満のバックグラウンドVRAMモード、BOINCクライアント、または自律型AIエージェントで世界の4大チャレンジに参加しましょう。",
+    "ko": "HiveMind('La Ruche') 국제 런칭 위크엔드(2026년 10월 30일~11월 1일)에 오신 것을 환영합니다! 1.5GB 미만 백그라운드 VRAM 모드, 8GB 게이머 모드, BOINC 클라이언트 또는 자율 A2A/MCP 에이전트로 4대 글로벌 챌린지에 참여하세요.",
+    "ar": "مرحباً بكم في عطلة نهاية الأسبوع للإطلاق الدولي لمشروع HiveMind ('La Ruche'، 30 أكتوبر – 1 نوفمبر 2026)! شاركوا عبر أي بطاقة رسوميات (أقل من 1.5 غيغابايت في الخلفية أو 8 غيغابايت لوضع الألعاب) أو عميل BOINC أو وكيل ذكي مستقل.",
+    "hi": "HiveMind ('La Ruche') अंतर्राष्ट्रीय लॉन्च वीकेंड (30 अक्टूबर – 1 नवंबर 2026) में आपका स्वागत है! किसी भी GPU (<1.5 GB बैकग्राउंड मोड या 8 GB गेमर मोड), BOINC क्लाइंट, या स्वायत्त AI एजेंट के साथ हमारे 6 वैश्विक क्षेत्रों से जुड़ें।"
   },
+  "boinc_global_plan_classes": [
+    {
+      "plan_class": "cpu_hivemind_solver",
+      "app_name": "hivemind_solver_sweep",
+      "min_vram_mib": 0,
+      "quorum": 2,
+      "description": "Cross-CPU Richardson step-doubling ODE/PDE solver sweeps & Lean 4 formal proof checks."
+    },
+    {
+      "plan_class": "cuda_hivemind",
+      "app_name": "hivemind_qlora",
+      "min_vram_mib": 4500,
+      "quorum": 2,
+      "description": "Consumer GPU (6-8 GB) 4-bit NF4 QLoRA DiLoCo inner steps & 8-expert MoE evaluation."
+    },
+    {
+      "plan_class": "cuda_hivemind_big",
+      "app_name": "hivemind_qlora_moe_big",
+      "min_vram_mib": 10000,
+      "quorum": 2,
+      "description": "Prosumer Big-GPU (12-24 GB+) 104-Bee Image-MoE upcycling & Qwen 3.5 14B/30B-A3B distillation."
+    }
+  ],
   "schedule_phases": [
     {
       "phase_id": "PHASE-0-THU-OCT29-NOCTURNAL-VMOE",
@@ -145,14 +172,23 @@
     "discovery_endpoints": {
       "calendar_json": "/api/v1/launch/calendar",
       "well_known_manifest": "/.well-known/hivemind-launch-calendar.json",
+      "roadmap_json": "/api/v1/launch/roadmap",
+      "well_known_roadmap": "/.well-known/hivemind-launch-roadmap.json",
       "enroll_post": "/api/v1/launch/enroll",
-      "nocturnal_vmoe_monitor": "/api/v1/night-moe/reddit-vision/evolution"
+      "nocturnal_vmoe_monitor": "/api/v1/night-moe/reddit-vision/evolution",
+      "boinc_ledger_sync": "/boinc/v1/ledger/sync"
     },
     "agent_roles_accepted": [
       "scout_bee_harvester",
       "employed_bee_qlora_trainer",
       "onlooker_bee_validator",
-      "lean4_formal_prover_agent"
+      "lean4_formal_prover_agent",
+      "boinc_quorum2_validator_agent"
+    ],
+    "boinc_plan_classes_supported": [
+      "cpu_hivemind_solver",
+      "cuda_hivemind",
+      "cuda_hivemind_big"
     ],
     "required_headers": {
       "X-HiveMind-Agent-Protocol": "AMCP/1.5-S29",

@@ -17,7 +17,7 @@
     {
       "pr_order": 2,
       "ticket": "HM-S32-02",
-      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "sdk": "hivemind-openrouter + hm-REVOKED",
       "model": "hivemind/coder",
       "completion_id": "chatcmpl-107",
       "request_id": "req-e0c3452f90464bf09c2d0effc8468462",
@@ -28,7 +28,7 @@
     {
       "pr_order": 3,
       "ticket": "HM-S32-03",
-      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "sdk": "hivemind-openrouter + hm-REVOKED",
       "model": "hivemind/coder",
       "completion_id": "chatcmpl-255",
       "request_id": "req-c1b68fed5b9b49a1b1425dc55db6dc38",
@@ -39,7 +39,7 @@
     {
       "pr_order": 4,
       "ticket": "HM-S33-01",
-      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "sdk": "hivemind-openrouter + hm-REVOKED",
       "model": "hivemind/coder",
       "completion_id": "chatcmpl-682",
       "request_id": "req-67d3e572591844f980ed3e873724659a",
@@ -50,7 +50,7 @@
     {
       "pr_order": 5,
       "ticket": "HM-S33-02",
-      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "sdk": "hivemind-openrouter + hm-REVOKED",
       "model": "hivemind/bee-rusty-sundials",
       "completion_id": "chatcmpl-759",
       "request_id": "req-845df5d9e1974af48c699003edc93991",
@@ -61,7 +61,7 @@
     {
       "pr_order": 6,
       "ticket": "HM-S33-03",
-      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "sdk": "hivemind-openrouter + hm-REVOKED",
       "model": "hivemind/bee-stars",
       "completion_id": "chatcmpl-M8E1IjFpK650FCxehC1FsUDKZqg59vUt",
       "request_id": "req-e851f3c97bde413aac43a22af9a7b9c6",
@@ -72,7 +72,7 @@
     {
       "pr_order": 7,
       "ticket": "HM-S34-01",
-      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "sdk": "hivemind-openrouter + hm-REVOKED",
       "model": "hivemind/coder",
       "completion_id": "chatcmpl-491",
       "request_id": "req-081aa414e05a450b837c71cde6a4b9f3",
@@ -83,7 +83,7 @@
     {
       "pr_order": 8,
       "ticket": "HM-S34-02",
-      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "sdk": "hivemind-openrouter + hm-REVOKED",
       "model": "hivemind/coder",
       "completion_id": "chatcmpl-545",
       "request_id": "req-fd03f0ac5a604efda78c460a52e4920f",
@@ -94,7 +94,7 @@
     {
       "pr_order": 9,
       "ticket": "HM-S34-03",
-      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "sdk": "hivemind-openrouter + hm-REVOKED",
       "model": "hivemind/bee-lean-prover",
       "completion_id": "chatcmpl-552",
       "request_id": "req-bc16692f4cea4f0b886ed37aa44260df",
@@ -105,7 +105,7 @@
     {
       "pr_order": 10,
       "ticket": "HM-S34-04",
-      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "sdk": "hivemind-openrouter + hm-REVOKED",
       "model": "hivemind/coder",
       "completion_id": "chatcmpl-282",
       "request_id": "req-e92f1134e3a0470db57ca1e8e11de723",

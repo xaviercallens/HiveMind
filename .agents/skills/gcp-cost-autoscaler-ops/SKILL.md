@@ -33,19 +33,19 @@ python3 .agents/skills/gcp-cost-autoscaler-ops/scripts/gcp_cost_audit.py --proje
 ### Tier 1 — Cloud Run Knative Autoscaler Rules
 1. **Single-Writer Stateful Litestream Gateway (`hivemind-openrouter` in `us-central1`)**:
    - Runs `litestream replicate -exec "uvicorn server:app --workers 1"`.
-   - Because Uvicorn runs a single Python worker process (GIL-bound to 1 core), allocate exactly **1 vCPU and 1 GiB RAM** with `--cpu-boost`:
+   - Because Uvicorn runs a single Python worker process (GIL-bound to 1 core), allocate **1 vCPU and 1 GiB RAM** with `--cpu-boost` and scale-to-zero single-writer bounds (`--min-instances=0 --max-instances=1`):
      ```bash
      gcloud run services update hivemind-openrouter \
        --region=us-central1 --project=gen-lang-client-0625573011 \
-       --cpu=1 --memory=1Gi --min-instances=1 --max-instances=1 \
-       --no-cpu-throttling --cpu-boost --concurrency=80
+       --cpu=1 --memory=1Gi --min-instances=0 --max-instances=1 \
+       --cpu-throttling --cpu-boost --concurrency=80
      ```
 2. **Stateless Control Plane & APIs (`hivemind-at-home-ruche`, `symbrain-v4-edge`, `runux-math-kernel-service`, etc.)**:
-   - Must use **request-based billing** (`--cpu-throttling`) and **scale-to-zero** (`--min-instances=0`) with `--cpu-boost`:
+   - Must use **request-based billing** (`--cpu-throttling`) and **scale-to-zero** (`--min-instances=0 --max-instances=1`) with `--cpu-boost`:
      ```bash
      gcloud run services update <SERVICE> \
        --region=<REGION> --project=gen-lang-client-0625573011 \
-       --cpu-throttling --cpu-boost --min-instances=0 --max-instances=2
+       --cpu-throttling --cpu-boost --min-instances=0 --max-instances=1
      ```
 3. **Cloud Run L4 GPU Services (`deepseek-prover-v2`, `personashield-api-gpu`, `symbrain-v4-cloud32`)**:
    - Keep `--min-instances=0 --max-instances=1` to prevent concurrent multi-GPU cold-start spikes from crawlers or burst retries.

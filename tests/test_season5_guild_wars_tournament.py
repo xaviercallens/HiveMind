@@ -231,7 +231,8 @@ def test_s5_04_guild_tournament_api_json_schema(client: TestClient) -> None:
 
 
 def test_s5_04_guild_tournament_matchmaking_update(client: TestClient) -> None:
-    """A squad can queue its self-reported metrics and the matchmaking re-runs."""
+    """Unauthenticated self-reports are recorded as unverified without re-ranking the champion (IP-153)."""
+    initial_champion = client.get("/api/guild-tournament").json()["champion_guild_id"]
     resp = client.post(
         "/api/guild-tournament",
         json={
@@ -246,10 +247,12 @@ def test_s5_04_guild_tournament_matchmaking_update(client: TestClient) -> None:
     assert body["num_guilds"] == 3
     assert body["num_raid_arcs"] == 3
     updated = next(g for g in body["guilds"] if g["guild_id"] == "GUILD-03")
-    assert updated["multi_domain_holdout_perplexity"] == pytest.approx(4.25)
-    assert updated["speculative_tokens_per_sec"] == pytest.approx(31.5)
-    assert updated["rank"] == 1
-    assert body["champion_guild_id"] == "GUILD-03"
+    assert updated["squad_reported"] is True
+    assert updated["squad_report_verified"] is False
+    assert updated["self_report_status"] == "UNVERIFIED_IGNORED_FOR_RANKING"
+    assert updated["reported_unverified_perplexity"] == pytest.approx(4.25)
+    assert updated["reported_unverified_tokens_per_sec"] == pytest.approx(31.5)
+    assert body["champion_guild_id"] == initial_champion
 
     unknown = client.post("/api/guild-tournament", json={"guild_id": "GUILD-99"})
     assert unknown.status_code == 404

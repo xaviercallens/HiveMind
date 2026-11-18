@@ -50,7 +50,7 @@ class Backend:
     name = "backend"
 
     def complete(self, messages: List[Dict[str, str]]) -> str:  # pragma: no cover - interface
-        raise NotImplementedError
+        raise BackendError(f"{self.name}: no language model backend configured")
 
 
 class FakeBackend(Backend):
@@ -59,6 +59,8 @@ class FakeBackend(Backend):
     name = "fake"
 
     def __init__(self, script: Any) -> None:
+        if not callable(script) and not isinstance(script, (list, tuple)):
+            raise ValueError("script must be a callable or a list/tuple of strings")
         self._script = script
         self._i = 0
         self.calls: List[List[Dict[str, str]]] = []
@@ -104,7 +106,12 @@ def check_loopback_url(url: str) -> str:
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *a: Any, **k: Any) -> None:  # type: ignore[override]
+    last_refused_url: str = ""
+    last_refused_code: int = 0
+
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:  # type: ignore[override]
+        self.last_refused_url = str(newurl) if newurl is not None else ""
+        self.last_refused_code = int(code) if isinstance(code, int) else 0
         return None
 
 
@@ -122,6 +129,18 @@ class OllamaBackend(Backend):
             raise BackendError("model name has unexpected characters")
         if isinstance(num_gpu, bool) or not isinstance(num_gpu, int) or num_gpu < 0:
             raise BackendError("num_gpu must be an integer >= 0")
+        if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise BackendError("timeout_s must be a finite positive number")
+        if isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or not math.isfinite(temperature) or temperature < 0:
+            raise BackendError("temperature must be a finite number >= 0")
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            raise BackendError("seed must be an integer")
+        if isinstance(num_predict, bool) or not isinstance(num_predict, int) or num_predict < 1:
+            raise BackendError("num_predict must be an integer >= 1")
+        if isinstance(max_response_bytes, bool) or not isinstance(max_response_bytes, int) or max_response_bytes < 1:
+            raise BackendError("max_response_bytes must be an integer >= 1")
+        if think is not None and not isinstance(think, bool):
+            raise BackendError("think must be a boolean or None")
         self.base_url = check_loopback_url(base_url)
         self.model, self.num_gpu, self.timeout_s = model, num_gpu, float(timeout_s)
         self.temperature, self.seed, self.num_predict, self.think = float(temperature), int(seed), int(num_predict), think
@@ -129,6 +148,11 @@ class OllamaBackend(Backend):
         self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
 
     def payload(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+        if not isinstance(messages, list) or not all(
+            isinstance(m, dict) and isinstance(m.get("role"), str) and isinstance(m.get("content"), str)
+            for m in messages
+        ):
+            raise BackendError("messages must be a list of role/content dicts")
         body: Dict[str, Any] = {"model": self.model, "messages": messages, "stream": False,
                                 "options": {"num_gpu": self.num_gpu, "temperature": self.temperature, "seed": self.seed, "num_predict": self.num_predict}}
         if self.think is not None:
@@ -180,6 +204,8 @@ def _loads(text: str) -> Any:
 
 def _balanced_objects(text: str) -> List[str]:
     """Top-level balanced {...} slices (string-aware), in order."""
+    if not isinstance(text, str):
+        raise SpecInvalid("text must be a string")
     out: List[str] = []
     i, n = 0, len(text)
     while i < n:
@@ -333,9 +359,9 @@ def validate_spec(obj: Any) -> Dict[str, Any]:
         at = obj["atol"]
         if isinstance(at, list):
             _numlist(at, "atol", 20)
-            if len(at) != n or not all(v > 0 for v in at):
+            if len(at) != n or not all(0 < v <= 1 for v in at):
                 raise SpecInvalid('"atol" array must have one positive entry per state variable')
-        elif not (_is_num(at) and at > 0):
+        elif not (_is_num(at) and 0 < at <= 1):
             raise SpecInvalid('"atol" must be a positive number')
     if "method" in obj and obj["method"] not in ("bdf", "adams"):
         raise SpecInvalid('"method" must be "bdf" or "adams"')
@@ -350,11 +376,15 @@ def validate_spec(obj: Any) -> Dict[str, Any]:
 
 def canonical_bytes(spec: Dict[str, Any]) -> bytes:
     """The exact bytes sent to the solver (compact JSON, key order as proposed)."""
+    if not isinstance(spec, dict):
+        raise ValueError("spec must be a dict")
     return json.dumps(spec, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
 def with_house_tolerances(spec: Dict[str, Any]) -> Dict[str, Any]:
     """A copy of the validated spec with the Science Bee house tolerances added when the proposal omitted them (tighter than the CLI defaults 1e-8 / 1e-10)."""
+    if not isinstance(spec, dict):
+        raise ValueError("spec must be a dict")
     out = dict(spec)
     out.setdefault("rtol", HOUSE_RTOL)
     out.setdefault("atol", HOUSE_ATOL)
@@ -362,6 +392,8 @@ def with_house_tolerances(spec: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def spec_sha256(spec: Dict[str, Any]) -> str:
+    if not isinstance(spec, dict):
+        raise ValueError("spec must be a dict")
     return hashlib.sha256(canonical_bytes(spec)).hexdigest()
 
 
@@ -441,6 +473,8 @@ Allowed slot_family values:
 
 def build_system_prompt(*, prefer_slots: bool = False) -> str:
     """The allowed grammar and families, generated from families.py."""
+    if not isinstance(prefer_slots, bool):
+        raise ValueError("prefer_slots must be a boolean")
     base = SYSTEM_PROMPT_HEAD + fam.catalogue_text() + "\n" + SYSTEM_PROMPT_TAIL.format(presets=fam.presets_text())
     if prefer_slots:
         return base + SLOT_SYSTEM_PROMPT_TAIL
@@ -448,11 +482,17 @@ def build_system_prompt(*, prefer_slots: bool = False) -> str:
 
 
 def build_first_messages(question: str, *, prefer_slots: bool = False) -> List[Dict[str, str]]:
+    if not isinstance(question, str) or not question.strip():
+        raise ValueError("question must be a non-empty string")
     return [{"role": "system", "content": build_system_prompt(prefer_slots=prefer_slots)},
             {"role": "user", "content": "Question (between the markers):\n<<<\n" + question.strip() + "\n>>>\nReply with ONE JSON object."}]
 
 
 def build_followup_messages(question: str, previous_spec: Dict[str, Any], previous_question: Optional[str], *, prefer_slots: bool = False) -> List[Dict[str, str]]:
+    if not isinstance(question, str) or not question.strip():
+        raise ValueError("question must be a non-empty string")
+    if not isinstance(previous_spec, dict):
+        raise ValueError("previous_spec must be a dict")
     prev_q = (previous_question or "").strip()
     return [{"role": "system", "content": build_system_prompt(prefer_slots=prefer_slots)},
             {"role": "user", "content": ("The previous question was:\n<<<\n" + prev_q + "\n>>>\nIts VALIDATED specification was:\n" + json.dumps(previous_spec, separators=(",", ":"), ensure_ascii=False)
@@ -466,6 +506,12 @@ def formulate(messages: List[Dict[str, str]], backend: Backend, *, max_retries: 
 
     Returns {ok, spec, spec_bytes, attempts, retries, errors, raw_outputs, reason}. Never guesses: after the last failure ok is False.
     """
+    if isinstance(max_retries, bool) or not isinstance(max_retries, int) or max_retries < 0:
+        raise ValueError("max_retries must be an integer >= 0")
+    if not isinstance(messages, list) or not all(isinstance(m, dict) for m in messages):
+        raise ValueError("messages must be a list of dicts")
+    if not isinstance(backend, Backend) and not callable(getattr(backend, "complete", None)):
+        raise ValueError("backend must be a Backend or have a callable complete(messages)")
     msgs = [dict(m) for m in messages]
     errors: List[str] = []
     raws: List[str] = []
@@ -496,6 +542,12 @@ def formulate(messages: List[Dict[str, str]], backend: Backend, *, max_retries: 
 
 
 def _fail(errors: List[str], raws: List[str], attempts: int, reason: str) -> Dict[str, Any]:
+    if not isinstance(errors, list) or not isinstance(raws, list):
+        raise ValueError("errors and raws must be lists")
+    if isinstance(attempts, bool) or not isinstance(attempts, int) or attempts < 0:
+        raise ValueError("attempts must be an integer >= 0")
+    if not isinstance(reason, str):
+        raise ValueError("reason must be a string")
     return {"ok": False, "spec": None, "spec_bytes": None, "slot_trace": None, "attempts": attempts, "retries": max(0, attempts - 1),
             "errors": errors, "raw_outputs": raws, "reason": reason}
 
@@ -505,6 +557,14 @@ class SolverPipeline:
     """spec bytes -> sandboxed solver -> verifier -> certificate. sandbox, verifier and service helpers are imported lazily; any failure gives UNVERIFIED."""
 
     def __init__(self, binary: str, *, problems_dir: Optional[str] = None, timeout_s: float = 30.0, mem_mb: int = 2048, allow_unsandboxed: bool = False) -> None:
+        if not isinstance(binary, str) or not binary.strip():
+            raise ValueError("binary must be a non-empty string")
+        if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise ValueError("timeout_s must be a finite positive number")
+        if isinstance(mem_mb, bool) or not isinstance(mem_mb, int) or mem_mb < 1:
+            raise ValueError("mem_mb must be an integer >= 1")
+        if not isinstance(allow_unsandboxed, bool):
+            raise ValueError("allow_unsandboxed must be a boolean")
         self.binary, self.problems_dir = binary, problems_dir
         self.timeout_s, self.mem_mb, self.allow_unsandboxed = float(timeout_s), int(mem_mb), bool(allow_unsandboxed)
         self._library: Optional[Dict[str, Dict[str, Any]]] = None
@@ -570,6 +630,8 @@ _EN_WORDS = re.compile(r"\b(what|which|give|compute|how|with|the|is|are|if|and|o
 
 
 def detect_language(text: str) -> str:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     fr, en = len(_FR_WORDS.findall(text)), len(_EN_WORDS.findall(text))
     return "fr" if fr > en else "en"
 
@@ -585,6 +647,8 @@ _UNIT_AFTER_NUMBER = r"(?<![\w.])[-+]?\d+(?:[.,]\d+)?(?:[eE][-+]?\d+)?\s*"
 
 def units_mentioned(question: str) -> Dict[str, List[str]]:
     """Units the question itself uses, found right after a number (never converted)."""
+    if not isinstance(question, str):
+        raise ValueError("question must be a string")
     found: Dict[str, List[str]] = {}
     for dim, pats in _UNIT_PATTERNS.items():
         for pat, label in pats:
@@ -598,6 +662,10 @@ def _g(x: Any) -> str:
 
 
 def _describe_setup(spec: Dict[str, Any], lang: str) -> List[str]:
+    if not isinstance(spec, dict) or not isinstance(spec.get("problem"), dict) or not isinstance(spec.get("y0"), list):
+        raise ValueError("spec must be a validated spec dict")
+    if not isinstance(lang, str) or lang not in ("en", "fr"):
+        raise ValueError("lang must be 'en' or 'fr'")
     prob, y0 = spec["problem"], spec["y0"]
     lines: List[str] = []
     fr = lang == "fr"
@@ -638,6 +706,8 @@ def _describe_setup(spec: Dict[str, Any], lang: str) -> List[str]:
 
 
 def _state_names(spec: Dict[str, Any]) -> List[str]:
+    if not isinstance(spec, dict) or not isinstance(spec.get("problem"), dict) or not isinstance(spec.get("y0"), list):
+        raise ValueError("spec must be a validated spec dict")
     prob = spec["problem"]
     if prob["kind"] == "named":
         names = [s["name"] for s in fam.FAMILIES[prob["family"]]["state"]]
@@ -654,6 +724,12 @@ def echo_interpreted_problem(
     slot_trace: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Echo the interpreted problem back to the user for confirmation before relying on numbers."""
+    if not isinstance(spec, dict) or not isinstance(spec.get("problem"), dict) or not isinstance(spec.get("y0"), list) or not isinstance(spec.get("t_out"), list):
+        raise ValueError("spec must be a validated spec dict")
+    if not isinstance(language, str):
+        raise ValueError("language must be a string")
+    if slot_trace is not None and not isinstance(slot_trace, dict):
+        raise ValueError("slot_trace must be a dict or None")
     lang = "fr" if language == "fr" else "en"
     names = _state_names(spec)
     setup_lines = _describe_setup(spec, lang)
@@ -700,6 +776,12 @@ _VERDICT_WORDS = {
 
 def explain(question: str, spec: Optional[Dict[str, Any]], report: Optional[Dict[str, Any]], *, language: Optional[str] = None, failure_reason: str = "") -> str:
     """Deterministic plain-language answer (no model). Always ends with the limits sentence (English; French translation added for French questions)."""
+    if not isinstance(question, str):
+        raise ValueError("question must be a string")
+    if spec is not None and not isinstance(spec, dict):
+        raise ValueError("spec must be a dict or None")
+    if report is not None and not isinstance(report, dict):
+        raise ValueError("report must be a dict or None")
     lang = language or detect_language(question)
     fr = lang == "fr"
     out: List[str] = []
@@ -764,6 +846,12 @@ class ScienceBee:
     """One conversation: remembers the last VALIDATED spec so that a follow-up modifies it through the same validation loop."""
 
     def __init__(self, backend: Backend, pipeline: Any, *, max_retries: int = MAX_RETRIES, prefer_slots: bool = False) -> None:
+        if not isinstance(backend, Backend):
+            raise ValueError("backend must be a Backend instance")
+        if isinstance(max_retries, bool) or not isinstance(max_retries, int) or max_retries < 0:
+            raise ValueError("max_retries must be an integer >= 0")
+        if not isinstance(prefer_slots, bool):
+            raise ValueError("prefer_slots must be a boolean")
         self.backend, self.pipeline, self.max_retries = backend, pipeline, int(max_retries)
         self.prefer_slots = bool(prefer_slots)
         self.last_spec: Optional[Dict[str, Any]] = None
@@ -806,6 +894,8 @@ def _canon_num(x: float) -> float:
 
 
 def _canon_problem(spec: Dict[str, Any]) -> Tuple[Any, ...]:
+    if not isinstance(spec, dict) or not isinstance(spec.get("problem"), dict):
+        raise ValueError("spec must be a dict with a problem object")
     prob = spec["problem"]
     if prob["kind"] == "named":
         e = fam.FAMILIES[prob["family"]]
@@ -828,6 +918,10 @@ def _close(a: Any, b: Any, rel: float) -> bool:
 
 def specs_match(a: Dict[str, Any], b: Dict[str, Any], rel: float = 1e-6) -> bool:
     """Exact spec match as pre-registered: same problem (defaults filled in), y0, t0 (default 0) and t_out within relative 1e-6; id, tolerances and method ignored."""
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        raise ValueError("a and b must be dicts")
+    if isinstance(rel, bool) or not isinstance(rel, (int, float)) or not math.isfinite(rel) or rel < 0:
+        raise ValueError("rel must be a finite non-negative number")
     try:
         if not _close(_canon_problem(a), _canon_problem(b), rel):
             return False
@@ -843,10 +937,16 @@ _SEP = r"\s*(?:=|:|of|is|at|equals|de|à|a|vaut|égal à|egal a)?\s*"
 
 
 def _fr_decimals(text: str) -> str:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     return re.sub(r"(?<=\d),(?=\d)", ".", text)
 
 
 def _find(text: str, synonyms: Sequence[str]) -> Optional[float]:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
+    if not isinstance(synonyms, (list, tuple)) or not synonyms or not all(isinstance(s, str) and s.strip() for s in synonyms):
+        raise ValueError("synonyms must be a non-empty sequence of strings")
     for syn in synonyms:
         m = re.search(r"(?<![\w])(?:" + syn + r")" + _SEP + "(" + _NUM + ")", text, re.IGNORECASE)
         if m:
@@ -858,6 +958,8 @@ _TIME_MARK = re.compile(r"(?:\bt\s*=|\bat times?\b|\bat\b|\bafter\b|\bà\b|\baux
 
 
 def _times(text: str) -> Optional[List[float]]:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     sentences = re.split(r"(?<=[.?!])\s+", text.strip())
     for s in reversed(sentences):
         marks = list(_TIME_MARK.finditer(s))
@@ -870,6 +972,10 @@ def _times(text: str) -> Optional[List[float]]:
 
 
 def _increasing(ts: Optional[List[float]]) -> Optional[List[float]]:
+    if ts is None:
+        return None
+    if not isinstance(ts, list) or not all(_is_num(x) for x in ts):
+        raise ValueError("ts must be a list of finite numbers or None")
     if not ts or any(b <= a for a, b in zip(ts, ts[1:])) or ts[0] <= 0:
         return None
     return ts
@@ -877,6 +983,8 @@ def _increasing(ts: Optional[List[float]]) -> Optional[List[float]]:
 
 def baseline_formulate(question: str) -> Optional[Dict[str, Any]]:
     """Keyword/template formulator: regular expressions over a tiny vocabulary. Returns a validated spec, or None (could not formulate). No unit conversion."""
+    if not isinstance(question, str):
+        raise ValueError("question must be a string")
     q = _fr_decimals(question)
     ts = _increasing(_times(q))
     if ts is None:
@@ -956,6 +1064,8 @@ class BaselineBackend(Backend):
     name = "baseline"
 
     def complete(self, messages: List[Dict[str, str]]) -> str:
+        if not isinstance(messages, list) or not messages or not isinstance(messages[-1], dict) or not isinstance(messages[-1].get("content"), str):
+            raise BackendError("messages must be a non-empty list of role/content dicts")
         text = messages[-1]["content"]
         m = re.search(r"<<<\n(.*?)\n>>>", text, re.DOTALL)
         spec = baseline_formulate(m.group(1) if m else text)
@@ -964,6 +1074,10 @@ class BaselineBackend(Backend):
 
 # ======================================================================== named-slot formulator (pre-converting unit & derived-parameter slots)
 def _find_with_unit(text: str, synonyms: Sequence[str], unit_re: str) -> Optional[float]:
+    if not isinstance(text, str) or not isinstance(unit_re, str) or not unit_re.strip():
+        raise ValueError("text and unit_re must be strings")
+    if not isinstance(synonyms, (list, tuple)) or not synonyms or not all(isinstance(s, str) and s.strip() for s in synonyms):
+        raise ValueError("synonyms must be a non-empty sequence of strings")
     for syn in synonyms:
         m = re.search(r"(?<![\w])(?:" + syn + r")" + _SEP + "(" + _NUM + r")\s*(?:" + unit_re + r")(?![\w])", text, re.IGNORECASE)
         if m:
@@ -972,6 +1086,10 @@ def _find_with_unit(text: str, synonyms: Sequence[str], unit_re: str) -> Optiona
 
 
 def _find_before_unit(text: str, unit_re: str, noun_re: Optional[str] = None) -> Optional[float]:
+    if not isinstance(text, str) or not isinstance(unit_re, str) or not unit_re.strip():
+        raise ValueError("text and unit_re must be strings")
+    if noun_re is not None and (not isinstance(noun_re, str) or not noun_re.strip()):
+        raise ValueError("noun_re must be a non-empty string or None")
     tail = (r"\s+(?:" + noun_re + r")") if noun_re else ""
     m = re.search(r"(" + _NUM + r")\s*(?:" + unit_re + r")(?![\w])" + tail, text, re.IGNORECASE)
     return float(m.group(1)) if m else None
@@ -984,6 +1102,8 @@ _SLOT_TIME_MARK = re.compile(
 
 
 def _slot_times(text: str) -> Optional[List[float]]:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     m_grid = re.search(
         r"(?:over|simulate|pendant|sur)\s+(" + _NUM + r")\s*(?:seconds?|days?|minutes?|s|d|min)\b.*?\((\d+)\s*points?\)",
         text,
@@ -1007,6 +1127,8 @@ def _slot_times(text: str) -> Optional[List[float]]:
 
 def slot_formulate(question: str) -> Optional[Dict[str, Any]]:
     """Extract a `hivemind-solver-slots/1` slot dictionary (including unit conversions & derived parameters) and validate it via `compile_slot_spec`."""
+    if not isinstance(question, str):
+        raise ValueError("question must be a string")
     q = _fr_decimals(question)
     ts = _increasing(_slot_times(q))
     if ts is None:
@@ -1344,6 +1466,8 @@ class SlotBackend(Backend):
     name = "slot"
 
     def complete(self, messages: List[Dict[str, str]]) -> str:
+        if not isinstance(messages, list) or not messages or not isinstance(messages[-1], dict) or not isinstance(messages[-1].get("content"), str):
+            raise BackendError("messages must be a non-empty list of role/content dicts")
         text = messages[-1]["content"]
         m = re.search(r"<<<\n(.*?)\n>>>", text, re.DOTALL)
         slot_obj = slot_formulate(m.group(1) if m else text)

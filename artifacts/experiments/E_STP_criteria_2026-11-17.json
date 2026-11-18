@@ -1,0 +1,185 @@
+{
+  "E-STP-1": {
+    "model": "crowd",
+    "rule": "A1 (2026-11-15)",
+    "fractions": {
+      "1": {
+        "n_sft": 3,
+        "n_stp": 3,
+        "sft_acc": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "stp_acc": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "sft_mean": 0.0,
+        "stp_mean": 0.0,
+        "diff": 0.0,
+        "pooled_sd": 0.0,
+        "interpretable": false,
+        "state": "uninformative",
+        "gain_over_2sd": false,
+        "sft_far_mean": 3.2956,
+        "stp_far_mean": 3.2954,
+        "guard_rail": "pass",
+        "health": "not_evaluable"
+      },
+      "0.25": {
+        "n_sft": 3,
+        "n_stp": 3,
+        "sft_acc": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "stp_acc": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "sft_mean": 0.0,
+        "stp_mean": 0.0,
+        "diff": 0.0,
+        "pooled_sd": 0.0,
+        "interpretable": false,
+        "state": "uninformative",
+        "gain_over_2sd": false,
+        "sft_far_mean": 3.2812,
+        "stp_far_mean": 3.281,
+        "guard_rail": "pass",
+        "health": "not_evaluable"
+      },
+      "0.0625": {
+        "n_sft": 3,
+        "n_stp": 3,
+        "sft_acc": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "stp_acc": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "sft_mean": 0.0,
+        "stp_mean": 0.0,
+        "diff": 0.0,
+        "pooled_sd": 0.0,
+        "interpretable": false,
+        "state": "uninformative",
+        "gain_over_2sd": false,
+        "sft_far_mean": 3.274,
+        "stp_far_mean": 3.2739,
+        "guard_rail": "pass",
+        "health": "not_evaluable"
+      }
+    },
+    "interpretable_fractions": [],
+    "fractions_with_gain": [],
+    "primary_fraction_gain": false,
+    "verdict": "uninformative",
+    "notes": [
+      "health() is not defined in the executed code: that clause is not evaluable",
+      "a negative verdict ends this branch of the program (CITIZEN_AI_JEPA_PROGRAM.md)"
+    ]
+  },
+  "E-STP-2": {
+    "model": "qwen",
+    "rule": "A1 (2026-11-15)",
+    "fractions": {
+      "1": {
+        "n_sft": 3,
+        "n_stp": 3,
+        "sft_acc": [
+          87.9,
+          87.4,
+          87.1
+        ],
+        "stp_acc": [
+          88.2,
+          86.6,
+          86.7
+        ],
+        "sft_mean": 87.467,
+        "stp_mean": 87.167,
+        "diff": -0.3,
+        "pooled_sd": 0.695,
+        "interpretable": true,
+        "state": "interpretable",
+        "gain_over_2sd": false,
+        "sft_far_mean": 2.8844,
+        "stp_far_mean": 2.8653,
+        "guard_rail": "pass",
+        "health": "not_evaluable"
+      },
+      "0.25": {
+        "n_sft": 3,
+        "n_stp": 3,
+        "sft_acc": [
+          81.4,
+          79.9,
+          80.9
+        ],
+        "stp_acc": [
+          81.2,
+          80.7,
+          80.8
+        ],
+        "sft_mean": 80.733,
+        "stp_mean": 80.9,
+        "diff": 0.167,
+        "pooled_sd": 0.572,
+        "interpretable": true,
+        "state": "interpretable",
+        "gain_over_2sd": false,
+        "sft_far_mean": 2.9174,
+        "stp_far_mean": 2.8904,
+        "guard_rail": "pass",
+        "health": "not_evaluable"
+      },
+      "0.0625": {
+        "n_sft": 3,
+        "n_stp": 3,
+        "sft_acc": [
+          61.2,
+          59.7,
+          61.3
+        ],
+        "stp_acc": [
+          59.7,
+          61.1,
+          60.0
+        ],
+        "sft_mean": 60.733,
+        "stp_mean": 60.267,
+        "diff": -0.467,
+        "pooled_sd": 0.821,
+        "interpretable": true,
+        "state": "interpretable",
+        "gain_over_2sd": false,
+        "sft_far_mean": 2.9036,
+        "stp_far_mean": 2.8684,
+        "guard_rail": "pass",
+        "health": "not_evaluable"
+      }
+    },
+    "interpretable_fractions": [
+      "1",
+      "0.25",
+      "0.0625"
+    ],
+    "fractions_with_gain": [],
+    "primary_fraction_gain": false,
+    "verdict": "no_gain",
+    "notes": [
+      "health() is not defined in the executed code: that clause is not evaluable",
+      "a negative verdict ends this branch of the program (CITIZEN_AI_JEPA_PROGRAM.md)"
+    ]
+  },
+  "M4_gate": "closed"
+}

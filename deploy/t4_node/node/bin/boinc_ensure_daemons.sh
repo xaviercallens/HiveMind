@@ -17,6 +17,7 @@ SETTLE="${HM_SETTLE_S:-20}"       # daemons detach asynchronously: give them tim
 UNIT_ACTIVE="${HM_UNIT_ACTIVE_CMD:-systemctl is-active --quiet hivemind-boinc-daemons.service}"
 REQUIRED=('^feeder ' '^transitioner ' '^file_deleter '
           '^script_validator .*--app hivemind_qlora_moe( |$)' '^script_assimilator .*--app hivemind_qlora_moe( |$)'
+          '^script_validator .*--app hivemind_qlora_moe_big( |$)' '^script_assimilator .*--app hivemind_qlora_moe_big( |$)'
           '^script_validator .*--app hivemind_moe_infer( |$)' '^script_assimilator .*--app hivemind_moe_infer( |$)')
 
 log() { echo "boinc_ensure_daemons: $*"; }

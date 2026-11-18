@@ -12,6 +12,7 @@ Binds to 127.0.0.1 only. Exposing it is the owner's decision (see docs/BOINC_COR
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,13 +22,31 @@ from typing import Any
 from hivemind.boinc.real_client.moe_app import HF_CACHE, load_peft_model, state_sha
 
 
+_LOG = logging.getLogger(__name__)
+
+
+def log_request(client: str, fmt: str, *args: Any) -> None:
+    """Record one HTTP request line at DEBUG level instead of writing it to stderr (the handler's default)."""
+    if not isinstance(client, str) or not client.strip():
+        raise ValueError("client must be a non-empty string")
+    if not isinstance(fmt, str):
+        raise ValueError("fmt must be a string")
+    _LOG.debug("node endpoint %s: %s", client, fmt % args if args else fmt)
+
+
 class NodeEndpoint:
     def __init__(self, spec: dict[str, Any], adapter_path: Path, port: int = 0, served_name: str = "hivemind-granite-moe-qlora") -> None:
+        if not isinstance(spec, dict) or not isinstance(spec.get("model_id"), str) or not spec["model_id"].strip():
+            raise ValueError("spec must contain a non-empty string model_id")
+        if isinstance(port, bool) or not isinstance(port, int) or not (0 <= port <= 65535):
+            raise ValueError("port must be an integer in [0, 65535]")
+        if not isinstance(served_name, str) or not served_name.strip():
+            raise ValueError("served_name must be a non-empty string")
         import torch
         from transformers import AutoTokenizer
 
         self.spec, self.name = spec, served_name
-        state = torch.load(adapter_path, map_location="cpu")["state"]
+        state = torch.load(adapter_path, map_location="cpu", weights_only=True)["state"]
         self.adapter_sha = state_sha(state)
         self.model = load_peft_model(spec, state)
         self.model.eval()
@@ -36,8 +55,8 @@ class NodeEndpoint:
         node = self
 
         class H(BaseHTTPRequestHandler):
-            def log_message(self, *a: Any) -> None:
-                pass
+            def log_message(self, format: str, *args: Any) -> None:
+                log_request(self.address_string(), format, *args)
 
             def _json(self, obj: Any, code: int = 200) -> None:
                 b = json.dumps(obj).encode()
@@ -66,9 +85,14 @@ class NodeEndpoint:
                 self._json(out)
 
         self.httpd = ThreadingHTTPServer(("127.0.0.1", port), H)
+        self._started = False
         self.port = self.httpd.server_address[1]
 
     def complete(self, prompt: str, max_new_tokens: int) -> dict[str, Any]:
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError("prompt must be a non-empty string")
+        if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int) or max_new_tokens < 1:
+            raise ValueError("max_new_tokens must be a positive integer")
         import torch
 
         ids = self.tok(prompt, return_tensors="pt").input_ids.to(0)
@@ -84,8 +108,11 @@ class NodeEndpoint:
         }
 
     def start(self) -> None:
+        self._started = True
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 
     def stop(self) -> None:
-        self.httpd.shutdown()
+        if self._started:
+            self.httpd.shutdown()
+            self._started = False
         self.httpd.server_close()

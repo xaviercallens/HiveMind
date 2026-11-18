@@ -64,9 +64,11 @@ jobs:
           uv run --no-sync python -m coverage report --fail-under=95 --show-missing
 
       - name: Package Steam Edition & Generate Cryptographic SHA-256 Checksums
+        env:
+          REF_NAME: ${{ github.ref_name }}  # passed as data, never spliced into the shell text
         run: |
-          zip -r HiveMind_Steam_FreeEdition_${{ github.ref_name }}.zip steam_dist/HiveMind_Steam_FreeEdition/ docs/STEAM_STATUS.md
-          sha256sum HiveMind_Steam_FreeEdition_${{ github.ref_name }}.zip \
+          zip -r "HiveMind_Steam_FreeEdition_${REF_NAME}.zip" steam_dist/HiveMind_Steam_FreeEdition/ docs/STEAM_STATUS.md
+          sha256sum "HiveMind_Steam_FreeEdition_${REF_NAME}.zip" \
             paper/hivemind_foundation_article.pdf \
             lean4/HiveMindSpec.lean \
             artifacts/rtx_intense_stress_and_steam_deploy_report.json \

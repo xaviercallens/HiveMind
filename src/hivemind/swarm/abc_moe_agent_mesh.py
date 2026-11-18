@@ -88,6 +88,8 @@ class WaggleDanceMessage(BaseModel):
 
     def sign(self, secret_key: str = DEFAULT_HMAC_SECRET) -> WaggleDanceMessage:
         """Sign canonical message content with HMAC-SHA256."""
+        if not isinstance(secret_key, str) or not secret_key.strip():
+            raise ValueError("secret_key must be non-empty for WaggleDanceMessage HMAC signing")
         payload = (
             f"{self.dance_id}:{self.task_id}:{self.scout_bee_id}:{self.confidence_score}:"
             f"{self.dance_duration_ms}:{self.quorum_status}:{self.timestamp_utc}"
@@ -98,7 +100,7 @@ class WaggleDanceMessage(BaseModel):
 
     def verify_signature(self, secret_key: str = DEFAULT_HMAC_SECRET) -> bool:
         """Verify HMAC-SHA256 signature."""
-        if not self.signature_hmac:
+        if not self.signature_hmac or not isinstance(secret_key, str) or not secret_key.strip():
             return False
         payload = (
             f"{self.dance_id}:{self.task_id}:{self.scout_bee_id}:{self.confidence_score}:"
@@ -147,6 +149,23 @@ class FoodSource:
         default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="milliseconds")
     )
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.source_id, str) or not self.source_id.strip():
+            raise ValueError("source_id must be a non-empty string")
+        if (
+            isinstance(self.nectar_richness, bool)
+            or not isinstance(self.nectar_richness, (int, float))
+            or not math.isfinite(self.nectar_richness)
+            or not (0.0 <= float(self.nectar_richness) <= 1.0)
+        ):
+            raise ValueError("nectar_richness must be a finite number in [0.0, 1.0]")
+        if not isinstance(self.exhausted, bool):
+            raise ValueError("exhausted must be a boolean")
+        if isinstance(self.trial_count, bool) or not isinstance(self.trial_count, int) or self.trial_count < 0:
+            raise ValueError("trial_count must be a non-negative integer")
+        if not isinstance(self.discovered_by, str) or not self.discovered_by.strip():
+            raise ValueError("discovered_by must be a non-empty string")
+
     def increment_trial(self) -> int:
         self.trial_count += 1
         return self.trial_count
@@ -181,6 +200,27 @@ class ABCState:
     kafka_event_log: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.task_id, str) or not self.task_id.strip():
+            raise ValueError("task_id must be a non-empty string")
+        if not isinstance(self.user_query, str) or not self.user_query.strip():
+            raise ValueError("user_query must be a non-empty string")
+        if not isinstance(self.target_schema, Mapping):
+            raise ValueError("target_schema must be a mapping")
+        if (
+            isinstance(self.quality_threshold, bool)
+            or not isinstance(self.quality_threshold, (int, float))
+            or not math.isfinite(float(self.quality_threshold))
+            or not (0.0 < float(self.quality_threshold) <= 1.0)
+        ):
+            raise ValueError("quality_threshold must be in (0.0, 1.0]")
+        if isinstance(self.abandonment_limit, bool) or not isinstance(self.abandonment_limit, int) or self.abandonment_limit < 1:
+            raise ValueError("abandonment_limit must be an integer >= 1")
+        if isinstance(self.max_cycles, bool) or not isinstance(self.max_cycles, int) or self.max_cycles < 1:
+            raise ValueError("max_cycles must be an integer >= 1")
+        if isinstance(self.cycle_count, bool) or not isinstance(self.cycle_count, int) or self.cycle_count < 0:
+            raise ValueError("cycle_count must be a non-negative integer")
+
 
 # ==============================================================================
 # Layer 1 Implementation: Waggle Dance Protocol & Quorum Sensing
@@ -195,6 +235,10 @@ class WaggleDanceScrutinyProtocol:
         tau_0_ms: int = 1000,
         secret_key: str = DEFAULT_HMAC_SECRET,
     ) -> None:
+        if isinstance(tau_0_ms, bool) or not isinstance(tau_0_ms, int) or tau_0_ms <= 0:
+            raise ValueError("tau_0_ms must be a positive integer")
+        if not isinstance(secret_key, str) or not secret_key.strip():
+            raise ValueError("secret_key must be a non-empty string")
         self.tau_0_ms = tau_0_ms
         self.secret_key = secret_key
 
@@ -210,6 +254,23 @@ class WaggleDanceScrutinyProtocol:
         quorum_threshold: int = 2,
     ) -> WaggleDanceMessage:
         """Calculate dance duration proportional to site quality (tau_0 * Q) and broadcast."""
+        for field_name, val in (
+            ("task_id", task_id),
+            ("scout_bee_id", scout_bee_id),
+            ("task_domain", task_domain),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            isinstance(confidence_score, bool)
+            or not isinstance(confidence_score, (int, float))
+            or not math.isfinite(confidence_score)
+        ):
+            raise ValueError("confidence_score must be a finite number")
+        if isinstance(estimated_tokens, bool) or not isinstance(estimated_tokens, int) or estimated_tokens < 0:
+            raise ValueError("estimated_tokens must be a non-negative integer")
+        if isinstance(quorum_threshold, bool) or not isinstance(quorum_threshold, int) or quorum_threshold < 1:
+            raise ValueError("quorum_threshold must be a positive integer")
         clamped_q = max(0.0, min(1.0, float(confidence_score)))
         duration_ms = int(round(self.tau_0_ms * clamped_q))
 
@@ -234,12 +295,26 @@ class WaggleDanceScrutinyProtocol:
         available_peers: list[dict[str, Any]],
     ) -> tuple[WaggleDanceMessage, QuorumConsensusVerdict | None]:
         """Simulate blind recruitment imitation: peers join if peer affinity matches required tools."""
+        if not isinstance(dance, WaggleDanceMessage):
+            raise TypeError("dance must be a WaggleDanceMessage")
+        if not isinstance(available_peers, list):
+            raise TypeError("available_peers must be a list of peer dicts")
         recruits = list(dance.current_recruits)
         for peer in available_peers:
+            if not isinstance(peer, Mapping):
+                raise TypeError("each peer must be a mapping")
             pid = str(peer.get("bee_id", "peer-bee"))
             if pid in recruits:
                 continue
-            affinity = float(peer.get("affinity", 0.5))
+            raw_aff = peer.get("affinity", 0.5)
+            if (
+                isinstance(raw_aff, bool)
+                or not isinstance(raw_aff, (int, float))
+                or not math.isfinite(float(raw_aff))
+                or not (0.0 <= float(raw_aff) <= 1.0)
+            ):
+                raise ValueError("peer affinity must be a finite number in [0.0, 1.0]")
+            affinity = float(raw_aff)
             # Probability of recruitment proportional to dance confidence Q and peer affinity
             prob_recruit = dance.confidence_score * affinity
             if prob_recruit >= 0.35:
@@ -291,6 +366,8 @@ def parse_scientific_scout_record(record: Mapping[str, Any]) -> dict[str, Any]:
     `chembl`, and `materials_science` records so Employed Bees can populate strict schemas
     without hallucinating citations or bioactivity values.
     """
+    if not isinstance(record, Mapping):
+        raise TypeError("record must be a Mapping")
     title = str(record.get("title", ""))
     snippet = str(record.get("snippet", ""))
     source = str(record.get("source", ""))
@@ -349,6 +426,21 @@ class ABCMoEAgent:
         web_search_fn: Callable[[str], list[dict[str, str]]] | None = None,
         nectar_cache: SwarmNectarCache | None = None,
     ) -> None:
+        if not isinstance(agent_id, str) or not agent_id.strip():
+            raise ValueError("agent_id must be a non-empty string")
+        if isinstance(abandonment_limit, bool) or not isinstance(abandonment_limit, int) or abandonment_limit < 1:
+            raise ValueError("abandonment_limit must be a positive integer")
+        if (
+            isinstance(quality_threshold, bool)
+            or not isinstance(quality_threshold, (int, float))
+            or not math.isfinite(quality_threshold)
+            or not (0.0 < float(quality_threshold) <= 1.0)
+        ):
+            raise ValueError("quality_threshold must be a finite number in (0.0, 1.0]")
+        if web_search_fn is not None and not callable(web_search_fn):
+            raise TypeError("web_search_fn must be callable or None")
+        if nectar_cache is not None and not isinstance(nectar_cache, SwarmNectarCache):
+            raise TypeError("nectar_cache must be a SwarmNectarCache or None")
         self.agent_id = agent_id
         self.abandonment_limit = abandonment_limit
         self.quality_threshold = quality_threshold
@@ -357,6 +449,8 @@ class ABCMoEAgent:
 
     def _default_mock_web_search(self, query: str) -> list[dict[str, str]]:
         """Fallback deterministic research snippets across scientific domains (HM-S22.2: arXiv, PubMed, ChEMBL, Battery)."""
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("query must be a non-empty string")
         terms = query.lower()
         if "battery" in terms or "batterie" in terms:
             return [
@@ -412,6 +506,8 @@ class ABCMoEAgent:
     # --- ABC Step 1: Employed Bee Phase (Internal MoE Expert Exploitation) ---
     def employed_exploit_step(self, state: ABCState) -> ABCState:
         """Exploits the current food source using internal MoE experts."""
+        if not isinstance(state, ABCState):
+            raise ValueError("state must be an ABCState instance")
         if not state.food_sources:
             # No food source yet: trigger scout immediately
             state.current_phase = "SCOUT_EXPLORE"
@@ -452,6 +548,10 @@ class ABCMoEAgent:
     # --- ABC Step 2: Observer Bee Phase (Quality Assessment & Abandonment Test) ---
     def observer_evaluate_step(self, state: ABCState) -> ABCState:
         """Assesses quality of candidate solution and increments abandonment counter if stagnant."""
+        if not isinstance(state, ABCState):
+            raise ValueError("state must be an ABCState instance")
+        if not state.food_sources:
+            raise ValueError("state.food_sources must be non-empty before observer evaluation")
         current_source = state.food_sources[state.current_source_idx]
         solution = state.best_solution or {}
         data = solution.get("data", {})
@@ -502,6 +602,8 @@ class ABCMoEAgent:
     # --- ABC Step 3: Scout Bee Phase (External Tool Exploration) ---
     def scout_explore_step(self, state: ABCState) -> ABCState:
         """Invokes external tools (Web Search / API / Solvers) or SwarmNectarCache to discover high-nectar source."""
+        if not isinstance(state, ABCState):
+            raise ValueError("state must be an ABCState instance")
         query = state.user_query
         cache_hit_entry = None
         if self.nectar_cache is not None:
@@ -573,6 +675,8 @@ class ABCMoEAgent:
     # --- StateGraph Run Cycle ---
     def run(self, initial_state: ABCState) -> ABCState:
         """Executes the ABC loop until completion or maximum cycle threshold."""
+        if not isinstance(initial_state, ABCState):
+            raise ValueError("initial_state must be an ABCState instance")
         state = initial_state
         while state.current_phase not in ("COMPLETED", "FAILED") and state.cycle_count < state.max_cycles:
             state.cycle_count += 1
@@ -608,6 +712,14 @@ class AgentMeshOrchestrator:
         available_peers: list[dict[str, Any]] | None = None,
         nectar_cache: SwarmNectarCache | None = None,
     ) -> None:
+        if not isinstance(lead_bee_id, str) or not lead_bee_id.strip():
+            raise ValueError("lead_bee_id must be a non-empty string")
+        if available_peers is not None and (
+            not isinstance(available_peers, list) or not all(isinstance(p, Mapping) for p in available_peers)
+        ):
+            raise TypeError("available_peers must be a list of peer mappings or None")
+        if nectar_cache is not None and not isinstance(nectar_cache, SwarmNectarCache):
+            raise TypeError("nectar_cache must be a SwarmNectarCache or None")
         self.lead_bee_id = lead_bee_id
         self.protocol = WaggleDanceScrutinyProtocol(tau_0_ms=1000)
         self.available_peers = available_peers or [
@@ -627,6 +739,19 @@ class AgentMeshOrchestrator:
         required_tools: list[str] | None = None,
     ) -> dict[str, Any]:
         """Runs the complete two-layer workflow from Waggle Dance consensus to ABC deliverable."""
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise ValueError("task_id must be a non-empty string")
+        if not isinstance(user_query, str) or not user_query.strip():
+            raise ValueError("user_query must be a non-empty string")
+        if not isinstance(target_schema, dict) or not target_schema:
+            raise ValueError("target_schema must be a non-empty dict")
+        if (
+            isinstance(confidence_prior, bool)
+            or not isinstance(confidence_prior, (int, float))
+            or not math.isfinite(confidence_prior)
+            or not (0.0 <= float(confidence_prior) <= 1.0)
+        ):
+            raise ValueError("confidence_prior must be a finite number in [0.0, 1.0]")
         tools = required_tools or ["web_search", "json_extractor"]
 
         # Step 1: Couche 1 - Émission de la Danse Frétillante (Waggle Dance)

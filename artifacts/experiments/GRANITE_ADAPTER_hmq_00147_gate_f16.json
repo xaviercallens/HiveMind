@@ -1,0 +1,86 @@
+{
+  "experiment": "Does the BOINC-trained adapter still beat its base model after conversion to GGUF (the files that would be served)?",
+  "adapter": {
+    "wu_id": "hmq_00147",
+    "sha256": "0af6f81b464a11b95fc0c2b914c2754c7650b4cc29990cbeb3d0a0f545277d30",
+    "chain_eval_loss_before": 2.126203050216039,
+    "chain_eval_loss_after": 2.1214304169019065,
+    "rank": 8,
+    "alpha": 16,
+    "targets": [
+      "k_proj",
+      "o_proj",
+      "q_proj",
+      "v_proj"
+    ]
+  },
+  "base": "ibm-granite/granite-3.1-1b-a400m-base",
+  "engine": "llama.cpp llama-perplexity, CPU, f16 base + f16 LoRA GGUF",
+  "held_out": "64 chunks x 128 tokens per domain from moe_work's never-trained eval rows; domains ['general', 'french', 'edu_web', 'news', 'biomed', 'math']",
+  "gate": {
+    "rule": "pooled mean NLL gain > 0, paired bootstrap 95% interval of the gain excludes 0, no domain worse than +1%",
+    "fixed_before_running": true
+  },
+  "pooled": {
+    "n_chunks": 384,
+    "mean_nll_gain_nats": -0.00168,
+    "bootstrap95": [
+      -0.01437,
+      0.01201
+    ],
+    "relative_gain": -0.0009
+  },
+  "domains": {
+    "general": {
+      "n_chunks": 64,
+      "base_nll": 2.0017,
+      "adapter_nll": 2.0136,
+      "relative_change": 0.0059,
+      "base_ppl": 7.402,
+      "adapter_ppl": 7.49
+    },
+    "french": {
+      "n_chunks": 64,
+      "base_nll": 1.9232,
+      "adapter_nll": 1.9938,
+      "relative_change": 0.0367,
+      "base_ppl": 6.843,
+      "adapter_ppl": 7.343
+    },
+    "edu_web": {
+      "n_chunks": 64,
+      "base_nll": 2.2755,
+      "adapter_nll": 2.3576,
+      "relative_change": 0.0361,
+      "base_ppl": 9.733,
+      "adapter_ppl": 10.566
+    },
+    "news": {
+      "n_chunks": 64,
+      "base_nll": 1.9864,
+      "adapter_nll": 2.0067,
+      "relative_change": 0.0102,
+      "base_ppl": 7.289,
+      "adapter_ppl": 7.439
+    },
+    "biomed": {
+      "n_chunks": 64,
+      "base_nll": 1.9114,
+      "adapter_nll": 1.8582,
+      "relative_change": -0.0278,
+      "base_ppl": 6.762,
+      "adapter_ppl": 6.412
+    },
+    "math": {
+      "n_chunks": 64,
+      "base_nll": 1.2595,
+      "adapter_nll": 1.1379,
+      "relative_change": -0.0966,
+      "base_ppl": 3.524,
+      "adapter_ppl": 3.12
+    }
+  },
+  "worst_domain_regression": 0.0367,
+  "servable": false,
+  "caveat": "Language-model loss on text, not task accuracy. The adapter was trained on an NF4 base and is measured here on an f16 base. A base model has no chat tuning."
+}

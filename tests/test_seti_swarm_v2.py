@@ -530,7 +530,9 @@ def test_phase2_swarm_fabric_m1_to_m4_and_openai_gateway(tmp_path: Path) -> None
     body = resp.json()
     assert body["object"] == "chat.completion"
     assert body["hivemind_swarm_fabric"]["tree_speculation_gamma"] == 6
-    assert body["hivemind_swarm_fabric"]["opoi_audit"]["opoi_passed"] is True
+    # The endpoint has no activation commitment to audit, so it must say so rather than report a pass.
+    assert body["hivemind_swarm_fabric"]["opoi_audit"]["status"] == "NOT_PERFORMED"
+    assert body["hivemind_swarm_fabric"]["opoi_audit"]["opoi_passed"] is None
 
     import json
 
@@ -552,7 +554,8 @@ def test_phase2_swarm_fabric_m1_to_m4_and_openai_gateway(tmp_path: Path) -> None
     assert assembled == body["choices"][0]["message"]["content"]
     closing_chunk = chunks[-1]
     assert closing_chunk["choices"][0]["finish_reason"] == "stop"
-    assert closing_chunk["hivemind_swarm_fabric"]["opoi_audit"]["opoi_passed"] is True
+    assert closing_chunk["hivemind_swarm_fabric"]["opoi_audit"]["status"] == "NOT_PERFORMED"
+    assert closing_chunk["hivemind_swarm_fabric"]["opoi_audit"]["opoi_passed"] is None
     assert closing_chunk["hivemind_swarm_fabric"]["l2_state_channel_voucher"]["nonce"] >= 1
     assert closing_chunk["usage"]["completion_tokens"] > 0
 

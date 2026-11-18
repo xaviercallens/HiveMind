@@ -57,18 +57,38 @@ def _write_jsonl(path: Path, rows: Sequence[Dict[str, Any]]) -> Tuple[int, str]:
     return len(rows), _sha256_file(path)
 
 
-def _general_replay_examples(count: int) -> List[Dict[str, Any]]:
+def _verify_replay_anchor(n: int, reported_total: int, completion: str) -> Dict[str, Any]:
+    """Independently verify a general code/math replay anchor against direct summation (IP-180)."""
+    expected_sum = sum(range(1, int(n) + 1))
+    matches_sum = int(reported_total) == expected_sum
+    in_completion = str(expected_sum) in completion
+    ok = bool(matches_sum and in_completion)
+    return {
+        "verdict": "VERIFIED" if ok else "REJECTED",
+        "n": int(n),
+        "expected_sum": expected_sum,
+        "reported_total": int(reported_total),
+        "matches_independent_sum": matches_sum,
+    }
+
+
+def _general_replay_examples(
+    count: int,
+    *,
+    total_fn: Any = None,
+) -> List[Dict[str, Any]]:
     """Generate bilingual EN/FR general code/math replay anchors (20% replay ratio)."""
     rows: List[Dict[str, Any]] = []
     for i in range(count):
         n = (i % 15) + 3
-        total = n * (n + 1) // 2
+        total = int(total_fn(n)) if callable(total_fn) else (n * (n + 1) // 2)
         if i % 2 == 0:
             prompt = f"Write a pure Python function `triangular_sum(n)` and evaluate it at n={n}."
             completion = f"def triangular_sum(n: int) -> int:\n    return n * (n + 1) // 2\n# triangular_sum({n}) == {total}"
         else:
             prompt = f"Calculez la somme des entiers de 1 a {n} et donnez la formule exacte."
             completion = f"La formule exacte est n*(n+1)/2. Pour n={n}, la somme vaut {total}."
+        cert = _verify_replay_anchor(n, total, completion)
         rows.append(
             {
                 "id": f"replay-anchor-{i:04d}",
@@ -76,7 +96,8 @@ def _general_replay_examples(count: int) -> List[Dict[str, Any]]:
                 "bee_id": "anchor_replay",
                 "prompt": prompt,
                 "completion": completion,
-                "verdict": "VERIFIED",
+                "certificate": cert,
+                "verdict": cert["verdict"],
             }
         )
     return rows

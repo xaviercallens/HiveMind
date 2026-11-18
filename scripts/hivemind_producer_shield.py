@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HiveMind producer shield: a small authenticating proxy in front of your local model server.
 
 Why: to earn points your model server must be reachable from the internet (through a tunnel or a port forward), and
@@ -22,12 +23,12 @@ from __future__ import annotations
 
 import argparse
 import hmac
+import itertools
 import json
 import os
-import itertools
 import sys
 import time
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -43,7 +44,14 @@ UPSTREAM_TIMEOUT_S: float = 300.0
 
 
 def _error(status: int, message: str, code: str) -> JSONResponse:
+    if isinstance(status, bool) or not isinstance(status, int) or not (400 <= status <= 599):
+        raise ValueError("status must be an HTTP error status integer in [400, 599]")
+    if not isinstance(message, str) or not message.strip() or not isinstance(code, str) or not code.strip():
+        raise ValueError("message and code must be non-empty strings")
     return JSONResponse({"error": {"message": message, "type": "shield_error", "code": code}}, status_code=status)
+
+
+MAX_TOKENS_CAP = 16384  # per-request ceiling for max_tokens / max_completion_tokens
 
 
 def create_shield_app(
@@ -65,10 +73,48 @@ def create_shield_app(
     """
     # ``control_state_file`` is the small JSON file the producer agent writes (``--control-state-file``): while it says ``"paused": true`` chat requests get
     # 503 ``producer_paused``. A missing or unreadable file means "not paused" (the behaviour without remote control); ``/v1/models`` is never affected.
-    if len(token) < MIN_TOKEN_CHARS:
-        raise ValueError(f"the endpoint token must be at least {MIN_TOKEN_CHARS} characters")
-    if max_concurrent < 1 or max_body_bytes < 1:
+    if (
+        not isinstance(upstream, str)
+        or not upstream.strip().startswith(("http://", "https://"))
+        or any(c in upstream for c in ("\r", "\n", "\x00"))
+    ):
+        raise ValueError("upstream must be an http:// or https:// URL without control characters")
+    if not isinstance(token, str) or len(token) < MIN_TOKEN_CHARS or any(c in token for c in ("\r", "\n", "\x00")):
+        raise ValueError(f"the endpoint token must be at least {MIN_TOKEN_CHARS} characters without control characters")
+    if (
+        isinstance(max_concurrent, bool)
+        or not isinstance(max_concurrent, int)
+        or isinstance(max_body_bytes, bool)
+        or not isinstance(max_body_bytes, int)
+        or max_concurrent < 1
+        or max_body_bytes < 1
+    ):
         raise ValueError("max_concurrent and max_body_bytes must be >= 1")
+    if (
+        isinstance(allowed_models, (str, bytes))
+        or not isinstance(allowed_models, Iterable)
+        or any(not isinstance(m, str) or not m.strip() or any(c in m for c in ("\r", "\n", "\x00")) for m in allowed_models)
+    ):
+        raise ValueError("allowed_models must be a sequence of non-empty model strings without control characters")
+    if routes is not None and (
+        not isinstance(routes, Mapping)
+        or any(
+            not isinstance(m, str)
+            or not m.strip()
+            or any(c in m for c in ("\r", "\n", "\x00"))
+            or not isinstance(u, str)
+            or not u.strip().startswith(("http://", "https://"))
+            or any(c in u for c in ("\r", "\n", "\x00"))
+            for m, u in routes.items()
+        )
+    ):
+        raise ValueError("routes must map non-empty model strings to http:// or https:// URLs without control characters")
+    if control_state_file is not None and (
+        not isinstance(control_state_file, str)
+        or not control_state_file.strip()
+        or any(c in control_state_file for c in ("\r", "\n", "\x00"))
+    ):
+        raise ValueError("control_state_file must be a non-empty string path without control characters or None")
     base = upstream.rstrip("/")
     route_base = {m: u.rstrip("/") for m, u in (routes or {}).items()}
     allowed = frozenset(allowed_models) | (frozenset(route_base) if allowed_models else frozenset())
@@ -147,7 +193,18 @@ def create_shield_app(
             return _error(400, "Body must be JSON.", "invalid_json")
         if not isinstance(body, dict):
             return _error(400, "Body must be a JSON object.", "invalid_json")
-        if allowed and body.get("model") not in allowed:
+        model = body.get("model")
+        if not isinstance(model, str):  # a list or object would raise TypeError in the set/dict lookups below (a 500)
+            return _error(400, "model must be a string.", "invalid_request")
+        clamped = False
+        for limit_key in ("max_tokens", "max_completion_tokens"):  # a consumer can not make one request run for ever
+            limit = body.get(limit_key)
+            if isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit > MAX_TOKENS_CAP:
+                body[limit_key] = MAX_TOKENS_CAP
+                clamped = True
+        if clamped:
+            raw = json.dumps(body).encode("utf-8")
+        if allowed and model not in allowed:
             return _error(403, "This model is not offered by this producer.", "model_not_allowed")
         now = time.monotonic()
         for stale in [n for n, started in inflight.items() if now - started > UPSTREAM_TIMEOUT_S + 30.0]:
@@ -158,7 +215,7 @@ def create_shield_app(
         inflight[number] = now
         try:
             upstream_request = client.build_request(
-                "POST", route_base.get(body.get("model"), base) + "/v1/chat/completions", content=raw, headers={"Content-Type": "application/json"}
+                "POST", route_base.get(model, base) + "/v1/chat/completions", content=raw, headers={"Content-Type": "application/json"}
             )
             upstream_response = await client.send(upstream_request, stream=True)
         except httpx.HTTPError:
@@ -179,7 +236,15 @@ def create_shield_app(
     return app
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+POC_NOTICE = (
+    "Proof of concept (PoC): not a production service. Until HiveMind is fully secured, prompts you serve and requests you make "
+    "must contain only public, non-sensitive data (no secrets, personal, private or enterprise data); the people using your node "
+    "are anonymous, and nothing yet verifies producers or their output."
+)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser for the authenticating producer shield."""
     parser = argparse.ArgumentParser(description="Authenticating proxy in front of a local OpenAI-compatible model server.")
     parser.add_argument("--upstream", default="http://127.0.0.1:11434", help="Your model server (default: Ollama on this machine)")
     parser.add_argument("--host", default="127.0.0.1", help="Interface to listen on; keep 127.0.0.1 and point your tunnel at it")
@@ -191,7 +256,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--route", action="append", default=[], metavar="MODEL=URL",
                         help="Send this model to another local server (repeat), e.g. hivemind-bee-stars=http://127.0.0.1:8294. Implies --allow-model for it.")
     parser.add_argument("--control-state-file", metavar="PATH", help="State file written by the producer agent (--control-state-file); while it says paused, chat requests get 503 producer_paused")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
+    print(f"NOTICE: {POC_NOTICE}", file=sys.stderr)
+    if not args.upstream.startswith(("http://127.0.0.1", "http://localhost")):
+        parser.error(f"--upstream expects a local loopback URL (http://127.0.0.1:PORT or http://localhost:PORT), got {args.upstream!r}")
     routes: dict[str, str] = {}
     for item in args.route:
         model, sep, url = item.partition("=")

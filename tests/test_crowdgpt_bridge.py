@@ -153,3 +153,52 @@ def test_crowdswarm_v2_client_oom_and_502_503_resilience_policy() -> None:
     retry_503 = evaluate_client_resilience_policy(batch_size=2, http_status=503, retry_attempt=2)
     assert retry_503["action"] == "RETRY_FETCH_TASK_WITH_BACKOFF"
     assert retry_503["backoff_s"] > 8.0
+
+
+def test_ip230_multi_krum_clamps_token_weights_and_surfaces_byzantine_filter_active() -> None:
+    """IP-230: 4 honest + 2 attackers at 1e9 tokens stays within 0.005 of honest mean; n=4, f=1 marks filter inactive."""
+    honest = [
+        torch.full((64,), 0.100, dtype=torch.bfloat16),
+        torch.full((64,), 0.101, dtype=torch.bfloat16),
+        torch.full((64,), 0.099, dtype=torch.bfloat16),
+        torch.full((64,), 0.100, dtype=torch.bfloat16),
+    ]
+    honest_mean = float(torch.stack([h.float() for h in honest], dim=0).mean().item())
+    attackers = [
+        torch.full((64,), 1.03125, dtype=torch.bfloat16),
+        torch.full((64,), 1.03125, dtype=torch.bfloat16),
+    ]
+    res = multi_krum_select_and_aggregate(
+        honest + attackers,
+        f_byzantine=1,
+        token_weights=[1_000, 1_000, 1_000, 1_000, 1_000_000_000, 1_000_000_000],
+    )
+    agg_mean = float(res.aggregated_delta_bf16.float().mean().item())
+    assert abs(agg_mean - honest_mean) < 0.005
+    assert res.effective_tokens <= 5_000
+    assert res.byzantine_filter_active is True
+
+    # Even if m_select=5 forces one survivor with 1e9 tokens inside a tight cluster, weight clamping prevents takeover
+    near_attackers = [
+        torch.full((64,), 0.115, dtype=torch.bfloat16),
+        torch.full((64,), 1.03125, dtype=torch.bfloat16),
+    ]
+    res_forced = multi_krum_select_and_aggregate(
+        honest + near_attackers,
+        f_byzantine=1,
+        m_select=5,
+        token_weights=[1_000, 1_000, 1_000, 1_000, 1_000_000_000, 1_000_000_000],
+    )
+    assert abs(float(res_forced.aggregated_delta_bf16.float().mean().item()) - honest_mean) < 0.005
+    assert res_forced.effective_tokens == 5_250
+
+    # n=4, f=1 cannot satisfy n >= 2f + 3 so eff_f=0 and byzantine_filter_active is False
+    res_small = multi_krum_select_and_aggregate(honest, f_byzantine=1)
+    assert res_small.byzantine_filter_active is False
+
+    with pytest.raises(ValueError, match="finite and positive"):
+        multi_krum_select_and_aggregate(
+            honest,
+            f_byzantine=1,
+            token_weights=[1000, float("nan"), 1000, 1000],
+        )

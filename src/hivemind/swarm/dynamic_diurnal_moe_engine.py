@@ -72,8 +72,39 @@ class DiurnalProducerProfile:
     timezone_offset_hours: float  # e.g., +1.0 for CET, -4.0 for EDT (Quebec), -7.0 for PDT, +9.0 for JST
     is_gamer_node: bool = False
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.account_id, str) or not self.account_id.strip():
+            raise ValueError("account_id must be a non-empty string")
+        if not isinstance(self.handle, str) or not self.handle.strip():
+            raise ValueError("handle must be a non-empty string")
+        if (
+            isinstance(self.vram_gb, bool)
+            or not isinstance(self.vram_gb, (int, float))
+            or not math.isfinite(self.vram_gb)
+            or self.vram_gb <= 0.0
+        ):
+            raise ValueError("vram_gb must be finite and > 0")
+        if not isinstance(self.hardware_class, str) or not self.hardware_class.strip():
+            raise ValueError("hardware_class must be a non-empty string")
+        if (
+            isinstance(self.timezone_offset_hours, bool)
+            or not isinstance(self.timezone_offset_hours, (int, float))
+            or not math.isfinite(self.timezone_offset_hours)
+            or not (-12.0 <= float(self.timezone_offset_hours) <= 14.0)
+        ):
+            raise ValueError("timezone_offset_hours must be a finite number in [-12.0, 14.0]")
+        if not isinstance(self.is_gamer_node, bool):
+            raise ValueError("is_gamer_node must be a boolean")
+
     def local_hour(self, now_utc: float) -> float:
         """Calculate the local solar/clock hour (0.0 to 24.0) for this producer."""
+        if (
+            isinstance(now_utc, bool)
+            or not isinstance(now_utc, (int, float))
+            or not math.isfinite(now_utc)
+            or now_utc < 0.0
+        ):
+            raise ValueError("now_utc must be a finite non-negative timestamp")
         utc_hour = (now_utc % 86400.0) / 3600.0
         local = (utc_hour + self.timezone_offset_hours) % 24.0
         return local
@@ -91,9 +122,25 @@ class DiurnalProducerProfile:
         is_preempted: bool = False,
     ) -> DiurnalOperationalMode:
         """Resolve the optimal operational mode for this producer right now."""
+        if (
+            isinstance(system_load_ratio, bool)
+            or not isinstance(system_load_ratio, (int, float))
+            or not math.isfinite(system_load_ratio)
+            or not (0.0 <= float(system_load_ratio) <= 1.0)
+        ):
+            raise ValueError("system_load_ratio must be a finite number in [0.0, 1.0]")
+        if (
+            isinstance(surplus_producers_count, bool)
+            or not isinstance(surplus_producers_count, int)
+            or surplus_producers_count < 0
+        ):
+            raise ValueError("surplus_producers_count must be a non-negative integer")
+        if not isinstance(is_preempted, bool):
+            raise ValueError("is_preempted must be a boolean")
+        night = self.is_local_night(now_utc)
         if is_preempted:
             return DiurnalOperationalMode.GAMER_PREEMPTED
-        if self.is_local_night(now_utc):
+        if night:
             return DiurnalOperationalMode.INTENSE_NOCTURNAL_TRAINING
         # Daytime: check if surplus compute is available
         if surplus_producers_count >= 2 or system_load_ratio < 0.65:
@@ -114,6 +161,26 @@ class LongTailDomainScore:
     recommended_base_model: str
     cluster: str
     reason: str
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("domain", self.domain),
+            ("canonical_domain", self.canonical_domain),
+            ("hf_dataset", self.hf_dataset),
+            ("recommended_base_model", self.recommended_base_model),
+            ("cluster", self.cluster),
+            ("reason", self.reason),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.request_count, bool) or not isinstance(self.request_count, int) or self.request_count < 0:
+            raise ValueError("request_count must be a non-negative integer")
+        for field_name, num in (
+            ("complexity_weight", self.complexity_weight),
+            ("priority_score", self.priority_score),
+        ):
+            if isinstance(num, bool) or not isinstance(num, (int, float)) or not math.isfinite(float(num)) or float(num) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
 
 
 class LongTailIntentScanner:
@@ -145,7 +212,16 @@ class LongTailIntentScanner:
 
     def record_request(self, domain: str, timestamp_utc: float | None = None) -> None:
         """Record an end-user request for a domain."""
-        t = time.time() if timestamp_utc is None else timestamp_utc
+        if not isinstance(domain, str) or not domain.strip():
+            raise ValueError("domain must be a non-empty string")
+        if timestamp_utc is not None and (
+            isinstance(timestamp_utc, bool)
+            or not isinstance(timestamp_utc, (int, float))
+            or not math.isfinite(timestamp_utc)
+            or timestamp_utc < 0.0
+        ):
+            raise ValueError("timestamp_utc must be a finite non-negative number")
+        t = time.time() if timestamp_utc is None else float(timestamp_utc)
         try:
             canonical = resolve_domain_canonical(domain)
         except ValueError:
@@ -172,6 +248,15 @@ class LongTailIntentScanner:
           S_d = (1.0 / sqrt(N_d + 1)) * Complexity_d * RecencyBonus_d
         Domains with very few requests (N_d = 1..3) get the largest inverse-frequency boost!
         """
+        if (
+            isinstance(now_utc, bool)
+            or not isinstance(now_utc, (int, float))
+            or not math.isfinite(now_utc)
+            or now_utc < 0.0
+        ):
+            raise ValueError("now_utc must be a finite non-negative timestamp")
+        if not target_domains:
+            raise ValueError("target_domains must not be empty")
         scores: list[LongTailDomainScore] = []
         for domain in target_domains:
             canonical = resolve_domain_canonical(domain)
@@ -248,6 +333,48 @@ class DiurnalTrainingWorkunit:
     is_byob: bool = False
     byob_bee_id: str | None = None
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("wu_id", self.wu_id),
+            ("domain", self.domain),
+            ("canonical_domain", self.canonical_domain),
+            ("hf_dataset", self.hf_dataset),
+            ("base_model_id", self.base_model_id),
+            ("assigned_producer_id", self.assigned_producer_id),
+            ("producer_handle", self.producer_handle),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, iv in (("target_rank", self.target_rank), ("steps", self.steps)):
+            if isinstance(iv, bool) or not isinstance(iv, int) or iv < 1:
+                raise ValueError(f"{field_name} must be a positive integer")
+        if not isinstance(self.operational_mode, DiurnalOperationalMode):
+            raise TypeError("operational_mode must be a DiurnalOperationalMode")
+        if (
+            isinstance(self.producer_timezone_offset, bool)
+            or not isinstance(self.producer_timezone_offset, (int, float))
+            or not math.isfinite(float(self.producer_timezone_offset))
+            or not (-12.0 <= float(self.producer_timezone_offset) <= 14.0)
+        ):
+            raise ValueError("producer_timezone_offset must be a finite number in [-12.0, 14.0]")
+        if (
+            isinstance(self.local_clock_hour, bool)
+            or not isinstance(self.local_clock_hour, (int, float))
+            or not math.isfinite(float(self.local_clock_hour))
+            or not (0.0 <= float(self.local_clock_hour) <= 24.0)
+        ):
+            raise ValueError("local_clock_hour must be a finite number in [0.0, 24.0]")
+        for field_name, num in (
+            ("pouw_reward_hmt", self.pouw_reward_hmt),
+            ("estimated_tflops", self.estimated_tflops),
+        ):
+            if isinstance(num, bool) or not isinstance(num, (int, float)) or not math.isfinite(float(num)) or float(num) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        if not isinstance(self.is_byob, bool):
+            raise ValueError("is_byob must be a boolean")
+        if self.byob_bee_id is not None and (not isinstance(self.byob_bee_id, str) or not self.byob_bee_id.strip()):
+            raise ValueError("byob_bee_id must be a non-empty string or None")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -260,15 +387,23 @@ class DiurnalMoETrainingScheduler:
         router_store: RouterStore | None = None,
         scanner: LongTailIntentScanner | None = None,
     ) -> None:
+        if router_store is not None and not isinstance(router_store, RouterStore):
+            raise TypeError("router_store must be a RouterStore or None")
+        if scanner is not None and not isinstance(scanner, LongTailIntentScanner):
+            raise TypeError("scanner must be a LongTailIntentScanner or None")
         self._store = router_store
         self._scanner = scanner or LongTailIntentScanner()
         self._producers: dict[str, DiurnalProducerProfile] = {}
 
     def register_producer_profile(self, profile: DiurnalProducerProfile) -> None:
         """Register or update a producer's diurnal profile (timezone, VRAM, hardware)."""
+        if not isinstance(profile, DiurnalProducerProfile):
+            raise TypeError("profile must be a DiurnalProducerProfile")
         self._producers[profile.account_id] = profile
 
     def get_producer_profile(self, account_id: str) -> DiurnalProducerProfile | None:
+        if not isinstance(account_id, str) or not account_id.strip():
+            raise ValueError("account_id must be a non-empty string")
         return self._producers.get(account_id)
 
     def schedule_diurnal_batch(
@@ -286,6 +421,13 @@ class DiurnalMoETrainingScheduler:
            - DAYTIME_SURPLUS_HARVESTING: r=16, 30 steps, 1.0x PoUW reward.
            - INTENSE_NOCTURNAL_TRAINING: r=32 or r=64, 100 steps, large VRAM models, 1.25x PoUW multiplier.
         """
+        if (
+            isinstance(system_load_ratio, bool)
+            or not isinstance(system_load_ratio, (int, float))
+            or not math.isfinite(system_load_ratio)
+            or not (0.0 <= float(system_load_ratio) <= 1.0)
+        ):
+            raise ValueError("system_load_ratio must be a finite number in [0.0, 1.0]")
         scored_domains = self._scanner.score_all_domains(now_utc, target_domains)
         workunits: list[DiurnalTrainingWorkunit] = []
         domain_idx = 0
@@ -381,6 +523,20 @@ class DiurnalMoETrainingScheduler:
         3. Whether Method-of-Lines PDE MoE and 3x Cluster Super-MoEs are active (`>= 4` producers).
         4. Per-producer operational mode breakdown (daytime inference, surplus harvesting, nocturnal training).
         """
+        if now_utc is not None and (
+            isinstance(now_utc, bool)
+            or not isinstance(now_utc, (int, float))
+            or not math.isfinite(now_utc)
+            or now_utc < 0.0
+        ):
+            raise ValueError("now_utc must be a finite non-negative timestamp")
+        if (
+            isinstance(system_load_ratio, bool)
+            or not isinstance(system_load_ratio, (int, float))
+            or not math.isfinite(system_load_ratio)
+            or not (0.0 <= float(system_load_ratio) <= 1.0)
+        ):
+            raise ValueError("system_load_ratio must be a finite number in [0.0, 1.0]")
         ts = float(now_utc) if now_utc is not None else time.time()
         total_vram_gb = 0.0
         live_models_set: set[str] = set()
@@ -411,4 +567,5 @@ class DiurnalMoETrainingScheduler:
         quorum_state["operational_mode_breakdown"] = mode_counts
         quorum_state["system_load_ratio"] = round(float(system_load_ratio), 3)
         quorum_state["evaluated_at_utc"] = round(ts, 3)
+        quorum_state["simulated"] = True
         return quorum_state

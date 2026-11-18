@@ -1,4 +1,4 @@
-FROM us-central1-docker.pkg.dev/gen-lang-client-0625573011/cloud-run-source-deploy/hivemind-at-home-ruche:join-community-20261029
+FROM us-central1-docker.pkg.dev/gen-lang-client-0625573011/cloud-run-source-deploy/hivemind-at-home-ruche@sha256:c129e801d21a8e8f17c42d3a08dc9c08cb7b7d518b4fb3f602b8e1102203f143
 USER root
 RUN rm -f /app/src/hivemind/boinc/stitch_portal.py
 COPY hivemind_at_home_dashboard.py /app/src/hivemind/boinc/hivemind_at_home_dashboard.py
@@ -18,3 +18,5 @@ COPY join_page.py /app/join_page.py
 COPY join_page.py /app/src/hivemind/router/join_page.py
 COPY scripts/ /app/scripts/
 COPY server.py /app/server.py
+RUN (id -u app >/dev/null 2>&1 || useradd --system --uid 10001 --no-create-home app) && chown -R app /app
+USER app

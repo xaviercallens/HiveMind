@@ -47,14 +47,28 @@ class UpdatePolicy:
     require_improvement: bool = False
 
     def __post_init__(self) -> None:
-        if not 0.0 < self.alpha < 1.0:
+        if (
+            isinstance(self.alpha, bool)
+            or not isinstance(self.alpha, (int, float))
+            or not 0.0 < float(self.alpha) < 1.0
+        ):
             raise ValueError("alpha must be in (0, 1)")
-        if self.min_n < 1:
+        if isinstance(self.min_n, bool) or not isinstance(self.min_n, int) or self.min_n < 1:
             raise ValueError("min_n must be >= 1")
-        if not 0.0 <= self.max_unverified_fraction <= 1.0:
+        if (
+            isinstance(self.max_unverified_fraction, bool)
+            or not isinstance(self.max_unverified_fraction, (int, float))
+            or not 0.0 <= float(self.max_unverified_fraction) <= 1.0
+        ):
             raise ValueError("max_unverified_fraction must be in [0, 1]")
-        if self.tolerated_net_loss < 0:
+        if (
+            isinstance(self.tolerated_net_loss, bool)
+            or not isinstance(self.tolerated_net_loss, int)
+            or self.tolerated_net_loss < 0
+        ):
             raise ValueError("tolerated_net_loss must be >= 0")
+        if not isinstance(self.require_improvement, bool):
+            raise ValueError("require_improvement must be a bool")
 
 
 @dataclass(frozen=True)
@@ -76,6 +90,50 @@ class UpdateReceipt:
     p_improvement: float  # one-sided exact: P(X >= c)
     policy: Dict[str, Any] = field(default_factory=dict)
     receipt_sha256: str = ""
+
+    def __post_init__(self) -> None:
+        if self.decision not in (ACCEPT, REJECT, INSUFFICIENT):
+            raise ValueError(f"decision must be one of {ACCEPT}, {REJECT}, {INSUFFICIENT}")
+        if not isinstance(self.reasons, list) or any(not isinstance(r, str) or not r.strip() for r in self.reasons):
+            raise ValueError("reasons must be a list of non-empty strings")
+        for i_field in (
+            "n",
+            "b",
+            "c",
+            "both_pass",
+            "both_fail",
+            "baseline_pass",
+            "candidate_pass",
+            "unverified_baseline",
+            "unverified_candidate",
+        ):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if self.b + self.c + self.both_pass + self.both_fail != self.n:
+            raise ValueError("b + c + both_pass + both_fail must equal n")
+        if self.baseline_pass != self.b + self.both_pass:
+            raise ValueError("baseline_pass must equal b + both_pass")
+        if self.candidate_pass != self.c + self.both_pass:
+            raise ValueError("candidate_pass must equal c + both_pass")
+        if self.unverified_baseline > self.n or self.unverified_candidate > self.n:
+            raise ValueError("unverified counts cannot exceed n")
+        for p_field in ("unverified_fraction", "p_two_sided", "p_regression", "p_improvement"):
+            val = getattr(self, p_field)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or not (0.0 <= float(val) <= 1.0)
+            ):
+                raise ValueError(f"{p_field} must be a finite number in [0.0, 1.0]")
+        if not isinstance(self.policy, dict):
+            raise ValueError("policy must be a dictionary")
+        if not isinstance(self.receipt_sha256, str) or (
+            self.receipt_sha256 != ""
+            and (len(self.receipt_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in self.receipt_sha256))
+        ):
+            raise ValueError("receipt_sha256 must be empty or a 64-character hex string")
 
     @property
     def accepted(self) -> bool:
@@ -101,6 +159,15 @@ def _lower_tail(k: int, n: int) -> float:
 
 def exact_paired_p(b: int, c: int) -> float:
     """Two-sided exact McNemar p from the discordant counts (same value as ``scripts/e15_lib.mcnemar_exact``)."""
+    if (
+        isinstance(b, bool)
+        or not isinstance(b, int)
+        or b < 0
+        or isinstance(c, bool)
+        or not isinstance(c, int)
+        or c < 0
+    ):
+        raise ValueError("b and c must be non-negative integers")
     n = b + c
     return 1.0 if n == 0 else min(1.0, 2 * _lower_tail(min(b, c), n))
 
@@ -114,7 +181,13 @@ def _seal(receipt: UpdateReceipt) -> UpdateReceipt:
 
 def decide(baseline: Mapping[str, str], candidate: Mapping[str, str], policy: UpdatePolicy = UpdatePolicy()) -> UpdateReceipt:
     """Accept or refuse a candidate update from per-task sandbox outcomes on the same held-out tasks (see module docstring)."""
+    if not isinstance(baseline, Mapping) or not isinstance(candidate, Mapping):
+        raise ValueError("baseline and candidate must be Mapping instances")
+    if not isinstance(policy, UpdatePolicy):
+        raise ValueError("policy must be an UpdatePolicy instance")
     for name, outcomes in (("baseline", baseline), ("candidate", candidate)):
+        if any(not isinstance(k, str) or not k.strip() or any(ord(c) < 32 or ord(c) == 127 for c in k) for k in outcomes):
+            raise ValueError(f"{name} task keys must be non-empty strings without control characters")
         bad = sorted({v for v in outcomes.values() if v not in OUTCOMES})
         if bad:
             raise ValueError(f"{name} has outcomes outside {OUTCOMES}: {bad}")
@@ -169,12 +242,24 @@ class HeldOutTask:
     tests: Sequence[str]
     setup: str = ""
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.key, str) or not self.key.strip() or any(ord(c) < 32 or ord(c) == 127 for c in self.key):
+            raise ValueError("key must be a non-empty string")
+        if not isinstance(self.prompt, str):
+            raise ValueError("prompt must be a string")
+        if isinstance(self.tests, (str, bytes)) or not isinstance(self.tests, Sequence) or not self.tests or any(not isinstance(t, str) or not t.strip() for t in self.tests):
+            raise ValueError("tests must be a non-empty sequence of strings")
+        if not isinstance(self.setup, str):
+            raise ValueError("setup must be a string")
+
 
 _FENCE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.S | re.I)
 
 
 def extract_code(text: str) -> str:
     """The last fenced code block of a model reply, or the whole reply when it has none."""
+    if not isinstance(text, str):
+        raise TypeError("text must be a string")
     blocks = _FENCE.findall(text)
     return (blocks[-1] if blocks else text).strip()
 
@@ -186,6 +271,10 @@ def evaluate_tasks(tasks: Sequence[HeldOutTask], generate: Callable[[HeldOutTask
     ``gate`` must return an object with a ``verdict`` string: ``ACCEPTED`` is a pass, ``UNVERIFIED`` is unverified, every other
     verdict is a fail. A generator that raises, an empty extraction, or a gate that raises is ``unverified`` and never a pass.
     """
+    if isinstance(tasks, (str, bytes)) or not isinstance(tasks, Sequence) or any(not isinstance(t, HeldOutTask) for t in tasks):
+        raise ValueError("tasks must be a sequence of HeldOutTask instances")
+    if not callable(generate) or not callable(gate) or not callable(extract):
+        raise ValueError("generate, gate, and extract must be callable")
     keys = [t.key for t in tasks]
     if len(set(keys)) != len(keys):
         raise ValueError("duplicate task keys")

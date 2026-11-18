@@ -6,6 +6,8 @@ After=hivemind-live-bee-llama.service
 Requires=hivemind-live-bee-llama.service
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 User=callensxavier_gmail_com
 WorkingDirectory=/home/callensxavier_gmail_com/bee-stars
 EnvironmentFile=/etc/hivemind/t4-bee.env

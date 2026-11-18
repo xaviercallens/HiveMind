@@ -86,3 +86,62 @@ The receipt is `artifacts/experiments/E_B3_MOE_PAIRED_<date>.json`. It records:
 - the per-chunk NLLs;
 - start and end times;
 - a `deviations` list.
+
+---
+
+## Results (added after the run; the sections above and the JSON spec are unchanged)
+
+- **Order of events:**
+  - pre-registration commit `ef51535300f3187c04c22adcdf3a206fb29e33bc`, pushed 2026-11-18 12:46:18 UTC;
+  - script commit `b76570fc` pushed next;
+  - the evaluation started 12:49:19 UTC and finished 12:59:40 UTC (621 s wall, CPU only, 4 threads, fp32 trunk).
+- **Receipt:** [`artifacts/experiments/E_B3_MOE_PAIRED_2026-11-18.json`](../artifacts/experiments/E_B3_MOE_PAIRED_2026-11-18.json),
+  with spec sha256 `0a22082e…57c14`, chunk-id sha256 `8eabd337…92a9b92` and `deviations: []`.
+- **Integrity checks:**
+  - every registered hash matched;
+  - the row-order check passed on all 4 local sources;
+  - base-equivalence gate: the zero-delta upcycled model gave 4.715309 on chunk 0, identical to dense.
+
+**Test rows used** (all at or after each source's `train_rows[1]`):
+
+| Expert | Source | Rows used | Notes |
+|---|---|---|---|
+| E0 general | fineweb-edu | 440–479 | |
+| E1 code | CodeAlpaca-20k | 3244–3314 | 75 scanned, 35 had < 64 tokens; self-oss-instruct not needed |
+| E2 math | NuminaMath-CoT | 340–379 | |
+| E3 logic | — | — | skipped: never trained |
+| E4 physics | PhysicsQA | — | skipped: no rows after 370 |
+| E5 exoplanets | exoplanet-transit-detection | 140–179 | |
+| E6 stars | sspp-dr9-stellar-spectra | 540–579 | |
+| E7 security | Code_Vulnerability_Security_DPO | 940–979 | |
+
+**N = 240 chunks** (6 experts × 40).
+
+| | Base NLL | MoE NLL | Mean d | Change | MoE lower / higher |
+|---|---|---|---|---|---|
+| E0 general | 4.6290 | 4.5870 | −0.0419 | −0.91 % | 27 / 13 |
+| E1 code | 5.1974 | 4.0355 | −1.1619 | −22.36 % | 40 / 0 |
+| E2 math | 4.8411 | 4.7034 | −0.1376 | −2.84 % | 35 / 5 |
+| E5 exoplanets | 6.1476 | 5.9895 | −0.1581 | −2.57 % | 33 / 7 |
+| E6 stars | 3.5218 | 3.3214 | −0.2004 | −5.69 % | 40 / 0 |
+| E7 security | 5.1801 | 4.8966 | −0.2835 | −5.47 % | 40 / 0 |
+| **All** | **4.9195** | **4.5889** | **−0.3306** | | **215 / 25** |
+
+- **Mean paired difference:** −0.3306 nats, bootstrap 95 % CI **[−0.3865, −0.2770]** (10,000 resamples, seed 20261118).
+- **Sign test:** p = 7.2e-39 (informational).
+- **Verdict under the registered rule: PASS** (the CI upper bound is below 0).
+- **Domain guard:** holds, since no expert got worse.
+- So this evaluation **supports B3** for the MoE add-on as registered.
+
+**Reading the numbers (not part of the decision rule):**
+
+- **Chunk position:**
+  - Each chunk is the first 64 tokens of a row, in the `row_to_text` serialisation used in training (for example
+    `instruction: … output: …`).
+  - Part of the gain, most clearly the −22 % on E1, where CodeAlpaca rows are short templated records, is likely the
+    add-on learning that per-source format, not general domain skill.
+  - The ratchet measured contiguous windows inside rows instead.
+  - So these magnitudes are not comparable with the ratchet's −2.88 %, and they should not be quoted as a general
+    quality gain of Crowd-v1.
+- **Scorecard:** the MVP scorecard is not changed. `check_b3` reads only the Granite train-to-serve gate artifacts, which
+  still fail. Wiring this receipt into B3 (and into the router's serve gate) is an owner decision.

@@ -15,7 +15,7 @@ from hivemind.cli.community_orchestrator import (
 from hivemind.router.points_wording import currency_leftovers
 
 
-def test_evaluate_pull_request_approves_clean_pr_and_blocks_extortion() -> None:
+def test_evaluate_pull_request_refers_clean_pr_to_gatekeeper_and_blocks_extortion() -> None:
     clean_pr = {
         "number": 80,
         "title": "feat(s7): wire speculative token-tree prefetch into verifier",
@@ -33,8 +33,9 @@ def test_evaluate_pull_request_approves_clean_pr_and_blocks_extortion() -> None:
         ],
     }
     res_ok = evaluate_pull_request_for_merge(clean_pr)
-    assert res_ok["can_merge"] is True
-    assert res_ok["verdict"] == "APPROVE_AND_MERGE"
+    assert res_ok["can_merge"] is False
+    assert res_ok["preliminary_checks_passed"] is True
+    assert res_ok["verdict"] == "REFER_TO_GATEKEEPER"
     assert res_ok["risk_score"] == 0
     assert "HiveMind Reflexion Points (HMT)" in res_ok["review_markdown"]
     assert currency_leftovers(res_ok["review_markdown"]) == []

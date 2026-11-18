@@ -422,8 +422,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="Start from a saved round checkpoint (crowd_moe_opendiloco_round_N.safetensors) instead of the upcycled start")
     ap.add_argument("--start-data-offset", type=int, default=0,
                     help="Token position where both learners start in their shards (to continue after a resumed run)")
-    ap.add_argument("--stop-after-rejections", type=int, default=0,
-                    help="Stop after this many consecutive rounds rejected by the loss ratchet (0 = never)")
+    ap.add_argument("--stop-after-rejections", type=int, default=3,
+                    help="Stop MoE training after this many consecutive rejected rounds (default: 3, 0 = never)")
     ap.add_argument("--cuda-mem-cap-mib", default="0",
                     help="Hard cap on this process's CUDA allocations: 0 (off), auto (free - floor - 700 MiB) or MiB")
     ap.add_argument(
@@ -457,6 +457,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--systemd-out", type=Path, default=None)
     ap.add_argument("--poll-s", type=float, default=15.0)
     args = ap.parse_args(argv)
+    if args.stop_after_rejections < 0:
+        ap.error("--stop-after-rejections must be non-negative")
 
     if args.mode == "budget-check":
         plan = compute_gcp_t4_spot_crowd_budget()
@@ -639,6 +641,24 @@ def main(argv: list[str] | None = None) -> int:
         cursor_t4 = int(args.start_data_offset)  # each round continues through the shard (IP-293)
         cursor_2070 = int(args.start_data_offset)
         consecutive_rejections = 0
+
+        def finish_round(record: dict[str, Any]) -> bool:
+            nonlocal consecutive_rejections
+            accepted = record["accepted_by_loss_ratchet"]
+            consecutive_rejections = 0 if accepted else consecutive_rejections + 1
+            stalled = 0 < args.stop_after_rejections <= consecutive_rejections
+            if stalled:
+                record["ratchet_stall_reason"] = f"{consecutive_rejections} consecutive rounds rejected"
+            append_round_record(args.work_dir, record)
+            moe_rounds.append(record)
+            coord.outer_lr = next_outer_lr(
+                coord.outer_lr, accepted, initial=args.outer_lr, decay=args.outer_lr_decay,
+                growth=args.outer_lr_growth, floor=args.outer_lr_min,
+            )
+            if stalled:
+                print(f"stopping: {record['ratchet_stall_reason']}", file=sys.stderr)
+            return stalled
+
         for rnd in range(max(1, args.rounds)):
             master_snap = coord.export_buckets()
 
@@ -685,19 +705,21 @@ def main(argv: list[str] | None = None) -> int:
                 # a non-finite step (fp16 overflow, router refused NaN logits): reject the round, keep the master state,
                 # move past the bad window and back off the outer lr like any rejection
                 load_moe_trainable_buckets(model, master_snap, num_router_fragments=4)
-                moe_rounds.append({"round_index": rnd + 1, "device": exec_dev, "accepted_by_loss_ratchet": False,
-                                   "non_finite": True, "outer_lr": float(coord.outer_lr),
-                                   "data_offsets": {"learner0": out_t4.get("start_offset", cursor_t4),
-                                                    "learner1": out_2070.get("start_offset", cursor_2070)}})
-                append_round_record(args.work_dir, moe_rounds[-1])
+                stalled = finish_round({
+                    "round_index": rnd + 1,
+                    "device": exec_dev,
+                    "accepted_by_loss_ratchet": False,
+                    "non_finite": True,
+                    "outer_lr": float(coord.outer_lr),
+                    "data_offsets": {
+                        "learner0": out_t4.get("start_offset", cursor_t4),
+                        "learner1": out_2070.get("start_offset", cursor_2070),
+                    },
+                })
                 print(f"round {rnd + 1}: non-finite step, round rejected", file=sys.stderr)
                 cursor_t4 = int(out_t4.get("next_offset", cursor_t4))
                 cursor_2070 = int(out_2070.get("next_offset", cursor_2070))
-                consecutive_rejections += 1
-                coord.outer_lr = next_outer_lr(coord.outer_lr, False, initial=args.outer_lr, decay=args.outer_lr_decay,
-                                               growth=args.outer_lr_growth, floor=args.outer_lr_min)
-                if args.stop_after_rejections and consecutive_rejections >= args.stop_after_rejections:
-                    print(f"stopping: {consecutive_rejections} consecutive rounds rejected", file=sys.stderr)
+                if stalled:
                     break
                 continue
 
@@ -746,7 +768,7 @@ def main(argv: list[str] | None = None) -> int:
                     vram_total_mib=total_m,
                 )
 
-            moe_rounds.append(
+            stalled = finish_round(
                 {
                     "round_index": rnd + 1,
                     "device": exec_dev,
@@ -762,14 +784,9 @@ def main(argv: list[str] | None = None) -> int:
                     "outer_lr": float(coord.outer_lr),
                 }
             )
-            append_round_record(args.work_dir, moe_rounds[-1])
             cursor_t4 = int(out_t4.get("next_offset", cursor_t4))
             cursor_2070 = int(out_2070.get("next_offset", cursor_2070))
-            consecutive_rejections = 0 if receipt.accepted_by_loss_ratchet else consecutive_rejections + 1
-            coord.outer_lr = next_outer_lr(coord.outer_lr, bool(receipt.accepted_by_loss_ratchet), initial=args.outer_lr,
-                                           decay=args.outer_lr_decay, growth=args.outer_lr_growth, floor=args.outer_lr_min)
-            if args.stop_after_rejections and consecutive_rejections >= args.stop_after_rejections:
-                print(f"stopping: {consecutive_rejections} consecutive rounds rejected by the loss ratchet", file=sys.stderr)
+            if stalled:
                 break
 
         print(

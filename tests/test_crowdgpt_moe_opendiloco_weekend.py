@@ -312,6 +312,62 @@ def test_weekend_raid_gateway_endpoint_calendar_ics_and_worker_cli(tmp_path: Pat
     assert pub_mod.main(["--dry-run", "--print-urls"]) == 0
 
 
+@pytest.mark.parametrize("limit,non_finite_last", [(None, False), (None, True), (0, False)])
+def test_moe_worker_records_when_consecutive_rejections_stop_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, limit: int | None, non_finite_last: bool
+) -> None:
+    import json
+    from types import SimpleNamespace
+
+    from hivemind.swarm import crowdgpt_moe_opendiloco as moe
+
+    calls = []
+
+    def inner_steps(model, _shard, *, start_offset, **_kwargs):
+        calls.append(start_offset)
+        return {
+            "non_finite": non_finite_last and len(calls) in (9, 10),
+            "next_offset": start_offset + 8,
+            "steps_completed": 1,
+            "tokens_processed": 8,
+            "pseudo_grads": {key: torch.zeros_like(value) for key, value in extract_moe_trainable_buckets(model).items()},
+        }
+
+    def step_round(self, _submissions, *, eval_fn):
+        return SimpleNamespace(
+            accepted_by_loss_ratchet=len(calls) == 4,
+            candidate_eval_loss=2.0,
+            eval_loss_before=1.0,
+            eval_loss_after=1.0,
+            fragments_synced=(),
+            master_state_sha256=self.master_sha256(),
+            quorum_telemetry={},
+        )
+
+    monkeypatch.setattr(moe, "run_crowd_moe_opendiloco_inner_steps", inner_steps)
+    monkeypatch.setattr(moe.CrowdOpenDiLoCoCoordinator, "step_decoupled_round", step_round)
+    worker = _load_script("gcp_t4_crowd_diloco_worker_stall_test", "scripts/gcp_t4_crowd_diloco_worker.py")
+    args = [
+        "--mode", "moe-opendiloco-round", "--small-arch", "--cpu-only", "--no-save-safetensors",
+        "--rounds", "6", "--outer-lr", "0.4", "--outer-lr-decay", "0.5", "--work-dir", str(tmp_path),
+    ]
+    if limit is not None:
+        args.extend(["--stop-after-rejections", str(limit)])
+    assert worker.main(args) == 0
+
+    rows = [json.loads(line) for line in (tmp_path / "rounds.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert [row["outer_lr"] for row in rows[:5]] == pytest.approx([0.4, 0.2, 0.2, 0.1, 0.05])
+    assert calls == [offset for offset in range(0, 8 * len(rows), 8) for _ in range(2)]
+    assert all("ratchet_stall_reason" not in row for row in rows[:4])
+    if limit == 0:
+        assert len(rows) == 6
+        assert all("ratchet_stall_reason" not in row for row in rows)
+    else:
+        assert len(rows) == 5
+        assert rows[-1]["ratchet_stall_reason"] == "3 consecutive rounds rejected"
+        assert rows[-1].get("non_finite", False) is non_finite_last
+
+
 def test_moe_inner_steps_stop_as_soon_as_the_yield_guard_says_so() -> None:
     """The weekend T4 round must honour the HOLD file, live traffic, Spot preemption and the VRAM floor at every step."""
     from types import SimpleNamespace

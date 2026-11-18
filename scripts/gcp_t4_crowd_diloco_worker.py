@@ -446,6 +446,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--cpu-only", action="store_true")
     ap.add_argument("--gateway", default=DEFAULT_HIVEMIND_GATEWAY_URL)
     ap.add_argument("--submit-opentrainer", action="store_true")
+    ap.add_argument("--interleave-block-tokens", type=int, default=0,
+                    help="With --real-data: 0 = each learner's experts one after another (default, unchanged); "
+                         "B > 0 = B tokens from each expert in turn, so every expert is trained from the first rounds. "
+                         "1024 (one round of 16 x 64 tokens) rotates experts every round.")
     ap.add_argument("--real-data", action="store_true",
                     help="train on real rows of the 8-expert dataset plan instead of the synthetic pattern (needs --tokenizer-json)")
     ap.add_argument("--tokenizer-json", type=Path, default=None, help="Crowd-v1 tokenizer.json (tokenizers library format)")
@@ -554,6 +558,7 @@ def main(argv: list[str] | None = None) -> int:
             cache_dir=Path(args.data_cache_dir) if args.data_cache_dir else Path(args.work_dir) / "rows",
             train_tokens_per_expert=args.train_tokens_per_expert,
             heldout_tokens_per_expert=args.heldout_tokens_per_expert,
+            interleave_block_tokens=args.interleave_block_tokens,
             **extra_kw,
         )
         Path(args.work_dir).mkdir(parents=True, exist_ok=True)

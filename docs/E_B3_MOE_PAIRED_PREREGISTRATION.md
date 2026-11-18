@@ -138,8 +138,9 @@ The receipt is `artifacts/experiments/E_B3_MOE_PAIRED_<date>.json`. It records:
 - **Chunk position:**
   - Each chunk is the first 64 tokens of a row, in the `row_to_text` serialisation used in training (for example
     `instruction: … output: …`).
-  - Part of the gain, most clearly the −22 % on E1, where CodeAlpaca rows are short templated records, is likely the
-    add-on learning that per-source format, not general domain skill.
+  - Untested hypothesis: part of the gain, most clearly the −22 % on E1, where CodeAlpaca rows are short templated
+    records, may be the add-on learning that per-source format rather than general domain skill. Nothing in this run
+    separates the two.
   - The ratchet measured contiguous windows inside rows instead.
   - So these magnitudes are not comparable with the ratchet's −2.88 %, and they should not be quoted as a general
     quality gain of Crowd-v1.

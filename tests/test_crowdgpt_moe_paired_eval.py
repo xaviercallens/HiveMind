@@ -211,3 +211,122 @@ def test_preregistration_spec_is_frozen_and_consistent():
     assert spec["chunking"]["chunks_per_expert"] * spec["chunking"]["expected_experts"] >= spec["chunking"]["min_total_chunks"] >= 200
     assert set(spec["data"]["excluded_benchmarks"]) == set(pe.BANNED_BENCHMARKS)
     assert os.path.basename(spec["data"]["manifest"]) == "real_data_manifest.json"
+
+
+# ---------------------------------------------------------------------------
+# E-B3-MOE-2 mid-row follow-up (chunk_offset)
+# ---------------------------------------------------------------------------
+
+def _lens(lengths):
+    """A fake source whose row i has ``lengths[i]`` words (each encodes to one id)."""
+    def fetch(ds, cfg, split, off, length):
+        return [{"text": " ".join(f"w{i}x{j}" for j in range(lengths[i]))} for i in range(off, min(off + length, len(lengths)))]
+    return fetch
+
+
+def test_offset_zero_selects_exactly_the_944_chunks():
+    man = _manifest([_src("a/a", 300)])
+    fetch = {"datasets_server": _rows(1000, short_every=5)}
+    old, rep_old = pe.select_test_chunks(man, fetch, _encode, chunks_per_expert=10, chunk_tokens=64)
+    new, rep_new = pe.select_test_chunks(man, fetch, _encode, chunks_per_expert=10, chunk_tokens=64, chunk_offset=0)
+    assert [(c["row"], c["ids"]) for c in old] == [(c["row"], c["ids"]) for c in new]
+    assert pe.chunk_ids_sha256(old) == pe.chunk_ids_sha256(new) and rep_old == rep_new
+    assert all(c["score_from"] == 0 and len(c["ids"]) == 64 for c in new)
+
+
+def test_midrow_needs_offset_plus_tokens_and_keeps_the_context():
+    lengths = [200] * 300 + [100, 127, 128, 300, 64, 129] + [50] * 100
+    man = _manifest([_src("a/a", 300)])
+    chunks, rep = pe.select_test_chunks(man, {"datasets_server": _lens(lengths)}, lambda t: list(range(len(t.split()))),
+                                        chunks_per_expert=3, chunk_tokens=64, chunk_offset=64)
+    assert [c["row"] for c in chunks] == [302, 303, 305]  # rows with < 128 ids are skipped, next eligible taken
+    assert all(len(c["ids"]) == 128 and c["score_from"] == 64 for c in chunks)
+    assert chunks[0]["ids"] == list(range(128))  # ids[0:128]: the row's opening stays as context
+    assert rep[0]["sources"][0]["rows_too_short"] == 3
+
+
+def test_midrow_hash_covers_all_128_ids():
+    a = [{"expert_id": "E0", "dataset_id": "d", "row": 1, "ids": list(range(128)), "score_from": 64}]
+    b = [{**a[0], "ids": [*range(10), 999, *range(11, 128)]}]
+    assert pe.chunk_ids_sha256(a) != pe.chunk_ids_sha256(b)
+
+
+def test_masked_score_matches_manual_cross_entropy_and_is_causal():
+    _, model = _small_model()
+    model.eval()
+    ids = [(i * 13 + 7) % 256 for i in range(128)]
+    x = torch.tensor([ids])
+    with torch.no_grad():
+        logits = model(x)[0][0].float()
+    mid = pe.chunk_nll(model, ids, score_from=64)
+    assert mid == pytest.approx(F.cross_entropy(logits[63:127], x[0, 64:]).item(), abs=1e-4)  # 64 targets ids[64..127]
+    start_masked = pe.chunk_nll(model, ids, score_to=64)
+    assert start_masked == pytest.approx(F.cross_entropy(logits[0:63], x[0, 1:64]).item(), abs=1e-4)
+    # causality: later tokens do not change earlier predictions (the run's causality gate)
+    assert start_masked == pytest.approx(pe.chunk_nll(model, ids[:64]), abs=1e-4)
+    assert pe.chunk_nll(model, ids) == pe.chunk_nll(model, ids, score_from=0)
+    with pytest.raises(ValueError):
+        pe.chunk_nll(model, ids, score_from=128)
+
+
+def test_eval_arm_uses_score_from_and_rowstart_control():
+    _, model = _small_model()
+    ids = [(i * 7 + 3) % 256 for i in range(128)]
+    chunks = [{"expert_id": "E0", "ids": ids, "score_from": 64}]
+    assert pe.eval_arm(model, chunks)[0] == pytest.approx(pe.chunk_nll(model, ids, score_from=64), abs=1e-6)
+    assert pe.eval_arm(model, chunks, rowstart_tokens=64)[0] == pytest.approx(pe.chunk_nll(model, ids[:64]), abs=1e-6)
+
+
+def test_zero_delta_upcycle_equals_dense_on_midrow_score():
+    worker, model = _small_model()
+    ids = [(i * 13 + 7) % 256 for i in range(128)]
+    dense = pe.chunk_nll(model, ids, score_from=64)
+    pe.upcycle_and_load(model, SPLIT, None, worker.load_init_buckets)
+    assert pe.chunk_nll(model, ids, score_from=64) == pytest.approx(dense, abs=1e-5)
+
+
+def test_per_expert_minimum_excludes_small_experts_from_the_verdict_and_guard():
+    chunks = [{"expert_id": "E0"}] * 200 + [{"expert_id": "E1"}] * 5
+    keep = pe.qualifying_experts(chunks, 20)
+    assert keep == {"E0"}
+    ix = [i for i, c in enumerate(chunks) if c["expert_id"] in keep]
+    base = [5.0] * 205
+    moe = [4.9 + 0.001 * (i % 7) for i in range(200)] + [6.0] * 5  # E1 much worse, but below the minimum
+    r = pe.make_analyser(chunks, ix, keep, min_total=200, n_resamples=500)(moe, base)
+    assert r["n"] == 200 and r["verdict"] == "PASS" and r["domain_guard_ok"] is True
+    assert [e["qualifies"] for e in r["per_expert"]] == [True, False]
+    r2 = pe.make_analyser(chunks, ix[:150], keep, min_total=200, n_resamples=500)(moe, base)
+    assert r2["verdict"] == "INSUFFICIENT_N"
+
+
+def test_format_content_label():
+    assert pe.format_content_label("PASS", -0.20) == "MOSTLY_CONTENT"
+    assert pe.format_content_label("PASS", -0.1653) == "MOSTLY_CONTENT"
+    assert pe.format_content_label("PASS", -0.10) == "MOSTLY_FORMAT_SOME_CONTENT"
+    assert pe.format_content_label("NO_GAIN", -0.10) == "FORMAT"
+    assert pe.format_content_label("HARM", 0.05) == "FORMAT"
+    assert pe.format_content_label("INSUFFICIENT_N", -0.5) == "NONE"
+
+
+def test_mid_over_start_ratio():
+    mid = {"mean_paired_diff": -0.1, "per_expert": [{"expert_id": "E0", "mean_diff": -0.05}, {"expert_id": "E1", "mean_diff": -0.2}]}
+    start = {"mean_paired_diff": -0.4, "per_expert": [{"expert_id": "E0", "mean_diff": -0.1}, {"expert_id": "E1", "mean_diff": 0.0}]}
+    r = pe.mid_over_start_ratio(mid, start)
+    assert r["overall"] == pytest.approx(0.25) and r["E0"] == pytest.approx(0.5) and r["E1"] is None
+
+
+def test_midrow_preregistration_spec_is_frozen_and_consistent():
+    spec = json.loads((REPO / "docs" / "E_B3_MOE_MIDROW_PREREGISTRATION.json").read_text(encoding="utf-8"))
+    first = json.loads((REPO / "docs" / "E_B3_MOE_PAIRED_PREREGISTRATION.json").read_text(encoding="utf-8"))
+    assert spec["frozen"] is True
+    ch = spec["chunking"]
+    assert ch["chunk_offset"] == 64 and ch["chunk_tokens"] == 64 and ch["min_row_tokens"] == 128
+    assert ch["min_total_chunks"] == 200 and ch["min_chunks_per_expert"] == 20 and ch["scan_cap_rows_per_source"] == 2000
+    # only the chunk position changes: same base, primary checkpoint, split, manifest and benchmark exclusions as #944
+    assert spec["arms"]["base"] == first["arms"]["base"]
+    assert spec["arms"]["moe"]["checkpoint_sha256"] == first["arms"]["moe"]["checkpoint_sha256"]
+    assert spec["arms"]["moe"]["split"] == first["arms"]["moe"]["split"]
+    assert spec["data"]["manifest_sha256"] == first["data"]["manifest_sha256"]
+    assert set(spec["data"]["excluded_benchmarks"]) == set(pe.BANNED_BENCHMARKS)
+    assert spec["arms"]["moe_secondary"]["checkpoint_sha256"].startswith("58696cfe5660bd91")
+    assert "-0.1653" in spec["interpretation_rule"]["reference"]

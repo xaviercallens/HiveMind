@@ -6,7 +6,9 @@ The frozen spec is ``docs/E_B3_MOE_PAIRED_PREREGISTRATION.json``. This script fo
 
 * test rows start at each source's ``train_rows[1]`` in the training run's ``real_data_manifest.json``. Those rows were
   never read by training (rows ``[40, train_end)``) nor by the training ratchet's evaluation (rows ``[0, 40)``);
-* one 64-token chunk per row (the row's first 64 token ids), ``chunks_per_expert`` per trained expert;
+* one 64-token chunk per row (the row's first 64 token ids), ``chunks_per_expert`` per trained expert. With a
+  ``chunking.chunk_offset`` > 0 in the spec (the E-B3-MOE-2 mid-row follow-up, ``docs/E_B3_MOE_MIDROW_PREREGISTRATION.json``)
+  a row needs ``offset + 64`` ids, the model reads ``ids[0:offset+64]`` and only targets ``offset..offset+63`` are scored;
 * per-chunk mean next-token NLL for the dense base, then for the same model upcycled in place with the checkpoint's
   buckets (built and loaded with the worker's code path), paired per chunk;
 * a paired bootstrap 95 % CI of ``mean(NLL_moe - NLL_base)`` decides PASS / HARM / NO_GAIN / INSUFFICIENT_N.
@@ -62,13 +64,21 @@ def select_test_chunks(
     chunk_tokens: int = 64,
     scan_cap_rows: int = 2000,
     banned: frozenset[str] = BANNED_BENCHMARKS,
+    chunk_offset: int = 0,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Chunks from rows after each source's training range, one chunk per row, plus a per-expert report.
+
+    ``chunk_offset`` (default 0 = the #944 row-start chunks): a row needs ``chunk_offset + chunk_tokens`` ids; the chunk
+    keeps ``ids[0:chunk_offset + chunk_tokens]`` as model input and ``score_from = chunk_offset`` marks the first scored
+    target, so the row's opening stays in context but is not scored.
 
     ``fetchers`` maps a manifest ``origin`` (``local_hf_cache`` / ``datasets_server``) to a row fetcher
     ``(dataset_id, config, split, offset, length) -> rows``. A later source of an expert is read only if the earlier
     ones gave too few chunks. Experts that were not trained, or whose sources have no rows left, are reported as skipped.
     """
+    if chunk_offset < 0 or chunk_tokens < 2:
+        raise ValueError("chunk_offset must be >= 0 and chunk_tokens >= 2")
+    need = chunk_offset + chunk_tokens
     chunks: list[dict[str, Any]] = []
     report: list[dict[str, Any]] = []
     for expert in manifest.get("experts", []):
@@ -106,10 +116,11 @@ def select_test_chunks(
                         break
                     used["rows_scanned"] += 1
                     ids = list(encode(row_to_text(row)))
-                    if len(ids) < chunk_tokens:
+                    if len(ids) < need:
                         used["rows_too_short"] += 1
                         continue
-                    got.append({"expert_id": eid, "dataset_id": ds, "row": off + i, "ids": [int(t) for t in ids[:chunk_tokens]]})
+                    got.append({"expert_id": eid, "dataset_id": ds, "row": off + i, "ids": [int(t) for t in ids[:need]],
+                                "score_from": chunk_offset})
                     used["rows_used"].append(off + i)
                 if len(rows) < length:
                     used["exhausted"] = len(got) < chunks_per_expert
@@ -134,22 +145,43 @@ def chunk_ids_sha256(chunks: Sequence[Mapping[str, Any]]) -> str:
 # model evaluation
 # ---------------------------------------------------------------------------
 
-def chunk_nll(model: torch.nn.Module, ids: Sequence[int]) -> float:
-    """Mean next-token NLL (nats) of one chunk: the worker's forward, batch size 1, over len(ids) - 1 predictions."""
+def chunk_nll(model: torch.nn.Module, ids: Sequence[int], *, score_from: int = 0, score_to: int | None = None) -> float:
+    """Mean next-token NLL (nats) of one chunk: the worker's forward, batch size 1.
+
+    By default all ``len(ids) - 1`` predictions are scored (the #944 metric). ``score_from`` / ``score_to`` restrict the
+    scored targets to ``ids[max(1, score_from):score_to]`` (labels outside are set to -100, and the worker's loss divides
+    by the count of scored targets) while the model still reads all of ``ids``.
+    """
     from hivemind.swarm.gcp_t4_crowd_diloco import forward_crowd_v1_checkpointed
 
     x = torch.tensor([list(ids)], dtype=torch.long)
+    labels = x
+    if score_from > 0 or score_to is not None:
+        labels = x.clone()
+        labels[:, :score_from] = -100
+        if score_to is not None:
+            labels[:, score_to:] = -100
+        if not bool((labels[:, 1:] != -100).any()):
+            raise ValueError("no scored targets")
     with torch.no_grad():
-        _, loss = forward_crowd_v1_checkpointed(model, x, labels=x, use_grad_checkpointing=False,
+        _, loss = forward_crowd_v1_checkpointed(model, x, labels=labels, use_grad_checkpointing=False,
                                                 token_chunk_size=max(2, len(ids)))
     return float(loss.item())
 
 
-def eval_arm(model: torch.nn.Module, chunks: Sequence[Mapping[str, Any]], *, log: Callable[[str], None] | None = None) -> list[float]:
+def eval_arm(model: torch.nn.Module, chunks: Sequence[Mapping[str, Any]], *, log: Callable[[str], None] | None = None,
+             rowstart_tokens: int | None = None) -> list[float]:
+    """Per-chunk NLL of the chunk's scored targets (``score_from``, default 0).
+
+    With ``rowstart_tokens``, instead the #944 metric on the same row: ``chunk_nll(ids[:rowstart_tokens])``.
+    """
     model.eval()
     out: list[float] = []
     for i, c in enumerate(chunks):
-        out.append(chunk_nll(model, c["ids"]))
+        if rowstart_tokens is not None:
+            out.append(chunk_nll(model, c["ids"][:rowstart_tokens]))
+        else:
+            out.append(chunk_nll(model, c["ids"], score_from=int(c.get("score_from", 0))))
         if log and (i + 1) % 20 == 0:
             log(f"  {i + 1}/{len(chunks)} chunks")
     return out
@@ -241,6 +273,58 @@ def b3_supported(verdict: str, guard_ok: bool) -> bool:
     return verdict == "PASS" and guard_ok
 
 
+def qualifying_experts(chunks: Sequence[Mapping[str, Any]], min_per_expert: int) -> set[str]:
+    """Experts with at least ``min_per_expert`` chunks (the others are reported but not decisive)."""
+    counts: dict[str, int] = {}
+    for c in chunks:
+        counts[c["expert_id"]] = counts.get(c["expert_id"], 0) + 1
+    return {e for e, n in counts.items() if n >= min_per_expert}
+
+
+def make_analyser(chunks: Sequence[Mapping[str, Any]], ix: Sequence[int], keep: set[str], *, min_total: int,
+                  n_resamples: int = 10_000, seed: int = 20261118) -> Callable[[Sequence[float], Sequence[float]], dict[str, Any]]:
+    """``analyse(arm, ref)``: the registered statistic and verdict over the qualifying chunks ``ix``.
+
+    Per-expert rows are reported for every expert (``qualifies`` marks the decisive ones); the domain guard uses only
+    qualifying experts.
+    """
+
+    def analyse(arm: Sequence[float], ref: Sequence[float]) -> dict[str, Any]:
+        ix_: Sequence[int] = ix if arm else []
+        d = [arm[i] - ref[i] for i in ix_]
+        n_ = len(d)
+        m_, lo_, hi_ = paired_bootstrap_ci(d, n_resamples=n_resamples, seed=seed) if n_ else (float("nan"),) * 3
+        per = per_expert_summary(chunks, ref, arm) if arm else []
+        for e in per:
+            e["qualifies"] = e["expert_id"] in keep
+        q = [e for e in per if e["qualifies"]]
+        return {"n": n_, "mean_base_nll": float(np.mean([ref[i] for i in ix_])) if n_ else None,
+                "mean_moe_nll": float(np.mean([arm[i] for i in ix_])) if n_ else None,
+                "mean_paired_diff": m_, "bootstrap95": [lo_, hi_], "sign_test": sign_test(d), "per_expert": per,
+                "verdict": decide(n_, lo_, hi_, min_n=min_total), "domain_guard_ok": domain_guard(q) if q else False}
+
+    return analyse
+
+
+def mid_over_start_ratio(mid: Mapping[str, Any], start: Mapping[str, Any]) -> dict[str, float | None]:
+    """``mean_d(mid-row) / mean_d(row-start)`` overall and per expert, on the same rows (informational)."""
+    out: dict[str, float | None] = {
+        "overall": mid["mean_paired_diff"] / start["mean_paired_diff"] if start["mean_paired_diff"] else None}
+    for em, es in zip(mid["per_expert"], start["per_expert"]):
+        assert em["expert_id"] == es["expert_id"]
+        out[em["expert_id"]] = em["mean_diff"] / es["mean_diff"] if es["mean_diff"] else None
+    return out
+
+
+def format_content_label(verdict: str, mean_d: float, *, threshold: float = -0.1653) -> str:
+    """E-B3-MOE-2 interpretation rule (frozen in docs/E_B3_MOE_MIDROW_PREREGISTRATION.json)."""
+    if verdict == "INSUFFICIENT_N":
+        return "NONE"
+    if verdict == "PASS":
+        return "MOSTLY_CONTENT" if mean_d <= threshold else "MOSTLY_FORMAT_SOME_CONTENT"
+    return "FORMAT"
+
+
 # ---------------------------------------------------------------------------
 # integrity checks
 # ---------------------------------------------------------------------------
@@ -323,13 +407,20 @@ def main(argv: list[str] | None = None) -> int:
     spec_bytes = Path(args.spec).read_bytes()
     spec = json.loads(spec_bytes)
     base_spec, moe_spec, chunking = spec["arms"]["base"], spec["arms"]["moe"], spec["chunking"]
+    sec_spec = spec["arms"].get("moe_secondary")
+    chunk_offset = int(chunking.get("chunk_offset", 0))
+    chunk_tokens = int(chunking["chunk_tokens"])
+    min_per_expert = int(chunking.get("min_chunks_per_expert", 1))
     stats_seed, n_resamples = 20261118, 10_000
     deviations: list[str] = []
 
-    for path, want in ((moe_spec["checkpoint"], moe_spec["checkpoint_sha256"]),
-                       (spec["data"]["manifest"], spec["data"]["manifest_sha256"]),
-                       (base_spec["weights_file"], base_spec["weights_sha256"]),
-                       (args.tokenizer_json, base_spec["tokenizer_sha256"])):
+    to_check = [(moe_spec["checkpoint"], moe_spec["checkpoint_sha256"]),
+                (spec["data"]["manifest"], spec["data"]["manifest_sha256"]),
+                (base_spec["weights_file"], base_spec["weights_sha256"]),
+                (args.tokenizer_json, base_spec["tokenizer_sha256"])]
+    if sec_spec:
+        to_check.append((sec_spec["checkpoint"], sec_spec["checkpoint_sha256"]))
+    for path, want in to_check:
         got = sha256_file(path)
         if got != want:
             print(f"refused: {path} sha256 {got} != registered {want}", file=sys.stderr)
@@ -364,9 +455,10 @@ def main(argv: list[str] | None = None) -> int:
     tok = Tokenizer.from_file(str(args.tokenizer_json))
     chunks, selection = select_test_chunks(
         manifest, {"local_hf_cache": _local, "datasets_server": _remote}, lambda s: tok.encode(s).ids,
-        chunks_per_expert=int(chunking["chunks_per_expert"]), chunk_tokens=int(chunking["chunk_tokens"]),
-        scan_cap_rows=2000)
-    log(f"selected {len(chunks)} chunks: " + ", ".join(f"{e['expert_id']}={e['chunks']}" for e in selection))
+        chunks_per_expert=int(chunking["chunks_per_expert"]), chunk_tokens=chunk_tokens,
+        scan_cap_rows=int(chunking.get("scan_cap_rows_per_source", 2000)), chunk_offset=chunk_offset)
+    log(f"selected {len(chunks)} chunks (offset {chunk_offset}): "
+        + ", ".join(f"{e['expert_id']}={e['chunks']}" for e in selection))
 
     worker = _load_worker()
     model, rev_meta = worker._load_or_build_model(cache_dir=Path(args.base_cache_dir), use_small_arch=False,
@@ -378,13 +470,30 @@ def main(argv: list[str] | None = None) -> int:
     if any(t < 0 or t >= vocab for c in chunks for t in c["ids"]):
         print("refused: token id outside the vocabulary", file=sys.stderr)
         return 3
+    rowstart = chunk_offset if chunk_offset > 0 else None  # same-row #944 control, only for mid-row chunks
     log("base arm (dense Crowd-v1)")
     base_nll = eval_arm(model, chunks, log=log) if chunks else []
+    base_start = eval_arm(model, chunks, log=log, rowstart_tokens=rowstart) if chunks and rowstart else []
 
     eq: dict[str, Any] = {"tolerance_nats": 1e-3}
+    causal: dict[str, Any] = {}
+    moe_nll: list[float] = []
+    moe_start: list[float] = []
+    sec_nll: list[float] = []
+    sec_start: list[float] = []
     if chunks:
+        c0 = chunks[0]
+        if rowstart:
+            causal = {"tolerance_nats": 1e-4,
+                      "masked_rowstart_on_full_input": chunk_nll(model, c0["ids"], score_to=rowstart),
+                      "rowstart_chunk_nll": base_start[0]}
+            causal["passed"] = abs(causal["masked_rowstart_on_full_input"] - base_start[0]) <= 1e-4
+            if not causal["passed"]:
+                print(f"refused: causality gate failed on chunk 0: {causal}", file=sys.stderr)
+                return 5
+            log(f"causality gate passed: {causal}")
         upcycle_and_load(model, moe_spec["split"], None, worker.load_init_buckets)
-        eq["zero_delta_chunk0_nll"] = chunk_nll(model, chunks[0]["ids"])
+        eq["zero_delta_chunk0_nll"] = chunk_nll(model, c0["ids"], score_from=int(c0.get("score_from", 0)))
         eq["dense_chunk0_nll"] = base_nll[0]
         eq["passed"] = abs(eq["zero_delta_chunk0_nll"] - base_nll[0]) <= 1e-3
         if not eq["passed"]:
@@ -393,28 +502,59 @@ def main(argv: list[str] | None = None) -> int:
         log(f"base-equivalence gate passed: {eq}")
         from hivemind.swarm.crowdgpt_moe_opendiloco import extract_moe_trainable_buckets, load_moe_trainable_buckets
 
-        template = extract_moe_trainable_buckets(model, num_router_fragments=int(moe_spec["split"]["num_router_fragments"]))
-        buckets = worker.load_init_buckets(moe_spec["checkpoint"], template)
-        load_moe_trainable_buckets(model, buckets, num_router_fragments=int(moe_spec["split"]["num_router_fragments"]))
+        nfrag = int(moe_spec["split"]["num_router_fragments"])
+        template = extract_moe_trainable_buckets(model, num_router_fragments=nfrag)
         eq["moe_trainable_parameters"] = int(sum(v.numel() for v in template.values()))
+        load_moe_trainable_buckets(model, worker.load_init_buckets(moe_spec["checkpoint"], template), num_router_fragments=nfrag)
         log("MoE arm (checkpoint loaded)")
         moe_nll = eval_arm(model, chunks, log=log)
-    else:
-        moe_nll = []
+        moe_start = eval_arm(model, chunks, log=log, rowstart_tokens=rowstart) if rowstart else []
+        if sec_spec:
+            load_moe_trainable_buckets(model, worker.load_init_buckets(sec_spec["checkpoint"], template), num_router_fragments=nfrag)
+            log("secondary MoE arm (checkpoint loaded into the same model)")
+            sec_nll = eval_arm(model, chunks, log=log)
+            sec_start = eval_arm(model, chunks, log=log, rowstart_tokens=rowstart) if rowstart else []
 
-    diffs = [m - b for m, b in zip(moe_nll, base_nll)]
-    n = len(diffs)
-    mean_d, lo, hi = paired_bootstrap_ci(diffs, n_resamples=n_resamples, seed=stats_seed) if n else (float("nan"),) * 3
-    verdict = decide(n, lo, hi, min_n=int(chunking["min_total_chunks"]))
-    experts = per_expert_summary(chunks, base_nll, moe_nll) if n else []
-    guard = domain_guard(experts) if experts else False
+    keep = qualifying_experts(chunks, min_per_expert)
+    ix = [i for i, c in enumerate(chunks) if c["expert_id"] in keep]
+    excluded = sorted({c["expert_id"] for c in chunks} - keep)
+    analyse = make_analyser(chunks, ix, keep, min_total=int(chunking["min_total_chunks"]),
+                            n_resamples=n_resamples, seed=stats_seed)
+
+    prim = analyse(moe_nll, base_nll)
+    n, mean_d, (lo, hi), verdict = prim["n"], prim["mean_paired_diff"], prim["bootstrap95"], prim["verdict"]
+    experts, guard = prim["per_expert"], prim["domain_guard_ok"]
+    extra: dict[str, Any] = {}
+    if chunk_offset > 0:
+        interp = spec.get("interpretation_rule", {})
+        extra["interpretation"] = {"label": format_content_label(verdict, mean_d), "threshold_nats": -0.1653,
+                                   "reference_944_mean_diff": -0.3306, "rule": {k: interp.get(k) for k in (
+                                       "MOSTLY_CONTENT", "MOSTLY_FORMAT_SOME_CONTENT", "FORMAT", "NONE")}}
+        if moe_start:
+            ctrl = analyse(moe_start, base_start)
+            extra["same_row_rowstart_control"] = {
+                "note": "#944 metric (chunk_nll(ids[0:64]), 63 predictions) on the SAME rows; informational",
+                **ctrl, "ratio_mid_over_start_mean_d": mid_over_start_ratio(prim, ctrl)}
+        if sec_nll:
+            sec = analyse(sec_nll, base_nll)
+            sec["checkpoint_sha256"] = sec_spec["checkpoint_sha256"]
+            sec["role"] = "secondary, reported, not decisive"
+            if sec_start:
+                sc = analyse(sec_start, base_start)
+                sec["same_row_rowstart_control"] = {k: sc[k] for k in ("n", "mean_paired_diff", "bootstrap95", "per_expert")}
+                sec["same_row_rowstart_control"]["ratio_mid_over_start_mean_d"] = mid_over_start_ratio(sec, sc)
+            extra["secondary"] = sec
     finished = _now()
+    try:
+        spec_rel = str(Path(args.spec).resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        spec_rel = str(args.spec)
     receipt = {
-        "schema": "hivemind.e_b3_moe_paired.v1",
+        "schema": "hivemind.e_b3_moe_midrow.v1" if chunk_offset > 0 else "hivemind.e_b3_moe_paired.v1",
         "evidence": "measured",
         "experiment_id": spec["experiment_id"],
         "roadmap_item": "IP-300",
-        "preregistration": {"spec_path": "docs/E_B3_MOE_PAIRED_PREREGISTRATION.json",
+        "preregistration": {"spec_path": spec_rel,
                             "spec_sha256": hashlib.sha256(spec_bytes).hexdigest(),
                             "commit": args.prereg_commit},
         "script_commit": _git("rev-parse", "HEAD"),
@@ -429,27 +569,41 @@ def main(argv: list[str] | None = None) -> int:
         "row_order_check": order,
         "selection": selection,
         "n_chunks": n,
-        "chunk_tokens": int(chunking["chunk_tokens"]),
+        "n_chunks_selected": len(chunks),
+        "chunk_offset": chunk_offset,
+        "chunk_tokens": chunk_tokens,
+        "min_chunks_per_expert": min_per_expert,
+        "experts_excluded_below_min": excluded,
         "chunk_ids_sha256": chunk_ids_sha256(chunks),
+        "causality_gate": causal,
         "base_equivalence_gate": eq,
-        "mean_base_nll": float(np.mean(base_nll)) if n else None,
-        "mean_moe_nll": float(np.mean(moe_nll)) if n else None,
+        "mean_base_nll": prim["mean_base_nll"],
+        "mean_moe_nll": prim["mean_moe_nll"],
         "mean_paired_diff": mean_d,
         "bootstrap95": [lo, hi],
         "bootstrap": {"resamples": n_resamples, "seed": stats_seed, "method": "iid paired, percentile"},
-        "sign_test": sign_test(diffs),
+        "sign_test": prim["sign_test"],
         "per_expert": experts,
         "verdict": verdict,
         "domain_guard_ok": guard,
         "b3_supported": b3_supported(verdict, guard),
         "b3_note": "B3 counts this as passing only if verdict == PASS and the +1% domain guard holds; otherwise B3 stays failing",
+        **extra,
         "chunks": [{"expert_id": c["expert_id"], "dataset_id": c["dataset_id"], "row": c["row"],
-                    "base_nll": base_nll[i], "moe_nll": moe_nll[i]} for i, c in enumerate(chunks)] if n else [],
+                    "base_nll": base_nll[i], "moe_nll": moe_nll[i],
+                    **({"base_rowstart_nll": base_start[i], "moe_rowstart_nll": moe_start[i]} if moe_start else {}),
+                    **({"secondary_nll": sec_nll[i]} if sec_nll else {}),
+                    **({"secondary_rowstart_nll": sec_start[i]} if sec_start else {})}
+                   for i, c in enumerate(chunks)] if moe_nll else [],
         "deviations": deviations,
     }
+    if chunk_offset > 0:
+        receipt["effect_on_944_and_b3"] = spec.get("effect_on_944_and_b3")
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(receipt, indent=1) + "\n", encoding="utf-8")
     log(f"verdict {verdict}: n={n} mean_d={mean_d:.6f} ci=[{lo:.6f}, {hi:.6f}] guard={guard} -> {args.out}")
+    if "interpretation" in extra:
+        log(f"interpretation {extra['interpretation']['label']}")
     return 0
 
 

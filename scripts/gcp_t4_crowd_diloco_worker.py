@@ -422,8 +422,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="Start from a saved round checkpoint (crowd_moe_opendiloco_round_N.safetensors) instead of the upcycled start")
     ap.add_argument("--start-data-offset", type=int, default=0,
                     help="Token position where both learners start in their shards (to continue after a resumed run)")
-    ap.add_argument("--stop-after-rejections", type=int, default=3,
-                    help="Stop MoE training after this many consecutive rejected rounds (default: 3, 0 = never)")
+    ap.add_argument("--stop-after-rejections", type=int, default=8,
+                    help="Stop MoE training after this many consecutive rejected rounds (default: 8, 0 = never). "
+                         "Each round reads a new data window, so an improvement can follow several rejections.")
     ap.add_argument("--cuda-mem-cap-mib", default="0",
                     help="Hard cap on this process's CUDA allocations: 0 (off), auto (free - floor - 700 MiB) or MiB")
     ap.add_argument(

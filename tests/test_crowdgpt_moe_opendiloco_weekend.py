@@ -326,7 +326,7 @@ def test_moe_worker_records_when_consecutive_rejections_stop_the_run(
     def inner_steps(model, _shard, *, start_offset, **_kwargs):
         calls.append(start_offset)
         return {
-            "non_finite": non_finite_last and len(calls) in (9, 10),
+            "non_finite": non_finite_last and len(calls) in (19, 20),
             "next_offset": start_offset + 8,
             "steps_completed": 1,
             "tokens_processed": 8,
@@ -349,22 +349,22 @@ def test_moe_worker_records_when_consecutive_rejections_stop_the_run(
     worker = _load_script("gcp_t4_crowd_diloco_worker_stall_test", "scripts/gcp_t4_crowd_diloco_worker.py")
     args = [
         "--mode", "moe-opendiloco-round", "--small-arch", "--cpu-only", "--no-save-safetensors",
-        "--rounds", "6", "--outer-lr", "0.4", "--outer-lr-decay", "0.5", "--work-dir", str(tmp_path),
+        "--rounds", "11", "--outer-lr", "0.4", "--outer-lr-decay", "0.5", "--work-dir", str(tmp_path),
     ]
     if limit is not None:
         args.extend(["--stop-after-rejections", str(limit)])
     assert worker.main(args) == 0
 
     rows = [json.loads(line) for line in (tmp_path / "rounds.jsonl").read_text(encoding="utf-8").splitlines()]
-    assert [row["outer_lr"] for row in rows[:5]] == pytest.approx([0.4, 0.2, 0.2, 0.1, 0.05])
+    assert [row["outer_lr"] for row in rows[:7]] == pytest.approx([0.4, 0.2, 0.2, 0.1, 0.05, 0.025, 0.02])
     assert calls == [offset for offset in range(0, 8 * len(rows), 8) for _ in range(2)]
-    assert all("ratchet_stall_reason" not in row for row in rows[:4])
+    assert all("ratchet_stall_reason" not in row for row in rows[:-1])
     if limit == 0:
-        assert len(rows) == 6
-        assert all("ratchet_stall_reason" not in row for row in rows)
+        assert len(rows) == 11
+        assert "ratchet_stall_reason" not in rows[-1]
     else:
-        assert len(rows) == 5
-        assert rows[-1]["ratchet_stall_reason"] == "3 consecutive rounds rejected"
+        assert len(rows) == 10
+        assert rows[-1]["ratchet_stall_reason"] == "8 consecutive rounds rejected"
         assert rows[-1].get("non_finite", False) is non_finite_last
 
 

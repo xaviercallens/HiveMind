@@ -142,6 +142,33 @@ Context: a joint training weekend with CrowdGPT (Vxtzq) on the dense 1 B model C
   - Don't re-run CI before the failure is understood.
   - A safety test that flags new egress is a policy question for the owner. Don't hide the URL from the scanner.
 
+### 15. A red `main` makes every PR red; a CI re-run tests the old merge (17 November)
+
+- **What happened.** After #937 made criterion E1 pass, nobody regenerated `docs/MVP_SCORECARD.md`. The scorecard
+  test then failed on `main` and on every open PR (#927, #935). Re-running #935's failed job failed again, because a
+  re-run tests the merge commit built at the first run, against the old `main`.
+- **Rules.**
+  - When every open PR fails the same test, check `main` first: fix it there once (PR #939), then update each
+    branch.
+  - After `main` changes, use `gh pr update-branch <n>` (or merge `main` in). A plain re-run won't pick up the fix.
+  - Any PR that changes an MVP receipt runs `python scripts/mvp_scorecard.py --write` in the same PR.
+  - Dependabot PRs touching workflows or protected dependency files are blocked by the owner-only gate
+    (OWN-01/CB-04) on purpose. Leave them to the owner.
+
+### 16. Re-measure a stop rule after you change what a round does (18 November)
+
+- **What happened.** The IP-293 brief asked to stop a MoE run after 3 rejected rounds by default. It was written
+  when a rejected round replayed the same tokens and could never succeed. After the data-cursor fix, every round
+  reads new data, and rejected streaks often end in an improvement: in run `104052Z`, 3 of 23 accepted rounds came
+  after 3 or more rejections, and the longest streak before an acceptance was 6. On 18 November, round 8 (a new best)
+  came right after 4 rejections. A default of 3 would have stopped run 2 near round 19 and lost 12 of its 23
+  accepted improvements.
+- **Rules.**
+  - Set stop thresholds from measured streak lengths of the current recipe, with headroom (default 8 suggested to
+    PR #941).
+  - When a brief's premise is fixed by a later PR, update the brief, so contributors don't implement the old
+    assumption.
+
 ### 9. Tooling notes for agents
 
 - In worktree-isolated sessions, compound shell commands that touch git are refused: run plain, separate commands.

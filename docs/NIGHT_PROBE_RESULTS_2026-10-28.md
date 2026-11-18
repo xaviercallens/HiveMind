@@ -35,6 +35,8 @@ Source: the queue's own result files (`arm_A*.json`, `summary.json`) in `night_p
 
 **Cause.** The queue caps each arm at `min(9500, free - 600)` MiB, which protects the 10 GB big-profile budget but not the 4,300 MiB guard. A2 was allowed to reach 6,964 MiB of its own use while the bee server held 4,836 MiB. A run that size must not happen again: the queue must cap each arm at `free - 4300` MiB before it starts (and refuse to start otherwise). This is an owner-visible defect, not a measurement result, and it is fixed only in the queue code, not here.
 
+**Fixed (status 2026-11-18).** `scripts/night_probe_queue.py` now enforces the floor itself: `check_vram_floor_guard()` caps each arm at `min(max_cap, free - 4300)` MiB and refuses to start when free VRAM is below the floor or below the arm's estimated peak plus the floor (PS-02-D1, commit `b3ea2c04`, 7 November). Commit `e95dac1c` (8 November) made the 4,300 MiB floor on by default and impossible to lower. `tests/test_vram_floor_guard.py` refuses a simulated 4,000 MiB-free GPU. The A2 measurement above stays as recorded: it happened before the fix.
+
 ## Not tested
 
 - Quality (held-out loss, bits per byte): **Not tested.**

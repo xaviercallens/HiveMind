@@ -374,14 +374,18 @@ globalThis.document = {
 };
 let clipboardText = '';
 let failClipboard = false;
-globalThis.navigator = {
-  clipboard: {
-    async writeText(t) {
-      if (failClipboard) throw new Error('clipboard denied');
-      clipboardText = String(t);
+Object.defineProperty(globalThis, 'navigator', {
+  configurable: true,
+  writable: true,
+  value: {
+    clipboard: {
+      async writeText(t) {
+        if (failClipboard) throw new Error('clipboard denied');
+        clipboardText = String(t);
+      },
     },
   },
-};
+});
 const fetchCalls = [];
 let modelsMode = 'ok';
 globalThis.fetch = async (url, opts = {}) => {

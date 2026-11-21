@@ -78,7 +78,19 @@ BUNDLE: List[Path] = [
     PROJECT_ROOT / "artifacts" / "nocturnal_reddit_vision_moe_report.json",
     PROJECT_ROOT / "artifacts" / "exoplanet_astro_vmoe_poc_report.json",
     PROJECT_ROOT / "artifacts" / "massive_swarm_image_moe_report.json",
+    # v4.3.0: the receipts behind PROV-86..PROV-88, the economics model, and the future-directions document
+    PROJECT_ROOT / "artifacts" / "experiments" / "CHAIN_STATUS_2026-11-07.json",
+    PROJECT_ROOT / "artifacts" / "experiments" / "NIGHT_INTENSE_1_probe_results_2026-10-28.json",
+    PROJECT_ROOT / "artifacts" / "experiments" / "CATALOG_SERVED_2026-11-07.json",
+    PROJECT_ROOT / "artifacts" / "experiments" / "CONSUMER_GPU_ECONOMICS_2026-11-07.json",
+    PROJECT_ROOT / "docs" / "FUTURE_DIRECTIONS_2026-11-07.md",
+    PROJECT_ROOT / "artifacts" / "experiments" / "E12_replay_fixtures_manifest.json",
 ]
+# v4.3.0: the eight E12 fixtures carried over one file each since v3.7.1 are packed into one archive (built by
+# scripts/pack_e12_replay_fixtures.py from the public v4.1.0 record, each checked against its published MD5) to stay
+# under the 100-file record cap. The archive is not in git; its path comes from the environment.
+FIXTURES_ZIP = Path(os.environ.get("HIVEMIND_E12_FIXTURES_ZIP", str(PROJECT_ROOT / "artifacts" / "E12_replay_fixtures.zip")))
+BUNDLE.append(FIXTURES_ZIP)
 # v3.8.0: every receipt behind E10b, E11, E11b, E12 (T4), E13, E14, E15 and E16 (preregistrations, amendments, raw and reports); partial files and superseded E11b/7B raw dumps excluded to respect Zenodo's 100-file-per-record cap
 _T4_PREFIXES = ("E10b_", "E11_", "E11b_", "E12_replay_", "E13_", "E14_", "E15_", "E16_")
 _SUPERSEDED_RAW = {
@@ -93,7 +105,7 @@ BUNDLE += sorted(
     and "callensxavier_gmail_com" not in p.read_text(encoding="utf-8", errors="ignore")  # run logs carrying the machine username stay out of the public record
 )
 CARRIED_PATH = PROJECT_ROOT / "paper" / "zenodo_carried_over_v3.7.1.json"
-CARRIED: Dict[str, str] = json.loads(CARRIED_PATH.read_text(encoding="utf-8"))["md5"] if CARRIED_PATH.exists() else {}
+CARRIED: Dict[str, str] = {}  # v4.3.0: nothing is carried over; the fixtures travel in FIXTURES_ZIP (see above)
 
 
 def load_token() -> str:
@@ -143,22 +155,26 @@ def get_deposition(dep_id: int, token: str) -> Dict[str, Any]:
 def metadata(version: str, doi_note: str) -> Dict[str, Any]:
     desc = (
         "<p>Preprint and evidence bundle of <b>Project HiveMind</b>: a system design for decentralized sparse "
-        "Mixture-of-Experts training with DiLoCo-style outer optimization on 8 GB consumer GPUs, integrating "
-        "Decoupled DiLoCo quorum aggregation (Google DeepMind), PA-CGAD staleness gating, FoMoE partial expert "
-        "replication, DeMo/SparseLoCo 2-bit compression, MuLoCo inner preconditioning, a looped MoE backbone, "
-        "the biomimetic <b>Bi-Layer Honeybee Agent Mesh (AMCP-Kafka &amp; ABC MoE)</b>, multi-division <b>Vision-MoE (V-MoE)</b>, "
-        "the <b>18-Month Research Roadmap for Overcoming Scale and Security Bottlenecks in Decentralized MoE Architectures</b>, "
-        "and 141 Lean 4 theorems compiling without sorry.</p>"
-        "<p><b>Version 4.1.0 Highlights (Multi-Division Vision-MoE &amp; 18-Month ZK-SNARK / Geo-Mesh Research Roadmap):</b><br/>"
-        "1. <i>18-Month, 4-Phase Decentralization Research Roadmap (Seasons 29&ndash;32):</i> Structured methodology to eliminate datacenter dependency across 1,000+ untrusted domestic nodes by fusing "
-        "(i) <b>Top-K (1%) 4-bit/2-bit Quantized Split Learning</b> (&divide;100 bandwidth reduction with EF21 error feedback for 70B&ndash;405B pipeline models across 8&ndash;16 GB nodes), "
-        "(ii) <b>Cryptographic Verifiable Computation via zk-SNARKs</b> (succinct &le;32 KB proofs of honest backpropagation verified in O(1) / &lt;10 ms CPU time, replacing O(N^2 d) Multi-Krum distance matrices and anchoring Proof-of-Useful-Compute tokenomics), and "
-        "(iii) <b>Geo-Cryptographic P2P DHT Mesh Routing</b> (mapping MoE Bees by RTT and reputation into <b>15&ndash;20 node localized sub-swarms</b> with fuzzy consensus, Multi-Bee Debate, and Sovereign Edge Queen Bees).<br/>"
-        "2. <i>Sub-1.5 GB 'La Ruche' Vision-MoE &amp; Culturally-Grounded Reddit-Vision VLM MoE:</i> 972.0&ndash;1,490.0 MiB background VRAM across 4 visual backbones (SigLIP-Base, ViT-Base, DINOv2-B/14, DINOv2-L/14 in 4-bit NF4 with local Muon Newton-Schulz-5 + 8-bit AdamW) and 99.92% BTM Top-2 MoE loss reduction.<br/>"
-        "3. <i>Exoplanet &amp; Astrophysics Vision-MoE PoC (&lt;1.5 GB VRAM):</i> Transforms 1D Kepler/TESS/JWST/DECaLS signals into 2D Morlet CWT scalograms and trains 4 specialized experts within 910.0&ndash;1,410.0 MiB VRAM under Focal Loss (gamma=2.0), achieving 99.95% mean focal loss reduction and 99.97% V-MoE gain.<br/>"
-        "4. <i>Massive 7-Division, 15-Dataset, 42.87M-Sample Swarm Image-MoE Orchestrator:</i> Shards 42,870,000 visual/scientific samples into 8,574 streaming shards across 104 Bees (64 Tier-1 &lt;1.5 GB, 28 Tier-2 8 GB, 12 Tier-3 12&ndash;24 GB), achieving 99.84% upcycled FoMoE Top-2 focal loss gain.<br/>"
-        "5. <i>Version 4.0.0 &amp; 3.9.0 Foundations Retained:</i> Bi-Layer Honeybee Agent Mesh (AMCP-Kafka Quorum Sensing + ABC MoE Loop + Swarm Nectar Cache), 20 nocturnal MoE adapters (+277.06 TFLOPs, 35 models total), and Live 47-Node WAN Swarm validation (5,632.11 Cobblestones / 2.433 PFLOPs, 0.0% execution-class-matched false rejection rate).</p>"
-        "<p>The JSON artifacts in this bundle are the sole source of every number in the PDF (provenance lock PROV-01..PROV-85 in paper/autoevolve_peer_review_pipeline.py). Source commit: "
+        "Mixture-of-Experts training with DiLoCo-style outer optimization on 8 GB consumer GPUs, with a BOINC "
+        "QLoRA-MoE training chain, an agent mesh on Kafka (AMCP), and 164 Lean 4 theorems compiling without sorry.</p>"
+        "<p><b>Version 4.3.0 aligns the paper with live results.</b> "
+        "(1) <i>Chain status through hmq_00187:</i> measured from the assimilated ledger, the median per-domain held-out change is "
+        "+0.0046 nats over rounds 1-98, +0.0051 over 99-170 and +0.1266 over 171 onward (99% of domain changes worse); a diagnostic "
+        "round with stratified mixing off and the learning rate halved was also worse on all six evaluated domains. The degradation "
+        "is reported as unexplained. "
+        "(2) <i>Night feasibility probes (28 October 2026):</i> measured memory peaks of four QLoRA arms on a Tesla T4, estimator errors, "
+        "and one breach of the project's 4,300 MiB free-VRAM floor, which the probe queue did not enforce. "
+        "(3) <i>What is served and what is trained:</i> a runtime measurement of the public model catalog finds that no "
+        "HiveMind-trained adapter is served to users; the models served are off-the-shelf open-weight models. "
+        "(4) <i>Future directions</i> (docs/FUTURE_DIRECTIONS_2026-11-07.md, a proposal, nothing implemented): interoperability with "
+        "KwaaiNet/Petals-style swarms, Decoupled DiLoCo for the QLoRA-MoE chain, self-replication safety invariants, community "
+        "questions, the AMCP mesh and BOINC as one volunteer fabric, a consumer-GPU economics model with sourced parameters, "
+        "AI-capex downturn scenarios, and H-Net dynamic chunking as a candidate to measure.</p>"
+        "<p>Earlier sections (v3.7.2-v4.2.0) are retained unchanged; version 4.2.0 was never deposited separately and is included here. "
+        "The eight E12 replay fixtures previously carried over one file each are packed in E12_replay_fixtures.zip with a manifest of "
+        "their original checksums, to respect the 100-file record cap.</p>"
+        "<p>The JSON artifacts in this bundle are the source of every number in the PDF (provenance lock PROV-01..PROV-88 in "
+        "paper/autoevolve_peer_review_pipeline.py, 87 of 87 checks passing). Source commit: "
         + SOURCE_COMMIT + " of the HiveMind repository on GitHub (xaviercallens/HiveMind).</p>"
         f"<p>{doi_note}</p>"
     )
@@ -170,16 +186,16 @@ def metadata(version: str, doi_note: str) -> Dict[str, Any]:
             "description": desc,
             "creators": [{"name": "Callens, Xavier", "affiliation": "Project HiveMind / AutoevolveAI"}],
             "keywords": [
-                "decentralized training", "DiLoCo", "Decoupled DiLoCo", "mixture-of-experts", "FoMoE",
-                "consumer GPU", "Byzantine fault tolerance", "Lean 4", "agent mesh", "honeybee swarm",
-                "ABC algorithm", "Kafka AMCP", "Vision-MoE", "Split Learning", "zk-SNARK", "Geo-Cryptographic Mesh Routing",
+                "decentralized training", "DiLoCo", "Decoupled DiLoCo", "mixture-of-experts", "QLoRA",
+                "consumer GPU", "BOINC", "volunteer computing", "Lean 4", "agent mesh", "Kafka AMCP",
+                "negative results", "provenance",
             ],
             "license": "cc-by-4.0",
             "related_identifiers": [
                 {"identifier": "https://github.com/xaviercallens/HiveMind", "relation": "isSupplementTo", "scheme": "url"},
             ],
             "version": version,
-            "notes": "Preprint v4.1.0. Adds Section 12: Multi-Division Vision-MoE (<1.5 GB La Ruche V-MoE, Exoplanet CWT/Focal-Loss PoC, 42.87M-sample 104-Bee Swarm Orchestrator) and the 18-Month, 4-Phase Research Roadmap (Top-1% Quantized Split Learning, zk-SNARK Verifiable Computation, and Geo-Cryptographic Mesh Routing).",
+            "notes": "Preprint v4.3.0. Aligns the paper with live results (chain degradation since hmq_00171, night probe floor breach, served-versus-trained catalog measurement) and adds the future-directions document. Includes the previously undeposited v4.2.0 changes.",
         }
     }
 
@@ -233,7 +249,7 @@ def main() -> int:
     ap.add_argument("--stage", choices=["draft", "upload", "publish"], required=True)
     ap.add_argument("--deposition-id", type=int, default=None)
     ap.add_argument("--new-version-of", type=int, default=None, help="existing record id to create a new version of")
-    ap.add_argument("--version", default="4.1.0")
+    ap.add_argument("--version", default="4.3.0")
     args = ap.parse_args()
     token = load_token()
 

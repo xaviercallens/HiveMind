@@ -1,24 +1,24 @@
 {
   "stage": "published",
-  "deposition_id": 23776302,
-  "prereserved_doi": "10.5281/zenodo.23776302",
+  "deposition_id": 24043016,
+  "prereserved_doi": "10.5281/zenodo.24043016",
   "state": "done",
-  "html": "https://zenodo.org/record/23776302",
+  "html": "https://zenodo.org/record/24043016",
   "files": [
     {
       "filename": "hivemind_foundation_article.pdf",
-      "md5": "d81a32c03fcdfed113e765b6f91eb1c0",
-      "status": "already_present"
+      "md5": "1747489a380471b529ed0d914a30ef55",
+      "status": "uploaded"
     },
     {
       "filename": "hivemind_foundation_article.tex",
-      "md5": "5d7d0b52a5aabdfd201b30ae7c35b970",
-      "status": "already_present"
+      "md5": "398b0154b360d6a62316da7a43e513de",
+      "status": "uploaded"
     },
     {
       "filename": "PEER_REVIEW_REPORT.json",
-      "md5": "e355fbd5d438ca24dd4e3745f528d94e",
-      "status": "already_present"
+      "md5": "6bcf669248481658fe6afed9325a09c7",
+      "status": "uploaded"
     },
     {
       "filename": "RESEARCH_PROGRAM.md",
@@ -32,8 +32,8 @@
     },
     {
       "filename": "HiveMindSpec.lean",
-      "md5": "029f70686ea163e409f9a3795c7813cb",
-      "status": "already_present"
+      "md5": "7543596df5909ce32dddd9d45a6fb025",
+      "status": "uploaded"
     },
     {
       "filename": "architecture_hypothesis_verification_report.json",
@@ -112,8 +112,8 @@
     },
     {
       "filename": "ROADMAP.md",
-      "md5": "15bf9e29a71c075b2d39dae925054805",
-      "status": "already_present"
+      "md5": "dd2fc42c416de3c303bb4b0108e616a7",
+      "status": "uploaded"
     },
     {
       "filename": "external_review_v3.5.0_2026-10-23.md",
@@ -137,13 +137,13 @@
     },
     {
       "filename": "gwaya_stub_audit.json",
-      "md5": "a0b886d357633cba2103b9c005a8df1f",
-      "status": "already_present"
+      "md5": "89e57fbed991cb7aa03c9a92b5cc7d5b",
+      "status": "uploaded"
     },
     {
       "filename": "CITATION.cff",
-      "md5": "10ace2f18ec9a5c3e83583687ef64e70",
-      "status": "already_present"
+      "md5": "ede351a89a913d510fe593a155af8adf",
+      "status": "uploaded"
     },
     {
       "filename": "gwaya_lite_live_check.json",
@@ -197,22 +197,57 @@
     },
     {
       "filename": "VISION_AND_NEXTGEN_SWARM_ROADMAP.md",
-      "md5": "49041b552896cf402b0c9f063ad5d79d",
+      "md5": "445501d4585589483e545936f42a00f8",
       "status": "uploaded"
     },
     {
       "filename": "nocturnal_reddit_vision_moe_report.json",
-      "md5": "072ec679048d3cbcc2417fe2c68cf90a",
+      "md5": "84a663886afd5036067da16fbd7aa881",
       "status": "uploaded"
     },
     {
       "filename": "exoplanet_astro_vmoe_poc_report.json",
       "md5": "2b8e57cf6d8abd40e76a889b7930e52d",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "massive_swarm_image_moe_report.json",
       "md5": "a6cc76e5a81be82f6f1129ae6c783b83",
+      "status": "already_present"
+    },
+    {
+      "filename": "CHAIN_STATUS_2026-11-07.json",
+      "md5": "fb4c1f96b1ebfdc3cc42f3c036578085",
+      "status": "uploaded"
+    },
+    {
+      "filename": "NIGHT_INTENSE_1_probe_results_2026-10-28.json",
+      "md5": "d03ae17017bc73ab527769670a82c1a9",
+      "status": "uploaded"
+    },
+    {
+      "filename": "CATALOG_SERVED_2026-11-07.json",
+      "md5": "3d02911a9a4b0234885ad73fb62b8205",
+      "status": "uploaded"
+    },
+    {
+      "filename": "CONSUMER_GPU_ECONOMICS_2026-11-07.json",
+      "md5": "f2fdb3f2a0ef1e219c1808d2834e3674",
+      "status": "uploaded"
+    },
+    {
+      "filename": "FUTURE_DIRECTIONS_2026-11-07.md",
+      "md5": "6209d01d36c05e45cadc45a7041b5707",
+      "status": "uploaded"
+    },
+    {
+      "filename": "E12_replay_fixtures_manifest.json",
+      "md5": "be88122afc5560593e2980f80344ea12",
+      "status": "uploaded"
+    },
+    {
+      "filename": "E12_replay_fixtures.zip",
+      "md5": "d0a56172aa3051e1b9ba3f0fb19cf7fb",
       "status": "uploaded"
     },
     {
@@ -466,14 +501,14 @@
       "status": "already_present"
     }
   ],
-  "written_utc": "2026-10-29T19:00:51Z",
+  "written_utc": "2026-11-07T19:31:32Z",
   "local_sha256": {
-    "hivemind_foundation_article.pdf": "4f2d4169d8f46ffe1d0ac369149bf07e5b2cbb263d924800f813272e1ff4d3c6",
-    "hivemind_foundation_article.tex": "475cc2af36a1e9d9957f3d012a3a839cde0004859bec155ea32d4db7af64f86b",
-    "PEER_REVIEW_REPORT.json": "02592f34341cced08525eb383113acc5bd3d7704c3e6236ba3bf84d10f6473ae",
+    "hivemind_foundation_article.pdf": "18eb1133a3e27a80e78de1d3caf29962ffb1085c8dc3dccdf1d30c39c4267b41",
+    "hivemind_foundation_article.tex": "75033800ab979cfe09045d9a617cfbc88ccc3db2d02de3e099ede7e3760cb799",
+    "PEER_REVIEW_REPORT.json": "a059697c0bdc400f2b0763576cf2a62953c45b8f86faa66abea8a73f5e4d7a3c",
     "RESEARCH_PROGRAM.md": "8f32c90c94dd53ee776c5c601506a04af35edbb024ed56382ec8057f02570f59",
     "MOE_DILOCO_REVIEW_2026-10-23.md": "71e29178c486fda014d3385dd5ca70019c153a84d4f03ad14f4dd77939bd77a5",
-    "HiveMindSpec.lean": "f20414aa6727dc25c7880e38a3b29985b2b5d851f80414a781708628952b0863",
+    "HiveMindSpec.lean": "5531e803cd06b20561ca27703865bf3d74e79b7a8b7d8523b799c3f6360d0337",
     "architecture_hypothesis_verification_report.json": "d8e98442efd8c7892c014b67e240e6dd729af1499479243477da7b98e8b92379",
     "paper_v3_experiments_report.json": "580bf389f626cf8d4900170dc5dfe86c60d421a78ca80104e85dea13e969ab89",
     "decoupled_diloco_quorum_check.json": "1474ca96987cf6d13c135ebb8e634bc490e5f04744d8509d9e7ca4792c1447e7",
@@ -489,13 +524,13 @@
     "RDAMultiplier.lean": "e1d241cf884de0273e458f6fd8b0ab2043da0c534894c493eed328025dd9dffd",
     "E12_pilot_prereg.json": "1cc44c9ed62d4a8b242e8342ad7c6922bfe067041eac8399dbac86242e4c6bd4",
     "E12_pilot_report.json": "a582a6a2f434d255e4a1308afe5e9f3a0b4e57700129b63703534de227f7334a",
-    "ROADMAP.md": "5511b22eddfb06df8aa98db769fd12679039e4616d60f81ed42f004e12a56a52",
+    "ROADMAP.md": "273d60e7c8b85716372665fd35a6ae65290375d39ed2276651fffd44a31675c7",
     "external_review_v3.5.0_2026-10-23.md": "73b14a8e320174d1e638eb95525b6b2ac49121b6033c0c3234bc84fe92b3cb8d",
     "response_to_external_review_v3.5.0.md": "a2ae2e1dc1dd7f7a67ae2b02da37579fefd5ba75784f6838e67574bf576715f8",
     "E8_pilot_report.json": "f31cb7bd0ebb4d1ca19f6df03f786791e09db7c78cc62e55fd3d4f700e472397",
     "predictions_ledger.json": "7a4514984806d6874fa775b4647312384a53442134c79e5f616896a1458e03cd",
-    "gwaya_stub_audit.json": "b529fb22d9f8c59471fda1a30e9c1f420b2e18b9650f70fcc34ffbe74bd6e2b9",
-    "CITATION.cff": "347468993fbb8a16d94a013b8565010ea7b1796fd24796a8dad80ceacdb3423c",
+    "gwaya_stub_audit.json": "64471518ca33a5f419fdecd89eb8dc904422a65230c995773aa1ad6aacb52404",
+    "CITATION.cff": "1174e18de92b841c7ea149f398155bcf557b2527d8e04fdb996f0c881c90ac1f",
     "gwaya_lite_live_check.json": "c6884e7686eea5990c011cbcbf552db79baf8961b4d81fce0f53d345fbb61390",
     "T4_10h_campaign_report.md": "b4f143aff63558019a309ee0a29810ec048e001f800c2328bb0c088343d1d5bc",
     "t4_branch_review_2026-10-24.md": "1262672ebe5c054ada5a38337f44fa255b9ddaf450aac57eb820a231cedf0c53",
@@ -506,10 +541,17 @@
     "nocturnal_20_moe_stress_test_report.json": "9d4e58e12aa64a4712bd25c1aed6a876e02fa96043750e408e516c8e6f13ef2e",
     "nocturnal_large_moe_20_campaign_report.json": "09dfe58ffb30aad320619c44295416253bafedd89a2dc5f2961f1c5ed57ce93f",
     "ROADMAP_AMCP_AGENT_MESH_KAFKA_EVOLUTION.md": "3a8319d3601cfd4ebf34b80d8102d6361b4f5e794bac6084055c1928f16dc1da",
-    "VISION_AND_NEXTGEN_SWARM_ROADMAP.md": "25336300c08b2c7c33bd7c49dffb54909520dd7b59d6e6a12229df2e814e16e9",
-    "nocturnal_reddit_vision_moe_report.json": "25a9311adde0a9ae929ceab9d1598f814612fd0acf3d033465323001f0e9f225",
+    "VISION_AND_NEXTGEN_SWARM_ROADMAP.md": "3778bfc36c2c81d24bea031ee990b4d8caf4fed3d29c271f685b38602237f446",
+    "nocturnal_reddit_vision_moe_report.json": "9c7c63329d7e199ce453473c7245b9da7854b17970d0de0c3cea5bad41958a84",
     "exoplanet_astro_vmoe_poc_report.json": "af3fbe1aca9f8165999d1adc5b490ef9fdf1a3c5478a965e6858746020ebf5d0",
     "massive_swarm_image_moe_report.json": "6cae13051a99f4dd96eef6974dd0644e76a2a3d8426d93fad9ca2fd9b19a640e",
+    "CHAIN_STATUS_2026-11-07.json": "69d45f71ba3425ea973acbb3de2e09c967dc63990a407dac0dea0bb5debdd75d",
+    "NIGHT_INTENSE_1_probe_results_2026-10-28.json": "6c9a04f64c68e7790cadcdaf4f865e1f46d9bc5a4da99c1e08aa7bd411943b22",
+    "CATALOG_SERVED_2026-11-07.json": "eb007cfedb5f4e1b6f913be61d36779bb7253fef32887a5e843854af91b3a0f9",
+    "CONSUMER_GPU_ECONOMICS_2026-11-07.json": "29514cd837b56b65b52e46f12aa0408b901239938420ee335c6e276fc572da92",
+    "FUTURE_DIRECTIONS_2026-11-07.md": "8868211cd4c392503fce25a79ec4b113926161e74d973b6faf76a477194566de",
+    "E12_replay_fixtures_manifest.json": "943c29b44adf0a4d38870ae3c6ad6d4619e3715b1af36f0629aa1c7e5f9a18ba",
+    "E12_replay_fixtures.zip": "68be1ced4459beac71a469adbb9c465ce21f870e748d01255a38f7c80dce7dd6",
     "E10b_first_execution_partial.json": "a4a0b5b83e0e36f39074389aa7624a14a4c98083aafa1c51d220ab6279b0ca93",
     "E10b_lattice_05b_prereg.json": "e5102af8457409f28fe6578c73fee3d8fb95e386418081fcbab20aa747869d67",
     "E10b_lattice_05b_prereg_amendment_2.json": "73fa0da0291a710a4d085c7adb7768627d562f0b367592fc6afbc2f2ecf61485",
@@ -561,31 +603,43 @@
     "E16_gwaya_lite_t4_prereg.json": "2f032305ecb734d1659ea7bd872d3c4c403e6838bd2eebad79fdd76ed00cd5d5",
     "E16_gwaya_lite_t4_report.json": "4cdce7c8877091050723b95d4a8ae22e563f428004e7141e6e1bfbc069504b57"
   },
-  "record_id": 23776302,
-  "doi": "10.5281/zenodo.23776302",
-  "doi_url": "https://doi.org/10.5281/zenodo.23776302",
+  "record_id": 24043016,
+  "doi": "10.5281/zenodo.24043016",
+  "doi_url": "https://doi.org/10.5281/zenodo.24043016",
   "conceptdoi": "10.5281/zenodo.23597697",
   "submitted": true,
   "remote_md5": {
-    "HiveMindSpec.lean": "029f70686ea163e409f9a3795c7813cb",
-    "CITATION.cff": "10ace2f18ec9a5c3e83583687ef64e70",
+    "VISION_AND_NEXTGEN_SWARM_ROADMAP.md": "445501d4585589483e545936f42a00f8",
+    "nocturnal_reddit_vision_moe_report.json": "84a663886afd5036067da16fbd7aa881",
+    "CATALOG_SERVED_2026-11-07.json": "3d02911a9a4b0234885ad73fb62b8205",
+    "hivemind_foundation_article.pdf": "1747489a380471b529ed0d914a30ef55",
+    "FUTURE_DIRECTIONS_2026-11-07.md": "6209d01d36c05e45cadc45a7041b5707",
+    "CITATION.cff": "ede351a89a913d510fe593a155af8adf",
+    "hivemind_foundation_article.tex": "398b0154b360d6a62316da7a43e513de",
+    "NIGHT_INTENSE_1_probe_results_2026-10-28.json": "d03ae17017bc73ab527769670a82c1a9",
+    "CHAIN_STATUS_2026-11-07.json": "fb4c1f96b1ebfdc3cc42f3c036578085",
+    "gwaya_stub_audit.json": "89e57fbed991cb7aa03c9a92b5cc7d5b",
     "E15_hypotheses.json": "a5968df0640c7270a11ebc22e6a85563",
     "E11b_kv_lattice_sweep_prereg_amendment_1.json": "7c1cbf410a33afa9e700a6a31a841990",
     "E11_kv_lattice_report.json": "f1594749ea23c42f515eedc189344704",
     "T4_REPLICATION_KIT.md": "d3f8e00272b090ed19e8703bb5f31769",
     "RESEARCH_PROGRAM.md": "4eb8837e597ccfe337e51cc50cbd9650",
+    "CONSUMER_GPU_ECONOMICS_2026-11-07.json": "f2fdb3f2a0ef1e219c1808d2834e3674",
+    "E12_replay_fixtures_manifest.json": "be88122afc5560593e2980f80344ea12",
+    "HiveMindSpec.lean": "7543596df5909ce32dddd9d45a6fb025",
+    "ROADMAP.md": "dd2fc42c416de3c303bb4b0108e616a7",
+    "E12_replay_fixtures.zip": "d0a56172aa3051e1b9ba3f0fb19cf7fb",
     "predictions_ledger.json": "6cd791a69e2f7c9ca88a873823401621",
     "E15_gwaya_rft_prereg.json": "e08b0ed2e833ded1d67557e83694dad6",
-    "ROADMAP.md": "15bf9e29a71c075b2d39dae925054805",
     "nocturnal_20_moe_stress_test_report.json": "6bc15d8ba8753c4af3510c9626f1449f",
     "live_wan_swarm_production_report.json": "bf337b516c634f5f8562b8251588ea1c",
     "E14_raw_qwen0.5b.json": "0b1b41307880f507e87e509949936cad",
+    "E11_raw_qwen0.5b.json": "71615d509b2588492682eea75dd01ea2",
+    "E11_kv_lattice_prereg_erratum_1.json": "774c4e0332c3475bc410df44a1673fe8",
     "E12_replay_divergence_prereg.json": "7843d434ce7776d20789f3270e1bcc6e",
     "E10b_lattice_05b_prereg_amendment_2.json": "861027eb265cd8bf923c27598561517c",
     "E13_swarm_local_raw_qwen0.5b.json": "743883d7b0e37098cc9a22486f8642c5",
     "E13_swarm_local_raw_granite1b.json": "50e3b1277cfd03127aca6611d24cdbe2",
-    "E11_raw_qwen0.5b.json": "71615d509b2588492682eea75dd01ea2",
-    "E11_kv_lattice_prereg_erratum_1.json": "774c4e0332c3475bc410df44a1673fe8",
     "E13_swarm_local_prereg_amendment_6.json": "6d226749643caec19aabafef119a584c",
     "lean_independent_runner_check.json": "8c95a61bb071efaf72f082defd93e692",
     "E13_swarm_local_raw_qwen0.5b_rotstraggle.json": "66a1a273dd2951d24b63b6faadaac720",
@@ -616,6 +670,7 @@
     "E5_het_prereg.json": "ebda99de822594573e8329b48aec3ee3",
     "E16_gwaya_lite_t4_report.json": "6d7704f37ccb4efcf345540bbe73c354",
     "E13_swarm_local_prereg_amendment_1.json": "354e1d927f03788d72d36f45a2504832",
+    "response_to_external_review_v3.5.0.md": "d8f663b3975bc149c1a6a832a3a82fe1",
     "E5_het_report.json": "416502040865c58cc382b51f74d4d83f",
     "E5_het_calibration.json": "0628539e3ffd18424e67a939274d4009",
     "E8_pilot_report.json": "dc5ec843a262f2b210fafeacb7f1373d",
@@ -625,17 +680,8 @@
     "E10_lattice_prereg.json": "eb712ef77a1032850552c77363a62121",
     "E10_lattice_report.json": "47060fa583ffd428b3ab35a4ee6c4688",
     "lean_rda_multiplier_check.json": "e90b1d2471c842f7d9644d8fa68f87c5",
-    "response_to_external_review_v3.5.0.md": "d8f663b3975bc149c1a6a832a3a82fe1",
-    "lora_init.pt": "04c5022688345ab698486f65427bdb43",
     "E12_pilot_prereg.json": "d13fa9cb9a1320948cd7f8259db93ae7",
-    "ref.pt": "c138febbf12c699d14bbe9f111f57bde",
-    "same_process_repeat.pt": "38e0e9a3288dc04e774b6b0389866806",
-    "threads_1.pt": "f521f10448cefc2323d4382f02c21dc0",
-    "threads_8.pt": "506c0bfe50422af806543eae65685e41",
-    "remote_cpu.pt": "8cc88c6232f9fcf2208ddff19b4dd35a",
-    "tampered.pt": "174eb93be0285c4bfca2ea808df09410",
     "E12_pilot_report.json": "bfecb9c88be6d4b0d0c1e54909422102",
-    "bf16_autocast.pt": "5bf4de09d97837f11e2e38fbecd68e30",
     "E15_gwaya_rft_prereg_amendment_1.json": "0f95e10a8426817374299216f2f8dfd8",
     "E13_swarm_local_prereg_amendment_4.json": "a23ce97a8957f662109538c1c0cff8bb",
     "E16_gwaya_lite_t4_prereg.json": "aaff03643dccbab39adda7b4f3dea6ed",
@@ -657,16 +703,11 @@
     "E11b_kv_lattice_sweep_prereg.json": "32950b86ad42e9c24a10ef01d5f7cf38",
     "E13_swarm_local_raw_qwen0.5b_m6.json": "2e822a5e14e698a2a476815eb2fde84c",
     "E13_swarm_local_report_granite3b.json": "ac4a0a8d99d488642469735d45160539",
-    "gwaya_stub_audit.json": "a0b886d357633cba2103b9c005a8df1f",
+    "exoplanet_astro_vmoe_poc_report.json": "2b8e57cf6d8abd40e76a889b7930e52d",
+    "massive_swarm_image_moe_report.json": "a6cc76e5a81be82f6f1129ae6c783b83",
     "nocturnal_large_moe_20_campaign_report.json": "96497fb61443f62dae2667a2e6d06ac9",
     "ROADMAP_AMCP_AGENT_MESH_KAFKA_EVOLUTION.md": "017bf23fda8e702e689b0f3c5f2f06d9",
-    "hivemind_foundation_article.pdf": "d81a32c03fcdfed113e765b6f91eb1c0",
-    "nocturnal_reddit_vision_moe_report.json": "072ec679048d3cbcc2417fe2c68cf90a",
-    "hivemind_foundation_article.tex": "5d7d0b52a5aabdfd201b30ae7c35b970",
-    "PEER_REVIEW_REPORT.json": "e355fbd5d438ca24dd4e3745f528d94e",
-    "VISION_AND_NEXTGEN_SWARM_ROADMAP.md": "49041b552896cf402b0c9f063ad5d79d",
-    "exoplanet_astro_vmoe_poc_report.json": "2b8e57cf6d8abd40e76a889b7930e52d",
-    "massive_swarm_image_moe_report.json": "a6cc76e5a81be82f6f1129ae6c783b83"
+    "PEER_REVIEW_REPORT.json": "6bcf669248481658fe6afed9325a09c7"
   },
   "checksum_mismatches": [],
   "verified": true

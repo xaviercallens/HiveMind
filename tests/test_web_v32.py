@@ -49,7 +49,7 @@ class FakeGateway:
         if path == "/v1/hivemind/live-telemetry":
             return (200, self.telemetry) if self.telemetry is not None else (502, {})
         if path == "/api/v1/auth/capabilities":
-            return 200, {"password_reset_email": self.reset_email}
+            return 200, {"password_reset_email": self.reset_email, "google": True, "github": True, "oidc": []}
         return 404, {}
 
     def post(self, path: str, payload: dict[str, Any], bearer: str | None = None, client_ip: str | None = None):

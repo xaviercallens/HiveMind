@@ -73,8 +73,8 @@
 
       <div id="sso" hidden>
         <p class="or" data-i18n="or">or</p>
-        <a class="button" id="google-btn" href="/auth/google/start" data-i18n="b_google">Sign in with Google</a>
-        <p class="muted small" data-i18n="google_hint">Already have an account with a password? Sign in with it first, then link Google from your account page; otherwise Google opens a new, separate account.</p>
+        <div class="row" id="sso-buttons"></div>
+        <p class="muted small" data-i18n="sso_hint">Already have an account with a password? Sign in with it first, then link your other account from your account page; otherwise it opens a new, separate account.</p>
       </div>
     </div>
 
@@ -99,7 +99,7 @@
       </form>
       <div class="row">
         <button type="button" id="rotate" data-i18n="b_rotate">New API key</button>
-        <a class="button" id="link-google" href="/auth/google/start?link=1" hidden data-i18n="b_link_google">Link my Google account</a>
+        <span id="link-buttons" class="row"></span>
         <button type="button" id="logout" data-i18n="b_logout">Sign out</button>
       </div>
       <h3 data-i18n="usage_h">Recent usage</h3>

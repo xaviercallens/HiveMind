@@ -85,6 +85,12 @@ from hivemind.router.accounts import (
     UnknownAccount,
     fit_loaded_models,
 )
+from hivemind.router.blind_ab_arena import (
+    BlindArenaCollector,
+    blind_ab_arena_csp,
+    pick_arena_language,
+    render_blind_ab_arena_page,
+)
 from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, catalog_payload, normalize_model_alias
 from hivemind.router.google_auth import GoogleAuthError, GoogleIdTokenVerifier
 from hivemind.router.join_page import join_content_security_policy, pick_language, render_join_page
@@ -609,6 +615,14 @@ class OnboardingFeedbackRequest(BaseModel):
     note: str = Field(default="", max_length=240)
 
 
+class ArenaVoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task_id: str = Field(min_length=1, max_length=64)
+    chosen_side: str = Field(min_length=1, max_length=8)
+    profile: str = Field(min_length=1, max_length=32)
+    ballot_token: str | None = Field(default=None, max_length=128)
+
+
 class MaxPriceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     max_price_per_1k: float = Field(gt=0.0, le=MAX_PRICE_CEILING, allow_inf_nan=False)
@@ -1073,7 +1087,7 @@ class BodyLimitMiddleware:
 LINK_TYPO_PAGES = frozenset({
     "/", "/signup", "/register", "/login", "/connexion", "/join", "/rejoindre", "/noel", "/quick",
     "/portal", "/playground", "/community",
-    "/benchmarks", "/boinc", "/crowdgpt-raid", "/raid", "/raid-noel", "/life-as-a-bee", "/manifesto", "/manifeste", "/game",
+    "/benchmarks", "/boinc", "/crowdgpt-raid", "/raid", "/raid-noel", "/arena-noel", "/life-as-a-bee", "/manifesto", "/manifeste", "/game",
     "/en", "/fr", "/de", "/es",
 })
 _LINK_TYPO_RE = re.compile(r"^(/[a-z0-9-]*?)(?:[)\]\[>\"'.,;:!*]|%29|%5[bBdD]|%22|%27|%3[eE]).*$")
@@ -3163,6 +3177,62 @@ def create_router_app(
             feedback_summary=onboarding_feedback.summary(),
         )
         return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+    blind_ab_arena = BlindArenaCollector()
+    arena_vote_limiter = SlidingWindowLimiter(60, 60.0)
+
+    @app.api_route("/arena-noel", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def blind_ab_arena_hub(request: Request) -> HTMLResponse:
+        """Zero-VRAM bilingual (FR/EN) Blind A/B Evaluation Arena for holiday checkpoints."""
+        lang = pick_arena_language(
+            request.query_params.get("lang"),
+            request.headers.get("accept-language"),
+            default="fr",
+        )
+        nonce = secrets.token_urlsafe(18)
+        gw_origin = str(request.base_url).rstrip("/")
+        page = render_blind_ab_arena_page(
+            lang=lang,
+            nonce=nonce,
+            gateway_url=gw_origin,
+            path="/arena-noel",
+            arena_summary=blind_ab_arena.summary(),
+            cards=blind_ab_arena.build_cards(lang=lang),
+        )
+        return HTMLResponse(
+            page,
+            headers={
+                "Content-Security-Policy": blind_ab_arena_csp(nonce),
+                "Cache-Control": "no-store",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "strict-origin-when-cross-origin",
+                "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+            },
+        )
+
+    @app.post("/v1/hivemind/arena/vote")
+    def submit_blind_arena_vote(request: Request, payload: ArenaVoteRequest) -> JSONResponse:
+        """Record an anonymous blind A/B checkpoint evaluation vote with zero GPU inference."""
+        if not arena_vote_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many arena votes; try again in a minute.", "rate_limit_error", "rate_limited")
+        try:
+            result = blind_ab_arena.record_vote(
+                task_id=payload.task_id,
+                chosen_side=payload.chosen_side,
+                profile=payload.profile,
+                ballot_token=payload.ballot_token,
+            )
+        except ValueError as exc:
+            raise RouterError(400, f"invalid arena vote: {exc}", "invalid_request_error", "invalid_arena_vote") from None
+        return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+    @app.get("/v1/hivemind/arena/summary")
+    def get_blind_arena_summary() -> JSONResponse:
+        """Public live summary of blind A/B checkpoint votes, win_ratio, and 95% Wilson lower bound."""
+        return JSONResponse(blind_ab_arena.summary(), headers={"Cache-Control": "no-store"})
 
     @app.post("/v1/hivemind/register/google")
     def register_google(request: Request, payload: GoogleRegisterRequest) -> JSONResponse:

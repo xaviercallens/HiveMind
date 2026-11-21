@@ -69,6 +69,7 @@ from hivemind.router.google_auth import GoogleAuthError, GoogleIdTokenVerifier
 from hivemind.router.join_page import join_content_security_policy, pick_language, render_join_page
 from hivemind.router.oidc_auth import OidcAuthError, OidcIdTokenVerifier
 from hivemind.router.portal_page import portal_content_security_policy, render_portal_page
+from hivemind.router.quick_join_page import OnboardingFeedbackCollector, quick_join_csp, render_quick_join_page
 from hivemind.router.signup_page import content_security_policy, render_signup_page
 from hivemind.router.usage_capture import classify_prompt_intent_and_language, detect_client_sdk
 from hivemind.router.market import (
@@ -563,6 +564,15 @@ class GoogleRegisterRequest(BaseModel):
     role: Literal["consumer", "producer", "prosumer", "trainer"] = "prosumer"
 
 
+class OnboardingFeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    profile: Literal["dev", "gamer"] = "dev"
+    ease_rating: int = Field(ge=1, le=5)
+    zero_game_lag: bool = True
+    platform: str = Field(default="unknown", max_length=32)
+    note: str = Field(default="", max_length=240)
+
+
 class MaxPriceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     max_price_per_1k: float = Field(gt=0.0, le=MAX_PRICE_CEILING, allow_inf_nan=False)
@@ -1025,7 +1035,8 @@ class BodyLimitMiddleware:
 # punctuation glued on ("/signup)", "/signup](https:...", "/signup."), which 404s (seen in the 2026-11 gateway logs).
 # Only these fixed paths can be redirect targets, so the redirect cannot be pointed anywhere else.
 LINK_TYPO_PAGES = frozenset({
-    "/", "/signup", "/register", "/login", "/connexion", "/join", "/rejoindre", "/portal", "/playground", "/community",
+    "/", "/signup", "/register", "/login", "/connexion", "/join", "/rejoindre", "/noel", "/quick",
+    "/portal", "/playground", "/community",
     "/benchmarks", "/boinc", "/crowdgpt-raid", "/raid", "/life-as-a-bee", "/manifesto", "/manifeste", "/game",
     "/en", "/fr", "/de", "/es",
 })
@@ -3030,6 +3041,45 @@ def create_router_app(
             "Content-Security-Policy": join_content_security_policy(nonce), "Cache-Control": "no-store", "Vary": "Accept-Language",
             "Content-Language": lang, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin",
         })
+
+    onboarding_feedback = OnboardingFeedbackCollector()
+
+    @app.api_route("/noel", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/quick", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def quick_join(request: Request) -> HTMLResponse:
+        """Minimalist 1-screen personal quick-start page for holiday developers and PC gamers."""
+        french_path = request.url.path == "/noel"
+        default_lang = "fr" if french_path else "en"
+        lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default=default_lang)
+        nonce = secrets.token_urlsafe(18)
+        gw_origin = str(request.base_url).rstrip("/")
+        page = render_quick_join_page(
+            lang,
+            nonce,
+            gateway_url=gw_origin,
+            path="/noel" if french_path else "/quick",
+            handle_registration=open_registration,
+            feedback_summary=onboarding_feedback.summary(),
+        )
+        return HTMLResponse(page, headers={
+            "Content-Security-Policy": quick_join_csp(nonce), "Cache-Control": "no-store", "Vary": "Accept-Language",
+            "Content-Language": lang, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin",
+        })
+
+    @app.post("/v1/hivemind/onboarding/feedback")
+    def submit_onboarding_feedback(request: Request, payload: OnboardingFeedbackRequest) -> dict[str, Any]:
+        if not register_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many feedback submissions; try again in a minute.", "rate_limit_error", "rate_limited")
+        return onboarding_feedback.record(
+            profile=payload.profile,
+            ease_rating=payload.ease_rating,
+            zero_game_lag=payload.zero_game_lag,
+            platform_name=payload.platform,
+        )
+
+    @app.get("/v1/hivemind/onboarding/feedback/summary")
+    def get_onboarding_feedback_summary() -> dict[str, Any]:
+        return onboarding_feedback.summary()
 
     @app.post("/v1/hivemind/register/google")
     def register_google(request: Request, payload: GoogleRegisterRequest) -> JSONResponse:
@@ -5565,30 +5615,33 @@ def create_router_app(
 
     _ALLOWED_ONBOARDING_SCRIPTS = {
         "hivemind_boinc_idle_worker.py",
+        "hivemind_connect.py",
         "hivemind_producer_agent.py",
         "hivemind_producer_shield.py",
         "hivemind_producer_autostart.py",
         "hivemind_volunteer_config.py",
         "hivemind_volunteer_preflight.py",
         "hivemind_opentrainer_agent.py",
+        "join_hivemind.ps1",
     }
 
     def _serve_onboarding_script(script_name: str) -> PlainTextResponse:
         from pathlib import Path
 
         if script_name not in _ALLOWED_ONBOARDING_SCRIPTS:
-            raise HTTPException(status_code=404, detail="Unknown onboarding script")
+            raise RouterError(404, "Unknown onboarding script.", "not_found_error", "not_found")
         router_dir = Path(__file__).resolve().parent
         repo_root = router_dir.parents[2]
+        media_type = "text/plain; charset=utf-8" if script_name.endswith(".ps1") else "text/x-python; charset=utf-8"
         for candidate_dir in (repo_root / "scripts", Path("/app/scripts"), router_dir):
             sp = candidate_dir / script_name
             if sp.exists():
                 return PlainTextResponse(
                     sp.read_text(encoding="utf-8"),
-                    media_type="text/x-python; charset=utf-8",
+                    media_type=media_type,
                     headers={"Content-Disposition": f'inline; filename="{script_name}"'},
                 )
-        raise HTTPException(status_code=404, detail="Script file not present on server")
+        raise RouterError(404, "Script file not present on server.", "not_found_error", "not_found")
 
     @app.get("/hivemind_boinc_idle_worker.py")
     def get_boinc_idle_worker_source() -> PlainTextResponse:

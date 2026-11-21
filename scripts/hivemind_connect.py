@@ -1,338 +1,643 @@
 #!/usr/bin/env python3
-"""HiveMind connector: register, check your connection and print ready-to-paste settings for your editor.
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
+"""Zero-dependency cross-platform HiveMind quick-connect & Gamer-Whisper assistant.
 
-Only dependency: ``pip install httpx``. It prints settings with a key placeholder by default, so nothing secret is
-written anywhere unless you ask (--embed-key, --save-key).
+Designed for personal home machines (Windows 11, macOS, Linux) with standard-library Python only:
+  1. ``connect`` (default): register or load ``~/.hivemind/credentials.json``, verify API access
+     against ``/v1/hivemind/me`` and ``/v1/models``, and output a ready-to-use VS Code (Continue.dev)
+     snippet without installing PyTorch.
+  2. ``--gamer-check`` / ``--gamer-whisper``: quiet gaming-PC guard (``<= 70 C`` default ceiling,
+     ``2048 MiB`` free-VRAM reserve, active game detection, ``< 1.5 s`` full process-tree stop).
+  3. ``--feedback``: optional anonymous usability & comfort telemetry (``ease_rating`` 1..5).
+  4. ``--uninstall``: remove saved local HiveMind credentials cleanly in one step.
 
-    python hivemind_connect.py register --handle my-name            # shows your API key once
-    export HIVEMIND_API_KEY=hm-...
-    python hivemind_connect.py check                                # balance, live models, catalog
-    python hivemind_connect.py snippet continue --model coder       # paste into Continue's config.yaml
-    python hivemind_connect.py snippet --list
-
-Snippets target open standards: the OpenAI chat-completions protocol for the tools, plain JSON/YAML for the config.
-Each editor changes its settings format over time: verify a snippet against that tool's current documentation.
+Personal Home Use & Non-Monetary Notice:
+  - Personal home PCs and personal side-projects ONLY (never work laptops or corporate code/data).
+  - 0.00 EUR / 0.00 USD: symbolic points have zero monetary value.
 """
 
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import os
-import stat
+import platform
+import re
+import secrets
+import signal
+import subprocess
 import sys
-from collections.abc import Sequence
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import httpx
+DEFAULT_GATEWAY = "https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app"
+HANDLE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{1,47}$")
 
-DEFAULT_GATEWAY: str = "https://hivemind-openrouter-1003063861791.us-central1.run.app"
-GATEWAY_ENV: str = "HIVEMIND_GATEWAY"
-API_KEY_ENV: str = "HIVEMIND_API_KEY"
-KEY_PLACEHOLDER: str = "hm-YOUR_KEY"
-DEFAULT_MODEL: str = "coder"
-DEFAULT_MAX_TOKENS: int = 2048
-HTTP_TIMEOUT_S: float = 30.0
-TOOLS: tuple[str, ...] = ("continue", "opencode", "aider", "cline", "zed", "jetbrains", "python", "env")
-
-
-def public_model_id(model: str) -> str:
-    """``coder`` and ``hivemind/coder`` both mean the gateway model id ``hivemind/coder`` (``auto`` stays ``hivemind/auto``)."""
-    return model if model.startswith("hivemind/") else f"hivemind/{model}"
-
-
-def render_snippet(tool: str, *, gateway: str, model: str, api_key: str = KEY_PLACEHOLDER, max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
-    """Settings text for ``tool`` pointing at ``gateway``; pure function, no I/O."""
-    base = gateway.rstrip("/") + "/v1"
-    mid = public_model_id(model)
-    if max_tokens < 1:
-        raise ValueError("max_tokens must be >= 1")
-    if tool == "continue":
-        return (
-            "# Continue (VS Code / JetBrains): add to config.yaml\n"
-            "models:\n"
-            f"  - name: HiveMind {model}\n"
-            "    provider: openai\n"
-            f"    model: {mid}\n"
-            f"    apiBase: {base}\n"
-            f"    apiKey: {api_key}\n"
-            "    roles: [chat, edit, apply]\n"
-            "    defaultCompletionOptions:\n"
-            f"      maxTokens: {max_tokens}\n"
-        )
-    if tool == "opencode":
-        config = {
-            "$schema": "https://opencode.ai/config.json",
-            "provider": {"hivemind": {
-                "npm": "@ai-sdk/openai-compatible", "name": "HiveMind OpenRouter",
-                "options": {"baseURL": base, "apiKey": api_key},
-                # Without an output limit OpenCode asks for a very long answer; the gateway then reserves points for all of it
-                # and a small balance is refused ("below the ... reserve"). Ollama's default context is small, so keep prompts short.
-                "models": {mid: {"name": f"HiveMind {model}", "limit": {"context": 8192, "output": max_tokens}}},
-            }},
-        }
-        return ("// OpenCode: opencode.json\n"
-                "// 7B models often write a tool call as plain text instead of calling the tool. If OpenCode answers with JSON like\n"
-                '// {"name": "write", ...}, turn its tools off for chat-style use: add "tools": {"write": false, "edit": false, "bash": false}.\n'
-                + json.dumps(config, indent=2) + "\n")
-    if tool == "aider":
-        return (
-            "# Aider: environment, then run aider\n"
-            f"export OPENAI_API_BASE={base}\n"
-            f"export OPENAI_API_KEY={api_key}\n"
-            f"aider --model openai/{mid}\n"
-        )
-    if tool == "cline":
-        return (
-            "Cline (VS Code extension): open its settings and choose\n"
-            "  API Provider : OpenAI Compatible\n"
-            f"  Base URL     : {base}\n"
-            f"  API Key      : {api_key}\n"
-            f"  Model ID     : {mid}\n"
-            f"  (set the maximum output tokens to {max_tokens} if the tool offers it)\n"
-        )
-    if tool == "zed":
-        config = {"language_models": {"openai_compatible": {"HiveMind": {
-            "api_url": base,
-            "available_models": [{"name": mid, "display_name": f"HiveMind {model}", "max_tokens": 32768, "max_output_tokens": max_tokens}],
-        }}}}
-        return ("// Zed: settings.json (the key is entered in Zed's UI or via the HIVEMIND_API_KEY environment variable)\n"
-                + json.dumps(config, indent=2) + "\n")
-    if tool == "jetbrains":
-        return (
-            "PyCharm / IntelliJ: install the Continue plugin and use the `continue` snippet, or, in Settings > Tools > AI\n"
-            "Assistant > Models, add an OpenAI-compatible provider with\n"
-            f"  URL   : {base}\n"
-            f"  Key   : {api_key}\n"
-            f"  Model : {mid}\n"
-        )
-    if tool == "python":
-        return (
-            "# pip install openai\n"
-            "from openai import OpenAI\n\n"
-            f'client = OpenAI(base_url="{base}", api_key="{api_key}")\n'
-            "reply = client.chat.completions.create(\n"
-            f'    model="{mid}",\n'
-            f"    max_tokens={max_tokens},\n"
-            '    messages=[{"role": "user", "content": "Write a pygame window that bounces a ball."}],\n'
-            ")\n"
-            "print(reply.choices[0].message.content)\n"
-            'print(reply.model_dump().get("hivemind"))  # price, charge and producer of this call\n'
-        )
-    if tool == "env":
-        return f"export OPENAI_BASE_URL={base}\nexport OPENAI_API_KEY={api_key}\n"
-    raise ValueError(f"unknown tool {tool!r}; choose one of: {', '.join(TOOLS)}")
-
-
-def _gateway(args: argparse.Namespace) -> str:
-    return (args.gateway or os.environ.get(GATEWAY_ENV) or DEFAULT_GATEWAY).rstrip("/")
-
-
-def _key(parser: argparse.ArgumentParser) -> str:
-    key = os.environ.get(API_KEY_ENV, "")
-    if not key:
-        parser.error(f"set {API_KEY_ENV} to your HiveMind API key (run `register` first)")
-    return key
-
-
-def _save_or_print_key(body: dict[str, Any], args: argparse.Namespace, *, is_google: bool = False) -> int:
-    if args.save_key:
-        path = Path(args.save_key).expanduser()
-        if path.exists():
-            print(f"refusing to overwrite {path}", file=sys.stderr)
-            return 1
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, stat.S_IRUSR | stat.S_IWUSR)
-        with os.fdopen(descriptor, "w") as handle:
-            handle.write(body["api_key"])
-        print(f"key saved to {path} (owner-only). Then: export {API_KEY_ENV}=$(cat {path})")
-    else:
-        if is_google:
-            header = "Account created with Google!" if body.get("created") else "Welcome back: previous key rotated."
-            print(f"{header}\nYour API key (shown once, store it safely):\n  {body['api_key']}\nThen: export {API_KEY_ENV}=<that key>")
-        else:
-            print(f"Your API key (shown once, store it safely):\n  {body['api_key']}\nThen: export {API_KEY_ENV}=<that key>")
-    print(f"account {body['account_id']} role {body['role']}. New accounts hold 0 HMT: ask the operator for a grant, or earn by sharing a GPU.")
-    return 0
-
-
-def cmd_register(client: httpx.Client, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    response = client.post(_gateway(args) + "/v1/hivemind/register", json={"handle": args.handle, "role": args.role})
-    if response.status_code != 200:
-        print(f"registration failed ({response.status_code}): {response.text[:300]}", file=sys.stderr)
-        return 1
-    return _save_or_print_key(response.json(), args, is_google=False)
-
-
-def cmd_register_google(client: httpx.Client, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    gateway = _gateway(args)
-    token = args.token or os.environ.get("GOOGLE_ID_TOKEN", "")
-
-    if not token and getattr(args, "gcloud", False):
-        try:
-            import subprocess
-            cmd = ["gcloud", "auth", "print-identity-token", "--include-email"]
-            if getattr(args, "audience", None):
-                cmd.append(f"--audiences={args.audience}")
-            proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
-            if proc.returncode == 0 and proc.stdout.strip():
-                token = proc.stdout.strip()
-            else:
-                print(f"gcloud identity token failed: {proc.stderr.strip()}", file=sys.stderr)
-        except (FileNotFoundError, OSError):
-            print("gcloud command not found on PATH.", file=sys.stderr)
-
-    if not token and getattr(args, "browser", False):
-        signup_url = f"{gateway}/signup"
-        print(f"Opening browser for Google Sign-in: {signup_url}")
-        try:
-            import webbrowser
-            webbrowser.open(signup_url)
-        except Exception:
-            pass
-        print("Complete Google sign-in in your browser.")
-        print("Paste the API key displayed on the page, or enter your Google ID token:")
-        try:
-            entered = input("API Key or Google ID Token: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nAborted.", file=sys.stderr)
-            return 1
-        if entered.startswith("hm-"):
-            return _save_or_print_key({"account_id": "google-user", "api_key": entered, "role": args.role, "created": False}, args, is_google=True)
-        token = entered
-
-    if not token:
-        parser.error("provide a Google ID token via --token, set GOOGLE_ID_TOKEN, use --gcloud, or use --browser")
-
-    response = client.post(gateway + "/v1/hivemind/register/google", json={"id_token": token, "role": args.role})
-    if response.status_code != 200:
-        print(f"Google sign-in failed ({response.status_code}): {response.text[:300]}", file=sys.stderr)
-        return 1
-    return _save_or_print_key(response.json(), args, is_google=True)
-
-
-def cmd_check(client: httpx.Client, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    gateway = _gateway(args)
-    headers = {"Authorization": f"Bearer {_key(parser)}"}
-    me = client.get(gateway + "/v1/hivemind/me", headers=headers)
-    if me.status_code != 200:
-        print(f"key rejected ({me.status_code}). Check {API_KEY_ENV}.", file=sys.stderr)
-        return 1
-    account = me.json()
-    live = [m.get("id") for m in client.get(gateway + "/v1/models", headers=headers).json().get("data", [])]
-    tiers = client.get(gateway + "/v1/hivemind/catalog").json().get("tiers", [])
-    print(f"account {account['account_id']}  role {account['role']}  balance {account['balance']} HMT  max price {account['max_price_per_1k']}/1k")
-    print(f"live models now: {', '.join(live) if live else 'none'}")
-    for tier in tiers:
-        flag = "live" if tier["public_id"] in live else "no producer yet"
-        print(f"  {tier['public_id']:<22} {'MoE ' if tier['moe'] else '    '}needs ~{tier['min_vram_gb']:g} GB  [{flag}]  {tier['good_for']}")
-    if account["balance"] <= 0:
-        print("balance is 0: requests will be refused until you are granted HMT or earn some as a producer.")
-    return 0
-
-
-def cmd_transfer(client: httpx.Client, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    gateway = _gateway(args)
-    headers = {"Authorization": f"Bearer {_key(parser)}"}
-    payload: dict[str, Any] = {
-        "recipient": args.to,
-        "amount": float(args.amount),
-        "memo": args.memo,
-        "notify_amcp": not bool(args.no_amcp),
+DEFAULT_GAME_EXECUTABLES: frozenset[str] = frozenset(
+    {
+        "cs2.exe",
+        "cs2",
+        "dota2.exe",
+        "dota2",
+        "cyberpunk2077.exe",
+        "eldenring.exe",
+        "bg3.exe",
+        "helldivers2.exe",
+        "valorant.exe",
+        "valorant-win64-shipping.exe",
+        "fortniteclient-win64-shipping.exe",
+        "overwatch.exe",
+        "league of legends.exe",
+        "baldur.exe",
+        "starfield.exe",
+        "witcher3.exe",
     }
-    if args.idempotency_key:
-        payload["idempotency_key"] = args.idempotency_key
-    if args.model_ref:
-        payload["model_ref"] = args.model_ref
-    if args.pr_url:
-        payload["pr_url"] = args.pr_url
-    res = client.post(gateway + "/v1/hivemind/points/transfer", headers=headers, json=payload)
-    if res.status_code != 200:
-        print(f"transfer failed ({res.status_code}): {res.text[:300]}", file=sys.stderr)
-        return 1
-    body = res.json()
-    print(
-        f"transfer {body['transfer_id']}: @{body['sender_handle']} -> @{body['recipient_handle']} "
-        f"{body['amount_hmt']:.2f} HMT ({body['memo']}) | remaining balance {body['sender_balance_hmt']:.2f} HMT"
-        + (f" | amcp_event {body['amcp_event_id']}" if body.get("amcp_event_id") else "")
-    )
-    return 0
+)
 
 
-def cmd_snippet(client: httpx.Client, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    if args.list or not args.tool:
-        print("tools: " + ", ".join(TOOLS))
-        return 0
-    key = os.environ.get(API_KEY_ENV, "") if args.embed_key else KEY_PLACEHOLDER
-    if args.embed_key and not key:
-        parser.error(f"--embed-key needs {API_KEY_ENV} to be set")
+@dataclass(frozen=True)
+class GpuSnapshot:
+    """Measured local GPU state from nvidia-smi."""
+
+    present: bool
+    name: str
+    total_mib: int
+    free_mib: int
+    temp_c: float
+    util_pct: float
+
+
+HttpFn = Callable[[str, str, dict[str, Any] | None, dict[str, str] | None], tuple[int, dict[str, Any]]]
+
+
+def _default_credentials_path() -> Path:
+    return Path.home() / ".hivemind" / "credentials.json"
+
+
+def _default_continue_snippet_path() -> Path:
+    return Path.home() / ".continue" / "hivemind_provider.yaml"
+
+
+def validate_gateway_url(url: str) -> str:
+    cleaned = (url or "").strip().rstrip("/")
+    if not (
+        cleaned.startswith("https://")
+        and cleaned.split("/")[2].endswith(".run.app")
+        or cleaned.startswith("http://127.0.0.1")
+        or cleaned.startswith("http://localhost")
+    ):
+        raise ValueError(
+            f"Refusing untrusted gateway URL {url!r}: expected a *.run.app HTTPS gateway or localhost."
+        )
+    return cleaned
+
+
+def sanitize_handle(raw: str) -> str:
+    candidate = re.sub(r"[^A-Za-z0-9._+-]+", "-", (raw or "").strip()).strip("-.")
+    if len(candidate) < 2:
+        candidate = f"friend-{secrets.token_hex(3)}"
+    candidate = candidate[:48]
+    if not HANDLE_RE.match(candidate) or candidate.lower().startswith(("google.", "github.", "oidc.")):
+        raise ValueError(
+            "Invalid handle: use 2-48 ASCII letters, digits, '.', '_', '+', or '-' (not starting with a provider prefix)."
+        )
+    return candidate
+
+
+def default_http_json(
+    method: str,
+    url: str,
+    payload: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, dict[str, Any]]:
+    req_headers = {"Accept": "application/json"}
+    if headers:
+        req_headers.update(headers)
+    data_bytes: bytes | None = None
+    if payload is not None:
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req_headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data_bytes, headers=req_headers, method=method)
     try:
-        print(render_snippet(args.tool, gateway=_gateway(args), model=args.model, api_key=key, max_tokens=args.max_tokens), end="")
-    except ValueError as exc:
-        parser.error(str(exc))
-    return 0
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            return int(resp.status), (json.loads(body) if body.strip() else {})
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        try:
+            parsed = json.loads(body) if body.strip() else {"error": body}
+        except json.JSONDecodeError:
+            parsed = {"error": body}
+        return int(exc.code), parsed
+
+
+def save_credentials(path: Path, record: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if os.name != "nt":
+        os.chmod(tmp, 0o600)
+    tmp.replace(path)
+
+
+def load_credentials(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if isinstance(data, dict) and str(data.get("api_key", "")).startswith("hm-"):
+        return data
+    return None
+
+
+def probe_local_gpu() -> GpuSnapshot:
+    try:
+        proc = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,memory.total,memory.free,temperature.gpu,utilization.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            parts = [p.strip() for p in proc.stdout.strip().splitlines()[0].split(",")]
+            if len(parts) >= 5:
+                return GpuSnapshot(
+                    present=True,
+                    name=parts[0],
+                    total_mib=max(0, int(float(parts[1]))),
+                    free_mib=max(0, int(float(parts[2]))),
+                    temp_c=float(parts[3]),
+                    util_pct=float(parts[4]),
+                )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return GpuSnapshot(present=False, name="", total_mib=0, free_mib=0, temp_c=0.0, util_pct=0.0)
+    return GpuSnapshot(present=False, name="", total_mib=0, free_mib=0, temp_c=0.0, util_pct=0.0)
+
+
+def list_running_process_names() -> set[str]:
+    names: set[str] = set()
+    try:
+        if os.name == "nt":
+            proc = subprocess.run(
+                ["tasklist", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            for line in proc.stdout.splitlines():
+                line = line.strip()
+                if line.startswith('"') and '","' in line:
+                    names.add(line.split('","', 1)[0].strip('"').lower())
+        else:
+            proc = subprocess.run(
+                ["ps", "-eo", "comm="],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            for line in proc.stdout.splitlines():
+                cleaned = line.strip().lower()
+                if cleaned:
+                    names.add(cleaned)
+    except (OSError, subprocess.SubprocessError):
+        return names
+    return names
+
+
+def get_os_idle_seconds() -> float:
+    if sys.platform != "win32":
+        return 999.0
+    try:
+        class _LastInputInfo(ctypes.Structure):
+            _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_ulong)]
+
+        lii = _LastInputInfo()
+        lii.cbSize = ctypes.sizeof(_LastInputInfo)
+        if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):  # type: ignore[attr-defined]
+            tick = ctypes.windll.kernel32.GetTickCount()  # type: ignore[attr-defined]
+            elapsed_ms = (tick - lii.dwTime) & 0xFFFFFFFF
+            return round(elapsed_ms / 1000.0, 3)
+    except Exception:
+        return 999.0
+    return 999.0
+
+
+def detect_active_game(running: set[str], extra_games: list[str] | None = None) -> str | None:
+    watch = set(DEFAULT_GAME_EXECUTABLES)
+    for g in extra_games or []:
+        cleaned = g.strip().lower()
+        if cleaned:
+            watch.add(cleaned)
+            watch.add(cleaned[:15])
+    for proc_name in sorted(running):
+        if proc_name in watch:
+            return proc_name
+    return None
+
+
+def evaluate_gamer_whisper_guard(
+    gpu: GpuSnapshot,
+    *,
+    running_procs: set[str],
+    extra_games: list[str] | None = None,
+    reserve_mib: int = 2048,
+    hot_c: float = 70.0,
+    max_external_util_pct: float = 15.0,
+    worker_running: bool = False,
+) -> dict[str, Any]:
+    """Decide whether a gaming PC is quiet and free enough to run or keep running a lightweight round."""
+    active_game = detect_active_game(running_procs, extra_games)
+    if active_game is not None:
+        return {"allow": False, "reason": f"game_active:{active_game}", "active_game": active_game}
+    if not gpu.present or gpu.total_mib <= 0:
+        return {"allow": False, "reason": "no_nvidia_gpu_detected", "active_game": None}
+    if gpu.temp_c >= hot_c:
+        return {"allow": False, "reason": f"thermal_whisper_cap:{gpu.temp_c:.0f}C>={hot_c:.0f}C", "active_game": None}
+    if gpu.free_mib < reserve_mib:
+        return {"allow": False, "reason": f"vram_reserve_guard:{gpu.free_mib}MiB<{reserve_mib}MiB", "active_game": None}
+    if not worker_running and gpu.util_pct > max_external_util_pct:
+        return {
+            "allow": False,
+            "reason": f"external_gpu_busy:{gpu.util_pct:.0f}%>{max_external_util_pct:.0f}%",
+            "active_game": None,
+        }
+    return {"allow": True, "reason": "ready_gamer_whisper", "active_game": None}
+
+
+def build_continue_yaml(gateway: str, api_key: str) -> str:
+    return (
+        "# HiveMind personal hobby/open-source coding configuration for VS Code (Continue.dev)\n"
+        "# Personal projects ONLY — never send corporate or confidential source code.\n"
+        "name: HiveMind Holiday Lab\n"
+        "version: 0.0.1\n"
+        "schema: v1\n"
+        "models:\n"
+        "  - name: HiveMind Coder\n"
+        "    provider: openai\n"
+        "    model: hivemind/coder\n"
+        f"    apiBase: {gateway}/v1\n"
+        f"    apiKey: {api_key}\n"
+        "    roles:\n"
+        "      - chat\n"
+        "      - edit\n"
+        "  - name: HiveMind Bee-Stars (Science)\n"
+        "    provider: openai\n"
+        "    model: hivemind/bee-stars\n"
+        f"    apiBase: {gateway}/v1\n"
+        f"    apiKey: {api_key}\n"
+        "    roles:\n"
+        "      - chat\n"
+    )
+
+
+def terminate_process_tree_fast(proc: subprocess.Popen[Any], timeout_s: float = 1.2) -> float:
+    """Stop a worker process tree immediately so 100% of GPU VRAM returns to the owner within < 1.5s."""
+    started = time.monotonic()
+    if proc.poll() is not None:
+        return round(time.monotonic() - started, 4)
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                capture_output=True,
+                timeout=timeout_s,
+                check=False,
+            )
+        else:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except OSError:
+                proc.terminate()
+        try:
+            proc.wait(timeout=max(0.2, timeout_s * 0.6))
+        except subprocess.TimeoutExpired:
+            if os.name != "nt":
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except OSError:
+                    proc.kill()
+            else:
+                proc.kill()
+            proc.wait(timeout=0.5)
+    except (OSError, subprocess.SubprocessError):
+        return round(time.monotonic() - started, 4)
+    return round(time.monotonic() - started, 4)
+
+
+def ensure_connected_account(
+    *,
+    gateway: str,
+    credentials_path: Path,
+    handle: str | None,
+    role: str,
+    explicit_api_key: str | None,
+    http_fn: HttpFn = default_http_json,
+) -> dict[str, Any]:
+    api_key = (explicit_api_key or os.environ.get("HIVEMIND_API_KEY") or "").strip()
+    saved = load_credentials(credentials_path)
+    if not api_key and saved and saved.get("gateway") == gateway:
+        api_key = str(saved["api_key"])
+
+    created = False
+    resolved_handle = handle or (saved.get("handle") if saved else None) or ""
+    if not api_key:
+        base_handle = sanitize_handle(handle or f"hm-{platform.node() or 'home'}")
+        status, body = http_fn(
+            "POST",
+            f"{gateway}/v1/hivemind/register",
+            {"handle": base_handle, "role": role},
+            None,
+        )
+        if status == 409 and not handle:
+            retry_handle = sanitize_handle(f"{base_handle[:38]}-{secrets.token_hex(2)}")
+            status, body = http_fn(
+                "POST",
+                f"{gateway}/v1/hivemind/register",
+                {"handle": retry_handle, "role": role},
+                None,
+            )
+            base_handle = retry_handle
+        if status != 200 or not str(body.get("api_key", "")).startswith("hm-"):
+            msg = body.get("error") or body
+            raise RuntimeError(f"Registration refused (HTTP {status}): {msg}")
+        api_key = str(body["api_key"])
+        resolved_handle = base_handle
+        created = True
+
+    me_status, me_body = http_fn(
+        "GET",
+        f"{gateway}/v1/hivemind/me",
+        None,
+        {"Authorization": f"Bearer {api_key}"},
+    )
+    if me_status != 200:
+        raise RuntimeError(f"API key check failed on /v1/hivemind/me (HTTP {me_status}): {me_body}")
+
+    models_status, models_body = http_fn("GET", f"{gateway}/v1/models", None, None)
+    models = [m.get("id") for m in (models_body.get("data") or []) if isinstance(m, dict) and m.get("id")]
+    if models_status != 200:
+        models = []
+
+    record = {
+        "account_id": me_body.get("account_id", ""),
+        "api_key": api_key,
+        "created_here": created,
+        "gateway": gateway,
+        "handle": me_body.get("handle") or resolved_handle,
+        "role": me_body.get("role") or role,
+        "saved_at_utc": datetime.now(UTC).isoformat(),
+    }
+    save_credentials(credentials_path, record)
+    return {"account": record, "balance": me_body.get("balance", 0.0), "models": models}
+
+
+def run_gamer_whisper_session(
+    *,
+    gateway: str,
+    api_key: str,
+    extra_games: list[str],
+    reserve_mib: int,
+    hot_c: float,
+    cool_c: float,
+    once: bool,
+    gpu_probe_fn: Callable[[], GpuSnapshot] = probe_local_gpu,
+    proc_list_fn: Callable[[], set[str]] = list_running_process_names,
+    popen_fn: Callable[..., subprocess.Popen[Any]] | None = None,
+    poll_interval_s: float = 0.5,
+) -> dict[str, Any]:
+    gpu = gpu_probe_fn()
+    preflight_decision = evaluate_gamer_whisper_guard(
+        gpu,
+        running_procs=proc_list_fn(),
+        extra_games=extra_games,
+        reserve_mib=reserve_mib,
+        hot_c=hot_c,
+        worker_running=False,
+    )
+    if not preflight_decision["allow"]:
+        return {"status": "yielded_before_start", **preflight_decision, "yield_elapsed_s": 0.0}
+
+    agent_script = Path(__file__).resolve().with_name("hivemind_opentrainer_agent.py")
+    cmd = [
+        sys.executable,
+        str(agent_script),
+        "--gateway",
+        gateway,
+        "--max-vram-gb",
+        "4.5",
+        "--train",
+        "--once",
+    ]
+    env = dict(os.environ)
+    env["HIVEMIND_API_KEY"] = api_key
+    repo_src = str(Path(__file__).resolve().parents[1] / "src")
+    env["PYTHONPATH"] = repo_src + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+
+    launcher = popen_fn or subprocess.Popen
+    popen_kwargs: dict[str, Any] = {"env": env}
+    if os.name != "nt":
+        popen_kwargs["start_new_session"] = True
+    proc = launcher(cmd, **popen_kwargs)
+
+    while proc.poll() is None:
+        time.sleep(max(0.05, poll_interval_s))
+        live_gpu = gpu_probe_fn()
+        live_decision = evaluate_gamer_whisper_guard(
+            live_gpu,
+            running_procs=proc_list_fn(),
+            extra_games=extra_games,
+            reserve_mib=reserve_mib,
+            hot_c=hot_c,
+            worker_running=True,
+        )
+        if not live_decision["allow"]:
+            elapsed_s = terminate_process_tree_fast(proc)
+            return {
+                "status": "yielded_to_owner",
+                **live_decision,
+                "cool_resume_c": cool_c,
+                "yield_elapsed_s": elapsed_s,
+            }
+
+    return {"status": "round_completed" if proc.returncode == 0 else "worker_exited", "returncode": proc.returncode}
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Connect your editor or Python code to the HiveMind OpenRouter.")
-    parser.add_argument("--gateway", help=f"Gateway URL (default: ${GATEWAY_ENV} or the public HiveMind gateway)")
-    sub = parser.add_subparsers(dest="command", required=True)
-    reg = sub.add_parser("register", help="Create an account and get an API key")
-    reg.add_argument("--handle", required=True)
-    reg.add_argument("--role", choices=["consumer", "producer", "prosumer"], default="prosumer",
-                     help="prosumer (default) can both use models and share a GPU")
-    reg.add_argument("--save-key", metavar="FILE", help="Write the key to FILE (owner-only) instead of printing it")
-    reg.set_defaults(func=cmd_register)
-
-    reg_g = sub.add_parser("register-google", help="Sign in with Google (ID token, gcloud, or browser)")
-    reg_g.add_argument("--token", help="Google ID token (or set GOOGLE_ID_TOKEN)")
-    reg_g.add_argument("--gcloud", action="store_true", help="Obtain Google ID token using gcloud CLI")
-    reg_g.add_argument("--audience", help="Optional audience parameter for gcloud identity token")
-    reg_g.add_argument("--browser", action="store_true", help="Open /signup page in your browser")
-    reg_g.add_argument("--role", choices=["consumer", "producer", "prosumer"], default="prosumer",
-                       help="prosumer (default) can both use models and share a GPU")
-    reg_g.add_argument("--save-key", metavar="FILE", help="Write the key to FILE (owner-only) instead of printing it")
-    reg_g.set_defaults(func=cmd_register_google)
-
-    login_g = sub.add_parser("login-google", help="Alias for register-google (returns rotated API key)")
-    login_g.add_argument("--token", help="Google ID token (or set GOOGLE_ID_TOKEN)")
-    login_g.add_argument("--gcloud", action="store_true", help="Obtain Google ID token using gcloud CLI")
-    login_g.add_argument("--audience", help="Optional audience parameter for gcloud identity token")
-    login_g.add_argument("--browser", action="store_true", help="Open /signup page in your browser")
-    login_g.add_argument("--role", choices=["consumer", "producer", "prosumer"], default="prosumer")
-    login_g.add_argument("--save-key", metavar="FILE", help="Write the key to FILE (owner-only) instead of printing it")
-    login_g.set_defaults(func=cmd_register_google)
-    chk = sub.add_parser("check", help="Verify your key and show balance, live models and tiers")
-    chk.set_defaults(func=cmd_check)
-    txf = sub.add_parser("transfer", help="Send HMT Reflexion Points to another HiveMinder")
-    txf.add_argument("--to", required=True, help="Recipient @handle, handle, email, or account_id")
-    txf.add_argument("--amount", type=float, required=True, help="Positive HMT amount to transfer")
-    txf.add_argument("--memo", default="peer-hiveminder-support", help="Short note describing the transfer")
-    txf.add_argument("--idempotency-key", help="Optional idempotency key to prevent duplicate sends")
-    txf.add_argument("--model-ref", help="Optional model id being tested (e.g. hivemind/crowd-v1)")
-    txf.add_argument("--pr-url", help="Optional GitHub PR URL attached to the AMCP event")
-    txf.add_argument("--no-amcp", action="store_true", help="Skip emitting an AMCP/Kafka collaboration message")
-    txf.set_defaults(func=cmd_transfer)
-    snip = sub.add_parser("snippet", help="Print settings for an editor or library")
-    snip.add_argument("tool", nargs="?", choices=TOOLS)
-    snip.add_argument("--model", default=DEFAULT_MODEL, help="tier id such as coder, coder-lite, moe-coder, or auto")
-    snip.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
-    snip.add_argument("--embed-key", action="store_true", help=f"Put ${API_KEY_ENV} into the snippet instead of a placeholder")
-    snip.add_argument("--list", action="store_true")
-    snip.set_defaults(func=cmd_snippet)
-    return parser
+    p = argparse.ArgumentParser(
+        description="HiveMind 60-second Personal Quick-Connect & Gamer-Whisper Assistant (0.00 EUR, personal PCs only)."
+    )
+    p.add_argument("--gateway", default=os.environ.get("HIVEMIND_GATEWAY_URL", DEFAULT_GATEWAY))
+    p.add_argument("--handle", default="", help="Desired handle (2-48 chars, e.g. alex-rtx4070).")
+    p.add_argument("--role", default="prosumer", choices=("consumer", "producer", "prosumer", "trainer"))
+    p.add_argument("--api-key", default="", help="Existing hm-... API key (optional).")
+    p.add_argument("--credentials-file", default=str(_default_credentials_path()))
+    p.add_argument("--write-continue-config", action="store_true", help="Write ~/.continue/hivemind_provider.yaml.")
+    p.add_argument("--continue-config-path", default=str(_default_continue_snippet_path()))
+    p.add_argument("--gamer-check", action="store_true", help="Inspect GPU, temperature, and running games only.")
+    p.add_argument("--gamer-whisper", action="store_true", help="Run quiet GPU contributor (<70C, <1.5s game stop).")
+    p.add_argument("--game", action="append", default=[], help="Extra game executable name to auto-stop on.")
+    p.add_argument("--reserve-mib", type=int, default=2048, help="Free VRAM MiB reserved for desktop/games.")
+    p.add_argument("--hot-c", type=float, default=70.0, help="Quiet fan temperature cap in Celsius (default: 70).")
+    p.add_argument("--cool-c", type=float, default=64.0, help="Cool-down temperature in Celsius (default: 64).")
+    p.add_argument("--once", action="store_true", help="Run a single quiet round and exit.")
+    p.add_argument("--feedback", action="store_true", help="Submit anonymous usability feedback (1..5).")
+    p.add_argument("--ease-rating", type=int, default=5, help="Ease of setup rating from 1 (hard) to 5 (instant).")
+    p.add_argument("--had-game-lag", action="store_true", help="Report that a game stuttered or fans were noisy.")
+    p.add_argument("--profile", default="dev", choices=("dev", "gamer"))
+    p.add_argument("--note", default="", help="Optional short feedback note (no personal data).")
+    p.add_argument("--uninstall", action="store_true", help="Delete local saved HiveMind credentials and snippet.")
+    p.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
+    return p
 
 
-def main(argv: Sequence[str] | None = None, *, transport: httpx.BaseTransport | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    with httpx.Client(timeout=HTTP_TIMEOUT_S, transport=transport) as client:
-        try:
-            return int(args.func(client, args, parser))
-        except httpx.HTTPError as exc:
-            print(f"cannot reach the gateway: {type(exc).__name__}: {exc}", file=sys.stderr)
+def main(argv: list[str] | None = None, *, http_fn: HttpFn = default_http_json) -> int:
+    args = build_parser().parse_args(argv)
+    cred_path = Path(args.credentials_file)
+    cont_path = Path(args.continue_config_path)
+
+    if args.uninstall:
+        removed: list[str] = []
+        for target in (cred_path, cont_path):
+            if target.is_file():
+                target.unlink()
+                removed.append(str(target))
+        print(json.dumps({"status": "uninstalled", "removed_files": removed}, indent=2))
+        return 0
+
+    try:
+        gateway = validate_gateway_url(args.gateway)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    if args.gamer_check:
+        gpu = probe_local_gpu()
+        decision = evaluate_gamer_whisper_guard(
+            gpu,
+            running_procs=list_running_process_names(),
+            extra_games=args.game,
+            reserve_mib=args.reserve_mib,
+            hot_c=args.hot_c,
+        )
+        out = {
+            "gpu": {
+                "present": gpu.present,
+                "name": gpu.name,
+                "total_mib": gpu.total_mib,
+                "free_mib": gpu.free_mib,
+                "temp_c": gpu.temp_c,
+                "util_pct": gpu.util_pct,
+            },
+            "os_idle_seconds": get_os_idle_seconds(),
+            "gamer_whisper": decision,
+        }
+        print(json.dumps(out, indent=2))
+        return 0 if decision["allow"] else 2
+
+    if args.feedback:
+        if not (1 <= int(args.ease_rating) <= 5):
+            print("Error: --ease-rating must be between 1 and 5.", file=sys.stderr)
+            return 2
+        status, body = http_fn(
+            "POST",
+            f"{gateway}/v1/hivemind/onboarding/feedback",
+            {
+                "profile": args.profile,
+                "ease_rating": int(args.ease_rating),
+                "zero_game_lag": not bool(args.had_game_lag),
+                "platform": platform.system().lower(),
+                "note": str(args.note or "")[:240],
+            },
+            None,
+        )
+        if status not in (200, 201):
+            print(f"Feedback submission failed (HTTP {status}): {body}", file=sys.stderr)
             return 1
+        print(json.dumps({"status": "feedback_recorded", "summary": body}, indent=2))
+        return 0
+
+    try:
+        connected = ensure_connected_account(
+            gateway=gateway,
+            credentials_path=cred_path,
+            handle=args.handle or None,
+            role=args.role,
+            explicit_api_key=args.api_key or None,
+            http_fn=http_fn,
+        )
+    except (RuntimeError, ValueError) as exc:
+        print(f"Connection error: {exc}", file=sys.stderr)
+        return 1
+
+    acct = connected["account"]
+    yaml_snippet = build_continue_yaml(gateway, acct["api_key"])
+    if args.write_continue_config:
+        cont_path.parent.mkdir(parents=True, exist_ok=True)
+        cont_path.write_text(yaml_snippet, encoding="utf-8")
+        if os.name != "nt":
+            os.chmod(cont_path, 0o600)
+
+    if args.gamer_whisper:
+        result = run_gamer_whisper_session(
+            gateway=gateway,
+            api_key=acct["api_key"],
+            extra_games=args.game,
+            reserve_mib=args.reserve_mib,
+            hot_c=args.hot_c,
+            cool_c=args.cool_c,
+            once=args.once,
+        )
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("status") in ("round_completed", "yielded_to_owner", "yielded_before_start") else 1
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "status": "connected",
+                    "handle": acct["handle"],
+                    "role": acct["role"],
+                    "credentials_file": str(cred_path),
+                    "models": connected["models"],
+                    "continue_config_written": str(cont_path) if args.write_continue_config else None,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    print("====================================================================")
+    print("  HIVEMIND HOLIDAY LAB — CONNECTED (PERSONAL HOME PC ONLY • 0.00 EUR)")
+    print("====================================================================")
+    print("  [Rule] Personal machines & personal hobby code ONLY (never work PCs).")
+    print(f"  Handle           : {acct['handle']} ({acct['role']})")
+    print(f"  Gateway          : {gateway}")
+    print(f"  Credentials saved: {cred_path}")
+    print(f"  Models online    : {', '.join(connected['models']) or 'verified'}")
+    if args.write_continue_config:
+        print(f"  VS Code snippet  : {cont_path}")
+    print("\n--- VS Code (Continue.dev) snippet ---")
+    print(yaml_snippet.rstrip())
+    print("\n--- Clean uninstall anytime ---")
+    print("  python3 scripts/hivemind_connect.py --uninstall")
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

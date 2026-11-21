@@ -4285,6 +4285,28 @@ def create_router_app(
             now_utc=now,
         )
 
+    from hivemind.router.training_data_proxy import TrainingDataError, TrainingRowsProxy
+
+    training_rows_proxy = TrainingRowsProxy()
+
+    @app.get("/v1/hivemind/training-data/rows")
+    def get_training_data_rows(
+        request: Request,
+        dataset: str,
+        config: str = "default",
+        split: str = "train",
+        offset: int = 0,
+        length: int = 100,
+    ) -> dict[str, Any]:
+        """Public training rows of the plan's datasets, fetched by the gateway with the dedicated HiveMind Hugging Face
+        account (option 2 of the owner's 2026-11-17 decision). Needs an API key; benchmarks are never served."""
+        authenticate(request)
+        try:
+            return training_rows_proxy.rows(dataset, config, split, offset, length)
+        except TrainingDataError as exc:
+            kind = "not_found_error" if exc.status == 404 else "invalid_request_error" if exc.status == 400 else "api_error"
+            raise RouterError(exc.status, str(exc), kind, "training_data") from None
+
     @app.get("/v1/hivemind/contributive-hub")
     @app.get("/v1/contributive-hub")
     def get_contributive_hub() -> dict[str, Any]:

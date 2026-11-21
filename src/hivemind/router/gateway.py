@@ -104,6 +104,12 @@ from hivemind.router.quick_join_page import (
     quick_join_csp,
     render_quick_join_page,
 )
+from hivemind.router.raid_noel_page import (
+    build_raid_noel_status,
+    pick_raid_language,
+    raid_noel_csp,
+    render_raid_noel_page,
+)
 from hivemind.router.signup_page import content_security_policy, render_signup_page
 from hivemind.router.usage_capture import classify_prompt_intent_and_language, detect_client_sdk
 from hivemind.security._exceptions import SwarmSecurityViolationError
@@ -1067,7 +1073,7 @@ class BodyLimitMiddleware:
 LINK_TYPO_PAGES = frozenset({
     "/", "/signup", "/register", "/login", "/connexion", "/join", "/rejoindre", "/noel", "/quick",
     "/portal", "/playground", "/community",
-    "/benchmarks", "/boinc", "/crowdgpt-raid", "/raid", "/life-as-a-bee", "/manifesto", "/manifeste", "/game",
+    "/benchmarks", "/boinc", "/crowdgpt-raid", "/raid", "/raid-noel", "/life-as-a-bee", "/manifesto", "/manifeste", "/game",
     "/en", "/fr", "/de", "/es",
 })
 _LINK_TYPO_RE = re.compile(r"^(/[a-z0-9-]*?)(?:[)\]\[>\"'.,;:!*]|%29|%5[bBdD]|%22|%27|%3[eE]).*$")
@@ -3113,6 +3119,50 @@ def create_router_app(
     @app.get("/v1/hivemind/onboarding/feedback/summary")
     def get_onboarding_feedback_summary() -> dict[str, Any]:
         return onboarding_feedback.summary()
+
+    @app.api_route("/raid-noel", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/raid", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def raid_noel_hub(request: Request) -> HTMLResponse:
+        """Bilingual Winter GPU Raid & Holiday Guild scoreboard and honest Wh electricity estimator."""
+        french_path = request.url.path == "/raid-noel"
+        default_lang = "fr" if french_path else "en"
+        lang = pick_raid_language(
+            request.query_params.get("lang"),
+            request.headers.get("accept-language"),
+            default=default_lang,
+        )
+        nonce = secrets.token_urlsafe(18)
+        gw_origin = str(request.base_url).rstrip("/")
+        page = render_raid_noel_page(
+            lang=lang,
+            nonce=nonce,
+            gateway_url=gw_origin,
+            path="/raid-noel" if french_path else "/raid",
+            live_telemetry=build_live_telemetry_snapshot(),
+            feedback_summary=onboarding_feedback.summary(),
+        )
+        return HTMLResponse(
+            page,
+            headers={
+                "Content-Security-Policy": raid_noel_csp(nonce),
+                "Cache-Control": "no-store",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "strict-origin-when-cross-origin",
+                "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+            },
+        )
+
+    @app.get("/v1/hivemind/raid/status")
+    def get_raid_noel_status() -> JSONResponse:
+        """Public live Winter GPU Raid & Holiday Guild status, symbolic guilds, and feedback summary."""
+        payload = build_raid_noel_status(
+            live_telemetry=build_live_telemetry_snapshot(),
+            feedback_summary=onboarding_feedback.summary(),
+        )
+        return JSONResponse(payload, headers={"Cache-Control": "no-store"})
 
     @app.post("/v1/hivemind/register/google")
     def register_google(request: Request, payload: GoogleRegisterRequest) -> JSONResponse:
@@ -5721,7 +5771,6 @@ def create_router_app(
             )
         return JSONResponse(res, headers={"Cache-Control": "no-store"})
 
-    @app.api_route("/raid", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/crowdgpt-raid", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def router_v34_pioneer_raid_hub(request: Request, lang: str | None = None) -> HTMLResponse:
         """Serve the strict-CSP bilingual (EN/FR) HiveMind v3.4 Pioneer Thank-You & Nov 14-15 CrowdGPT Raid Hub."""

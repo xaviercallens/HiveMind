@@ -19,59 +19,75 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import ipaddress
 import html
+import ipaddress
 import json
 import logging
 import math
+import os
 import re
 import secrets
 import socket
-import os
 import threading
 import time
 import uuid
-from pathlib import Path
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
-from starlette.concurrency import run_in_threadpool
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from hivemind.core.expert_registry import (
+    LIVE as EXPERT_LIVE,
+)
+from hivemind.core.expert_registry import (
+    SHADOW as EXPERT_SHADOW,
+)
+from hivemind.core.expert_registry import (
+    AdapterBaseMismatchError,
+    ExpertRecord,
+    ExpertRegistry,
+    GateNotPassedError,
+    HierarchicalExpertRouter,
+    IllegalTransitionError,
+)
+from hivemind.router import forwarded_client as _forwarded_client
 from hivemind.router.accounts import (
+    LEGACY_KNOWN_USERS,
     Account,
     DuplicateOpenTrainerRound,
     DuplicateRequest,
     HandleTaken,
     InsufficientBalance,
     InvalidCredentials,
-    LEGACY_KNOWN_USERS,
     ProducerRecord,
     ReservedHandle,
     RouterStore,
     TooManyEndpoints,
-    TooManyOpenTrainerNodes,
     TooManyHolds,
+    TooManyOpenTrainerNodes,
     UnknownAccount,
     fit_loaded_models,
 )
-from hivemind.router import forwarded_client as _forwarded_client
 from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, catalog_payload, normalize_model_alias
 from hivemind.router.google_auth import GoogleAuthError, GoogleIdTokenVerifier
 from hivemind.router.join_page import join_content_security_policy, pick_language, render_join_page
-from hivemind.router.oidc_auth import OidcAuthError, OidcIdTokenVerifier
-from hivemind.router.portal_page import portal_content_security_policy, render_portal_page
-from hivemind.router.quick_join_page import OnboardingFeedbackCollector, quick_join_csp, render_quick_join_page
-from hivemind.router.signup_page import content_security_policy, render_signup_page
-from hivemind.router.usage_capture import classify_prompt_intent_and_language, detect_client_sdk
 from hivemind.router.market import (
     MECHANISM_NO_TRADE,
     ConsumerBid,
@@ -81,16 +97,15 @@ from hivemind.router.market import (
     certify,
     clear_market,
 )
-from hivemind.core.expert_registry import (
-    LIVE as EXPERT_LIVE,
-    SHADOW as EXPERT_SHADOW,
-    AdapterBaseMismatchError,
-    ExpertRecord,
-    ExpertRegistry,
-    GateNotPassedError,
-    HierarchicalExpertRouter,
-    IllegalTransitionError,
+from hivemind.router.oidc_auth import OidcAuthError, OidcIdTokenVerifier
+from hivemind.router.portal_page import portal_content_security_policy, render_portal_page
+from hivemind.router.quick_join_page import (
+    OnboardingFeedbackCollector,
+    quick_join_csp,
+    render_quick_join_page,
 )
+from hivemind.router.signup_page import content_security_policy, render_signup_page
+from hivemind.router.usage_capture import classify_prompt_intent_and_language, detect_client_sdk
 from hivemind.security._exceptions import SwarmSecurityViolationError
 
 LOGGER = logging.getLogger("hivemind.router.gateway")
@@ -98,6 +113,21 @@ LOGGER = logging.getLogger("hivemind.router.gateway")
 MODEL_PREFIX = "hivemind/"
 AUTO_MODEL = "auto"
 PRODUCER_TTL_S = 120.0
+_ALLOWED_ONBOARDING_SCRIPTS: frozenset[str] = frozenset(
+    {
+        "hivemind_boinc_idle_worker.py",
+        "hivemind_connect.py",
+        "hivemind_doctor.py",
+        "hivemind_quickstart.py",
+        "hivemind_producer_agent.py",
+        "hivemind_producer_shield.py",
+        "hivemind_producer_autostart.py",
+        "hivemind_volunteer_config.py",
+        "hivemind_volunteer_preflight.py",
+        "hivemind_opentrainer_agent.py",
+        "join_hivemind.ps1",
+    }
+)
 ENDPOINT_COOLDOWN_S = 10.0  # after a failed request an endpoint is tried last for this long (MVP criterion A1: failover without paying a failed attempt first)
 PRODUCER_TIMEOUT_S = 120.0
 DEFAULT_COLD_START_WAIT_BUDGET_S = 20.0  # forward to a known-unloaded model only when it is expected to load within this
@@ -1933,13 +1963,14 @@ def create_router_app(
     # ------------------------------------------------------------------ endpoints
     def build_live_telemetry_snapshot() -> dict[str, Any]:
         """Build a unified real-life GCP production telemetry snapshot across all router stores and coordinators."""
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         from hivemind.router.opentrainer import build_opentrainer_status_payload
         from hivemind.router.t4_visibility import build_t4_visibility_payload
 
         now = clock()
         _refresh_reconnected_fleet_if_needed(now)
-        iso_now = datetime.fromtimestamp(now, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        iso_now = datetime.fromtimestamp(now, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         accounts_summary = store.public_accounts_summary(now_utc=now, window_s=86_400.0)
         models_raw = store.live_models(now, PRODUCER_TTL_S)
         public_models = [_public_model(AUTO_MODEL), *(_public_model(m) for m in models_raw)]
@@ -2144,7 +2175,10 @@ def create_router_app(
     @app.api_route("/comparatif", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def benchmarks_page(request: Request) -> HTMLResponse:
         """Multilingual (FR/EN/ES/DE/ZH) End-to-End Bee Benchmark, Frontier LLM Comparison & Swarm Capacity Infographic page."""
-        from hivemind.router.benchmarks_page import SUPPORTED_BENCHMARK_LANGS, render_benchmarks_page
+        from hivemind.router.benchmarks_page import (
+            SUPPORTED_BENCHMARK_LANGS,
+            render_benchmarks_page,
+        )
 
         raw_lang = (request.query_params.get("lang") or "").strip().lower()[:2]
         if raw_lang in SUPPORTED_BENCHMARK_LANGS:
@@ -2183,6 +2217,7 @@ def create_router_app(
     def benchmarks_infographic_svg() -> Any:
         """High-resolution SVG infographic of HiveMind swarm capacity, MoE gains, and LLM Pareto comparison."""
         from fastapi.responses import Response as _FastAPIResponse
+
         from hivemind.router.benchmarks_page import render_hivemind_capacity_infographic_svg
 
         return _FastAPIResponse(
@@ -2269,7 +2304,9 @@ def create_router_app(
     @app.get("/v1/hivemind/international-launch-readiness")
     def international_launch_readiness() -> dict[str, Any]:
         """Public mathematical, social, and economic readiness model for the International English Launch (HM-S19-INTL)."""
-        from hivemind.economy.international_launch_model import evaluate_international_launch_readiness
+        from hivemind.economy.international_launch_model import (
+            evaluate_international_launch_readiness,
+        )
 
         payload = evaluate_international_launch_readiness()
         payload["live_store_scale_status"] = store.producer_fleet_scale_status(clock(), PRODUCER_TTL_S, target_producers=100)
@@ -2278,7 +2315,9 @@ def create_router_app(
     @app.get("/v1/hivemind/producers/scale-100-status")
     def producers_scale_100_status() -> dict[str, Any]:
         """Live 100-Producer International Launch scaling gate, regional shards, hardware tiers, and AMCP mesh status."""
-        from hivemind.economy.international_launch_model import build_100_producer_international_fleet_plan
+        from hivemind.economy.international_launch_model import (
+            build_100_producer_international_fleet_plan,
+        )
         from hivemind.swarm.amcp_eda_traffic_sustainer import plan_100_producer_mesh_scaling
 
         live_status = store.producer_fleet_scale_status(clock(), PRODUCER_TTL_S, target_producers=100)
@@ -2298,7 +2337,9 @@ def create_router_app(
     @app.post("/v1/hivemind/producers/scale-100-simulate")
     async def producers_scale_100_simulate(request: Request) -> dict[str, Any]:
         """Simulate the 100-producer geo-sharded topology and P2C residency-aware dispatcher under custom traffic."""
-        from hivemind.economy.international_launch_model import build_100_producer_international_fleet_plan
+        from hivemind.economy.international_launch_model import (
+            build_100_producer_international_fleet_plan,
+        )
         from hivemind.swarm.amcp_eda_traffic_sustainer import (
             plan_100_producer_mesh_scaling,
             select_100_node_optimal_producer,
@@ -2654,17 +2695,9 @@ def create_router_app(
             )
         return JSONResponse(body, headers=_auth_cors_headers)
 
-    router_sso_states: dict[str, dict[str, Any]] = {}
     router_guests: dict[str, dict[str, Any]] = {}
     router_linked_providers: dict[str, list[str]] = {}
     supported_sso_providers = {"google", "reddit", "steam", "github", "epic", "boinc", "webauthn", "web3"}
-    core_mvp_sso_providers = {"google", "reddit", "steam", "github"}
-    sso_authorize_urls = {
-        "google": "https://accounts.google.com/o/oauth2/v2/auth",
-        "reddit": "https://www.reddit.com/api/v1/authorize",
-        "steam": "https://steamcommunity.com/openid/login",
-        "github": "https://github.com/login/oauth/authorize",
-    }
 
     @app.get("/api/v1/auth/session")
     def auth_session_api(request: Request) -> JSONResponse:
@@ -2787,7 +2820,7 @@ def create_router_app(
             "target_profile": target_profile,
             "compute_points": 0,
             "token": guest_token,
-            "node_id": "0x" + hashlib.sha256(f"guest:{guest_handle}".encode("utf-8")).hexdigest()[:8].upper(),
+            "node_id": "0x" + hashlib.sha256(f"guest:{guest_handle}".encode()).hexdigest()[:8].upper(),
             "registered_at": time.time(),
             "login_count": 1,
             "is_new_user": True,
@@ -2846,7 +2879,7 @@ def create_router_app(
                 "token": new_key,
                 "api_key": new_key,
                 **grant_info,
-                "node_id": "0x" + hashlib.sha256(f"upgraded:{resolved_handle}".encode("utf-8")).hexdigest()[:8].upper(),
+                "node_id": "0x" + hashlib.sha256(f"upgraded:{resolved_handle}".encode()).hexdigest()[:8].upper(),
                 "login_count": 1,
                 "is_new_user": True,
                 "is_guest": False,
@@ -2919,7 +2952,7 @@ def create_router_app(
     _reset_enabled = reset_email_enabled or reset_email_configured
     reset_ip_limiter = SlidingWindowLimiter(5, 3600.0)
     reset_email_limiter = SlidingWindowLimiter(3, 3600.0)
-    _RESET_ACCEPTED = {
+    _reset_accepted = {
         "status": "RESET_REQUESTED",
         "message": "If an account uses this e-mail address, a reset link is on its way. It is valid for 30 minutes.",
     }
@@ -2954,7 +2987,7 @@ def create_router_app(
             if account_id is not None:
                 token = await run_in_threadpool(store.create_password_reset, account_id, now)
                 await run_in_threadpool(_send_reset, email, token)
-        return JSONResponse(_RESET_ACCEPTED, status_code=202, headers={"Cache-Control": "no-store"})
+        return JSONResponse(_reset_accepted, status_code=202, headers={"Cache-Control": "no-store"})
 
     @app.post("/api/v1/auth/password-reset/confirm")
     async def auth_password_reset_confirm(request: Request) -> JSONResponse:
@@ -4710,8 +4743,6 @@ def create_router_app(
             raise RouterError(400, "window_s must be a finite number of seconds, zero or more.", "invalid_request_error", "invalid_request")
         return {"window_s": window_s, **store.user_counts(clock() - window_s)}
 
-    import hashlib
-
     seen_boinc_receipts: set[str] = set()
 
     def _resolve_existing_session_key(request: Request, body: Mapping[str, Any], account_id: str) -> str:
@@ -4782,7 +4813,7 @@ def create_router_app(
         except (SwarmSecurityViolationError, ReservedHandle):
             raise RouterError(400, "Invalid handle format.", "invalid_request_error", "invalid_handle") from None
 
-        ticket_hash = hashlib.sha256(f"{steam_id64}:3133700:{account_id}".encode("utf-8")).hexdigest()[:16].upper()
+        ticket_hash = hashlib.sha256(f"{steam_id64}:3133700:{account_id}".encode()).hexdigest()[:16].upper()
         return JSONResponse(
             {
                 "object": "hivemind.steam_session",
@@ -4822,7 +4853,7 @@ def create_router_app(
                 "n_points_folded": 16384,
                 "kernel_exec_ms": 0.28,
                 "recovered_transit_depth_ppm": 2789.0,
-                "result_sha256": hashlib.sha256(f"{handle}:{target_planet}:{clock()}".encode("utf-8")).hexdigest(),
+                "result_sha256": hashlib.sha256(f"{handle}:{target_planet}:{clock()}".encode()).hexdigest(),
             }
             try:
                 import importlib.util
@@ -4975,7 +5006,7 @@ def create_router_app(
         except (SwarmSecurityViolationError, ReservedHandle):
             raise RouterError(400, "Invalid handle format.", "invalid_request_error", "invalid_handle") from None
 
-        ticket_hash = hashlib.sha256(f"webgpu:{account_id}:{gpu_adapter}".encode("utf-8")).hexdigest()[:16].upper()
+        ticket_hash = hashlib.sha256(f"webgpu:{account_id}:{gpu_adapter}".encode()).hexdigest()[:16].upper()
         return JSONResponse(
             {
                 "object": "hivemind.webgpu_session",
@@ -5055,7 +5086,10 @@ def create_router_app(
     @app.get("/v1/hivemind/moe/quorum-status")
     def moe_quorum_status() -> dict[str, Any]:
         """Return live producer-quorum MoE activation status and unlocked Wave 2 Scientific MoE tiers."""
-        from hivemind.router.catalog import CPU_HYBRID_SOLVER_CATALOG, resolve_producer_quorum_moe_state
+        from hivemind.router.catalog import (
+            CPU_HYBRID_SOLVER_CATALOG,
+            resolve_producer_quorum_moe_state,
+        )
 
         now = clock()
         live_models = store.live_models(now, PRODUCER_TTL_S)
@@ -5130,7 +5164,9 @@ def create_router_app(
             param = _finite_float(body.get("param"), 0.05, -100.0, 100.0, "param")
 
             def _run_pde() -> dict[str, Any]:
-                from hivemind.swarm.rusty_sundials_scientific_bee import solve_wave2_method_of_lines_pde
+                from hivemind.swarm.rusty_sundials_scientific_bee import (
+                    solve_wave2_method_of_lines_pde,
+                )
 
                 return solve_wave2_method_of_lines_pde(
                     str(pde_family)[:64],
@@ -5162,6 +5198,7 @@ def create_router_app(
 
         def _run_sweep() -> dict[str, Any]:
             import sys as _sys
+
             from hivemind.swarm.rusty_sundials_scientific_bee import (
                 run_wave2_parameter_sweep_quorum,
                 verify_wave2_quorum_replicas,
@@ -5175,7 +5212,9 @@ def create_router_app(
             )
             if "hivemind.boinc.real_client.boinc_server_scripts" in _sys.modules:
                 try:
-                    from hivemind.boinc.real_client.boinc_server_scripts import validate_solver_sweep
+                    from hivemind.boinc.real_client.boinc_server_scripts import (
+                        validate_solver_sweep,
+                    )
 
                     verdict = validate_solver_sweep(
                         sweep_bundle["spec"],
@@ -5370,7 +5409,11 @@ def create_router_app(
     @app.api_route("/v3.1", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/v3.1/auth", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def router_v3_1_stitch_portal(request: Request) -> HTMLResponse:
-        from hivemind.boinc.hivemind_at_home_dashboard import POC_STATUS_HEADER, build_hivemind_at_home_state, portal_csp
+        from hivemind.boinc.hivemind_at_home_dashboard import (
+            POC_STATUS_HEADER,
+            build_hivemind_at_home_state,
+            portal_csp,
+        )
         from hivemind.boinc.stitch_portal import render_stitch_enhanced_portal
 
         state = build_hivemind_at_home_state()
@@ -5440,7 +5483,10 @@ def create_router_app(
 
     @app.post("/api/v1/training/calendar/propose")
     async def router_v3_training_propose(request: Request) -> dict[str, Any]:
-        from hivemind.boinc.hivemind_at_home_dashboard import TrainingSessionProposeRequest, _v3_mvp_mgr
+        from hivemind.boinc.hivemind_at_home_dashboard import (
+            TrainingSessionProposeRequest,
+            _v3_mvp_mgr,
+        )
 
         account = v3_account_write(request)
         req_obj = (await v3_body(request, TrainingSessionProposeRequest)).model_copy(update={"proposer_handle": "@" + account.handle.lstrip("@")})
@@ -5462,7 +5508,10 @@ def create_router_app(
 
     @app.post("/api/v1/training/t4-daily-schedule")
     async def router_v3_t4_schedule_post(request: Request) -> dict[str, Any]:
-        from hivemind.boinc.hivemind_at_home_dashboard import PersonalScheduleUpdateRequest, _v3_mvp_mgr
+        from hivemind.boinc.hivemind_at_home_dashboard import (
+            PersonalScheduleUpdateRequest,
+            _v3_mvp_mgr,
+        )
 
         require_admin(request)
         return _v3_mvp_mgr.update_personal_schedule(await v3_body(request, PersonalScheduleUpdateRequest))
@@ -5613,19 +5662,6 @@ def create_router_app(
         src_path = Path(__file__).with_name("hivemind_producer_shield.py")
         return PlainTextResponse(src_path.read_text(encoding="utf-8"), media_type="text/x-python; charset=utf-8")
 
-    _ALLOWED_ONBOARDING_SCRIPTS = {
-        "hivemind_boinc_idle_worker.py",
-        "hivemind_connect.py",
-        "hivemind_quickstart.py",
-        "hivemind_producer_agent.py",
-        "hivemind_producer_shield.py",
-        "hivemind_producer_autostart.py",
-        "hivemind_volunteer_config.py",
-        "hivemind_volunteer_preflight.py",
-        "hivemind_opentrainer_agent.py",
-        "join_hivemind.ps1",
-    }
-
     def _serve_onboarding_script(script_name: str) -> PlainTextResponse:
         from pathlib import Path
 
@@ -5690,6 +5726,7 @@ def create_router_app(
     def router_v34_pioneer_raid_hub(request: Request, lang: str | None = None) -> HTMLResponse:
         """Serve the strict-CSP bilingual (EN/FR) HiveMind v3.4 Pioneer Thank-You & Nov 14-15 CrowdGPT Raid Hub."""
         import secrets as _secrets
+
         from hivemind.router.community_outreach_v34 import (
             raid_hub_content_security_policy,
             render_v34_raid_hub_page,

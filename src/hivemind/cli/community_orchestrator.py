@@ -1,10 +1,9 @@
 # Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
-"""Autonomous 1-Hour PR Review, Merge, Roadmap, Experimentation & GitHub Discussions Orchestrator.
+"""Hourly PR audit, roadmap, experimentation and GitHub Discussions orchestrator.
 
 Scans open Pull Requests, Roadmap progress, Experimental receipts, and GitHub Discussions every 1 hour (or on-demand):
-1. Audits open Pull Requests with the 5-Layer `PRSecurityScanner` (`PAY-01..03`,
-   `CB-01..04`, `SEC-01..05`), checks mergeability and test readiness, and
-   merges confirmed, verified, no-harm PRs.
+1. Audits actual PR patches with the 5-Layer `PRSecurityScanner` (`PAY-01..03`,
+   `CB-01..04`, `SEC-01..05`). The owner gatekeeper handles merge authorization.
 2. Scans GitHub Discussions (`Announcements`, `General`, `Show and tell`, `Q&A`,
    `Ideas`) to answer questions from human developers and AI agents, validate
    shared `community_gpu_benchmark_receipt.json` hashes, and coordinate Season 7/8/9
@@ -473,7 +472,7 @@ def evaluate_pull_request_for_merge(
     pr_meta: dict[str, Any],
     scanner: PRSecurityScanner | None = None,
 ) -> dict[str, Any]:
-    """Audit a Pull Request with the 5-Layer PRSecurityScanner and determine merge readiness."""
+    """Run preliminary PR checks for the report. Merge authorization belongs to the gatekeeper."""
     sec_scanner = scanner or PRSecurityScanner()
     pr_number = int(pr_meta.get("number", 0))
     title = str(pr_meta.get("title", "")).strip()
@@ -483,6 +482,7 @@ def evaluate_pull_request_for_merge(
     is_draft = bool(pr_meta.get("isDraft", False))
     mergeable = str(pr_meta.get("mergeable", "UNKNOWN")).upper()
     changed_files = list(pr_meta.get("files", []))
+    diff_retrieved = bool(pr_meta.get("diff_retrieved", True))
 
     sec_report = sec_scanner.audit_pull_request(
         pr_number=str(pr_number),
@@ -495,9 +495,10 @@ def evaluate_pull_request_for_merge(
     )
 
     protected_files = touches_scientific_lead_protected_files(changed_files)
-    can_merge = bool(
+    preliminary_checks_passed = bool(
         not is_draft
         and mergeable == "MERGEABLE"
+        and diff_retrieved
         and sec_report.passed
         and not sec_report.blocked_merge
         and sec_report.risk_score == 0
@@ -506,8 +507,10 @@ def evaluate_pull_request_for_merge(
     )
     if protected_files:
         verdict = "HOLD_FOR_SCIENTIFIC_LEAD_REVIEW"
-    elif can_merge:
-        verdict = "APPROVE_AND_MERGE"
+    elif not diff_retrieved:
+        verdict = "HOLD_FOR_INCOMPLETE_DIFF"
+    elif preliminary_checks_passed:
+        verdict = "REFER_TO_GATEKEEPER"
     else:
         verdict = "HOLD_FOR_REVISION"
     wiki_refs = recommend_wiki_references(f"{title}\n{body}", max_pages=3)
@@ -519,6 +522,7 @@ def evaluate_pull_request_for_merge(
         f"- **5-Layer `PRSecurityScanner`:** `passed={sec_report.passed}` | "
         f"`risk_score={sec_report.risk_score}` | `functional_lines={sec_report.functional_lines_added}` | "
         f"`findings={len(sec_report.findings)}`\n"
+        f"- **Complete PR diff retrieved:** `{diff_retrieved}`. Merge authorization is handled by the gatekeeper.\n"
         f"- **Draft / Mergeable State:** `isDraft={is_draft}` | `mergeable={mergeable}`\n"
         f"- **📚 Project HiveMind Wiki References:**\n{wiki_links_md}\n"
         f"- **Non-Monetary Charter:** `HiveMind Reflexion Points (HMT)` (Symbolic compute-reciprocity points `PTS` / `$HIVE` "
@@ -532,9 +536,11 @@ def evaluate_pull_request_for_merge(
         "title": title,
         "author": author,
         "verdict": verdict,
-        "can_merge": can_merge,
+        "can_merge": False,
+        "preliminary_checks_passed": preliminary_checks_passed,
+        "diff_retrieved": diff_retrieved,
         "scientific_lead_protected_files": protected_files,
-        "security_passed": sec_report.passed,
+        "security_passed": diff_retrieved and sec_report.passed,
         "risk_score": sec_report.risk_score,
         "functional_lines_added": sec_report.functional_lines_added,
         "findings_count": len(sec_report.findings),
@@ -721,35 +727,44 @@ def compose_discussion_reply(discussion: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _patch_is_complete(file: dict[str, Any]) -> bool:
+    lines = (file.get("patch") or "").split("\n")
+    return (
+        sum(line.startswith("+") for line in lines) == file["additions"]
+        and sum(line.startswith("-") for line in lines) == file["deletions"]
+    )
+
+
 def _fetch_open_prs_via_gh(repo: str) -> list[dict[str, Any]]:
-    """Fetch open PRs and their changed files via GitHub CLI."""
+    """Fetch open PRs and GitHub's actual per-file patches via the GitHub CLI."""
     cmd = [
         "gh", "pr", "list",
         "--repo", repo,
         "--state", "open",
-        "--json", "number,title,body,author,isDraft,mergeable,files",
+        "--json", "number,title,body,author,isDraft,mergeable,changedFiles",
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=False)
     if res.returncode != 0 or not res.stdout.strip():
         return []
     raw_prs = json.loads(res.stdout)
     normalized: list[dict[str, Any]] = []
     for pr in raw_prs:
-        files_out = []
-        for f in pr.get("files") or []:
-            path_str = str(f.get("path", ""))
-            additions = int(f.get("additions", 0))
-            synthetic_patch = "\n".join(
-                f"+def line_{idx}(): return {idx}" for idx in range(max(1, min(additions, 15)))
-            )
-            files_out.append(
-                {
-                    "filename": path_str,
-                    "additions": additions,
-                    "deletions": int(f.get("deletions", 0)),
-                    "patch": synthetic_patch,
-                }
-            )
+        files_res = subprocess.run(
+            ["gh", "api", "--paginate", "--slurp", f"repos/{repo}/pulls/{pr['number']}/files?per_page=100"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        pages = json.loads(files_res.stdout) if files_res.returncode == 0 and files_res.stdout.strip() else []
+        files_out = [file for page in pages for file in page]
+        # GitHub caps the file list and can omit patch bodies for individual files.
+        diff_retrieved = (
+            bool(pages)
+            and len(files_out) == pr.get("changedFiles")
+            and len({file["filename"] for file in files_out}) == len(files_out)
+            and all(_patch_is_complete(file) for file in files_out)
+        )
         normalized.append(
             {
                 "number": pr["number"],
@@ -759,6 +774,7 @@ def _fetch_open_prs_via_gh(repo: str) -> list[dict[str, Any]]:
                 "isDraft": bool(pr.get("isDraft", False)),
                 "mergeable": str(pr.get("mergeable", "UNKNOWN")),
                 "files": files_out,
+                "diff_retrieved": diff_retrieved,
             }
         )
     return normalized
@@ -923,10 +939,10 @@ def run_hourly_quality_and_experiment_audit(repo_root: Path | None = None) -> di
 def run_orchestrator_cycle(
     repo: str = "xaviercallens/HiveMind",
     execute_live: bool = False,
-    auto_merge: bool = True,
+    auto_merge: bool = False,
     output_path: Path | None = DEFAULT_ORCHESTRATOR_REPORT,
 ) -> dict[str, Any]:
-    """Run one 1-hour autonomous PR review, merge, roadmap, experimentation, and GitHub Discussions cycle."""
+    """Run the hourly PR audit and community cycle. The legacy auto_merge argument has no effect."""
     if "/" not in repo:
         raise ValueError("repo must be in 'owner/name' format")
     owner, name = repo.split("/", 1)
@@ -935,29 +951,10 @@ def run_orchestrator_cycle(
     open_prs = _fetch_open_prs_via_gh(repo)
     scanner = PRSecurityScanner()
     pr_decisions: list[dict[str, Any]] = []
-    merged_pr_numbers: list[int] = []
 
     for pr in open_prs:
         decision = evaluate_pull_request_for_merge(pr, scanner=scanner)
-        if execute_live and decision["can_merge"] and auto_merge:
-            pr_num = decision["pr_number"]
-            subprocess.run(
-                ["gh", "pr", "comment", str(pr_num), "--repo", repo, "--body", decision["review_markdown"]],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            merge_res = subprocess.run(
-                ["gh", "pr", "merge", str(pr_num), "--repo", repo, "--admin", "--merge"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            decision["merged_live"] = merge_res.returncode == 0
-            if decision["merged_live"]:
-                merged_pr_numbers.append(pr_num)
-        else:
-            decision["merged_live"] = False
+        decision["merged_live"] = False
         pr_decisions.append(decision)
 
     discussions = _fetch_discussions_via_gh(owner, name)
@@ -995,7 +992,7 @@ def run_orchestrator_cycle(
     quality_and_experiment_audit = run_hourly_quality_and_experiment_audit()
 
     report: dict[str, Any] = {
-        "orchestrator": "Project HiveMind 1-Hour Autonomous PR, Roadmap, Experimentation & Community Discussion Orchestrator",
+        "orchestrator": "Project HiveMind 1-Hour PR Audit, Roadmap, Experimentation & Community Discussion Orchestrator",
         "cadence_cron": "0 * * * *",
         "repository": repo,
         "execute_live": execute_live,
@@ -1003,7 +1000,7 @@ def run_orchestrator_cycle(
         "elapsed_ms": round((time.perf_counter() - t0) * 1000.0, 3),
         "non_monetary_charter": NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE,
         "open_prs_scanned": len(open_prs),
-        "prs_merged_live": merged_pr_numbers,
+        "prs_merged_live": [],
         "pr_decisions": pr_decisions,
         "discussions_scanned": len(discussions),
         "discussion_replies_posted": replies_posted,
@@ -1022,20 +1019,20 @@ def run_orchestrator_cycle(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entrypoint for the 3-hour Autonomous PR & Discussion Orchestrator."""
+    """CLI entrypoint for the hourly PR and discussion orchestrator."""
     parser = argparse.ArgumentParser(
-        description="Run the Project HiveMind 3-Hour Autonomous PR Review, Merge & Discussion Orchestrator."
+        description="Run the Project HiveMind hourly PR audit and discussion orchestrator."
     )
     parser.add_argument("--repo", default="xaviercallens/HiveMind", help="Target GitHub repository")
     parser.add_argument(
         "--execute-live",
         action="store_true",
-        help="Post live GitHub Discussion replies and merge verified no-harm PRs",
+        help="Post live GitHub Discussion replies. PR merges are handled by the gatekeeper.",
     )
     parser.add_argument(
         "--no-auto-merge",
         action="store_true",
-        help="Disable automatic merging even when --execute-live is set",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--output",
@@ -1048,7 +1045,6 @@ def main(argv: list[str] | None = None) -> int:
     report = run_orchestrator_cycle(
         repo=args.repo,
         execute_live=args.execute_live,
-        auto_merge=not args.no_auto_merge,
         output_path=args.output,
     )
     print(json.dumps(report, indent=2))

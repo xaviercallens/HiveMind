@@ -5616,6 +5616,7 @@ def create_router_app(
     _ALLOWED_ONBOARDING_SCRIPTS = {
         "hivemind_boinc_idle_worker.py",
         "hivemind_connect.py",
+        "hivemind_quickstart.py",
         "hivemind_producer_agent.py",
         "hivemind_producer_shield.py",
         "hivemind_producer_autostart.py",

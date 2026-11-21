@@ -72,7 +72,7 @@ else
 fi
 
 if [ "$MODE" = "connect" ]; then
-    exec "$PYTHON_BIN" "$ROOT_DIR/scripts/hivemind_connect.py" \
+    exec "$PYTHON_BIN" "$ROOT_DIR/scripts/hivemind_quickstart.py" \
         --gateway "$GATEWAY_URL" \
         --write-continue-config \
         "${EXTRA_ARGS[@]}"
@@ -81,7 +81,7 @@ fi
 if [ "$MODE" = "gamer-whisper" ]; then
     WHISPER_RESERVE="${HIVEMIND_RESERVE_MIB:-2048}"
     WHISPER_HOT="${HIVEMIND_HOT_C:-70}"
-    exec "$PYTHON_BIN" "$ROOT_DIR/scripts/hivemind_connect.py" \
+    exec "$PYTHON_BIN" "$ROOT_DIR/scripts/hivemind_quickstart.py" \
         --gateway "$GATEWAY_URL" \
         --gamer-whisper \
         --reserve-mib "$WHISPER_RESERVE" \
@@ -132,7 +132,7 @@ fi
 
 if [ "$MODE" = "train" ]; then
     if [ -z "${HIVEMIND_API_KEY:-}" ]; then
-        "$PYTHON_BIN" "$ROOT_DIR/scripts/hivemind_connect.py" --gateway "$GATEWAY_URL" --json >/dev/null
+        "$PYTHON_BIN" "$ROOT_DIR/scripts/hivemind_quickstart.py" --gateway "$GATEWAY_URL" --json >/dev/null
         SAVED_KEY="$("$PYTHON_BIN" -c 'import json, os; p=os.path.expanduser("~/.hivemind/credentials.json"); d=json.load(open(p)); print(d.get("api_key",""))' 2>/dev/null || true)"
         export HIVEMIND_API_KEY="$SAVED_KEY"
     fi

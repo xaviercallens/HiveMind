@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import hivemind_connect as hc  # noqa: E402
+import hivemind_quickstart as hc  # noqa: E402
 from hivemind.router.accounts import RouterStore  # noqa: E402
 from hivemind.router.gateway import create_router_app  # noqa: E402
 
@@ -259,8 +259,8 @@ def test_gateway_noel_quick_pages_and_feedback_endpoints() -> None:
     )
     assert bad_extra.status_code == 400
 
-    # Zero-clone script download endpoints (connect.py + join_hivemind.ps1) and 404 guard
-    dl_py = client.get("/scripts/hivemind_connect.py")
+    # Zero-clone script download endpoints (quickstart.py + join_hivemind.ps1) and 404 guard
+    dl_py = client.get("/scripts/hivemind_quickstart.py")
     assert dl_py.status_code == 200
     assert "def ensure_connected_account" in dl_py.text
 

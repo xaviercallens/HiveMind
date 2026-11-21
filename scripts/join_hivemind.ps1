@@ -31,7 +31,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ConnectPy = Join-Path $ScriptDir "hivemind_connect.py"
+$ConnectPy = Join-Path $ScriptDir "hivemind_quickstart.py"
 
 if (-not (Test-Path $ConnectPy)) {
     Write-Error "Missing $ConnectPy alongside join_hivemind.ps1."

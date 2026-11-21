@@ -196,7 +196,7 @@ def render_quick_join_page(
         <h2>{escape(dev_title)}{escape(reg_note)}</h2>
         <p>{escape(dev_desc)}</p>
         <p><strong>{escape(dev_cmd_label)}</strong></p>
-        <pre>python3 scripts/hivemind_connect.py --gateway {safe_gw} --write-continue-config</pre>
+        <pre>python3 scripts/hivemind_quickstart.py --gateway {safe_gw} --write-continue-config</pre>
         <a class="btn" href="/signup">{escape(dev_signup_btn)}</a>
       </section>
       <section class="card">
@@ -207,7 +207,7 @@ def render_quick_join_page(
         <p><strong>{escape(nix_label)}</strong></p>
         <pre>./scripts/join_hivemind_campaign.sh --gamer-whisper</pre>
         <p><strong>{escape(uninstall_label)}</strong></p>
-        <pre>python3 scripts/hivemind_connect.py --uninstall</pre>
+        <pre>python3 scripts/hivemind_quickstart.py --uninstall</pre>
       </section>
     </div>
     <footer class="foot">

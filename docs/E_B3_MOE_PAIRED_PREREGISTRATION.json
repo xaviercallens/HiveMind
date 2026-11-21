@@ -1,0 +1,80 @@
+{
+  "schema": "hivemind.preregistration.v1",
+  "experiment_id": "E-B3-MOE-PAIRED",
+  "roadmap_item": "IP-300",
+  "registered_utc": "2026-11-18",
+  "frozen": true,
+  "question": "Does HiveMind's MoE LoRA add-on lower next-token loss of the frozen base Vxtzq/Crowd-v1 on real rows that neither training nor the training ratchet's evaluation ever read?",
+  "arms": {
+    "base": {
+      "model": "Vxtzq/Crowd-v1 (dense, frozen)",
+      "hf_revision": "b63212a843d662dadbec35f8544b6e0dafa6e72b",
+      "weights_file": "/mnt/disks/disk-socrateai-local-1/crowd_v1_cache/model_b63212a843d6.safetensors",
+      "weights_sha256": "1f8214ca6856280b48817402f9f8f0a3affd938d39718ade8f528f0102c2209f",
+      "tokenizer_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+    },
+    "moe": {
+      "description": "the same base, upcycled in place, with the checkpoint's buckets loaded",
+      "checkpoint": "/mnt/disks/disk-socrateai-local-1/hivemind_work/hf_moe_best/crowd_v1_moe_lora_experts_best.safetensors",
+      "checkpoint_sha256": "0778b9ee4279ee6a70f88e5fdbd02237f620499b1daee5ef8b927d2c3af781f8",
+      "lineage": "run_20261118T101755Z_day_full round 24 (hf_moe_best/round_receipt.json)",
+      "split": {
+        "split_mode": "lora_domain_experts",
+        "num_experts": 8,
+        "top_k": 2,
+        "routing_mode": "sigma_topk",
+        "lora_rank": 8,
+        "resident_expert_indices": [0, 1, 2, 3, 4, 5, 6, 7],
+        "num_layers_upcycled": 24,
+        "num_router_fragments": 4
+      },
+      "loader": "scripts/gcp_t4_crowd_diloco_worker.py load_init_buckets + hivemind.swarm.crowdgpt_moe_opendiloco.load_moe_trainable_buckets"
+    },
+    "newer_checkpoints": "not used, even if they appear during the run"
+  },
+  "data": {
+    "manifest": "/mnt/disks/disk-socrateai-local-1/gcpcrowd_moe/run_20261118T101755Z_day_full/real_data_manifest.json",
+    "manifest_sha256": "f4f13461f3086c09ad35f6b2b46dd4029ca382f368f4dc07c92570831484e913",
+    "lineage_manifests_identical": "runs 20261116T085412Z, 20261116T104052Z, 20261118T052031Z, 20261118T101755Z (the checkpoint's whole lineage) list the same heldout_rows/train_rows for every source",
+    "excluded_benchmarks": ["allenai/ai2_arc", "google-research-datasets/mbpp", "openai/openai_humaneval"],
+    "test_row_rule": "For each trained expert (manifest order) and each of its sources (manifest order), test rows start at that source's train_rows[1] (the first row after the last row training read) and are scanned in increasing order, at most 2000 rows per source. Rows are fetched by the source's manifest origin: local_hf_cache -> hivemind.swarm.crowdgpt_real_shards.LocalHFCacheFetcher (file order, same as training); datasets_server -> fetch_rows_datasets_server, 100 rows per request. A later source of the same expert is read only if the earlier ones give fewer than chunks_per_expert chunks. A source with no rows at or after train_rows[1] is reported as exhausted; an expert with no chunks is reported as skipped and never substituted.",
+    "expected_skips": {
+      "E3_formal_logic_arc": "no source (every source is a benchmark); not trained",
+      "E4_physics_stem": "maximus-21/PhysicsQA has 370 rows (datasets-server /size) and train_rows end at 370: no unseen rows"
+    },
+    "row_order_check": "Before registration: for every local_hf_cache source, rows [train_end-100, train_end) read now through LocalHFCacheFetcher equal the training run's cached rows JSON, and no cached block starts at train_end (all 4 sources matched on 2026-11-18). The script repeats this check and aborts on a mismatch.",
+    "text_and_tokens": "text = crowdgpt_real_shards.row_to_text(row); ids = Crowd-v1 tokenizer.encode(text).ids (same calls as training)"
+  },
+  "chunking": {
+    "chunk_tokens": 64,
+    "predictions_per_chunk": 63,
+    "rule": "one chunk per test row: the first 64 token ids of a row with at least 64 ids; rows with fewer ids are skipped",
+    "chunks_per_expert": 40,
+    "expected_experts": 6,
+    "expected_total_chunks": 240,
+    "min_total_chunks": 200
+  },
+  "metric": {
+    "per_chunk": "mean next-token NLL (nats) over the 63 shifted positions of the chunk, batch size 1, model.eval(), torch.no_grad()",
+    "paired_difference": "d_i = NLL_moe_i - NLL_base_i (negative = the add-on lowers loss)",
+    "compute": "CPU only (CUDA_VISIBLE_DEVICES empty, asserted in-process), fp32 trunk weights, torch.set_num_threads(4), nice 19",
+    "base_equivalence_gate": "after the base arm, the model is upcycled in place with the split above and zero-delta (fresh) buckets; its NLL on chunk 0 must match the dense NLL within 1e-3 nats, else the run aborts before the MoE arm"
+  },
+  "statistics": {
+    "primary": "paired bootstrap of mean(d): i.i.d. resampling of chunks with replacement, 10000 resamples, numpy.random.default_rng(20261118), percentile 95% CI (2.5, 97.5)",
+    "secondary_reported": [
+      "per-expert mean base NLL, mean MoE NLL, mean d and relative change",
+      "exact two-sided sign test on d (ties dropped), informational only"
+    ]
+  },
+  "decision_rule": {
+    "INSUFFICIENT_N": "fewer than 200 chunks in total: no decision",
+    "PASS": "CI upper bound < 0 (the add-on lowers held-out loss)",
+    "HARM": "CI lower bound > 0 (the add-on raises held-out loss)",
+    "NO_GAIN": "otherwise",
+    "domain_guard": "B3 (docs/MVP_TARGET.md) also needs no domain worse than +1%: guard holds when every evaluated expert has mean NLL_moe <= 1.01 * mean NLL_base",
+    "b3_effect": "This evaluation supports B3 only if verdict == PASS and the domain guard holds. Any other outcome (NO_GAIN, HARM, INSUFFICIENT_N, or PASS with a failed guard) leaves B3 failing. The verdict is reported as the rule gives it, whatever it is."
+  },
+  "scorecard": "scripts/mvp_scorecard.py check_b3 reads only artifacts/experiments/GRANITE_ADAPTER_*gate*.json; it has no hook for this receipt, so the scorecard wiring is not changed by this experiment.",
+  "receipt": "artifacts/experiments/E_B3_MOE_PAIRED_<date>.json, carrying this spec's sha256, the pre-registration commit, the script commit, the row indices used per source, the sha256 of the chunk token ids, per-chunk NLLs, start/end times and a deviations list"
+}

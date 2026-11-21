@@ -81,3 +81,39 @@ Adapted from [karpathy/autoresearch](https://github.com/karpathy/autoresearch) (
 - **Cost:** the T4 VM already runs all day for the live inference server, so the extra GCP cost is ≈ 0.
 - **Time:** about 7 × (2 h training + 20 min CPU judging) ≈ 17 h, so the T4 is busy until about Sunday 22 Nov 02:40
   Paris at the latest.
+
+## Amendment A1 (21 Nov 2026, 08:15 Paris)
+
+**What was known when this was written:** T1's judge result (J = 4.301917; base 4.286385; per expert against the base:
+E0 −0.41 %, E1 −1.43 %, E2 +2.81 %, E5 +2.67 %, E6 +0.86 %, E7 −1.27 %) and 27 of T2's 30 training rounds. No
+comparison trial (T3–T6) had started.
+
+**Three flaws found in review, and their fixes:**
+
+1. **T2 measures no noise.** The worker has a fixed seed, and T2 reproduced T1's candidate losses bit for bit (27 of
+   27 rounds). T2 is recorded as a determinism check only.
+   - **T2b (new):** the baseline recipe on **data slice 2** (start offset 30,720, the next unused tokens). The T2b − T1
+     gap estimates the slice-to-slice variability.
+   - **T7 (changed):** the final champion's recipe on **slice 2**, compared with **T2b** (the baseline on the same
+     slice) under the same keep rule. The result is CONFIRMED or NOT CONFIRMED. If no trial beats the baseline, T7 is
+     skipped.
+2. **The domain guard against the base model can't be met at this budget.** After 30 rounds even the baseline fails it
+   (E2 +2.81 %, E5 +2.67 %), so no trial could be kept.
+   - **The guard for selection is now relative to the reference run:** no scored expert's mid-row NLL may exceed the
+     champion's (for T7, T2b's) by more than 1 %.
+   - **The guard against the base model** is still reported for every trial. It remains the bar for promotion to
+     serving (B3), not for choosing a recipe.
+3. **T5 would re-read trained data.** Round 49 has already read 76,800 tokens per learner of the concatenated layout.
+   T5 now starts at offset 76,800 (concatenated champion) or 307,200 (interleaved champion, which skips at least
+   76,800 tokens of every expert).
+
+**Unchanged:** the judge, the token budget, the trial order T3–T6, and the CI rule.
+
+**Known limit:** with 30 rounds the effects may be smaller than the CI width (T1 against the base model:
++0.0155 [−0.0033, +0.0344]). If no trial is kept, the result is "no recipe beat the baseline at this budget", and
+campaign 2 is not started automatically.
+
+**After the screen (owner request of 21 Nov: "start it for this weekend autonomously"):** if T7 says CONFIRMED,
+campaign 2 starts automatically with the champion's recipe (run names `_c2_`). It runs in the 06:20–02:40 window and
+stops at **Monday 23 Nov 02:40 Paris**, enforced on a running worker. Its final state is then judged by the same
+frozen judge.

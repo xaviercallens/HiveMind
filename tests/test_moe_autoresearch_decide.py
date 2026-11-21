@@ -23,11 +23,13 @@ def test_clear_improvement_with_guard_is_kept() -> None:
     assert d["status"] == "keep" and d["ci95_vs_champion"][1] < 0 and abs(d["mean_diff_vs_champion"] + 0.05) < 1e-9
 
 
-def test_improvement_that_breaks_the_domain_guard_is_discarded() -> None:
+def test_improvement_that_makes_one_expert_worse_than_the_champion_is_discarded() -> None:
     champ = _receipt([4.0] * 240)
-    trial = _receipt([3.9] * 240, per_pct=(-5.0, +1.5))
+    trial = _receipt([4.1 if i % 6 == 0 else 3.8 for i in range(240)])  # E0 +2.5 % vs champion, mean still lower
     d = decide(trial, champ)
+    assert d["mean_diff_vs_champion"] < 0 and d["ci95_vs_champion"][1] < 0
     assert d["status"] == "discard" and d["guard_ok"] is False and d["reason"] == "guard fails"
+    assert d["per_expert_pct_vs_champion"]["E0"] == 2.5
 
 
 def test_noise_level_change_is_discarded() -> None:

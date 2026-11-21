@@ -35,15 +35,16 @@ R49 = W / "gcpcrowd_moe/run_20261116T104052Z_day_full/crowd_moe_opendiloco_round
 COMMON = ("--outer-lr 0.2 --outer-lr-decay 0.5 --outer-lr-growth 1.25 --outer-lr-min 0.02 --local-data "
           "--max-rows-per-source 5000 --train-tokens-per-expert 262144 --heldout-tokens-per-expert 8192 "
           "--eval-windows 224 --stop-after-rejections 0")
-BASE = {"ilv": 0, "seq": 64, "lr": None, "init": None}
-TRIALS = [  # (id, on_champion, delta, description) -- program.md order
+BASE = {"ilv": 0, "seq": 64, "lr": None, "init": None, "off": 0}
+SLICE2 = TOKENS_PER_LEARNER  # second data slice: the next 30,720 tokens per learner
+TRIALS = [  # (id, on_champion, delta, description) -- program.md order, Amendment A1
     ("T1", False, {}, "baseline A: concatenated layout"),
-    ("T2", False, {}, "baseline B (noise control)"),
+    ("T2b", False, {"off": SLICE2}, "noise control: baseline on data slice 2"),
     ("T3", True, {"ilv": 1024}, "H1 interleaved expert shards (1024)"),
     ("T4", True, {"seq": 128}, "H3 seq_len 128 (same tokens)"),
-    ("T5", True, {"init": str(R49)}, "H2 start from run 2 round 49"),
+    ("T5", True, {"init": str(R49)}, "H2 start from run 2 round 49 (on unseen data)"),
     ("T6", True, {"lr": 4e-4}, "H4 inner lr 4e-4"),
-    ("T7", True, {}, "confirmation: re-run the champion"),
+    ("T7", True, {}, "confirmation: champion on data slice 2 vs baseline on slice 2 (T2b)"),
 ]
 
 
@@ -107,7 +108,7 @@ def train(tid: str, cfg: dict) -> dict:
     """Train one trial to its token budget, in segments if a yield or the window cuts it. Returns the final state."""
     seq = int(cfg["seq"])
     target = TOKENS_PER_LEARNER // (INNER * seq)
-    done, offset, init, segs, fails, last_ckpt, accepted = 0, 0, cfg.get("init"), [], 0, None, 0
+    done, offset, init, segs, fails, last_ckpt, accepted = 0, int(cfg.get("off", 0)), cfg.get("init"), [], 0, None, 0
     while done < target:
         if stopped():
             raise SystemExit("STOP found")
@@ -198,8 +199,18 @@ def main() -> int:
     for tid, on_champ, delta, desc in TRIALS:
         if tid in st["done"]:
             continue
-        base = st["champion"]["config"] if (on_champ and st["champion"]) else BASE
+        base = {**BASE, **(st["champion"]["config"] if (on_champ and st["champion"]) else {})}
         cfg = {**base, **delta}
+        if "init" in delta:  # A1: r49 already read 76,800 tokens per learner of the concatenated layout: skip seen data
+            cfg["off"] = 307200 if int(base["ilv"]) else 76800
+        if tid == "T7":
+            if st["champion"]["trial"] == "T1":
+                log("T7 skipped: no trial beat the baseline, nothing to confirm")
+                st["done"]["T7"] = {"status": "skipped (champion is the baseline)"}
+                st["confirmed"] = False
+                save_state(st)
+                continue
+            cfg["off"] = int(base.get("off", 0)) + SLICE2
         log(f"{tid}: {desc}; config {cfg}")
         res = None
         for attempt in (1, 2):
@@ -228,14 +239,16 @@ def main() -> int:
             row.update(status="champion (baseline)", guard_ok=rec["domain_guard_ok"])
             st["champion"] = {"trial": "T1", "config": cfg, "receipt": str(OUT / "T1_judge.json")}
         else:
-            champ_rec = json.loads(pathlib.Path(st["champion"]["receipt"]).read_text())
-            d = decide(rec, champ_rec)
+            ref = OUT / "T2b_judge.json" if tid == "T7" else (OUT / "T1_judge.json" if tid == "T2b" else pathlib.Path(st["champion"]["receipt"]))
+            d = decide(rec, json.loads(pathlib.Path(ref).read_text()))
             row.update(mean_diff_vs_champion=round(d["mean_diff_vs_champion"], 6), ci95_lo=round(d["ci95_vs_champion"][0], 6),
                        ci95_hi=round(d["ci95_vs_champion"][1], 6), guard_ok=d["guard_ok"])
-            if tid == "T2":
-                row["status"] = "noise control (vs T1)"
+            row["per_expert_pct"] = json.dumps({"vs_base": per, "vs_ref": d["per_expert_pct_vs_champion"]})
+            if tid == "T2b":
+                row["status"] = "noise control (slice 2 vs T1)"
             elif tid == "T7":
-                row["status"] = "confirmation of " + st["champion"]["trial"]
+                st["confirmed"] = d["status"] == "keep"
+                row["status"] = ("CONFIRMED" if st["confirmed"] else "NOT CONFIRMED") + f" ({st['champion']['trial']} vs T2b on slice 2)"
             else:
                 row["status"] = d["status"]
                 if d["status"] == "keep":
@@ -246,7 +259,7 @@ def main() -> int:
         log(f"{tid}: {row['status']} J={row['J_midrow_nll']} diff={row.get('mean_diff_vs_champion')} "
             f"ci=[{row.get('ci95_lo')}, {row.get('ci95_hi')}] guard={row.get('guard_ok')}")
     producer(True)
-    log(f"screen finished; champion {st['champion']['trial']} config {st['champion']['config']}")
+    log(f"screen finished; champion {st['champion']['trial']} confirmed={st.get('confirmed')} config {st['champion']['config']}")
     return 0
 
 

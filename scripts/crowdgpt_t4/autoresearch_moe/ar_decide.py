@@ -37,13 +37,29 @@ def guard_ok(per_expert: Sequence[Mapping], limit_pct: float = GUARD_PCT) -> boo
     return all(float(e["relative_change_pct"]) <= limit_pct for e in per_expert)
 
 
+def per_expert_means(chunks: Sequence[Mapping]) -> dict[str, float]:
+    acc: dict[str, list[float]] = {}
+    for c in chunks:
+        acc.setdefault(str(c["expert_id"]), []).append(float(c["moe_nll"]))
+    return {k: float(np.mean(v)) for k, v in acc.items()}
+
+
+def guard_vs_reference(trial_chunks: Sequence[Mapping], ref_chunks: Sequence[Mapping],
+                       limit_pct: float = GUARD_PCT) -> tuple[bool, dict]:
+    """Amendment A1 guard: no expert's mid-row NLL above the REFERENCE run's by more than limit_pct per cent."""
+    a, b = per_expert_means(trial_chunks), per_expert_means(ref_chunks)
+    pct = {k: 100.0 * (a[k] / b[k] - 1.0) for k in sorted(a)}
+    return all(v <= limit_pct for v in pct.values()), {k: round(v, 3) for k, v in pct.items()}
+
+
 def decide(trial: Mapping, champion: Mapping) -> dict:
-    """Return the keep/discard decision of a trial receipt against the champion receipt (program.md decision rule)."""
+    """Keep/discard of a trial receipt against a reference receipt (program.md decision rule, Amendment A1)."""
     d = paired_diffs(trial["chunks"], champion["chunks"])
     lo, hi = bootstrap_ci(d)
-    g = guard_ok(trial["per_expert"])
+    g, pct = guard_vs_reference(trial["chunks"], champion["chunks"])
     keep = bool(hi < 0 and g)
     return {"mean_diff_vs_champion": float(d.mean()), "ci95_vs_champion": [lo, hi], "guard_ok": g,
+            "per_expert_pct_vs_champion": pct, "abs_guard_vs_base_ok": guard_ok(trial["per_expert"]),
             "status": "keep" if keep else "discard",
             "reason": ("CI entirely below 0 and guard holds" if keep else
                        "guard fails" if not g else "CI includes 0 or favours the champion")}

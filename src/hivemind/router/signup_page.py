@@ -8,7 +8,7 @@ Supports:
    via ``POST /v1/hivemind/auth/register`` (and ``POST /signup`` HTML form fallback).
 3. **Google Sign-In** (when ``client_id`` is configured) via ``POST /v1/hivemind/register/google``.
 
-All dynamic DOM updates use ``textContent`` (never ``innerHTML``), and the Content-Security-Policy enforces per-request nonces.
+All dynamic DOM updates use ``textContent`` exclusively, and the Content-Security-Policy enforces per-request nonces.
 """
 
 from __future__ import annotations
@@ -16,13 +16,68 @@ from __future__ import annotations
 import html
 import math
 import re
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
+from urllib.parse import urlparse
 
 from hivemind.router.google_auth import CLIENT_ID_RE
 
 # Origins Google documents for the Identity Services button (script, frame, connect, style).
 GSI = "https://accounts.google.com/gsi/"
 _NONCE_RE = re.compile(r"^[A-Za-z0-9+/=_-]{1,128}$")
+_CONTINUE_KEY_RE = re.compile(r"^hm[-_][A-Za-z0-9._=-]{1,192}$")
+DEFAULT_PUBLIC_API_BASE = "https://hivemind-openrouter-1003063861791.us-central1.run.app/v1"
+DEFAULT_KEY_PLACEHOLDER = "hm-YOUR_API_KEY"
+PERSONAL_PC_COMPLIANCE_NOTE = (
+    "100% personal home PC & personal hobby/open-source projects only — "
+    "never install on a corporate laptop or send company code/data — 0.00 EUR/USD"
+)
+
+
+def build_continue_config_yaml(api_key: str, api_base: str) -> str:
+    """Build a ready-to-paste VS Code Continue.dev ``config.yaml`` snippet for a HiveMind API key."""
+    if not isinstance(api_key, str) or not api_key.strip():
+        raise ValueError("api_key must be a non-empty string")
+    clean_key = api_key.strip()
+    if not _CONTINUE_KEY_RE.fullmatch(clean_key):
+        raise ValueError("api_key must be a valid hm-... or hm_live_... token")
+    if not isinstance(api_base, str) or not api_base.strip():
+        raise ValueError("api_base must be a non-empty http(s) URL")
+    clean_base = api_base.strip().rstrip("/")
+    if any(ch in clean_base for ch in ("\r", "\n", "\x00", " ", "\t", '"', "'", "#", "`")):
+        raise ValueError("api_base must not contain whitespace, quotes, or control characters")
+    parsed = urlparse(clean_base)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc or not parsed.hostname:
+        raise ValueError("api_base must be an absolute http(s) URL")
+    if parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
+        raise ValueError("api_base must not include credentials, query parameters, or fragments")
+    normalized_base = clean_base if clean_base.endswith("/v1") else f"{clean_base}/v1"
+    return (
+        "# HiveMind VS Code Continue.dev config (~/.continue/config.yaml)\n"
+        f"# {PERSONAL_PC_COMPLIANCE_NOTE}\n"
+        "name: HiveMind OpenRouter\n"
+        "version: 0.0.1\n"
+        "schema: v1\n"
+        "models:\n"
+        "  - name: HiveMind Coder\n"
+        "    provider: openai\n"
+        "    model: hivemind/coder\n"
+        f"    apiBase: {normalized_base}\n"
+        f"    apiKey: {clean_key}\n"
+        "    roles:\n"
+        "      - chat\n"
+        "      - edit\n"
+        "      - apply\n"
+        "    defaultCompletionOptions:\n"
+        "      maxTokens: 2048\n"
+        "  - name: HiveMind Auto\n"
+        "    provider: openai\n"
+        "    model: hivemind/auto\n"
+        f"    apiBase: {normalized_base}\n"
+        f"    apiKey: {clean_key}\n"
+        "    roles:\n"
+        "      - chat\n"
+    )
 
 
 def content_security_policy(nonce: str) -> str:
@@ -105,9 +160,44 @@ function persistUnifiedSession(body) {
     }
   } catch (e) {}
 }
+function buildContinueConfigYaml(apiKey, apiBase) {
+  const cleanKey = String(apiKey || 'hm-YOUR_API_KEY').trim() || 'hm-YOUR_API_KEY';
+  const cleanBase = String(apiBase || (window.location.origin + '/v1')).trim().replace(/\/+$/, '');
+  const normalizedBase = cleanBase.endsWith('/v1') ? cleanBase : (cleanBase + '/v1');
+  return [
+    '# HiveMind VS Code Continue.dev config (~/.continue/config.yaml)',
+    '# 100% personal home PC & personal hobby/open-source projects only — never install on a corporate laptop or send company code/data — 0.00 EUR/USD',
+    'name: HiveMind OpenRouter',
+    'version: 0.0.1',
+    'schema: v1',
+    'models:',
+    '  - name: HiveMind Coder',
+    '    provider: openai',
+    '    model: hivemind/coder',
+    '    apiBase: ' + normalizedBase,
+    '    apiKey: ' + cleanKey,
+    '    roles:',
+    '      - chat',
+    '      - edit',
+    '      - apply',
+    '    defaultCompletionOptions:',
+    '      maxTokens: 2048',
+    '  - name: HiveMind Auto',
+    '    provider: openai',
+    '    model: hivemind/auto',
+    '    apiBase: ' + normalizedBase,
+    '    apiKey: ' + cleanKey,
+    '    roles:',
+    '      - chat',
+  ].join('\n') + '\n';
+}
 function showSessionResult(body) {
   const tok = body.api_key || body.token || '';
   if ($('key')) $('key').textContent = tok;
+  if ($('continueYamlSnippet') && tok) {
+    $('continueYamlSnippet').textContent = buildContinueConfigYaml(tok, window.location.origin + '/v1');
+  }
+  if ($('verifyKeyStatus')) $('verifyKeyStatus').textContent = '';
   if ($('acct')) $('acct').textContent = (body.account_id || '') + (body.handle ? ' (' + body.handle + ')' : '');
   if ($('role')) $('role').textContent = body.role || 'prosumer';
   if ($('bal')) $('bal').textContent = (typeof body.balance_hmt === 'number' ? body.balance_hmt.toFixed(2) : (typeof body.balance === 'number' ? body.balance.toFixed(2) : (typeof body.compute_points === 'number' ? body.compute_points.toFixed(2) : 'n/a'))) + ' HMT';
@@ -197,6 +287,67 @@ if ($('copy')) {
     }
   });
 }
+if ($('copyContinueBtn')) {
+  $('copyContinueBtn').addEventListener('click', async () => {
+    try {
+      const snippetText = ($('continueYamlSnippet') && $('continueYamlSnippet').textContent) || '';
+      await navigator.clipboard.writeText(snippetText);
+      $('copyContinueBtn').textContent = '✅ Copied Continue.dev Config!';
+    } catch (err) {
+      $('copyContinueBtn').textContent = 'Select and copy the YAML snippet manually';
+    }
+  });
+}
+async function verifyActiveKeyModels() {
+  const statusEl = $('verifyKeyStatus');
+  const tok = (($('key') && $('key').textContent) || localStorage.getItem('hivemind_api_key') || '').trim();
+  if (!tok || tok === 'hm-YOUR_API_KEY' || !tok.startsWith('hm')) {
+    if (statusEl) {
+      statusEl.textContent = 'Sign in or create an account first to get your hm-... key.';
+      statusEl.className = 'err-text';
+    }
+    return;
+  }
+  if (statusEl) {
+    statusEl.textContent = 'Checking /v1/models...';
+    statusEl.className = 'mut';
+  }
+  try {
+    const res = await fetch('/v1/models', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + tok,
+        'Accept': 'application/json',
+      },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (statusEl) {
+        statusEl.textContent = (body.error && body.error.message) || ('Key check failed (HTTP ' + res.status + ').');
+        statusEl.className = 'err-text';
+      }
+      return;
+    }
+    const models = Array.isArray(body.data) ? body.data : [];
+    const modelIds = models.map((m) => (m && m.id ? String(m.id) : '')).filter(Boolean);
+    if (statusEl) {
+      statusEl.textContent =
+        '✅ Verified via /v1/models: ' +
+        models.length +
+        ' live model(s)' +
+        (modelIds.length ? ' (' + modelIds.slice(0, 3).join(', ') + (modelIds.length > 3 ? ', ...' : '') + ')' : '');
+      statusEl.className = 'mut';
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = 'Could not reach /v1/models on this gateway.';
+      statusEl.className = 'err-text';
+    }
+  }
+}
+if ($('verifyKeyModelsBtn')) {
+  $('verifyKeyModelsBtn').addEventListener('click', verifyActiveKeyModels);
+}
 
 async function syncSignupLiveTelemetry() {
   try {
@@ -247,6 +398,9 @@ async function checkActiveBrowserSession() {
       tok = serverTok;
     }
     if (!tok) return;
+    if ($('continueYamlSnippet')) {
+      $('continueYamlSnippet').textContent = buildContinueConfigYaml(tok, window.location.origin + '/v1');
+    }
     const res = await fetch('/api/v1/auth/session', { headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/json' } });
     if (!res.ok) return;
     const s = await res.json();
@@ -259,9 +413,18 @@ async function checkActiveBrowserSession() {
       compute_points: s.user.compute_points,
       created: false,
     });
+    const sessionBal = (typeof s.user.balance_hmt === 'number' ? s.user.balance_hmt.toFixed(2) : String(s.user.compute_points || 0)) + ' HMT';
     if ($('activeSessionHandle')) $('activeSessionHandle').textContent = '@' + (s.user.handle || 'operator');
-    if ($('activeSessionBalance')) $('activeSessionBalance').textContent = (typeof s.user.balance_hmt === 'number' ? s.user.balance_hmt.toFixed(2) : String(s.user.compute_points || 0)) + ' HMT';
+    if ($('activeSessionBalance')) $('activeSessionBalance').textContent = sessionBal;
+    if ($('key')) $('key').textContent = tok;
+    if ($('acct') && s.user.handle) $('acct').textContent = s.user.handle;
+    if ($('role') && s.user.role) $('role').textContent = s.user.role;
+    if ($('bal')) $('bal').textContent = sessionBal;
+    if ($('continueYamlSnippet')) {
+      $('continueYamlSnippet').textContent = buildContinueConfigYaml(tok, window.location.origin + '/v1');
+    }
     if ($('existingBrowserSessionBanner')) $('existingBrowserSessionBanner').hidden = false;
+    if ($('result')) $('result').hidden = false;
   } catch (e) {}
 }
 if ($('rotateKeyBtn')) {
@@ -272,9 +435,14 @@ if ($('rotateKeyBtn')) {
       const res = await fetch('/api/v1/auth/rotate-key', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok } });
       if (!res.ok) return;
       const d = await res.json();
-      if (d && d.token) {
-        if ($('key')) $('key').textContent = d.token;
-        persistUnifiedSession({ api_key: d.token, handle: d.handle || localStorage.getItem('hivemind_user_handle') || 'operator' });
+      const nextTok = (d && (d.api_key || d.token)) || '';
+      if (nextTok) {
+        if ($('key')) $('key').textContent = nextTok;
+        if ($('continueYamlSnippet')) {
+          $('continueYamlSnippet').textContent = buildContinueConfigYaml(nextTok, window.location.origin + '/v1');
+        }
+        if ($('verifyKeyStatus')) $('verifyKeyStatus').textContent = '';
+        persistUnifiedSession({ api_key: nextTok, handle: d.handle || localStorage.getItem('hivemind_user_handle') || 'operator' });
         setStatus('API key rotated! Your old key is revoked and your new key is saved in this browser.', false);
       }
     } catch (e) {}
@@ -320,11 +488,16 @@ if ($('changePasswordForm')) {
         setStatus((body.error && body.error.message) || 'Password update failed.', true);
         return;
       }
-      if (body.api_key) {
-        if ($('key')) $('key').textContent = body.api_key;
+      const rotatedKey = body.api_key || body.token || '';
+      if (rotatedKey) {
+        if ($('key')) $('key').textContent = rotatedKey;
+        if ($('continueYamlSnippet')) {
+          $('continueYamlSnippet').textContent = buildContinueConfigYaml(rotatedKey, window.location.origin + '/v1');
+        }
+        if ($('verifyKeyStatus')) $('verifyKeyStatus').textContent = '';
         if ($('acct') && body.handle) $('acct').textContent = body.handle;
         if ($('result')) $('result').hidden = false;
-        persistUnifiedSession({ api_key: body.api_key, handle: body.handle || localStorage.getItem('hivemind_user_handle') || 'operator' });
+        persistUnifiedSession({ api_key: rotatedKey, handle: body.handle || localStorage.getItem('hivemind_user_handle') || 'operator' });
         setStatus('Password updated and new hm-... API key issued!', false);
       } else {
         setStatus(body.message || 'Password updated! Sign in above with your new password.', false);
@@ -346,6 +519,11 @@ if ($('signOutSessionBtn')) {
       localStorage.removeItem('hivemind_user_handle');
       localStorage.removeItem('hivemind_user');
     } catch (e) {}
+    if ($('key')) $('key').textContent = '';
+    if ($('continueYamlSnippet')) {
+      $('continueYamlSnippet').textContent = buildContinueConfigYaml('hm-YOUR_API_KEY', window.location.origin + '/v1');
+    }
+    if ($('verifyKeyStatus')) $('verifyKeyStatus').textContent = '';
     if ($('existingBrowserSessionBanner')) $('existingBrowserSessionBanner').hidden = true;
     if ($('result')) $('result').hidden = true;
     setStatus('Signed out of browser session.', false);
@@ -446,6 +624,10 @@ async function onCredential(response) {
     const body = await reply.json().catch(() => ({}));
     if (!reply.ok) { setStatus((body.error && body.error.message) || 'Sign-in failed.', true); return; }
     $('key').textContent = body.api_key;
+    if ($('continueYamlSnippet') && body.api_key) {
+      $('continueYamlSnippet').textContent = buildContinueConfigYaml(body.api_key, window.location.origin + '/v1');
+    }
+    if ($('verifyKeyStatus')) $('verifyKeyStatus').textContent = '';
     $('acct').textContent = body.account_id;
     $('kind').textContent = body.created ? 'Your account was created.' : 'Welcome back: your previous key no longer works.';
     $('role').textContent = body.role;
@@ -557,13 +739,15 @@ def render_signup_page(
     res_acct = ""
     res_role = ""
     res_bal = "n/a"
+    raw_res_key = ""
     if auth_result:
         res_kind = (
             "Your account was created."
             if auth_result.get("created")
             else "Welcome back! Your previous account & HMT balance have been restored."
         )
-        res_key = html.escape(str(auth_result.get("api_key", "")))
+        raw_res_key = str(auth_result.get("api_key", "")).strip()
+        res_key = html.escape(raw_res_key)
         res_acct = html.escape(
             f"{auth_result.get('account_id', '')}"
             + (f" ({auth_result.get('handle')})" if auth_result.get("handle") else "")
@@ -571,6 +755,9 @@ def render_signup_page(
         res_role = html.escape(str(auth_result.get("role", "prosumer")))
         bal_val = float(auth_result.get("balance_hmt", auth_result.get("balance", 0.0)))
         res_bal = f"{bal_val:.2f} HMT"
+
+    yaml_key = raw_res_key if _CONTINUE_KEY_RE.fullmatch(raw_res_key) else DEFAULT_KEY_PLACEHOLDER
+    continue_yaml_html = html.escape(build_continue_config_yaml(yaml_key, DEFAULT_PUBLIC_API_BASE))
 
     err_html = html.escape(error_message) if error_message else ""
     err_cls = "err-text" if error_message else "mut"
@@ -606,8 +793,10 @@ def render_signup_page(
     <h1>🐝 Join or Sign In to HiveMind</h1>
     <p class="mut">Use open coding, scientific &amp; visual MoE models from your editor, or share your GPU and earn HMT points (0.00 EUR/USD).</p>
     <p class="mut" id="starter-grant">{starter_line}</p>
+    <p class="mut" id="personal-pc-compliance" data-testid="personal-pc-compliance">{PERSONAL_PC_COMPLIANCE_NOTE}</p>
   </div>
   <nav class="nav-links" data-testid="signup-quick-nav">
+    <a href="/noel">🎄 Noël Quick Start</a>
     <a href="/v3.1">🐝 Unified v3.1 Portal</a>
     <a href="/">⚡ AI Playground</a>
     <a href="/manifesto">📜 Manifesto</a>
@@ -655,6 +844,16 @@ def render_signup_page(
       <button id="transferSubmitBtn" data-testid="signup-transfer-hmt-btn" type="submit" class="secondary">Send HMT</button>
     </div>
   </form>
+  <div id="ideQuickSetup" data-testid="signup-ide-quick-setup" style="margin:.75rem 0;padding:.85rem;border:1px solid var(--line);border-radius:.5rem;background:var(--card)">
+    <h3 style="margin:0 0 .35rem;font-size:1rem;color:var(--amber)">⚡ 60-Second IDE & CLI Quick Setup</h3>
+    <p class="mut" style="margin:.2rem 0 .45rem">Paste directly into <code>~/.continue/config.yaml</code> in VS Code (Continue.dev) for personal hobby/open-source coding (0.00 EUR/USD):</p>
+    <pre><code id="continueYamlSnippet">{continue_yaml_html}</code></pre>
+    <p style="display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:.5rem 0">
+      <button id="copyContinueBtn" data-testid="signup-copy-continue-btn" type="button">📋 Copy VS Code Continue.dev Config</button>
+      <button id="verifyKeyModelsBtn" data-testid="signup-verify-key-models-btn" type="button" class="secondary">⚡ Test Key in Browser (/v1/models)</button>
+      <span id="verifyKeyStatus" data-testid="signup-verify-key-status" class="mut" role="status"></span>
+    </p>
+  </div>
   <p>Next, in a terminal or IDE (Continue / Cline / Aider / OpenCode):</p>
   <pre><code>export HIVEMIND_API_KEY=&lt;the key above&gt;
 python hivemind_connect.py check

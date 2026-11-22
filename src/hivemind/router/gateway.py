@@ -138,10 +138,17 @@ _ALLOWED_ONBOARDING_SCRIPTS: frozenset[str] = frozenset(
         "hivemind_volunteer_preflight.py",
         "hivemind_opentrainer_agent.py",
         "join_hivemind.ps1",
+        "noel_canary_cohort_rehearsal.py",
         "noel_cloud_run_parity_gate.py",
+        "noel_gamer_whisper_selftest.py",
         "noel_post_setup_probe.py",
+        "noel_scale_load_harness.py",
+        "noel_vscode_autoconfig.py",
     }
 )
+_SAFE_ONBOARDING_SCRIPT_RE = re.compile(r"^[A-Za-z0-9_]+\.(?:py|ps1)$")
+_ONBOARDING_SCRIPT_CACHE_LOCK = threading.Lock()
+_ONBOARDING_SCRIPT_CACHE: dict[Path, tuple[int, int, bytes, str]] = {}
 _HOLIDAY_ONBOARDING_ROUTES: tuple[str, ...] = (
     "/arena-noel",
     "/noel",
@@ -197,6 +204,49 @@ def build_onboarding_manifest(env: Mapping[str, str] | None = None) -> dict[str,
         "personal_pc_only": True,
         "financial_promise": "0.00 EUR / 0.00 USD",
     }
+
+
+def resolve_onboarding_script(
+    script_name: str,
+    *,
+    search_dirs: Sequence[Path] | None = None,
+) -> tuple[bytes, str, str]:
+    """Validate an allowlisted onboarding script and return ``(raw_bytes, media_type, sha256_hex)``."""
+    if (
+        not isinstance(script_name, str)
+        or "\x00" in script_name
+        or "/" in script_name
+        or "\\" in script_name
+        or ".." in script_name
+        or not _SAFE_ONBOARDING_SCRIPT_RE.fullmatch(script_name)
+        or script_name not in _ALLOWED_ONBOARDING_SCRIPTS
+    ):
+        raise RouterError(404, "Unknown onboarding script.", "not_found_error", "not_found")
+
+    router_dir = Path(__file__).resolve().parent
+    repo_root = router_dir.parents[2]
+    dirs = (repo_root / "scripts", Path("/app/scripts"), router_dir) if search_dirs is None else tuple(search_dirs)
+    media_type = "text/plain; charset=utf-8" if script_name.endswith(".ps1") else "text/x-python; charset=utf-8"
+
+    for candidate_dir in dirs:
+        if not candidate_dir.is_dir():
+            continue
+        resolved_dir = candidate_dir.resolve()
+        sp = (resolved_dir / script_name).resolve()
+        if sp.parent != resolved_dir or not sp.is_file():
+            continue
+        st = sp.stat()
+        with _ONBOARDING_SCRIPT_CACHE_LOCK:
+            cached = _ONBOARDING_SCRIPT_CACHE.get(sp)
+            if cached is not None and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
+                return cached[2], media_type, cached[3]
+        raw_bytes = sp.read_bytes()
+        digest = hashlib.sha256(raw_bytes).hexdigest()
+        with _ONBOARDING_SCRIPT_CACHE_LOCK:
+            _ONBOARDING_SCRIPT_CACHE[sp] = (st.st_mtime_ns, len(raw_bytes), raw_bytes, digest)
+        return raw_bytes, media_type, digest
+
+    raise RouterError(404, "Script file not present on server.", "not_found_error", "not_found")
 ENDPOINT_COOLDOWN_S = 10.0  # after a failed request an endpoint is tried last for this long (MVP criterion A1: failover without paying a failed attempt first)
 PRODUCER_TIMEOUT_S = 120.0
 DEFAULT_COLD_START_WAIT_BUDGET_S = 20.0  # forward to a known-unloaded model only when it is expected to load within this
@@ -5845,29 +5895,24 @@ def create_router_app(
         return PlainTextResponse(src_path.read_text(encoding="utf-8"), media_type="text/x-python; charset=utf-8")
 
     def _serve_onboarding_script(script_name: str) -> PlainTextResponse:
-        from pathlib import Path
-
-        if script_name not in _ALLOWED_ONBOARDING_SCRIPTS:
-            raise RouterError(404, "Unknown onboarding script.", "not_found_error", "not_found")
-        router_dir = Path(__file__).resolve().parent
-        repo_root = router_dir.parents[2]
-        media_type = "text/plain; charset=utf-8" if script_name.endswith(".ps1") else "text/x-python; charset=utf-8"
-        for candidate_dir in (repo_root / "scripts", Path("/app/scripts"), router_dir):
-            sp = candidate_dir / script_name
-            if sp.exists():
-                return PlainTextResponse(
-                    sp.read_text(encoding="utf-8"),
-                    media_type=media_type,
-                    headers={"Content-Disposition": f'inline; filename="{script_name}"'},
-                )
-        raise RouterError(404, "Script file not present on server.", "not_found_error", "not_found")
+        raw_bytes, media_type, digest = resolve_onboarding_script(script_name)
+        return PlainTextResponse(
+            content=raw_bytes,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'inline; filename="{script_name}"',
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Script-SHA256": digest,
+            },
+        )
 
     @app.get("/hivemind_boinc_idle_worker.py")
     def get_boinc_idle_worker_source() -> PlainTextResponse:
         """Serve the canonical BOINC & Steam idle-GPU worker (`scripts/hivemind_boinc_idle_worker.py`)."""
         return _serve_onboarding_script("hivemind_boinc_idle_worker.py")
 
-    @app.get("/scripts/{script_name}")
+    @app.get("/scripts/{script_name:path}")
     def download_onboarding_script(script_name: str) -> PlainTextResponse:
         """Serve any allowlisted volunteer/producer/trainer onboarding script (`/scripts/hivemind_boinc_idle_worker.py`, etc.)."""
         return _serve_onboarding_script(script_name)

@@ -1808,6 +1808,150 @@ Criterion \texttt{A1} (\texttt{scripts/a1\_multi\_gpu\_run.py}) requires serving
 \end{table}
 
 % ============================================================================
+\section{Field Results of the November 2026 Training Campaigns: What the Loss Hid, an Independent Judge, and a Selected Recipe}
+\label{sec:nov2026_field_results}
+% ============================================================================
+
+This section reports what three weeks of real training on one shared Tesla~T4 taught us (14--22~November 2026). It is
+an addendum to v4.3.0. Every number comes from a committed receipt or run log, and each paragraph names its source.
+Nothing here changes the claims of the earlier sections.
+
+\subsection{Weekend of 14--15 November: first community weekend}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{CrowdGPT co-training.} The T4 submitted 5 full rounds to the public CrowdGPT run of Crowd-v1 (895--949\,MB
+    each). It was then withdrawn by owner decision, after the floor watchdog had stopped 4 jobs that would have breached
+    the 4{,}300\,MiB free-VRAM floor (\texttt{LL.md}, ``Weekend numbers'').
+  \item \textbf{No outside trainer joined} during the weekend. The onboarding path was rewritten afterwards as a turnkey
+    \texttt{--train} mode and a three-command quickstart.
+  \item \textbf{LLM-JEPA pilot P1} (Crowd-v1, LoRA $r{=}64$, 3 seeds): 16.90\,\% exact match against 17.07\,\% for plain
+    fine-tuning, with far-token loss $+0.90$\,nat. The JEPA term collapsed ($1-\cos$ fell from 0.68 to 0.0005)
+    (\texttt{docs/CROWDGPT\_LLM\_JEPA\_RESULTS.md}).
+\end{itemize}
+
+\subsection{16--19 November: pre-registered STP experiments and a 596-round MoE campaign}
+\paragraph{Semantic Tube Prediction (STP).} Three pre-registered experiments tested the STP auxiliary loss
+\cite{huang2026stp}, a successor of LLM-JEPA \cite{huang2025llmjepa}. Their verdicts are reported exactly as the frozen
+analysis produced them (\texttt{docs/E\_STP\_RESULTS.md}).
+\begin{center}\small
+\begin{tabular}{@{}llp{7.2cm}@{}}
+\toprule
+Experiment & Model & Verdict\\
+\midrule
+E-STP-1 & Crowd-v1, lr $2{\times}10^{-5}$ & \textbf{uninformative}: 0\,\% exact match in all 18 runs (underfit)\\
+E-STP-2 & Qwen3-0.6B & \textbf{no gain}: STP$-$SFT $=-0.30$, $+0.17$ and $-0.47$ points at fractions 1, 1/4 and 1/16\\
+E-STP-1b & Crowd-v1, lr $10^{-3}$ & \textbf{guard rail failed}: far-token loss $+0.46$ and $+1.37$\,nat (limit $+0.05$)\\
+\bottomrule
+\end{tabular}
+\end{center}
+As pre-registered, the gate for shipping an STP training mode stays closed.
+
+\paragraph{MoE campaign 1.} Eight LoRA experts on frozen Crowd-v1 (19.2\,M trainable parameters) were trained with
+decoupled DiLoCo rounds and a loss ratchet. Over 596 rounds (179 accepted) the ratchet's held-out loss fell from
+5.385145 to 4.723302 ($-12.29\,\%$), with at least 6{,}981\,MiB of VRAM free throughout (Figure~\ref{fig:nov_traj}).
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.92\textwidth]{figures/fig_nov2026_moe_trajectory.pdf}
+\caption{Campaign 1: the best held-out loss of the training ratchet. Dashed lines mark the rounds where the data cursor
+first reached a new expert's data. Every large drop starts at one of them.}
+\label{fig:nov_traj}
+\end{figure}
+
+\paragraph{What the loss hid.} Two findings changed how we read that curve.
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Mostly format.} A pre-registered paired test on rows that training never read gave $-0.331$\,nat when
+    each chunk starts at the beginning of a row. It gave only $-0.062$\,nat (95\,\% CI $[-0.090,-0.035]$) when the same
+    rows are scored from token 64 onwards. About 81\,\% of the apparent gain was the add-on learning each dataset's
+    opening template (PR~\#944).
+  \item \textbf{One expert at a time.} Each learner's shard stored its experts' data one after another, and the cursor
+    reads it in order. For 256 rounds only general text and code were trained. When maths data arrived, maths improved
+    (mid-row $+1.9\,\%\to-4.7\,\%$ against the base model), while stars, which shares that learner, got worse ($+3.0\,\%$)
+    (Figure~\ref{fig:nov_midrow}).
+\end{enumerate}
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.92\textwidth]{figures/fig_nov2026_midrow_per_expert.pdf}
+\caption{Mid-row change per expert against base Crowd-v1 on never-used rows (negative is better), before and after the
+maths data was first read.}
+\label{fig:nov_midrow}
+\end{figure}
+
+\subsection{21--22 November: an autoresearch screen with a frozen judge, and campaign 2}
+We adapted the autoresearch loop of Karpathy \cite{karpathy2026autoresearch} to a shared volunteer GPU. One metric
+stays out of the search's reach, every trial has the same budget, each trial changes one thing, and each is kept or
+discarded. Four things differ:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item trials change configuration, not code;
+  \item the budget is tokens (30{,}720 per learner), not minutes;
+  \item the judge is the mid-row test above, on 240 never-used chunks, with a per-domain guard;
+  \item a trial is kept only if its paired 95\,\% interval against the current best excludes zero.
+\end{itemize}
+The plan and its amendment were committed before any comparison trial ran (PR~\#948).
+
+\begin{center}\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}llrll@{}}
+\toprule
+Trial & Change & Mid-row NLL & Against reference (95\,\% CI) & Outcome\\
+\midrule
+T1 & baseline & 4.3019 & n/a & start\\
+T2 & same seed and data & n/a & n/a & bit-identical final state\\
+T2b & baseline, second data slice & 4.2783 & $-0.024$ $[-0.031,-0.017]$ & noise control\\
+T3 & interleaved expert shards & 4.3016 & $-0.000$ $[-0.068,+0.069]$ & discarded (guard)\\
+T4 & sequences of 128 tokens & 4.2810 & $-0.021$ $[-0.026,-0.015]$ & kept\\
+T5 & T4, continued from an earlier state & 4.2309 & $-0.050$ $[-0.064,-0.037]$ & kept\\
+T6 & T5, inner learning rate $4{\times}10^{-4}$ & 4.2064 & $-0.025$ $[-0.030,-0.019]$ & kept\\
+T7 & T6 on the second slice, against T2b & 4.2260 & $-0.052$ $[-0.065,-0.040]$ & \textbf{confirmed}\\
+\bottomrule
+\end{tabular}}
+\end{center}
+
+\noindent Base Crowd-v1 scores 4.2864 on the same chunks. The selected recipe (T6) is therefore the first configuration
+in this project with a \emph{content} gain on an independent test: $-0.080$\,nat against the base model (CI
+$[-0.101,-0.059]$), with the per-domain guard against the base satisfied. Four caveats apply:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item the trials are short;
+  \item two data slices of one recipe differ by 0.024\,nat, which is as much as T4's step;
+  \item T5's step includes the extra training of its starting state;
+  \item interleaving (T3) was not neutral: stars improved by 20\,\% while general text got 17.5\,\% worse.
+\end{itemize}
+
+\paragraph{Campaign 2 (in progress at the time of writing).} The driver started the confirmed recipe automatically on
+21~November. By 22~November 17:50 Paris it had run 295 rounds (99 accepted) with at least 5{,}523\,MiB free. Its final
+state will be scored by the same frozen judge, and that score, not the training loss, is the result we will report.
+
+\subsection{Returns from the field}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{The training loss is not the product metric.} A ratchet that scores from the start of a row rewards
+    format and data order. Selection now uses a frozen mid-row judge on never-used rows (\texttt{LL.md}, lessons 16--17).
+  \item \textbf{Training is bit-reproducible.} Repeating a run with the same seed and data gave an identical final
+    state, so a repeat run is no noise control; a second data slice is.
+  \item \textbf{Automation needs its own guards.} Four defects of the unattended pipeline were found and fixed in the
+    field: a stale resume point, a stall detector that never fired, an end time not enforced on a running job, and a
+    launch race.
+  \item \textbf{A shared GPU needs a contract, not courtesy.} The 4{,}300\,MiB floor was never breached by HiveMind's
+    jobs. It was breached once by another project's job on the same card, which checked free memory only before starting.
+  \item \textbf{Outside contributions arrive when tasks are small and testable.} The first external code contributions
+    since launch closed two items of the published improvement plan (PRs~\#941 and~\#945).
+\end{itemize}
+
+\subsection{Perspectives}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{JEPA for language models: parked, with one owner-gated re-test.} Four tests are negative or
+    uninformative on our models. The remaining pre-registered candidate is LLM-JEPA on a code fine-tuning task (PR~\#899),
+    where the original papers report their largest gains.
+  \item \textbf{Data before objectives.} Next screens will test template stripping and a gentler interleave, which
+    keeps the 20\,\% stars gain without the loss on general text.
+  \item \textbf{Looped expert layers.} Section~\ref{sec:missing_moe} proposed looped recurrence. The open-weights
+    Inkling~2~Mini is reported by its authors as a 26.4\,B looped mixture-of-experts with 3.4\,B active parameters; we
+    have not measured it \cite{inkling2mini2026}. It is too large to train on volunteer GPUs with 8--16\,GB. Its idea,
+    re-running shared middle layers, is a low-memory hypothesis that the same screen can test on Crowd-v1.
+  \item \textbf{New expert models as served tiers.} Volunteers with 32\,GB unified-memory machines could host such
+    open models in the catalog. This needs a compatible local runtime and a measured throughput before any public claim.
+  \item \textbf{Promotion gate.} An adapter is served only after it passes the mid-row test with every domain within
+    1\,\% of the base model. No adapter has been promoted yet.
+\end{itemize}
+
+% ============================================================================
 \section{Limitations, Threats to Validity, and Future Multi-Host Benchmarks}
 \label{sec:limitations}
 % ============================================================================
@@ -1932,6 +2076,10 @@ To prevent conflating machine-checked discrete arithmetic with empirical single-
 \bibitem{kelly1998rate} F.~P.~Kelly, A.~K.~Maulloo, and D.~K.~H.~Tan, ``Rate control for communication networks: shadow prices, proportional fairness and stability,'' \textit{Journal of the Operational Research Society}, vol.~49, no.~3, pp.~237--252, 1998.
 \bibitem{bass1969new} F.~M.~Bass, ``A new product growth for model consumer durables,'' \textit{Management Science}, vol.~15, no.~5, pp.~215--227, 1969.
 \bibitem{hwang2025hnet} S.~Hwang, B.~Wang, and A.~Gu, ``Dynamic Chunking for End-to-End Hierarchical Sequence Modeling,'' \textit{arXiv:2507.07955}, 2025.
+\bibitem{huang2025llmjepa} H.~Huang, Y.~LeCun, and R.~Balestriero, ``LLM-JEPA: Large Language Models Meet Joint Embedding Predictive Architectures,'' arXiv:2509.14252, 2025.
+\bibitem{huang2026stp} H.~Huang, Y.~LeCun, and R.~Balestriero, ``Semantic Tube Prediction,'' arXiv:2602.22617, 2026.
+\bibitem{karpathy2026autoresearch} A.~Karpathy, ``autoresearch,'' software repository, \url{https://github.com/karpathy/autoresearch}, 2026.
+\bibitem{inkling2mini2026} Thinking Machines Lab, ``Inkling 2 Mini,'' open-weights model release, 20~November 2026; figures as reported in press coverage, e.g.\ \href{https://the-decoder.com/new-open-model-inkling-2-mini-thinks-in-loops-to-solve-problems-with-fewer-words-and-still-runs-on-a-laptop/}{The Decoder, 21~November 2026}.
 \end{thebibliography}
 
 \end{document}

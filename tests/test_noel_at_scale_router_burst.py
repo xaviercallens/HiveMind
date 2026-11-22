@@ -28,7 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 HARNESS_PATH = REPO_ROOT / "scripts" / "noel_scale_load_harness.py"
 
 _INPROC_COV: coverage.Coverage | None = None
-if sys.gettrace() is None:
+if sys.gettrace() is None and coverage.Coverage.current() is None:
     _INPROC_COV = coverage.Coverage(
         data_file=None,
         config_file=False,

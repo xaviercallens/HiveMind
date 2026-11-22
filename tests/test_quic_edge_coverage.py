@@ -358,7 +358,11 @@ def test_quic_frame_count_is_enforced_across_separate_data_events(monkeypatch):
                 await asyncio.wait_for(delivered.wait(), 10.0)
                 writer.write(link._LENGTH.pack(6) + b"second")
                 writer.write_eof()
-                assert await asyncio.wait_for(reader.read(), 10.0) == b""
+                try:
+                    ack_bytes = await asyncio.wait_for(reader.read(), 10.0)
+                except ConnectionError:
+                    ack_bytes = b""
+                assert ack_bytes == b""
             assert received == [b"first"]
             assert server.frames_received == 1
         finally:

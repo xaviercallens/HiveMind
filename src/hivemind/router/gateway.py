@@ -138,8 +138,65 @@ _ALLOWED_ONBOARDING_SCRIPTS: frozenset[str] = frozenset(
         "hivemind_volunteer_preflight.py",
         "hivemind_opentrainer_agent.py",
         "join_hivemind.ps1",
+        "noel_cloud_run_parity_gate.py",
+        "noel_post_setup_probe.py",
     }
 )
+_HOLIDAY_ONBOARDING_ROUTES: tuple[str, ...] = (
+    "/arena-noel",
+    "/noel",
+    "/quick",
+    "/raid",
+    "/raid-noel",
+    "/v1/hivemind/arena/summary",
+    "/v1/hivemind/arena/vote",
+    "/v1/hivemind/onboarding/feedback",
+    "/v1/hivemind/onboarding/feedback/summary",
+    "/v1/hivemind/onboarding/manifest",
+    "/v1/hivemind/raid/status",
+)
+_BUILD_SHA_RE = re.compile(r"^[A-Za-z0-9]{6,64}$")
+_CLOUD_RUN_REVISION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_SECRET_VALUE_MARKERS: tuple[str, ...] = ("secret", "token", "password", "passwd", "apikey", "bearer", "aiza")
+
+
+def _sanitize_build_sha(raw: str | None) -> str:
+    """Sanitize HIVEMIND_BUILD_SHA to a clean alphanumeric/hex string or 'unknown' without leaking secrets."""
+    cleaned = (raw or "").strip()
+    low = cleaned.lower()
+    if not cleaned or low == "unknown" or not _BUILD_SHA_RE.fullmatch(cleaned) or any(m in low for m in _SECRET_VALUE_MARKERS):
+        return "unknown"
+    return low
+
+
+def _sanitize_cloud_run_revision(raw: str | None) -> str | None:
+    """Sanitize K_REVISION to a safe Cloud Run revision identifier or None."""
+    cleaned = (raw or "").strip()
+    low = cleaned.lower()
+    if (
+        not cleaned
+        or not _CLOUD_RUN_REVISION_RE.fullmatch(cleaned)
+        or low.startswith(("hm-", "hm_live_", "sk-", "ghp_"))
+        or any(m in low for m in _SECRET_VALUE_MARKERS)
+    ):
+        return None
+    return cleaned
+
+
+def build_onboarding_manifest(env: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """Build zero-PII Cloud Run holiday onboarding parity manifest from sanitized environment metadata."""
+    eff_env = os.environ if env is None else env
+    return {
+        "object": "hivemind.onboarding.manifest",
+        "campaign_id": "noel-2026-easy-onboard",
+        "status": "ok",
+        "build_sha": _sanitize_build_sha(eff_env.get("HIVEMIND_BUILD_SHA")),
+        "cloud_run_revision": _sanitize_cloud_run_revision(eff_env.get("K_REVISION")),
+        "holiday_routes": sorted(_HOLIDAY_ONBOARDING_ROUTES),
+        "downloadable_scripts": sorted(_ALLOWED_ONBOARDING_SCRIPTS),
+        "personal_pc_only": True,
+        "financial_promise": "0.00 EUR / 0.00 USD",
+    }
 ENDPOINT_COOLDOWN_S = 10.0  # after a failed request an endpoint is tried last for this long (MVP criterion A1: failover without paying a failed attempt first)
 PRODUCER_TIMEOUT_S = 120.0
 DEFAULT_COLD_START_WAIT_BUDGET_S = 20.0  # forward to a known-unloaded model only when it is expected to load within this
@@ -3133,6 +3190,11 @@ def create_router_app(
     @app.get("/v1/hivemind/onboarding/feedback/summary")
     def get_onboarding_feedback_summary() -> dict[str, Any]:
         return onboarding_feedback.summary()
+
+    @app.get("/v1/hivemind/onboarding/manifest")
+    def get_onboarding_manifest() -> JSONResponse:
+        """Public zero-PII Cloud Run deployment parity & holiday onboarding manifest."""
+        return JSONResponse(build_onboarding_manifest(), headers={"Cache-Control": "no-store"})
 
     @app.api_route("/raid-noel", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/raid", methods=["GET", "HEAD"], response_class=HTMLResponse)

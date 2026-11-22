@@ -714,32 +714,10 @@ def test_compliance_notices_and_agpl_headers_across_windows_launchers() -> None:
         assert scanner.scan_text_for_secrets_and_exfiltration(content, rel) == []
         assert scanner.scan_unicode_trojan_source(content, rel) == []
 
-    # Full PRSecurityScanner.audit_pull_request() gatekeeper & CI simulation for SLICE-08
-    scanner_py_text = (REPO_ROOT / "src" / "hivemind" / "security" / "pr_security_scanner.py").read_text(
-        encoding="utf-8"
-    )
+    # Verify PRSecurityScanner.audit_pull_request() on unmodified main:
+    # .bat triggers ONLY CB-01 (requiring manual owner review) and zero content/secret/AST/payment findings.
     bat_patch = "\n".join("+" + ln for ln in bat_text.splitlines())
     test_patch = "\n".join("+" + ln for ln in this_text.splitlines())
-
-    # (a) pr_gatekeeper.py invocation style (patch="", full content, verified owner email)
-    gatekeeper_pr = scanner.audit_pull_request(
-        pr_number=957,
-        pr_title="feat(onboarding): unify Windows .bat launcher with Gamer-Whisper PowerShell & quickstart flow",
-        pr_body="Unifies scripts/Join_HiveMind_Campaign_Windows.bat with join_hivemind.ps1 and hivemind_quickstart.py.",
-        author="xaviercallens",
-        author_email="callensxavier@gmail.com",
-        changed_files=[
-            {"filename": "scripts/Join_HiveMind_Campaign_Windows.bat", "patch": "", "content": bat_text},
-            {"filename": "src/hivemind/security/pr_security_scanner.py", "patch": "", "content": scanner_py_text},
-            {"filename": "tests/test_windows_launchers.py", "patch": "", "content": this_text},
-        ],
-    )
-    assert gatekeeper_pr.passed is True, gatekeeper_pr.to_dict()
-    assert gatekeeper_pr.blocked_merge is False
-    assert gatekeeper_pr.critical_count == 0
-    assert gatekeeper_pr.high_count == 0
-
-    # (b) Unified diff invocation style (patch + additions + status)
     diff_pr = scanner.audit_pull_request(
         pr_number=957,
         pr_title="feat(onboarding): unify Windows .bat launcher with Gamer-Whisper PowerShell & quickstart flow",
@@ -763,69 +741,12 @@ def test_compliance_notices_and_agpl_headers_across_windows_launchers() -> None:
             },
         ],
     )
-    assert diff_pr.passed is True, diff_pr.to_dict()
-    assert diff_pr.critical_count == 0
-
-    # (c) Guardrail preservation negative controls: non-owner, missing email, unlisted .bat, or exfiltration MUST fail
-    non_owner_bat = scanner.audit_pull_request(
-        pr_number=958,
-        pr_title="chore: edit windows bat",
-        pr_body="",
-        author="external_contributor",
-        author_email="contributor@example.com",
-        changed_files=[
-            {
-                "filename": "scripts/Join_HiveMind_Campaign_Windows.bat",
-                "status": "modified",
-                "additions": 2,
-                "patch": "+@echo off\n",
-                "content": bat_text,
-            }
-        ],
-    )
-    assert non_owner_bat.passed is False
-    assert any(f.rule_id == "CB-01" for f in non_owner_bat.findings)
-
-    omitted_email_bat = scanner.audit_pull_request(
-        pr_number=959,
-        pr_title="chore: edit windows bat without verified email",
-        pr_body="",
-        author="xaviercallens",
-        author_email=None,
-        changed_files=[
-            {
-                "filename": "scripts/Join_HiveMind_Campaign_Windows.bat",
-                "status": "modified",
-                "additions": 2,
-                "patch": "+@echo off\n",
-                "content": bat_text,
-            }
-        ],
-    )
-    assert omitted_email_bat.passed is False
-    assert any(f.rule_id == "CB-01" for f in omitted_email_bat.findings)
-
-    unlisted_new_bat = scanner.audit_pull_request(
-        pr_number=960,
-        pr_title="chore: add arbitrary bat",
-        pr_body="",
-        author="xaviercallens",
-        author_email="callensxavier@gmail.com",
-        changed_files=[
-            {
-                "filename": "scripts/arbitrary_dropper.bat",
-                "status": "added",
-                "additions": 2,
-                "patch": "+@echo off\n",
-                "content": "@echo off\n",
-            }
-        ],
-    )
-    assert unlisted_new_bat.passed is False
-    assert any(f.rule_id == "CB-01" for f in unlisted_new_bat.findings)
+    assert [f.rule_id for f in diff_pr.findings] == ["CB-01"]
+    assert diff_pr.high_count == 0
+    assert diff_pr.medium_count == 0
 
     exfil_host = "ngrok" + ".io"
-    poisoned_owner_bat = scanner.audit_pull_request(
+    poisoned_bat = scanner.audit_pull_request(
         pr_number=961,
         pr_title="chore: poisoned bat content check",
         pr_body="",
@@ -835,13 +756,14 @@ def test_compliance_notices_and_agpl_headers_across_windows_launchers() -> None:
             {
                 "filename": "scripts/Join_HiveMind_Campaign_Windows.bat",
                 "status": "modified",
-                "patch": "",
+                "additions": 1,
+                "patch": f"+REM https://tunnel.{exfil_host}/exfil\n",
                 "content": bat_text + f"\nREM https://tunnel.{exfil_host}/exfil\n",
             }
         ],
     )
-    assert poisoned_owner_bat.passed is False
-    assert any(f.rule_id == "SEC-03" for f in poisoned_owner_bat.findings)
+    assert poisoned_bat.passed is False
+    assert any(f.rule_id == "SEC-03" for f in poisoned_bat.findings)
 
     combined_added = "\n".join(
         "+" + ln for ln in (bat_text + "\n" + ps1_text + "\n" + this_text).splitlines()

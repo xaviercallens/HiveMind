@@ -6,11 +6,13 @@ Compatible with Python 3.10-3.13 across Windows 11, macOS, and Linux using ONLY 
 standard library:
   1. Zero-Inference Cloud Run Holiday Parity & Manifest Gate (`check_cloud_run_holiday_parity`):
      verifies GET `/health`, `/v1/models`, `/v1/hivemind/onboarding/manifest`, `/noel`, `/quick`,
-     `/raid-noel`, `/arena-noel`, `/v1/hivemind/onboarding/feedback/summary`, and downloadable
-     `/scripts/{hivemind_quickstart.py,hivemind_doctor.py,noel_post_setup_probe.py,
-     noel_cloud_run_parity_gate.py,join_hivemind.ps1}` without ever calling `/v1/chat/completions`
+     `/raid-noel`, `/arena-noel`, `/v1/hivemind/onboarding/feedback/summary`, downloadable
+     `/scripts/<name>` spot probes (`REQUIRED_PARITY_SCRIPTS`, or every allowlisted script in
+     `REQUIRED_SCRIPTS` under `--verify-all-scripts`, including `noel_vscode_autoconfig.py`,
+     `noel_gamer_whisper_selftest.py`, `noel_scale_load_harness.py`, and
+     `noel_canary_cohort_rehearsal.py`) without ever calling `/v1/chat/completions`
      or prompting `hivemind/coder`. Compares live `build_sha`, `holiday_routes`, and
-     `downloadable_scripts` against `--expected-sha` or local `git rev-parse HEAD`
+     `downloadable_scripts` against `REQUIRED_SCRIPTS` and `--expected-sha` or local `git rev-parse HEAD`
      (`--check-git-head`), failing closed (exit code 2, `parity_ok=False`,
      `redeploy_required=True`) on HTTP 404/5xx, missing holiday routes/scripts, or SHA drift.
   2. Dry-Run Cloud Run Redeploy Readiness & FinOps Verifier (`build_cloud_run_redeploy_plan`,
@@ -78,6 +80,35 @@ REQUIRED_PARITY_SCRIPTS: tuple[str, ...] = (
     "join_hivemind.ps1",
 )
 
+NOEL_ZERO_CLONE_SCRIPTS: tuple[str, ...] = (
+    "noel_canary_cohort_rehearsal.py",
+    "noel_cloud_run_parity_gate.py",
+    "noel_gamer_whisper_selftest.py",
+    "noel_post_setup_probe.py",
+    "noel_scale_load_harness.py",
+    "noel_vscode_autoconfig.py",
+)
+
+REQUIRED_SCRIPTS: tuple[str, ...] = (
+    "hivemind_boinc_idle_worker.py",
+    "hivemind_connect.py",
+    "hivemind_doctor.py",
+    "hivemind_opentrainer_agent.py",
+    "hivemind_producer_agent.py",
+    "hivemind_producer_autostart.py",
+    "hivemind_producer_shield.py",
+    "hivemind_quickstart.py",
+    "hivemind_volunteer_config.py",
+    "hivemind_volunteer_preflight.py",
+    "join_hivemind.ps1",
+    "noel_canary_cohort_rehearsal.py",
+    "noel_cloud_run_parity_gate.py",
+    "noel_gamer_whisper_selftest.py",
+    "noel_post_setup_probe.py",
+    "noel_scale_load_harness.py",
+    "noel_vscode_autoconfig.py",
+)
+
 EXPECTED_MANIFEST_HOLIDAY_ROUTES: tuple[str, ...] = (
     "/arena-noel",
     "/noel",
@@ -92,21 +123,7 @@ EXPECTED_MANIFEST_HOLIDAY_ROUTES: tuple[str, ...] = (
     "/v1/hivemind/raid/status",
 )
 
-EXPECTED_MANIFEST_SCRIPTS: tuple[str, ...] = (
-    "hivemind_boinc_idle_worker.py",
-    "hivemind_connect.py",
-    "hivemind_doctor.py",
-    "hivemind_opentrainer_agent.py",
-    "hivemind_producer_agent.py",
-    "hivemind_producer_autostart.py",
-    "hivemind_producer_shield.py",
-    "hivemind_quickstart.py",
-    "hivemind_volunteer_config.py",
-    "hivemind_volunteer_preflight.py",
-    "join_hivemind.ps1",
-    "noel_cloud_run_parity_gate.py",
-    "noel_post_setup_probe.py",
-)
+EXPECTED_MANIFEST_SCRIPTS: tuple[str, ...] = REQUIRED_SCRIPTS
 
 COMPLIANCE_NOTICE_EN = (
     "100% personal home PCs & personal hobby/open-source projects only — "
@@ -551,9 +568,9 @@ def _validate_manifest_body(
 
     raw_scripts = body.get("downloadable_scripts")
     if isinstance(raw_scripts, list) and all(isinstance(s, str) for s in raw_scripts):
-        missing_scripts = [s for s in EXPECTED_MANIFEST_SCRIPTS if s not in raw_scripts]
+        missing_scripts = [s for s in REQUIRED_SCRIPTS if s not in raw_scripts]
     else:
-        missing_scripts = list(EXPECTED_MANIFEST_SCRIPTS)
+        missing_scripts = list(REQUIRED_SCRIPTS)
 
     if missing_scripts:
         joined_s = ", ".join(missing_scripts)
@@ -571,6 +588,7 @@ def check_cloud_run_holiday_parity(
     *,
     expected_sha: str | None = None,
     check_git_head: bool = False,
+    verify_all_scripts: bool = False,
     http_fn: HttpFn = default_http_json,
     runner: RunnerFn = default_subprocess_runner,
     lang: str = "en",
@@ -677,8 +695,9 @@ def check_cloud_run_holiday_parity(
     script_http_statuses: dict[str, int] = {}
     missing_scripts: list[str] = []
     failed_scripts: list[str] = []
+    target_scripts = REQUIRED_SCRIPTS if verify_all_scripts else REQUIRED_PARITY_SCRIPTS
 
-    for script_name in REQUIRED_PARITY_SCRIPTS:
+    for script_name in target_scripts:
         script_path = f"/scripts/{script_name}"
         code, body = _invoke_http_callable(http_fn, "GET", f"{clean_gw}{script_path}")
         script_http_statuses[script_name] = code
@@ -1152,6 +1171,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also run live HTTP parity checks when combined with --print-redeploy-plan.",
     )
     parser.add_argument(
+        "--verify-all-scripts",
+        action="store_true",
+        help="Directly probe GET /scripts/<name> across every allowlisted script in REQUIRED_SCRIPTS.",
+    )
+    parser.add_argument(
         "--deploy-script",
         default="",
         help="Optional path to deploy/gcp_openrouter/deploy.sh for FinOps verification.",
@@ -1198,6 +1222,7 @@ def main(
             clean_gw,
             expected_sha=args.expected_sha,
             check_git_head=bool(args.check_git_head),
+            verify_all_scripts=bool(args.verify_all_scripts),
             http_fn=http_fn,
             runner=runner,
             lang=lang_code,

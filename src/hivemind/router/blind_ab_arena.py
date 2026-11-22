@@ -42,11 +42,31 @@ VALID_ARENA_PROFILES: frozenset[str] = frozenset({"dev", "gamer"})
 VALID_CHOSEN_SIDES: frozenset[str] = frozenset({"A", "B", "tie"})
 VALID_HOLIDAY_SIDES: frozenset[str] = frozenset({"A", "B"})
 MAX_ARENA_VOTES = 2000
+MAX_ARENA_VOTES_CEILING = 50_000
+MAX_SECRET_BYTES = 4096
+MAX_QUERY_LANG_CHARS = 64
+MAX_ACCEPT_LANGUAGE_CHARS = 512
+MAX_ACCEPT_LANGUAGE_PARTS = 32
+MAX_TASK_ID_CHARS = 64
+MAX_CHOSEN_SIDE_CHARS = 16
+MAX_PROFILE_CHARS = 32
+MAX_BALLOT_TOKEN_CHARS = 128
+MAX_GATEWAY_URL_CHARS = 256
+MAX_ROUTE_PATH_CHARS = 128
+MAX_RENDER_CARDS = 16
+MAX_CARD_TEXT_CHARS = 16_384
 Z_WILSON_95 = 1.959963984540054
 
-_NONCE_RE = re.compile(r"^[A-Za-z0-9_+=-]{8,80}$")
-_SALT_RE = re.compile(r"^[0-9a-f]{8,32}$")
-_MAC_RE = re.compile(r"^[0-9a-f]{24}$")
+_NONCE_RE = re.compile(r"\A[A-Za-z0-9_+=-]{8,80}\Z", re.ASCII)
+_SALT_RE = re.compile(r"\A[0-9a-f]{8,32}\Z", re.ASCII)
+_MAC_RE = re.compile(r"\A[0-9a-f]{24}\Z", re.ASCII)
+_TASK_ID_RE = re.compile(r"\A[a-z0-9][a-z0-9-]{0,63}\Z", re.ASCII)
+_BALLOT_SAFE_RE = re.compile(r"\A[A-Za-z0-9._-]{8,128}\Z", re.ASCII)
+_SAFE_PATH_RE = re.compile(r"\A/[A-Za-z0-9_./-]{0,127}\Z", re.ASCII)
+_Q_PARAM_RE = re.compile(r"\A\s*q\s*=\s*([01](?:\.[0-9]{0,3})?)\s*\Z", re.IGNORECASE | re.ASCII)
+_FORBIDDEN_URL_CHARS: frozenset[str] = frozenset(
+    {" ", "\t", "\r", "\n", '"', "'", "<", ">", "`", ";", "|", "&", "$", "\\"}
+)
 
 PERSONAL_PC_RULE_FR = (
     "Règle stricte d'intégrité personnelle : usage 100 % sur PC personnel à domicile et projets personnels / open-source "
@@ -317,19 +337,24 @@ def pick_arena_language(
         raise ValueError("default must be 'fr' or 'en'")
 
     if query_lang:
-        q_primary = query_lang.strip().lower().split("-")[0].split("_")[0]
-        if q_primary in SUPPORTED_ARENA_LANGS:
-            return q_primary
+        q_bounded = query_lang[:MAX_QUERY_LANG_CHARS]
+        if q_bounded.isascii():
+            q_primary = q_bounded.strip().lower().split("-")[0].split("_")[0]
+            if q_primary in SUPPORTED_ARENA_LANGS:
+                return q_primary
 
     best: tuple[float, int, str] | None = None
-    for position, part in enumerate((accept_language or "").split(",")):
+    raw_accept = (accept_language or "")[:MAX_ACCEPT_LANGUAGE_CHARS]
+    for position, part in enumerate(raw_accept.split(",", MAX_ACCEPT_LANGUAGE_PARTS)[:MAX_ACCEPT_LANGUAGE_PARTS]):
+        if not part.isascii():
+            continue
         tag, _, params = part.strip().partition(";")
         primary = tag.strip().lower().split("-")[0]
         if primary not in SUPPORTED_ARENA_LANGS:
             continue
         quality = 1.0
         if "q" in params.lower():
-            match = re.fullmatch(r"\s*q\s*=\s*([01](?:\.[0-9]{0,3})?)\s*", params, re.I)
+            match = _Q_PARAM_RE.fullmatch(params)
             quality = float(match.group(1)) if match else 0.0
         if quality > 0 and (best is None or (quality, -position) > (best[0], -best[1])):
             best = (quality, position, primary)
@@ -344,7 +369,7 @@ def wilson_95_lower_bound(wins: int, trials: int, z: float = Z_WILSON_95) -> flo
         raise ValueError("0 <= wins <= trials is required")
     if isinstance(z, bool) or not isinstance(z, (int, float)) or not math.isfinite(float(z)) or float(z) <= 0.0:
         raise ValueError("z must be a finite positive float")
-    if trials == 0:
+    if trials == 0 or wins == 0:
         return 0.0
     n = float(trials)
     p_hat = float(wins) / n
@@ -357,8 +382,8 @@ def wilson_95_lower_bound(wins: int, trials: int, z: float = Z_WILSON_95) -> flo
 
 
 def _validate_secret(secret: bytes) -> bytes:
-    if not isinstance(secret, (bytes, bytearray)) or len(secret) < 16:
-        raise ValueError("secret must be at least 16 bytes")
+    if not isinstance(secret, (bytes, bytearray)) or len(secret) < 16 or len(secret) > MAX_SECRET_BYTES:
+        raise ValueError("secret must be between 16 and 4096 bytes")
     return bytes(secret)
 
 
@@ -370,7 +395,12 @@ def sign_blind_ballot(
     salt: str | None = None,
 ) -> str:
     """Create an HMAC-masked blind ballot token hiding `holiday_side` from client DOM inspection."""
-    if isinstance(task_id, bool) or not isinstance(task_id, str) or task_id not in ARENA_TASKS_BY_ID:
+    if (
+        isinstance(task_id, bool)
+        or not isinstance(task_id, str)
+        or len(task_id) > MAX_TASK_ID_CHARS
+        or task_id not in ARENA_TASKS_BY_ID
+    ):
         raise ValueError("unknown task_id for blind ballot")
     if isinstance(holiday_side, bool) or not isinstance(holiday_side, str) or holiday_side not in VALID_HOLIDAY_SIDES:
         raise ValueError("holiday_side must be 'A' or 'B'")
@@ -395,11 +425,18 @@ def sign_blind_ballot(
 
 def verify_blind_ballot(ballot_token: str, task_id: str, secret: bytes) -> str:
     """Verify an HMAC-masked `ballot_token` for `task_id` and return the original `holiday_side` (`'A'` or `'B'`)."""
-    if isinstance(task_id, bool) or not isinstance(task_id, str) or task_id not in ARENA_TASKS_BY_ID:
+    if (
+        isinstance(task_id, bool)
+        or not isinstance(task_id, str)
+        or len(task_id) > MAX_TASK_ID_CHARS
+        or task_id not in ARENA_TASKS_BY_ID
+    ):
         raise ValueError("unknown task_id for blind ballot")
     if isinstance(ballot_token, bool) or not isinstance(ballot_token, str):
         raise ValueError("ballot_token must be a string")
     key = _validate_secret(secret)
+    if len(ballot_token) > MAX_BALLOT_TOKEN_CHARS or not ballot_token.isascii():
+        raise ValueError("malformed ballot_token")
     parts = ballot_token.strip().split(".")
     if len(parts) != 3:
         raise ValueError("malformed ballot_token")
@@ -428,7 +465,7 @@ def build_blind_task_cards(
     """Build curated side-by-side blind A/B task cards with randomized `A` / `B` checkpoint placement."""
     if isinstance(lang, bool) or not isinstance(lang, str):
         raise ValueError("lang must be a string")
-    is_fr = lang.strip().lower().startswith("fr")
+    is_fr = lang[:MAX_QUERY_LANG_CHARS].strip().lower().startswith("fr")
     active_rng: random.Random = rng if rng is not None else secrets.SystemRandom()
     active_secret = _validate_secret(secret) if secret is not None else secrets.token_bytes(32)
 
@@ -458,21 +495,25 @@ def build_blind_task_cards(
 
 
 def _normalize_chosen_side(chosen_side: str) -> str:
-    if isinstance(chosen_side, bool) or not isinstance(chosen_side, str):
+    if (
+        isinstance(chosen_side, bool)
+        or not isinstance(chosen_side, str)
+        or len(chosen_side) > MAX_CHOSEN_SIDE_CHARS
+        or not chosen_side.isascii()
+    ):
         raise ValueError("chosen_side must be 'A', 'B', or 'tie'")
     cleaned = chosen_side.strip()
-    if cleaned.upper() in ("A", "B"):
-        return cleaned.upper()
+    if cleaned in ("A", "a"):
+        return "A"
+    if cleaned in ("B", "b"):
+        return "B"
     if cleaned.lower() == "tie":
         return "tie"
     raise ValueError("chosen_side must be 'A', 'B', or 'tie'")
 
 
-def _compute_bucket_stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    total = len(rows)
-    holiday_wins = sum(1 for r in rows if r["preferred_checkpoint"] == "holiday_checkpoint")
-    baseline_wins = sum(1 for r in rows if r["preferred_checkpoint"] == "baseline_checkpoint")
-    ties = sum(1 for r in rows if r["preferred_checkpoint"] == "tie")
+def _bucket_stats_from_counts(holiday_wins: int, baseline_wins: int, ties: int) -> dict[str, Any]:
+    total = holiday_wins + baseline_wins + ties
     decisive = holiday_wins + baseline_wins
     win_ratio = round(holiday_wins / decisive, 4) if decisive > 0 else None
     wilson_lb = round(wilson_95_lower_bound(holiday_wins, decisive), 4)
@@ -488,7 +529,7 @@ def _compute_bucket_stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 class BlindArenaCollector:
-    """Thread-safe zero-VRAM collector for blind A/B holiday checkpoint evaluations."""
+    """Thread-safe bounded zero-VRAM collector for blind A/B holiday checkpoint evaluations."""
 
     def __init__(
         self,
@@ -496,11 +537,35 @@ class BlindArenaCollector:
         secret: bytes | None = None,
         max_votes: int = MAX_ARENA_VOTES,
     ) -> None:
-        if isinstance(max_votes, bool) or not isinstance(max_votes, int) or max_votes < 1:
-            raise ValueError("max_votes must be an integer >= 1")
+        if (
+            isinstance(max_votes, bool)
+            or not isinstance(max_votes, int)
+            or max_votes < 1
+            or max_votes > MAX_ARENA_VOTES_CEILING
+        ):
+            raise ValueError(f"max_votes must be an integer between 1 and {MAX_ARENA_VOTES_CEILING}")
         self._secret = _validate_secret(secret) if secret is not None else secrets.token_bytes(32)
+        self._max_votes = max_votes
         self._lock = threading.Lock()
-        self._votes: deque[dict[str, str]] = deque(maxlen=max_votes)
+        self._votes: deque[tuple[str, str, str, str]] = deque(maxlen=max_votes)
+        self._holiday_wins = 0
+        self._baseline_wins = 0
+        self._ties = 0
+        self._side_counts: dict[str, int] = {"A": 0, "B": 0, "tie": 0}
+        self._by_profile: dict[str, int] = {"dev": 0, "gamer": 0}
+        self._by_task_counts: dict[str, list[int]] = {tid: [0, 0, 0] for tid in ARENA_TASKS_BY_ID}
+        self._lifetime_votes = 0
+        self._evicted_votes = 0
+
+    def window_diagnostics(self) -> dict[str, int]:
+        """Return atomic ring-buffer bounds and lifetime/eviction counters."""
+        with self._lock:
+            return {
+                "max_votes": self._max_votes,
+                "retained_votes": len(self._votes),
+                "lifetime_votes": self._lifetime_votes,
+                "evicted_votes": self._evicted_votes,
+            }
 
     def issue_ballot(self, task_id: str, holiday_side: str, *, salt: str | None = None) -> str:
         """Issue an HMAC-masked blind ballot token bound to this collector's secret."""
@@ -515,6 +580,56 @@ class BlindArenaCollector:
         """Build per-request randomized blind A/B task cards signed with this collector's secret."""
         return build_blind_task_cards(lang=lang, rng=rng, secret=self._secret)
 
+    def _apply_delta_unlocked(
+        self,
+        task_id: str,
+        chosen_side: str,
+        profile: str,
+        preferred: str,
+        sign: int,
+    ) -> None:
+        task_bucket = self._by_task_counts[task_id]
+        if preferred == "holiday_checkpoint":
+            self._holiday_wins += sign
+            task_bucket[0] += sign
+        elif preferred == "baseline_checkpoint":
+            self._baseline_wins += sign
+            task_bucket[1] += sign
+        else:
+            self._ties += sign
+            task_bucket[2] += sign
+        self._side_counts[chosen_side] += sign
+        self._by_profile[profile] += sign
+
+    def _summary_unlocked(self) -> dict[str, Any]:
+        overall = _bucket_stats_from_counts(self._holiday_wins, self._baseline_wins, self._ties)
+        by_task: dict[str, dict[str, Any]] = {}
+        for task_id, task in ARENA_TASKS_BY_ID.items():
+            hw, bw, ti = self._by_task_counts[task_id]
+            by_task[task_id] = {
+                "domain": task["domain"],
+                **_bucket_stats_from_counts(hw, bw, ti),
+            }
+        return {
+            "object": "hivemind.blind_ab_arena.summary",
+            "campaign": "noel-2026-holiday-checkpoint-arena",
+            "zero_vram_inference": True,
+            **overall,
+            "chosen_side_counts": dict(self._side_counts),
+            "by_profile": dict(self._by_profile),
+            "by_task": by_task,
+            "compliance": {
+                "personal_pc_only": True,
+                "corporate_hardware_or_code_forbidden": True,
+                "monetary_cost_eur": "0.00 EUR",
+                "monetary_cost_usd": "0.00 USD",
+                "license": "AGPL-3.0",
+                "zero_live_gpu_vram": True,
+                "rule_fr": PERSONAL_PC_RULE_FR,
+                "rule_en": PERSONAL_PC_RULE_EN,
+            },
+        }
+
     def record_vote(
         self,
         *,
@@ -524,17 +639,27 @@ class BlindArenaCollector:
         ballot_token: str | None = None,
         holiday_side: str | None = None,
     ) -> dict[str, Any]:
-        """Validate and record a blind A/B evaluation vote and return updated summary + receipt."""
-        if isinstance(task_id, bool) or not isinstance(task_id, str):
+        """Validate and record a blind A/B evaluation vote and return atomic summary + receipt."""
+        if (
+            isinstance(task_id, bool)
+            or not isinstance(task_id, str)
+            or len(task_id) > MAX_TASK_ID_CHARS
+            or not task_id.isascii()
+        ):
             raise ValueError("task_id must be a known curated task identifier")
         norm_task_id = task_id.strip()
         task = ARENA_TASKS_BY_ID.get(norm_task_id)
         if task is None:
-            raise ValueError(f"unknown task_id {norm_task_id!r}")
+            raise ValueError("unknown curated task_id")
 
         norm_side = _normalize_chosen_side(chosen_side)
 
-        if isinstance(profile, bool) or not isinstance(profile, str):
+        if (
+            isinstance(profile, bool)
+            or not isinstance(profile, str)
+            or len(profile) > MAX_PROFILE_CHARS
+            or not profile.isascii()
+        ):
             raise ValueError("profile must be 'dev' or 'gamer'")
         norm_profile = profile.strip().lower()
         if norm_profile not in VALID_ARENA_PROFILES:
@@ -559,18 +684,16 @@ class BlindArenaCollector:
         else:
             preferred_checkpoint = "baseline_checkpoint"
 
-        entry = {
-            "task_id": norm_task_id,
-            "domain": task["domain"],
-            "chosen_side": norm_side,
-            "profile": norm_profile,
-            "holiday_side": resolved_holiday_side,
-            "preferred_checkpoint": preferred_checkpoint,
-        }
         with self._lock:
-            self._votes.append(entry)
+            if len(self._votes) == self._max_votes:
+                old_tid, old_side, old_prof, old_pref = self._votes.popleft()
+                self._apply_delta_unlocked(old_tid, old_side, old_prof, old_pref, -1)
+                self._evicted_votes += 1
+            self._votes.append((norm_task_id, norm_side, norm_profile, preferred_checkpoint))
+            self._apply_delta_unlocked(norm_task_id, norm_side, norm_profile, preferred_checkpoint, 1)
+            self._lifetime_votes += 1
+            summary_doc = self._summary_unlocked()
 
-        summary_doc = self.summary()
         return {
             **summary_doc,
             "recorded": True,
@@ -587,57 +710,78 @@ class BlindArenaCollector:
     def summary(self) -> dict[str, Any]:
         """Compute exact vote counts, `win_ratio`, and `wilson_95_lower_bound` across recorded votes."""
         with self._lock:
-            rows = list(self._votes)
-
-        overall = _compute_bucket_stats(rows)
-        side_counts = {
-            "A": sum(1 for r in rows if r["chosen_side"] == "A"),
-            "B": sum(1 for r in rows if r["chosen_side"] == "B"),
-            "tie": sum(1 for r in rows if r["chosen_side"] == "tie"),
-        }
-        by_profile = {
-            "dev": sum(1 for r in rows if r["profile"] == "dev"),
-            "gamer": sum(1 for r in rows if r["profile"] == "gamer"),
-        }
-        by_task: dict[str, dict[str, Any]] = {}
-        for task_id, task in ARENA_TASKS_BY_ID.items():
-            task_rows = [r for r in rows if r["task_id"] == task_id]
-            by_task[task_id] = {
-                "domain": task["domain"],
-                **_compute_bucket_stats(task_rows),
-            }
-
-        return {
-            "object": "hivemind.blind_ab_arena.summary",
-            "campaign": "noel-2026-holiday-checkpoint-arena",
-            "zero_vram_inference": True,
-            **overall,
-            "chosen_side_counts": side_counts,
-            "by_profile": by_profile,
-            "by_task": by_task,
-            "compliance": {
-                "personal_pc_only": True,
-                "corporate_hardware_or_code_forbidden": True,
-                "monetary_cost_eur": "0.00 EUR",
-                "monetary_cost_usd": "0.00 USD",
-                "license": "AGPL-3.0",
-                "zero_live_gpu_vram": True,
-                "rule_fr": PERSONAL_PC_RULE_FR,
-                "rule_en": PERSONAL_PC_RULE_EN,
-            },
-        }
+            return self._summary_unlocked()
 
 
 def _validate_gateway_url(gateway_url: str) -> str:
-    if isinstance(gateway_url, bool) or not isinstance(gateway_url, str) or not gateway_url.strip():
+    if (
+        isinstance(gateway_url, bool)
+        or not isinstance(gateway_url, str)
+        or len(gateway_url) > MAX_GATEWAY_URL_CHARS
+        or not gateway_url.isascii()
+        or not gateway_url.strip()
+    ):
         raise ValueError("gateway_url must be a non-empty http(s) URL")
     cleaned = gateway_url.strip().rstrip("/")
-    if any(ch in cleaned for ch in (" ", "\t", "\r", "\n", '"', "'", "<", ">")):
+    if any(ord(ch) < 33 or ord(ch) == 127 or ch in _FORBIDDEN_URL_CHARS for ch in cleaned):
         raise ValueError("gateway_url contains forbidden characters")
     parsed = urlparse(cleaned)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password:
+    try:
+        port = parsed.port
+    except ValueError:
+        raise ValueError("gateway_url has an invalid port") from None
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.netloc
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.path not in ("", "/")
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+        or (port is not None and not (1 <= port <= 65535))
+    ):
         raise ValueError("gateway_url must be a clean http(s) origin without credentials")
     return cleaned
+
+
+def _validate_route_path(path: str) -> str:
+    if (
+        isinstance(path, bool)
+        or not isinstance(path, str)
+        or len(path) > MAX_ROUTE_PATH_CHARS
+        or not path.startswith("/")
+        or path.startswith("//")
+        or ".." in path.split("/")
+        or not _SAFE_PATH_RE.fullmatch(path)
+    ):
+        raise ValueError("path must be a clean URL path starting with '/'")
+    return path
+
+
+def _sanitize_cards_for_render(cards: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
+    if isinstance(cards, (str, bytes, bytearray)) or not isinstance(cards, Sequence) or len(cards) > MAX_RENDER_CARDS:
+        raise ValueError("cards must be a bounded sequence of task card mappings")
+    clean_cards: list[dict[str, str]] = []
+    required_text_keys = ("badge", "title", "prompt", "candidate_a", "candidate_b")
+    for card in cards:
+        if not isinstance(card, Mapping):
+            raise ValueError("each card must be a Mapping")
+        tid = card.get("task_id")
+        ballot = card.get("ballot_token")
+        if isinstance(tid, bool) or not isinstance(tid, str) or not _TASK_ID_RE.fullmatch(tid):
+            raise ValueError("card task_id must be a clean lowercase slug")
+        if isinstance(ballot, bool) or not isinstance(ballot, str) or not _BALLOT_SAFE_RE.fullmatch(ballot):
+            raise ValueError("card ballot_token must be a bounded ASCII token")
+        normalized: dict[str, str] = {"task_id": tid, "ballot_token": ballot}
+        for key in required_text_keys:
+            val = card.get(key)
+            if isinstance(val, bool) or not isinstance(val, str) or len(val) > MAX_CARD_TEXT_CHARS or "\x00" in val:
+                raise ValueError(f"card {key} must be a bounded string without null bytes")
+            normalized[key] = val
+        clean_cards.append(normalized)
+    return clean_cards
 
 
 def _format_win_ratio(win_ratio: Any) -> str:
@@ -767,6 +911,7 @@ _ARENA_NOEL_JS = r"""(function () {
 
   function submitVote(taskId, chosenSide) {
     if (typeof fetch !== 'function') return Promise.resolve();
+    if (chosenSide !== 'A' && chosenSide !== 'B' && chosenSide !== 'tie') return Promise.resolve();
     var card = byId('arenaCard-' + taskId);
     var ballot = card ? card.getAttribute('data-ballot') : null;
     var payload = {
@@ -793,7 +938,9 @@ _ARENA_NOEL_JS = r"""(function () {
       .then(function (d) {
         applySummary(d);
         var lv = (d && d.last_vote) || {};
-        var holSide = lv.revealed_holiday_side || '?';
+        var holSide = (lv.revealed_holiday_side === 'A' || lv.revealed_holiday_side === 'B')
+          ? lv.revealed_holiday_side
+          : '?';
         var baseSide = holSide === 'A' ? 'B' : (holSide === 'B' ? 'A' : '?');
         ['A', 'B', 'Tie'].forEach(function (suffix) {
           var b = byId('voteBtn' + suffix + '-' + taskId);
@@ -875,17 +1022,15 @@ def render_blind_ab_arena_page(
         raise ValueError("lang must be a string")
     blind_ab_arena_csp(nonce)
     safe_gw = html.escape(_validate_gateway_url(gateway_url))
-    if isinstance(path, bool) or not isinstance(path, str) or not path.startswith("/"):
-        raise ValueError("path must be a URL path starting with '/'")
+    safe_path = html.escape(_validate_route_path(path))
     if arena_summary is not None and not isinstance(arena_summary, Mapping):
         raise ValueError("arena_summary must be a Mapping or None")
 
-    safe_path = html.escape(path)
-    is_fr = lang.strip().lower().startswith("fr")
+    is_fr = lang[:MAX_QUERY_LANG_CHARS].strip().lower().startswith("fr")
     lang_code = "fr" if is_fr else "en"
 
     active_cards = (
-        list(cards)
+        _sanitize_cards_for_render(cards)
         if cards is not None
         else build_blind_task_cards(lang=lang_code, rng=rng, secret=secret)
     )

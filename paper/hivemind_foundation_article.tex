@@ -2018,9 +2018,28 @@ domain within 1\,\% of the base. Five caveats apply:
     base holds on one slice but not on the other.
 \end{itemize}
 
-\paragraph{Campaign 2 (in progress at the time of writing).} The driver started the confirmed recipe automatically on
-21~November. By 22~November 17:50 Paris it had run 295 rounds (99 accepted) with at least 5{,}523\,MiB free. Its final
-state will be scored by the same frozen judge, and that score, not the training loss, is the result we will report.
+\paragraph{Campaign 2.} The driver started the confirmed recipe automatically on 21~November and stopped it on
+23~November at 02:40 Paris: 428 rounds over 5 runs, 122 accepted, with at least 5{,}523\,MiB of VRAM free. The same
+frozen judge then scored the final state on the 240 never-used chunks:
+\begin{center}\small
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+ & mean & general & code & maths & exoplanets & stars & security\\
+\midrule
+vs base & $-0.553$\,nat & $+2.21\,\%$ & $-7.19\,\%$ & $-3.33\,\%$ & $-9.55\,\%$ & $-49.42\,\%$ & $-16.86\,\%$\\
+\bottomrule
+\end{tabular}
+\end{center}
+The mean mid-row NLL fell from 4.2864 to 3.7337 (95\,\% CI of the difference $[-0.633,-0.473]$), and the add-on is
+lower on 190 of 240 chunks. The data manifest's row ranges are identical to those registered for the judge, and the
+judge's row-order and base-equivalence checks pass, so no test row was trained on. Three readings temper this result:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item the large gains are on domains whose training data was read, and the test rows come from the same datasets,
+    so they measure learning of each dataset's distribution rather than general ability (stars rows are numeric spectra);
+  \item format still accounts for part of it: scored from the start of rows, the difference is $-0.98$\,nat;
+  \item general text got 2.21\,\% worse while the other domains were trained, so the per-domain guard against the base
+    fails and, by our own rule, this add-on is \textbf{not promoted} to serving.
+\end{itemize}
 
 \subsection{Returns from the field}
 \begin{itemize}[leftmargin=*,itemsep=2pt]

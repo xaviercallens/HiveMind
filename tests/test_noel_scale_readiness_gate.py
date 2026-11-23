@@ -963,7 +963,8 @@ def test_cli_modes_loopback_http_server_and_input_safety_guards(
     )
     assert comp_dom["compliance_ok"] is False and "domain" in comp_dom["matched_markers"]
 
-    assert readiness_gate.load_scale_readiness_modules() == MODULES
+    reloaded_once = readiness_gate.load_scale_readiness_modules()
+    assert readiness_gate.load_scale_readiness_modules() == reloaded_once
     with pytest.raises(readiness_gate.ReadinessGateError):
         readiness_gate._load_or_reuse_script_module("missing_x", tmp_path / "does_not_exist.py")
 

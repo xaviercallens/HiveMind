@@ -89,3 +89,20 @@ text, +10.53 %; W25 on the frozen 240 chunks scores −0.079 nats).
 - **Outcome:** the chosen candidate replaces W25 as the recommendation only if it **corrects on the third split**.
   Otherwise W25 stays the recommendation.
 - CPU only. Receipts go to `hivemind_work/autoresearch_moe/correction_a1/`.
+
+### Amendment A1: partial results (23 Nov 2026, 17:10 Paris; the run was stopped by the host for low memory)
+
+Selection split, mid-row change against base Crowd-v1, %:
+
+| Candidate | mean diff (nats) [95 % CI] | general | code | maths | exoplanets | stars | security | corrects |
+|---|---|---|---|---|---|---|---|---|
+| W25 (from above) | −0.083 [−0.093, −0.072] | +0.64 | −1.79 | −1.85 | −1.81 | −5.33 | −2.06 | yes |
+| W30 | −0.098 [−0.114, −0.081] | **+1.87** | −2.20 | −2.17 | −2.35 | −7.16 | −2.59 | no |
+| W35 | −0.112 [−0.135, −0.088] | **+3.70** | −2.61 | −2.46 | −2.96 | −9.34 | −3.17 | no |
+| W40 | −0.126 [−0.156, −0.093] | **+6.00** | −3.03 | −2.56 | −3.69 | −11.88 | −3.83 | no |
+| W45 | not scored (run stopped) | | | | | | | |
+
+- **Status:** W30, W35 and W40 fail on general text, and W45 was not scored. The chosen candidate is therefore still
+  **W25**. Its test on the third split (`skip_eligible_rows = 80`) has **not been run yet**.
+- **Reading:** between λ = 0.25 and 0.40, general text worsens steadily as λ grows, about +1.3 points per 0.05. The
+  other domains improve steadily. On this model, the trade-off is sharp just above λ = 0.25.

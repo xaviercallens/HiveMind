@@ -46,3 +46,28 @@
   launcher.
 - Outputs go to `hivemind_work/autoresearch_moe/correction/`.
 - The receipts and a results section are added to this file afterwards. This pre-registration text is not edited.
+
+## Results (added 23 Nov 2026, 11:30 Paris; the pre-registration above is unchanged)
+
+Receipts: `artifacts/experiments/E_B3_MOE_CORRECTION_decision_2026-11-23.json` (all candidates) and
+`E_B3_MOE_CORRECTION_W25_frozen_2026-11-23.json` (final test). Mid-row change against base Crowd-v1, %.
+
+| Candidate | split | mean diff (nats) [95 % CI, seed 20261123] | general | code | maths | exoplanets | stars | security | corrects |
+|---|---|---|---|---|---|---|---|---|---|
+| C2 (λ = 1) | selection | −0.548 [−0.630, −0.466] | **+3.33** | −6.41 | −3.64 | −10.79 | −49.56 | −16.15 | no |
+| W75 | selection | −0.394 [−0.460, −0.326] | **+8.30** | −6.18 | −4.93 | −9.65 | −36.60 | −11.08 | no |
+| W50 | selection | −0.163 [−0.208, −0.114] | **+10.53** | −3.94 | −2.83 | −5.27 | −18.09 | −5.42 | no |
+| W25 | selection | −0.083 [−0.093, −0.072] | +0.64 | −1.79 | −1.85 | −1.81 | −5.33 | −2.06 | **yes** |
+| **W25, final** | **frozen 240** | **−0.079 [−0.089, −0.068]** | **+0.77** | −1.87 | −1.57 | −1.64 | −5.25 | −2.07 | guard holds |
+
+**Outcome: corrected.** W25 is chosen (the only candidate that corrects). On the frozen 240 chunks, scored once, every
+domain is within +1 % of the base and the gain is −0.079 nats. The frozen judge's own CI (seed 20261118) is
+[−0.088, −0.068], and the add-on is lower on 202 of 240 chunks. The row-order and base-equivalence gates pass. The
+checkpoint is `autoresearch_moe/correction/interp_lambda_0.25.safetensors` (sha256 `ab6c8fdc…`).
+
+**Reading.**
+- The correction keeps about 14 % of campaign 2's gain (−0.079 of −0.553). It is a safe operating point, not a free fix.
+- General text is **not monotone** in λ: it is worse at λ = 0.75 and 0.50 than at λ = 1. Interpolation is not a simple
+  dial between gain and regression on this model; only the low end of the range repaired it.
+- The size of the gain (−0.079) is about the same as the screen's recipe T6 (−0.080, also passing the guard), reached
+  by a different route.

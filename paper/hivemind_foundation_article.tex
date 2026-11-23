@@ -2042,19 +2042,26 @@ judge's row-order and base-equivalence checks pass, so no test row was trained o
 \end{itemize}
 
 \paragraph{Correction (23 November).} A pre-registered follow-up tried to remove the general-text regression without
-retraining. Re-reading general text was not the cure: campaign 2 had already re-read about 150{,}000 general-text
-tokens at its end. It interpolated the trainable weights between the zero-delta start, which reproduces the base, and
-campaign 2's final state, $\theta(\lambda)=\theta_0+\lambda(\theta_{C2}-\theta_0)$ for $\lambda\in\{0.75,0.5,0.25\}$.
-Candidates were chosen on a \emph{separate} selection split: the next 40 never-used rows of each source. The frozen
-240 chunks were used once, for the chosen candidate.
+retraining much. Re-reading general text was not the cure: campaign 2 had already re-read about 150{,}000 general-text
+tokens at its end. Candidates were chosen on a \emph{separate} selection split, the next 40 never-used rows of each
+source. A third split of 40 further rows confirmed the choice. The frozen 240 chunks were not reused after their single
+test of the first choice.
 \begin{itemize}[leftmargin=*,itemsep=2pt]
-  \item Only $\lambda=0.25$ kept every domain within 1\,\% of the base. General text is not monotone in $\lambda$:
-    $+3.3\,\%$ at $\lambda=1$, $+8.3\,\%$ at 0.75, $+10.5\,\%$ at 0.5, and $+0.6\,\%$ at 0.25 on the selection split.
-  \item On the frozen chunks, the $\lambda=0.25$ add-on scores $-0.079$\,nat against the base (95\,\% CI
-    $[-0.089,-0.068]$, lower on 202 of 240 chunks), with general text at $+0.77\,\%$ and every other domain better
-    (stars $-5.2\,\%$, security $-2.1\,\%$, code $-1.9\,\%$). It passes the per-domain guard.
-  \item The price is most of the gain: about 14\,\% of campaign 2's improvement is kept. Promotion to serving remains
-    the owner's decision.
+  \item \textbf{Interpolation toward the start.} Mixing campaign~2's trainable weights with the zero-delta start,
+    $\theta(\lambda)=\theta_0+\lambda(\theta_{C2}-\theta_0)$, kept every domain within 1\,\% of the base only at
+    $\lambda=0.25$. General text is not monotone in $\lambda$: $+3.3\,\%$ at 1, $+8.3\,\%$ at 0.75, $+10.5\,\%$ at 0.5,
+    $+6.0\,\%$ at 0.4, $+1.9\,\%$ at 0.3, $+0.6\,\%$ at 0.25. On the frozen chunks $\lambda=0.25$ scored $-0.079$\,nat
+    (general $+0.77\,\%$), but on the third split its general-text change was $+1.04\,\%$, just over the limit.
+  \item \textbf{Router versus experts.} The router holds 1.6\,\% of the trainable weights. Interpolating it separately
+    gave the best candidate: experts at half way and the \emph{router reset to its start}, which corrects on both the
+    selection split (general $+0.10\,\%$) and the third split (general $+0.63\,\%$, mean $-0.086$\,nat, 95\,\% CI
+    $[-0.097,-0.075]$), with every other domain better. The effect is conditional: with full-strength experts, resetting
+    the router is harmful (general $+14.9\,\%$), because the experts were trained jointly with their router.
+  \item \textbf{More training does not undo it.} Continuing campaign~2 on the T4 for 15 rounds at a four times lower
+    learning rate left general text at $+3.45\,\%$.
+  \item \textbf{The price is most of the gain:} about 16\,\% of campaign~2's improvement is kept. Promotion to serving
+    remains the owner's decision. The margins of the 1\,\% guard are thin: general-text figures moved by several tenths of
+    a point between splits.
 \end{itemize}
 
 \subsection{Returns from the field}

@@ -176,3 +176,17 @@ competes with the A2 candidates:
 
 The frozen 240 chunks are not used again. Receipts: `hivemind_work/autoresearch_moe/correction_f1/`. The final decision
 is applied by hand from the receipts, following the text above.
+
+### Amendment A3: results (23 Nov 2026, 19:20 Paris)
+
+Receipts: `artifacts/experiments/E_B3_MOE_CORRECTION_F1_training_2026-11-23.json` and `..._F1_selection_2026-11-23.json`.
+
+- **Training (T4, 17:12 to 18:48 Paris):** 15 rounds, 7 accepted, from C2 with inner lr 1e-4 at offset 72,149 (a second pass over
+  the first rows of E0 and E1). Checkpoint `crowd_moe_opendiloco_round_15.safetensors`, sha256 `fe6cfaf89cbf9b59...`. The worker used
+  about 2.8 GiB of RAM, free VRAM stayed at 6,957 MiB or more, and the producer was stopped only while it ran.
+- **Selection split, mid-row change against the base:** mean **-0.559** nats (CI [-0.641, -0.477]); general text **+3.45 %**, code -7.39 %,
+  maths -4.40 %, exoplanets -10.88 %, stars -49.91 %, security -15.77 %. **F1 does not correct** (general text above +1 %).
+- **Per the rule of A3, F1 cannot replace A2's recommendation.** A lower inner learning rate for 15 more rounds did not undo
+  the regression: F1 is close to C2 (selection: C2 +3.33 % on general text, F1 +3.45 %).
+- *Clarification:* the "sha256 `fd0d41a9...`" remark in A3's text refers to the earlier round-77 package and not to C2. C2 is the file
+  scored above, a copy of `run_20261122T200945Z_c2_full/crowd_moe_opendiloco_round_84.safetensors`.

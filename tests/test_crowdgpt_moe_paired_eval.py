@@ -330,3 +330,43 @@ def test_midrow_preregistration_spec_is_frozen_and_consistent():
     assert set(spec["data"]["excluded_benchmarks"]) == set(pe.BANNED_BENCHMARKS)
     assert spec["arms"]["moe_secondary"]["checkpoint_sha256"].startswith("58696cfe5660bd91")
     assert "-0.1653" in spec["interpretation_rule"]["reference"]
+
+
+def test_skip_eligible_selects_the_next_disjoint_block_and_defaults_to_unchanged() -> None:
+    """Correction screen (23 Nov 2026): skip_eligible = K gives the eligible rows after the first K, per expert."""
+    manifest = {"experts": [{"expert_id": "E0", "train_tokens": 10, "sources": [
+        {"dataset_id": "web/a", "config": "default", "split": "train", "origin": "local_hf_cache",
+         "heldout_rows": [0, 5], "train_rows": [5, 10]}]}]}
+
+    def fetch(ds, cfg, split, off, n):
+        # every third row is too short, so eligibility (not row position) must drive the skip
+        return [{"text": ("x " * (2 if (off + i) % 3 == 0 else 40)).strip()} for i in range(n) if off + i < 200]
+
+    enc = lambda s: [1] * len(s.split())  # noqa: E731
+    base, _ = pe.select_test_chunks(manifest, {"local_hf_cache": fetch}, enc, chunks_per_expert=6, chunk_tokens=8)
+    same, _ = pe.select_test_chunks(manifest, {"local_hf_cache": fetch}, enc, chunks_per_expert=6, chunk_tokens=8,
+                                     skip_eligible=0)
+    assert [c["row"] for c in base] == [c["row"] for c in same]
+    nxt, rep = pe.select_test_chunks(manifest, {"local_hf_cache": fetch}, enc, chunks_per_expert=6, chunk_tokens=8,
+                                      skip_eligible=6)
+    both, _ = pe.select_test_chunks(manifest, {"local_hf_cache": fetch}, enc, chunks_per_expert=12, chunk_tokens=8)
+    assert [c["row"] for c in nxt] == [c["row"] for c in both][6:]
+    assert not set(c["row"] for c in nxt) & set(c["row"] for c in base)
+    assert rep[0]["sources"][0]["rows_skipped"] == 6
+
+
+def test_interpolation_is_linear_between_start_and_checkpoint() -> None:
+    s = importlib.util.spec_from_file_location("crowdgpt_moe_interpolate", REPO / "scripts" / "crowdgpt_moe_interpolate.py")
+    m = importlib.util.module_from_spec(s)
+    assert s.loader is not None
+    s.loader.exec_module(m)
+    start = {"a": torch.zeros(2, 3), "r": torch.ones(4)}
+    end = {"a": torch.full((2, 3), 2.0), "r": torch.full((4,), 3.0)}
+    assert torch.equal(m.interpolate(start, end, 0.0)["a"], start["a"])
+    assert torch.equal(m.interpolate(start, end, 1.0)["r"], end["r"])
+    half = m.interpolate(start, end, 0.5)
+    assert torch.allclose(half["a"], torch.full((2, 3), 1.0)) and torch.allclose(half["r"], torch.full((4,), 2.0))
+    with pytest.raises(ValueError):
+        m.interpolate(start, {"a": end["a"]}, 0.5)
+    with pytest.raises(ValueError):
+        m.interpolate(start, {"a": torch.zeros(3, 2), "r": end["r"]}, 0.5)

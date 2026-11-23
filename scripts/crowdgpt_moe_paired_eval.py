@@ -65,6 +65,7 @@ def select_test_chunks(
     scan_cap_rows: int = 2000,
     banned: frozenset[str] = BANNED_BENCHMARKS,
     chunk_offset: int = 0,
+    skip_eligible: int = 0,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Chunks from rows after each source's training range, one chunk per row, plus a per-expert report.
 
@@ -72,12 +73,18 @@ def select_test_chunks(
     keeps ``ids[0:chunk_offset + chunk_tokens]`` as model input and ``score_from = chunk_offset`` marks the first scored
     target, so the row's opening stays in context but is not scored.
 
+    ``skip_eligible`` (default 0 = unchanged): per expert, skip the first ``skip_eligible`` eligible rows, in the same
+    source order. With ``skip_eligible = chunks_per_expert`` the selection is the NEXT block of rows after the ones a
+    frozen judge already uses: a disjoint split for model selection (correction screen, 23 Nov 2026).
+
     ``fetchers`` maps a manifest ``origin`` (``local_hf_cache`` / ``datasets_server``) to a row fetcher
     ``(dataset_id, config, split, offset, length) -> rows``. A later source of an expert is read only if the earlier
     ones gave too few chunks. Experts that were not trained, or whose sources have no rows left, are reported as skipped.
     """
     if chunk_offset < 0 or chunk_tokens < 2:
         raise ValueError("chunk_offset must be >= 0 and chunk_tokens >= 2")
+    if skip_eligible < 0:
+        raise ValueError("skip_eligible must be >= 0")
     need = chunk_offset + chunk_tokens
     chunks: list[dict[str, Any]] = []
     report: list[dict[str, Any]] = []
@@ -89,6 +96,7 @@ def select_test_chunks(
             entry["skipped_reason"] = f"not trained ({expert.get('skipped_reason') or 'no sources'})"
             continue
         got: list[dict[str, Any]] = []
+        skipped = 0
         for src in expert["sources"]:
             if len(got) >= chunks_per_expert:
                 break
@@ -103,7 +111,7 @@ def select_test_chunks(
             if start < int(src["heldout_rows"][1]):
                 raise ValueError(f"{eid}/{ds}: train_rows end {start} precedes the held-out end")
             used = {"dataset_id": ds, "origin": origin, "first_row": start, "rows_scanned": 0, "rows_used": [],
-                    "rows_too_short": 0, "exhausted": False}
+                    "rows_too_short": 0, "rows_skipped": 0, "exhausted": False}
             off = start
             while len(got) < chunks_per_expert and off < start + scan_cap_rows:
                 length = min(ROWS_PER_REQUEST, start + scan_cap_rows - off)
@@ -118,6 +126,10 @@ def select_test_chunks(
                     ids = list(encode(row_to_text(row)))
                     if len(ids) < need:
                         used["rows_too_short"] += 1
+                        continue
+                    if skipped < skip_eligible:
+                        skipped += 1
+                        used["rows_skipped"] += 1
                         continue
                     got.append({"expert_id": eid, "dataset_id": ds, "row": off + i, "ids": [int(t) for t in ids[:need]],
                                 "score_from": chunk_offset})
@@ -456,7 +468,8 @@ def main(argv: list[str] | None = None) -> int:
     chunks, selection = select_test_chunks(
         manifest, {"local_hf_cache": _local, "datasets_server": _remote}, lambda s: tok.encode(s).ids,
         chunks_per_expert=int(chunking["chunks_per_expert"]), chunk_tokens=chunk_tokens,
-        scan_cap_rows=int(chunking.get("scan_cap_rows_per_source", 2000)), chunk_offset=chunk_offset)
+        scan_cap_rows=int(chunking.get("scan_cap_rows_per_source", 2000)), chunk_offset=chunk_offset,
+        skip_eligible=int(chunking.get("skip_eligible_rows", 0)))
     log(f"selected {len(chunks)} chunks (offset {chunk_offset}): "
         + ", ".join(f"{e['expert_id']}={e['chunks']}" for e in selection))
 

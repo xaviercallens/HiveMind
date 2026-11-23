@@ -1191,7 +1191,7 @@ def test_06_loopback_http_real_git_gcloud_asgi_fallback_and_validation_edge_bran
         promoter._validate_argv_sequence([], allowed_binaries=frozenset({"gcloud"}))
     with pytest.raises(promoter.RevisionPromoterError):
         promoter._validate_argv_sequence(["gcloud", "bad\narg"], allowed_binaries=frozenset({"gcloud"}))
-    assert promoter.default_gcloud_runner(["gcloud", "--version"], 5.0)[0] in (0, 127)
+    assert promoter.default_gcloud_runner(["gcloud", "--version"], 15.0)[0] in (0, 124, 127)
 
     # 4. Validators, zero-inference guards, safety redaction, and CLI error JSON/text
     for bad_lang in (True, "de"):

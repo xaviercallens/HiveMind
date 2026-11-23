@@ -231,3 +231,16 @@ and the general-text figure moves by several tenths of a point between splits.
 - Nothing here changes the earlier conclusion that no candidate passes the guard together with the full gain of campaign 2.
 - **Operational:** the evaluator's RAM gate was raised from 9 to 12 GiB (no effect on results). The first A1 run was stopped by the host for low memory
   (see above); A2 waited for RAM instead (about one hour in total).
+
+## Amendment A4: one-time confirmation of `e50_r00` on the frozen 240 chunks (owner: "confirm", 23 Nov 2026, written before it is scored)
+
+**Known when written:** the A2 results. `e50_r00` corrects on the selection split and on the third split. The frozen 240
+chunks have scored C2 and W25, but never `e50_r00`.
+
+- **What is run:** the frozen judge, unchanged (`crowdgpt_moe_paired_eval.py`, spec sha `dce3b43e...`, `skip_eligible_rows = 0`), on
+  the checkpoint `interp_e50_r00.safetensors` (sha256 `80dccfa8...`), CPU only. This is its single frozen-chunk score. It is
+  **not used to choose** anything: the choice was made in A2.
+- **Reading rule:** if every scored expert is within +1 % of the base and the judge's own mean CI against the base is below 0, the
+  result is reported as **confirmed on the frozen chunks**. Otherwise it is reported as **not confirmed on the frozen chunks**, and
+  the A2 recommendation stands with that caveat. It is not rerun.
+- It does **not** promote anything to serving: that remains the owner's decision.

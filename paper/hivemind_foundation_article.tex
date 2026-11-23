@@ -2041,6 +2041,22 @@ judge's row-order and base-equivalence checks pass, so no test row was trained o
     fails and, by our own rule, this add-on is \textbf{not promoted} to serving.
 \end{itemize}
 
+\paragraph{Correction (23 November).} A pre-registered follow-up tried to remove the general-text regression without
+retraining. Re-reading general text was not the cure: campaign 2 had already re-read about 150{,}000 general-text
+tokens at its end. It interpolated the trainable weights between the zero-delta start, which reproduces the base, and
+campaign 2's final state, $\theta(\lambda)=\theta_0+\lambda(\theta_{C2}-\theta_0)$ for $\lambda\in\{0.75,0.5,0.25\}$.
+Candidates were chosen on a \emph{separate} selection split: the next 40 never-used rows of each source. The frozen
+240 chunks were used once, for the chosen candidate.
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item Only $\lambda=0.25$ kept every domain within 1\,\% of the base. General text is not monotone in $\lambda$:
+    $+3.3\,\%$ at $\lambda=1$, $+8.3\,\%$ at 0.75, $+10.5\,\%$ at 0.5, and $+0.6\,\%$ at 0.25 on the selection split.
+  \item On the frozen chunks, the $\lambda=0.25$ add-on scores $-0.079$\,nat against the base (95\,\% CI
+    $[-0.089,-0.068]$, lower on 202 of 240 chunks), with general text at $+0.77\,\%$ and every other domain better
+    (stars $-5.2\,\%$, security $-2.1\,\%$, code $-1.9\,\%$). It passes the per-domain guard.
+  \item The price is most of the gain: about 14\,\% of campaign 2's improvement is kept. Promotion to serving remains
+    the owner's decision.
+\end{itemize}
+
 \subsection{Returns from the field}
 \begin{itemize}[leftmargin=*,itemsep=2pt]
   \item \textbf{The training loss is not the product metric.} A ratchet that scores from the start of a row rewards

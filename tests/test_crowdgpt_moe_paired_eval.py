@@ -370,3 +370,34 @@ def test_interpolation_is_linear_between_start_and_checkpoint() -> None:
         m.interpolate(start, {"a": end["a"]}, 0.5)
     with pytest.raises(ValueError):
         m.interpolate(start, {"a": torch.zeros(3, 2), "r": end["r"]}, 0.5)
+
+
+def _load_script(name: str):
+    s = importlib.util.spec_from_file_location(name, REPO / "scripts" / f"{name}.py")
+    m = importlib.util.module_from_spec(s)
+    assert s.loader is not None
+    s.loader.exec_module(m)
+    return m
+
+
+def test_separate_router_and_expert_lambdas() -> None:
+    m = _load_script("crowdgpt_moe_interpolate")
+    start = {"expert_0": torch.zeros(3), "router_frag_0": torch.zeros(2)}
+    end = {"expert_0": torch.full((3,), 4.0), "router_frag_0": torch.full((2,), 8.0)}
+    out = m.interpolate_groups(start, end, lam_expert=0.5, lam_router=0.25)
+    assert torch.allclose(out["expert_0"], torch.full((3,), 2.0)) and torch.allclose(out["router_frag_0"], torch.full((2,), 2.0))
+    same = m.interpolate_groups(start, end, 0.5, 0.5)
+    plain = m.interpolate(start, end, 0.5)
+    assert all(torch.equal(same[k], plain[k]) for k in plain)
+
+
+def test_multi_eval_helpers_resume_signature_and_memory(tmp_path: Path) -> None:
+    m = _load_script("crowdgpt_moe_multi_eval")
+    assert m.mem_available_gb("MemTotal: 100 kB\nMemAvailable:   10485760 kB\n") == 10.0
+    assert m.mem_available_gb("MemTotal: 100 kB\n") == 0.0
+    cands = {"a": "x", "b": "y", "c": "z"}
+    (tmp_path / "b_skip40.json").write_text("{}")
+    assert m.pending(cands, tmp_path, 40) == ["a", "c"]
+    assert m.pending(cands, tmp_path, 80) == ["a", "b", "c"]  # a different split is a different receipt
+    c1 = [{"expert_id": "E0", "dataset_id": "d", "row": 1}, {"expert_id": "E1", "dataset_id": "d", "row": 2}]
+    assert m.signature(c1) == m.signature(list(c1)) and m.signature(c1) != m.signature(c1[::-1])

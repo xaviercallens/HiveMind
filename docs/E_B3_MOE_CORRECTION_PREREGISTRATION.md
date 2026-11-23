@@ -106,3 +106,43 @@ Selection split, mid-row change against base Crowd-v1, %:
   **W25**. Its test on the third split (`skip_eligible_rows = 80`) has **not been run yet**.
 - **Reading:** between λ = 0.25 and 0.40, general text worsens steadily as λ grows, about +1.3 points per 0.05. The
   other domains improve steadily. On this model, the trade-off is sharp just above λ = 0.25.
+
+## Amendment A2: router-versus-expert interpolation, and the confirmation of W25 (owner, 23 Nov 2026, written before any new candidate is scored)
+
+**Known when written:** the results above. W25 corrects on the selection split (J = 4.2428) and on the frozen 240
+chunks. W30, W35 and W40 fail on general text (+1.87, +3.70 and +6.00 %). W45 was not scored, because the host stopped
+the run for low memory, and W25 has not been tested on the third split (`skip_eligible_rows = 80`). The trainable
+weights are 12 buckets: 8 experts (18.87 M parameters) and 4 router fragments (0.30 M, 1.6 %).
+
+**Hypothesis (H-router).** The general-text regression comes mostly from the router, which learned to send general
+tokens to specialist experts, rather than from the experts' own weights. If so, keeping the experts at a high λ while
+pulling the **router** toward its start should keep most of the specialist gain with less regression.
+*Prediction, informational:* at equal expert λ, a lower router λ gives a smaller general-text change.
+
+**Candidates** (θ(λ_expert, λ_router) = start + λ·(C2 − start), per bucket group; same start and C2 files as above):
+
+| name | λ_expert | λ_router |
+|---|---|---|
+| e45_r45 | 0.45 | 0.45 (the unscored W45) |
+| e50_r00, e75_r00, e100_r00 | 0.50, 0.75, 1.00 | 0.00 |
+| e50_r25, e75_r25, e100_r25 | 0.50, 0.75, 1.00 | 0.25 |
+| e75_r50, e100_r50 | 0.75, 1.00 | 0.50 |
+| e25_r100, e50_r100 | 0.25, 0.50 | 1.00 |
+
+**Procedure and rule** (the rule of the first part, unchanged):
+1. Score all 11 candidates on the **selection split** (`skip_eligible_rows = 40`). A candidate *corrects* if every
+   scored expert is within +1 % of the base and the mean CI against the base (seed 20261123) is entirely below 0.
+2. **Chosen** = the lowest J among the correcting candidates **and W25** (selection J = 4.2428).
+3. Score the chosen candidate and W25 on the **third split** (`skip_eligible_rows = 80`). The frozen 240 chunks are not
+   used again.
+4. **The chosen candidate replaces W25 as the recommendation** only if it is not W25, it corrects on the third split,
+   and its J there is lower than W25's. **W25 stays the recommendation** if it is chosen or if the chosen candidate does
+   not meet that. In both cases W25's third-split result is reported, whether or not it corrects there.
+
+**Execution.** CPU only. One process loads the model and the base arm once and scores each candidate (about 9 minutes
+each), through `scripts/crowdgpt_moe_multi_eval.py`. It resumes from finished receipts, and it waits until at least
+9 GiB of RAM is available before loading the model and before each candidate. The scoring is the judge's own mid-row
+metric, without the same-row row-start control. Receipts: `hivemind_work/autoresearch_moe/correction_a2/`.
+
+**Not started here (needs the owner's go, because it uses the T4 and stops the producer for about an hour):** if no
+candidate beats W25, a short GPU continuation from C2 at a lower inner learning rate.

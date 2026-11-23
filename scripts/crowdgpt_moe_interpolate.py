@@ -45,18 +45,34 @@ def interpolate(start: dict[str, torch.Tensor], end: dict[str, torch.Tensor], la
     return out
 
 
+def interpolate_groups(start: dict[str, torch.Tensor], end: dict[str, torch.Tensor], lam_expert: float,
+                       lam_router: float) -> dict[str, torch.Tensor]:
+    """Like :func:`interpolate`, with one lambda for the ``router_frag_*`` buckets and another for everything else."""
+    out = {}
+    for name in start:
+        lam = lam_router if name.startswith("router") else lam_expert
+        out.update(interpolate({name: start[name]}, {name: end[name]}, lam))
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--spec", required=True, type=Path)
     ap.add_argument("--base-cache-dir", required=True, type=Path)
     ap.add_argument("--checkpoint", required=True, type=Path)
-    ap.add_argument("--lambdas", nargs="+", type=float, required=True)
+    ap.add_argument("--lambdas", nargs="*", type=float, default=[])
+    ap.add_argument("--pairs", nargs="*", default=[], metavar="NAME:LAM_EXPERT:LAM_ROUTER",
+                    help="separate lambdas for the experts and the router fragments; writes interp_<NAME>.safetensors")
     ap.add_argument("--out-dir", required=True, type=Path)
     a = ap.parse_args(argv)
     if os.environ.get("CUDA_VISIBLE_DEVICES", None) != "":
         print("refused: run with CUDA_VISIBLE_DEVICES= (CPU only)", file=sys.stderr)
         return 2
-    if any(not (0.0 <= lam <= 1.0) for lam in a.lambdas):
+    pairs = [(p.split(":")[0], float(p.split(":")[1]), float(p.split(":")[2])) for p in a.pairs]
+    if not a.lambdas and not pairs:
+        print("refused: give --lambdas and/or --pairs", file=sys.stderr)
+        return 2
+    if any(not (0.0 <= lam <= 1.0) for lam in [*a.lambdas, *(x for _, e, r in pairs for x in (e, r))]):
         print("refused: every lambda must be in [0, 1]", file=sys.stderr)
         return 2
     from safetensors.torch import save_file
@@ -81,6 +97,12 @@ def main(argv: list[str] | None = None) -> int:
         save_file(th, str(p))
         report["files"][f"{lam:.2f}"] = {"path": str(p), "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
         print(f"lambda {lam:.2f} -> {p.name}")
+    for name, le, lr in pairs:
+        th = {k: v.to(torch.bfloat16) for k, v in interpolate_groups(start, end, le, lr).items()}
+        p = a.out_dir / f"interp_{name}.safetensors"
+        save_file(th, str(p))
+        report["files"][name] = {"path": str(p), "lambda_expert": le, "lambda_router": lr, "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+        print(f"{name}: experts {le:.2f}, router {lr:.2f} -> {p.name}")
     (a.out_dir / "interp_report.json").write_text(json.dumps(report, indent=1))
     return 0
 

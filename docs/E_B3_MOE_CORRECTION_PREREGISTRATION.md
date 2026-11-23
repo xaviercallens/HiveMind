@@ -190,3 +190,44 @@ Receipts: `artifacts/experiments/E_B3_MOE_CORRECTION_F1_training_2026-11-23.json
   the regression: F1 is close to C2 (selection: C2 +3.33 % on general text, F1 +3.45 %).
 - *Clarification:* the "sha256 `fd0d41a9...`" remark in A3's text refers to the earlier round-77 package and not to C2. C2 is the file
   scored above, a copy of `run_20261122T200945Z_c2_full/crowd_moe_opendiloco_round_84.safetensors`.
+
+### Amendment A2: results (23 Nov 2026, 20:47 Paris)
+
+Receipt: `artifacts/experiments/E_B3_MOE_CORRECTION_A2_decision_2026-11-23.json` (selection and third-split results, per chunk
+aggregates). Mid-row change against base Crowd-v1, %, columns general, code, maths, exoplanets, stars, security.
+
+| candidate (experts_router) | split | J | mean diff (nats) [95 % CI] | general | code | maths | exoplanets | stars | security | corrects |
+|---|---|---|---|---|---|---|---|---|---|---|
+| e45_r45 | selection | 4.1845 | -0.1410 [-0.179, -0.100] | +8.37 | -3.46 | -2.67 | -4.45 | -14.82 | -4.53 | no |
+| e50_r00 | selection | 4.2312 | -0.0943 [-0.105, -0.083] | +0.10 | -1.69 | -1.98 | -2.27 | -6.06 | -2.11 | yes |
+| e75_r00 | selection | 4.2369 | -0.0886 [-0.112, -0.064] | +3.14 | -0.66 | -0.52 | -2.95 | -10.77 | -2.43 | no |
+| e100_r00 | selection | 4.5532 | +0.2276 [+0.181, +0.278] | +14.89 | +8.01 | +11.72 | +1.01 | -6.90 | +1.44 | no |
+| e50_r25 | selection | 4.1770 | -0.1485 [-0.190, -0.104] | +9.38 | -3.46 | -2.58 | -5.05 | -16.42 | -4.78 | no |
+| e75_r25 | selection | 4.0321 | -0.2935 [-0.357, -0.228] | +11.21 | -4.48 | -3.03 | -8.91 | -31.44 | -8.84 | no |
+| e100_r25 | selection | 3.8986 | -0.4270 [-0.507, -0.346] | +6.94 | -3.39 | -1.55 | -10.83 | -44.91 | -12.65 | no |
+| e75_r50 | selection | 3.9724 | -0.3532 [-0.418, -0.286] | +9.56 | -5.67 | -4.19 | -9.44 | -34.24 | -10.15 | no |
+| e100_r50 | selection | 3.8181 | -0.5075 [-0.587, -0.427] | +5.04 | -5.56 | -3.69 | -11.20 | -47.30 | -14.81 | no |
+| e25_r100 | selection | 4.2255 | -0.1001 [-0.115, -0.084] | +1.53 | -2.67 | -2.49 | -1.42 | -6.83 | -2.78 | no |
+| e50_r100 | selection | 4.1336 | -0.1920 [-0.242, -0.138] | +11.16 | -4.57 | -3.35 | -5.50 | -20.89 | -6.31 | no |
+| W25 | selection | 4.2428 | -0.0828 [-0.093, -0.072] | +0.64 | -1.79 | -1.85 | -1.81 | -5.33 | -2.06 | yes |
+| e50_r00 | **third** | 4.2252 | -0.0857 [-0.097, -0.075] | +0.63 | -1.52 | -1.90 | -1.92 | -6.03 | -2.08 | yes |
+| W25 | **third** | 4.2324 | -0.0785 [-0.089, -0.068] | +1.04 | -1.88 | -1.74 | -1.78 | -5.20 | -2.02 | no |
+
+**Outcome (rule of A2): `e50_r00` is chosen on the selection split and replaces W25 as the recommendation.** It corrects on the
+third split (every domain within +1 %, general text +0.63 %, mean -0.0857 nats) with a lower J
+than W25 there (4.2252 against 4.2324).
+Checkpoint: `autoresearch_moe/correction_a2/interp_e50_r00.safetensors`, sha256 `80dccfa8246058ea...`: experts at 50 % of the way from the
+zero-delta start to C2, **router fragments reset to their start** (λ_router = 0).
+
+**W25 does not confirm on the third split:** its general-text change is +1.04 %, just above the +1 % limit (selection +0.64 %, frozen 240 chunks +0.77 %). The margin of this guard is thin
+and the general-text figure moves by several tenths of a point between splits.
+
+**Reading.**
+- **H-router is supported only partly.** At experts λ = 0.50, router λ = 0 gives general +0.10 %, against +9.38 % at 0.25 and +11.16 % at 1.0.
+  At experts λ = 0.75, router 0 gives +3.14 %, against +11.21 % at 0.25 and +9.56 % at 0.5. A router reset helps when the experts are shrunk.
+  With full experts it is **harmful**: e100_r00 is +14.89 % on general text and a positive mean difference (+0.2276), because the experts were trained
+  jointly with their router. So the router does carry the regression, but the experts and the router cannot be pulled apart freely.
+- **The gain is small:** `e50_r00` keeps about 16 % of campaign 2's mean gain (-0.086 of -0.553), a little more than W25 (-0.079) and with more margin on general text.
+- Nothing here changes the earlier conclusion that no candidate passes the guard together with the full gain of campaign 2.
+- **Operational:** the evaluator's RAM gate was raised from 9 to 12 GiB (no effect on results). The first A1 run was stopped by the host for low memory
+  (see above); A2 waited for RAM instead (about one hour in total).

@@ -244,3 +244,21 @@ chunks have scored C2 and W25, but never `e50_r00`.
   result is reported as **confirmed on the frozen chunks**. Otherwise it is reported as **not confirmed on the frozen chunks**, and
   the A2 recommendation stands with that caveat. It is not rerun.
 - It does **not** promote anything to serving: that remains the owner's decision.
+
+### Amendment A4: result (23 Nov 2026, 21:30 Paris)
+
+Receipt: `artifacts/experiments/E_B3_MOE_CORRECTION_e50_r00_frozen_2026-11-23.json`.
+
+**Confirmed on the frozen 240 chunks.** `e50_r00` scored once by the unchanged frozen judge (spec sha `dce3b43e...`):
+
+| | frozen 240 chunks |
+|---|---|
+| J | 4.1995 (base 4.2864) |
+| mean MoE minus base | **-0.0869** nats, 95 % CI [-0.0979, -0.0758] (the judge's own bootstrap, seed 20261118) |
+| lower than the base | 197 of 240 chunks |
+| general / code / maths / exoplanets / stars / security | **+0.30** / -1.82 / -1.71 / -1.57 / -6.00 / -2.18 % |
+| gates | row-order check passed; base-equivalence gate passed; the judge's domain guard holds |
+
+Every domain is within +1 % of the base and the CI is below 0, so by the rule of A4 the result is **confirmed on the frozen chunks**. Together with the
+selection split (general +0.10 %) and the third split (general +0.63 %), `e50_r00` passes the guard on three disjoint sets of rows.
+Nothing is promoted to serving.

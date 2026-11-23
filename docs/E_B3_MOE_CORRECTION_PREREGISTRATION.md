@@ -71,3 +71,21 @@ checkpoint is `autoresearch_moe/correction/interp_lambda_0.25.safetensors` (sha2
   dial between gain and regression on this model; only the low end of the range repaired it.
 - The size of the gain (−0.079) is about the same as the screen's recipe T6 (−0.080, also passing the guard), reached
   by a different route.
+
+## Amendment A1: finer search between λ = 0.25 and 0.50 (owner, 23 Nov 2026, written before any new candidate is scored)
+
+**Known when written:** the results above (W25 corrects on the selection split with J = 4.2428; W50 fails on general
+text, +10.53 %; W25 on the frozen 240 chunks scores −0.079 nats).
+
+- **New candidates:** W30, W35, W40 and W45, that is θ(λ) for λ ∈ {0.30, 0.35, 0.40, 0.45}, built with the same tool
+  and the same start and C2 files.
+- **Selection:** the same selection split (`skip_eligible_rows = 40`) and the same rule. A candidate corrects if every
+  scored expert is within +1 % of the base and the mean CI against the base (seed 20261123) is entirely below 0. The
+  chosen candidate has the lowest J among the correcting candidates, **including W25** (J = 4.2428).
+- **Final test on a new, third split.** The frozen 240 chunks already scored the earlier choice. So the final test of this
+  amendment uses the **next 40 eligible rows** per expert (`skip_eligible_rows = 80`), which no step has used. The
+  chosen candidate and W25 are both scored there, for a paired comparison. An expert with fewer than 20 rows in this
+  split is excluded and reported.
+- **Outcome:** the chosen candidate replaces W25 as the recommendation only if it **corrects on the third split**.
+  Otherwise W25 stays the recommendation.
+- CPU only. Receipts go to `hivemind_work/autoresearch_moe/correction_a1/`.

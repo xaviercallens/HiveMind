@@ -90,7 +90,7 @@ text, +10.53 %; W25 on the frozen 240 chunks scores −0.079 nats).
   Otherwise W25 stays the recommendation.
 - CPU only. Receipts go to `hivemind_work/autoresearch_moe/correction_a1/`.
 
-### Amendment A1: partial results (23 Nov 2026, 17:10 Paris; the run was stopped by the host for low memory)
+### Amendment A1: partial results (23 Nov 2026, about 16:50 Paris; the run was stopped by the host for low memory)
 
 Selection split, mid-row change against base Crowd-v1, %:
 
@@ -146,3 +146,33 @@ metric, without the same-row row-start control. Receipts: `hivemind_work/autores
 
 **Not started here (needs the owner's go, because it uses the T4 and stops the producer for about an hour):** if no
 candidate beats W25, a short GPU continuation from C2 at a lower inner learning rate.
+
+## Amendment A3: the GPU continuation F1 (owner's go, 23 Nov 2026 17:15 Paris, written before F1 is trained or scored)
+
+**Known when written:** everything above. The A2 grid had not produced a single score yet: its CPU evaluator was
+waiting for RAM because another project's job held about 8 GiB. The owner asked for the GPU continuation to go ahead
+now, instead of only if no A2 candidate beats W25.
+
+**Candidate F1.** Continue campaign 2's final state with the screen's recipe, except for a lower inner learning rate:
+- start: `run_20261122T200945Z_c2_full/crowd_moe_opendiloco_round_84.safetensors` (C2, sha256 `fd0d41a9…` is the earlier
+  round-77 package; C2 itself is the file scored above, copied to `correction/C2.safetensors`);
+- `--seq-len 128`, `--lr 1e-4` (T6 used 4e-4), outer learning rate 0.2 with the adaptive rule of the campaigns,
+  16 inner steps, **15 rounds** (30,720 tokens per learner), concatenated layout, no stall stop;
+- data: start offset **72,149**, the campaign's natural continuation (learner 1's offset after C2's last round plus one
+  round). Both learners had already wrapped around their shards, so this is a **second pass** over the first rows of
+  E0 and E1, not new data;
+- run on the T4 through the guarded launcher, in the 06:20–02:40 Paris window, with the producer stopped only while the
+  worker runs, and only after at least 8 GiB of RAM is available. The final state is the last saved master state, which
+  is the ratchet's best accepted state so far.
+
+**Scoring and rule.** F1 is scored on the **selection split** (`skip_eligible_rows = 40`) by the same rule. It then
+competes with the A2 candidates:
+1. The chosen candidate of the selection split is the lowest J among all correcting candidates of A2, W25 and F1.
+2. The chosen candidate and W25 are scored on the **third split** (`skip_eligible_rows = 80`). A2's runner scores its own
+   choice and W25 there; if F1 is the choice, F1 is scored on the third split afterwards.
+3. **F1 replaces A2's recommendation** only if F1 corrects on the selection split with a lower J than A2's chosen
+   candidate, **and** corrects on the third split with a lower J than A2's recommendation there. Otherwise A2's
+   recommendation stands.
+
+The frozen 240 chunks are not used again. Receipts: `hivemind_work/autoresearch_moe/correction_f1/`. The final decision
+is applied by hand from the receipts, following the text above.

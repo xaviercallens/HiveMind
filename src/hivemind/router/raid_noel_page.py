@@ -14,6 +14,7 @@ for `GET /v1/hivemind/raid/status`:
 from __future__ import annotations
 
 import html
+import json
 import math
 import re
 from collections.abc import Mapping
@@ -24,7 +25,39 @@ from hivemind.router.telemetry_figures import NOT_AVAILABLE, shown_figure
 
 DEFAULT_GATEWAY_URL = "https://hivemind-openrouter-1003063861791.us-central1.run.app"
 SUPPORTED_RAID_LANGS: tuple[str, ...] = ("fr", "en")
+VALID_CES_PROFILES: frozenset[str] = frozenset({"dev", "gamer"})
+DEFAULT_CES_PLATFORM = "web-raid-noel"
+PENDING_CES_STORAGE_KEY = "hivemind_pending_ces_ballot"
+HOLIDAY_READINESS_ROUTES: tuple[str, ...] = (
+    "/noel",
+    "/quick",
+    "/raid-noel",
+    "/v1/hivemind/raid/status",
+    "/v1/hivemind/onboarding/feedback/summary",
+)
+_HTML_READINESS_ROUTES: frozenset[str] = frozenset({"/noel", "/quick", "/raid-noel"})
 _NONCE_RE = re.compile(r"^[A-Za-z0-9_+=-]{8,80}$")
+_CES_PLATFORM_RE = re.compile(r"\A[a-z0-9][a-z0-9_-]{0,23}\Z", re.ASCII)
+_FORBIDDEN_PLATFORM_TOKENS: tuple[str, ...] = (
+    "secret",
+    "token",
+    "password",
+    "passwd",
+    "apikey",
+    "bearer",
+    "amadeus",
+    "corporate",
+    "email",
+)
+
+CES_COMPLIANCE_REMINDER_FR = (
+    "Rappel conformité PC personnel uniquement : 100 % machine personnelle à domicile et projets perso / open-source "
+    "(jamais de poste ni code d'entreprise) • 0,00 EUR / 0,00 USD (0.00 EUR / 0.00 USD) • Zéro PII (aucun champ texte libre)."
+)
+CES_COMPLIANCE_REMINDER_EN = (
+    "Personal-PC-only compliance reminder: 100% personal home PCs and hobby/open-source projects ONLY "
+    "(never corporate laptops or employer code/data) • 0.00 EUR / 0.00 USD • Zero PII (no free-text field)."
+)
 
 PERSONAL_PC_RULE_FR = (
     "Règle stricte d'intégrité personnelle : usage 100 % sur PC personnel à domicile et projets personnels / open-source "
@@ -291,10 +324,204 @@ def _format_ease(ease: float | None) -> str:
     return f"{ease:.2f} / 5"
 
 
+def build_one_click_ces_ballot(
+    *,
+    profile: str = "gamer",
+    ease_rating: int = 5,
+    zero_game_lag: bool = True,
+    platform_name: str = DEFAULT_CES_PLATFORM,
+    note: str = "",
+) -> dict[str, Any]:
+    """Validate and normalize a strict zero-PII `OnboardingFeedbackRequest`-compatible 1-click ballot."""
+    if isinstance(profile, bool) or not isinstance(profile, str) or len(profile) > 32 or not profile.isascii():
+        raise ValueError("profile must be 'dev' or 'gamer'")
+    norm_profile = profile.strip().lower()
+    if norm_profile not in VALID_CES_PROFILES:
+        raise ValueError("profile must be 'dev' or 'gamer'")
+    if isinstance(ease_rating, bool) or not isinstance(ease_rating, int) or not (1 <= ease_rating <= 5):
+        raise ValueError("ease_rating must be an integer between 1 and 5")
+    if not isinstance(zero_game_lag, bool):
+        raise ValueError("zero_game_lag must be a boolean")
+    if (
+        isinstance(platform_name, bool)
+        or not isinstance(platform_name, str)
+        or not platform_name.isascii()
+        or len(platform_name) > 32
+    ):
+        raise ValueError("platform_name must be a 1-24 character ASCII platform slug")
+    clean_platform = platform_name.strip().lower()
+    if not _CES_PLATFORM_RE.fullmatch(clean_platform):
+        raise ValueError("platform_name must match ^[a-z0-9][a-z0-9_-]{0,23}$")
+    if clean_platform.startswith(("hm-", "hm_live_")) or any(
+        tok in clean_platform for tok in _FORBIDDEN_PLATFORM_TOKENS
+    ):
+        raise ValueError("platform_name contains forbidden credential, PII, or corporate markers")
+    if isinstance(note, bool) or not isinstance(note, str) or note != "":
+        raise ValueError("note must be empty ('') to enforce strict zero-PII 1-click feedback")
+    return {
+        "profile": norm_profile,
+        "ease_rating": ease_rating,
+        "zero_game_lag": zero_game_lag,
+        "platform": clean_platform,
+        "note": "",
+    }
+
+
+def evaluate_holiday_route_readiness(
+    route_probes: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Deterministically verify HTTP 200, CSP, and personal-PC 0.00 EUR/USD readiness across holiday routes."""
+    if not isinstance(route_probes, Mapping):
+        raise ValueError("route_probes must be a Mapping of route paths to probe dictionaries")
+    for raw_key, raw_val in route_probes.items():
+        if isinstance(raw_key, bool) or not isinstance(raw_key, str):
+            raise ValueError("route_probes keys must be route path strings")
+        if "completions" in raw_key.lower():
+            raise ValueError("live GPU inference probes are forbidden in holiday route readiness checks")
+        if raw_val is not None and not isinstance(raw_val, Mapping):
+            raise ValueError("each entry in route_probes must be a Mapping")
+
+    missing_or_stale: list[str] = []
+    per_route: dict[str, dict[str, Any]] = {}
+    passed_count = 0
+
+    for route in HOLIDAY_READINESS_ROUTES:
+        probe = route_probes.get(route)
+        if probe is None:
+            missing_or_stale.append(route)
+            per_route[route] = {
+                "status_code": None,
+                "http_200": False,
+                "csp_present": False,
+                "compliance_verified": False,
+                "ready": False,
+                "reason": "missing_probe",
+            }
+            continue
+
+        raw_status = probe.get("status_code") if "status_code" in probe else probe.get("status")
+        status_code = raw_status if (not isinstance(raw_status, bool) and isinstance(raw_status, int)) else None
+        http_200 = status_code == 200
+
+        raw_headers = probe.get("headers")
+        norm_headers: dict[str, str] = {}
+        if isinstance(raw_headers, Mapping):
+            for hk, hv in raw_headers.items():
+                if isinstance(hk, str) and isinstance(hv, str):
+                    norm_headers[hk.strip().lower()] = hv
+        csp_val = norm_headers.get("content-security-policy", "")
+        if not csp_val and isinstance(probe.get("csp"), str):
+            csp_val = probe["csp"]
+
+        text_body = ""
+        for bkey in ("body", "text", "html"):
+            bval = probe.get(bkey)
+            if isinstance(bval, str):
+                text_body = bval
+                break
+
+        json_body: Mapping[str, Any] | None = None
+        if isinstance(probe.get("json"), Mapping):
+            json_body = probe["json"]
+        elif text_body.lstrip().startswith("{"):
+            try:
+                parsed = json.loads(text_body)
+                if isinstance(parsed, Mapping):
+                    json_body = parsed
+            except json.JSONDecodeError:
+                json_body = None
+
+        csp_unsafe = "'unsafe-inline'" in csp_val or "'unsafe-eval'" in csp_val
+        if route in _HTML_READINESS_ROUTES:
+            csp_ok = bool("default-src 'none'" in csp_val and "'nonce-" in csp_val and not csp_unsafe)
+            lower_text = text_body.lower()
+            has_personal = "personal" in lower_text or "personnel" in lower_text
+            has_zero_cost = any(m in text_body for m in ("0.00 EUR", "0,00 EUR", "0.00 USD", "0,00 USD"))
+            has_agpl = "agpl-3.0" in lower_text
+            compliance_ok = bool(has_personal and has_zero_cost and has_agpl)
+        elif route == "/v1/hivemind/raid/status":
+            csp_ok = not csp_unsafe
+            comp_block = json_body.get("compliance") if isinstance(json_body, Mapping) else None
+            compliance_ok = bool(
+                isinstance(json_body, Mapping)
+                and json_body.get("object") == "hivemind.raid_noel.status"
+                and isinstance(comp_block, Mapping)
+                and comp_block.get("personal_pc_only") is True
+                and comp_block.get("monetary_cost_eur") == "0.00 EUR"
+                and comp_block.get("monetary_cost_usd") == "0.00 USD"
+            )
+        else:
+            csp_ok = not csp_unsafe
+            by_prof = json_body.get("by_profile") if isinstance(json_body, Mapping) else None
+            tot_resp = json_body.get("total_responses") if isinstance(json_body, Mapping) else None
+            dev_cnt = by_prof.get("dev") if isinstance(by_prof, Mapping) else None
+            gamer_cnt = by_prof.get("gamer") if isinstance(by_prof, Mapping) else None
+            compliance_ok = bool(
+                isinstance(json_body, Mapping)
+                and json_body.get("object", "hivemind.onboarding_feedback_summary")
+                == "hivemind.onboarding_feedback_summary"
+                and not isinstance(tot_resp, bool)
+                and isinstance(tot_resp, int)
+                and tot_resp >= 0
+                and not isinstance(dev_cnt, bool)
+                and isinstance(dev_cnt, int)
+                and dev_cnt >= 0
+                and not isinstance(gamer_cnt, bool)
+                and isinstance(gamer_cnt, int)
+                and gamer_cnt >= 0
+            )
+
+        csp_present = bool(csp_val and not csp_unsafe)
+        route_ready = bool(http_200 and csp_ok and compliance_ok)
+        if route_ready:
+            passed_count += 1
+            reason = "ok"
+        elif not http_200:
+            missing_or_stale.append(route)
+            reason = f"http_{status_code}" if status_code is not None else "network_or_missing_status"
+        elif not csp_ok:
+            missing_or_stale.append(route)
+            reason = "missing_or_weak_csp"
+        else:
+            missing_or_stale.append(route)
+            reason = "missing_compliance_or_contract"
+
+        per_route[route] = {
+            "status_code": status_code,
+            "http_200": http_200,
+            "csp_present": csp_present,
+            "compliance_verified": compliance_ok,
+            "ready": route_ready,
+            "reason": reason,
+        }
+
+    feedback_deployed = bool(per_route["/v1/hivemind/onboarding/feedback/summary"]["ready"])
+    return {
+        "object": "hivemind.raid_noel.holiday_route_readiness",
+        "required_routes": list(HOLIDAY_READINESS_ROUTES),
+        "routes_total_count": len(HOLIDAY_READINESS_ROUTES),
+        "routes_passed_count": passed_count,
+        "holiday_routes_ready": passed_count == len(HOLIDAY_READINESS_ROUTES) and not missing_or_stale,
+        "onboarding_feedback_deployed": feedback_deployed,
+        "missing_or_stale_routes": missing_or_stale,
+        "zero_gpu_inference": True,
+        "compliance": {
+            "personal_pc_only": True,
+            "monetary_cost_eur": "0.00 EUR",
+            "monetary_cost_usd": "0.00 USD",
+        },
+        "per_route": per_route,
+    }
+
+
 # Client-side controller: strictly uses DOM textContent / value / aria-pressed (zero HTML string sinks).
 _RAID_NOEL_JS = r"""(function () {
   var root = document.getElementById('raidNoelApp');
   var isFr = root && root.getAttribute('data-lang') === 'fr';
+  var PENDING_CES_KEY = 'hivemind_pending_ces_ballot';
+  var cesProfile = 'gamer';
+  var cesEase = 5;
+  var cesZeroLag = true;
 
   function byId(id) {
     return document.getElementById(id);
@@ -399,6 +626,18 @@ _RAID_NOEL_JS = r"""(function () {
     );
   }
 
+  function applyFeedbackSummary(fb) {
+    if (!fb || typeof fb !== 'object') return;
+    setText('raidFeedbackResponses', fmtReading(fb.total_responses));
+    setText('raidFeedbackEase', fmtEase(fb.mean_ease_rating));
+    setText('raidFeedbackZeroLag', fmtLagRatio(fb.zero_game_lag_ratio));
+    var prof = fb.by_profile || {};
+    setText(
+      'raidFeedbackProfiles',
+      'dev: ' + fmtReading(prof.dev) + ' | gamer: ' + fmtReading(prof.gamer)
+    );
+  }
+
   function applyRaidStatusPayload(d) {
     if (!d || typeof d !== 'object') return;
     var sw = d.swarm || {};
@@ -410,16 +649,7 @@ _RAID_NOEL_JS = r"""(function () {
     setText('raidActiveAccounts24h', fmtReading(sw.active_accounts_24h));
     setText('raidAcceptedRounds', fmtReading(sw.accepted_opentrainer_rounds));
     setText('raidLiveModels', fmtReading(sw.live_models));
-
-    var fb = d.onboarding_feedback || {};
-    setText('raidFeedbackResponses', fmtReading(fb.total_responses));
-    setText('raidFeedbackEase', fmtEase(fb.mean_ease_rating));
-    setText('raidFeedbackZeroLag', fmtLagRatio(fb.zero_game_lag_ratio));
-    var prof = fb.by_profile || {};
-    setText(
-      'raidFeedbackProfiles',
-      'dev: ' + fmtReading(prof.dev) + ' | gamer: ' + fmtReading(prof.gamer)
-    );
+    applyFeedbackSummary(d.onboarding_feedback || {});
   }
 
   function refreshRaidStatus() {
@@ -450,6 +680,210 @@ _RAID_NOEL_JS = r"""(function () {
             : 'Offline view: showing last received readings (no figures invented).'
         );
       });
+  }
+
+  function fnv1aHex(str, seed) {
+    var h = seed >>> 0;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return ('00000000' + h.toString(16)).slice(-8);
+  }
+
+  function buildCesIdempotencyKey(ballot) {
+    var raw = ballot.profile + '|' + String(ballot.ease_rating) + '|' + (ballot.zero_game_lag ? '1' : '0') + '|' + ballot.platform;
+    var hex = fnv1aHex(raw, 2166136261) + fnv1aHex(raw + '#raid-noel', 2166136261);
+    return 'ces-' + ballot.profile + '-' + String(ballot.ease_rating) + '-' + (ballot.zero_game_lag ? 'lag0' : 'lag1') + '-' + hex;
+  }
+
+  function validateCesBallot(b) {
+    if (!b || typeof b !== 'object') return null;
+    var prof = b.profile === 'dev' ? 'dev' : (b.profile === 'gamer' ? 'gamer' : null);
+    var ease = typeof b.ease_rating === 'number' && Number.isInteger(b.ease_rating) && b.ease_rating >= 1 && b.ease_rating <= 5 ? b.ease_rating : null;
+    var lag = typeof b.zero_game_lag === 'boolean' ? b.zero_game_lag : null;
+    if (!prof || ease === null || lag === null) return null;
+    if (b.note !== undefined && b.note !== '') return null;
+    return {
+      profile: prof,
+      ease_rating: ease,
+      zero_game_lag: lag,
+      platform: 'web-raid-noel',
+      note: ''
+    };
+  }
+
+  function buildCurrentCesBallot() {
+    return {
+      profile: cesProfile === 'dev' ? 'dev' : 'gamer',
+      ease_rating: cesEase,
+      zero_game_lag: Boolean(cesZeroLag),
+      platform: 'web-raid-noel',
+      note: ''
+    };
+  }
+
+  function clearPendingCesBallot() {
+    try {
+      if (window.localStorage) {
+        if (typeof window.localStorage.removeItem === 'function') {
+          window.localStorage.removeItem(PENDING_CES_KEY);
+        } else if (typeof window.localStorage.setItem === 'function') {
+          window.localStorage.setItem(PENDING_CES_KEY, '');
+        }
+      }
+    } catch (_e) {}
+  }
+
+  function savePendingCesBallot(ballot, idemKey, statusCode) {
+    try {
+      if (window.localStorage && typeof window.localStorage.setItem === 'function') {
+        window.localStorage.setItem(
+          PENDING_CES_KEY,
+          JSON.stringify({
+            ballot: ballot,
+            idempotency_key: idemKey,
+            last_status: statusCode
+          })
+        );
+      }
+    } catch (_e) {}
+  }
+
+  function loadPendingCesBallot() {
+    try {
+      if (!window.localStorage || typeof window.localStorage.getItem !== 'function') return null;
+      var raw = window.localStorage.getItem(PENDING_CES_KEY);
+      if (!raw || typeof raw !== 'string') return null;
+      if (raw.length > 512) {
+        clearPendingCesBallot();
+        return null;
+      }
+      var parsed = JSON.parse(raw);
+      var clean = validateCesBallot(parsed && parsed.ballot ? parsed.ballot : parsed);
+      if (!clean) {
+        clearPendingCesBallot();
+        return null;
+      }
+      var key = (parsed && typeof parsed.idempotency_key === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(parsed.idempotency_key))
+        ? parsed.idempotency_key
+        : buildCesIdempotencyKey(clean);
+      return { ballot: clean, idempotency_key: key };
+    } catch (_e) {
+      clearPendingCesBallot();
+      return null;
+    }
+  }
+
+  function cesSpoolMessage(statusCode) {
+    if (statusCode === 404) {
+      return isFr
+        ? 'Route Cloud Run /v1/hivemind/onboarding/feedback non déployée (HTTP 404) : vote zéro-PII gardé localement. Clique sur « Réessayer l\'envoi en attente » après déploiement.'
+        : 'Cloud Run route /v1/hivemind/onboarding/feedback not yet deployed (HTTP 404): zero-PII ballot saved locally. Click "Retry Pending Feedback" after deploy.';
+    }
+    if (statusCode === 429) {
+      return isFr
+        ? 'Limite de fréquence atteinte (HTTP 429) : vote zéro-PII gardé localement. Clique sur « Réessayer l\'envoi en attente » dans une minute.'
+        : 'Rate limit reached (HTTP 429): zero-PII ballot saved locally. Click "Retry Pending Feedback" in a minute.';
+    }
+    if (statusCode >= 500) {
+      return isFr
+        ? 'Passerelle temporairement occupée (HTTP ' + statusCode + ') : vote zéro-PII gardé localement. Clique sur « Réessayer l\'envoi en attente ».'
+        : 'Gateway temporarily busy (HTTP ' + statusCode + '): zero-PII ballot saved locally. Click "Retry Pending Feedback" to resend.';
+    }
+    return isFr
+      ? 'Mode hors-ligne / erreur réseau : vote zéro-PII gardé localement. Clique sur « Réessayer l\'envoi en attente » dès le retour réseau.'
+      : 'Offline / network error: zero-PII ballot saved locally. Click "Retry Pending Feedback" when back online.';
+  }
+
+  function sendCesBallot(ballot, idemKey, isRetry) {
+    if (typeof fetch !== 'function') {
+      savePendingCesBallot(ballot, idemKey, 0);
+      setText('cesSubmitStatus', cesSpoolMessage(0));
+      return Promise.resolve();
+    }
+    setText(
+      'cesSubmitStatus',
+      isFr ? 'Envoi du retour 1-clic zéro-PII…' : 'Sending 1-click zero-PII feedback…'
+    );
+    return fetch('/v1/hivemind/onboarding/feedback', {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idemKey
+      },
+      body: JSON.stringify(ballot)
+    })
+      .then(function (r) {
+        var code = r && typeof r.status === 'number' ? r.status : 0;
+        if (r && r.ok) {
+          return r.json().then(function (d) {
+            clearPendingCesBallot();
+            var fb = d && d.onboarding_feedback && typeof d.onboarding_feedback === 'object' ? d.onboarding_feedback : d;
+            applyFeedbackSummary(fb);
+            setText(
+              'cesSubmitStatus',
+              isRetry
+                ? (isFr
+                    ? 'Retour en attente synchronisé (HTTP 200 • zéro PII • 0,00 EUR / 0,00 USD).'
+                    : 'Pending zero-PII feedback flushed (HTTP 200 • 0.00 EUR / 0.00 USD).')
+                : (isFr
+                    ? 'Merci ! Retour 1-clic zéro-PII enregistré en direct (HTTP 200 • 0,00 EUR / 0,00 USD).'
+                    : 'Thank you! 1-click zero-PII feedback recorded live (HTTP 200 • 0.00 EUR / 0.00 USD).')
+            );
+          });
+        }
+        if (code === 404 || code === 408 || code === 429 || code >= 500 || code === 0) {
+          savePendingCesBallot(ballot, idemKey, code);
+          setText('cesSubmitStatus', cesSpoolMessage(code));
+          return;
+        }
+        clearPendingCesBallot();
+        setText(
+          'cesSubmitStatus',
+          isFr
+            ? 'Envoi refusé (HTTP ' + code + ') : vote réinitialisé.'
+            : 'Submission rejected (HTTP ' + code + '): ballot cleared.'
+        );
+      })
+      .catch(function () {
+        savePendingCesBallot(ballot, idemKey, 0);
+        setText('cesSubmitStatus', cesSpoolMessage(0));
+      });
+  }
+
+  function syncCesButtons() {
+    var devBtn = byId('cesProfileDevBtn');
+    var gamerBtn = byId('cesProfileGamerBtn');
+    if (devBtn) {
+      var isDev = cesProfile === 'dev';
+      devBtn.setAttribute('aria-pressed', isDev ? 'true' : 'false');
+      devBtn.className = isDev ? 'chip-btn active' : 'chip-btn';
+    }
+    if (gamerBtn) {
+      var isGamer = cesProfile === 'gamer';
+      gamerBtn.setAttribute('aria-pressed', isGamer ? 'true' : 'false');
+      gamerBtn.className = isGamer ? 'chip-btn active' : 'chip-btn';
+    }
+    for (var rating = 1; rating <= 5; rating++) {
+      var eBtn = byId('cesEaseBtn-' + rating);
+      if (eBtn) {
+        var activeEase = cesEase === rating;
+        eBtn.setAttribute('aria-pressed', activeEase ? 'true' : 'false');
+        eBtn.className = activeEase ? 'chip-btn active' : 'chip-btn';
+      }
+    }
+    var lagYes = byId('cesLagYesBtn');
+    var lagNo = byId('cesLagNoBtn');
+    if (lagYes) {
+      lagYes.setAttribute('aria-pressed', cesZeroLag ? 'true' : 'false');
+      lagYes.className = cesZeroLag ? 'chip-btn active' : 'chip-btn';
+    }
+    if (lagNo) {
+      lagNo.setAttribute('aria-pressed', !cesZeroLag ? 'true' : 'false');
+      lagNo.className = !cesZeroLag ? 'chip-btn active' : 'chip-btn';
+    }
   }
 
   ['calcWatts', 'calcHours', 'calcTariff'].forEach(function (id) {
@@ -491,6 +925,80 @@ _RAID_NOEL_JS = r"""(function () {
   if (refreshBtn) {
     refreshBtn.addEventListener('click', function () {
       return refreshRaidStatus();
+    });
+  }
+
+  var cesDevEl = byId('cesProfileDevBtn');
+  if (cesDevEl) {
+    cesDevEl.addEventListener('click', function () {
+      cesProfile = 'dev';
+      syncCesButtons();
+    });
+  }
+  var cesGamerEl = byId('cesProfileGamerBtn');
+  if (cesGamerEl) {
+    cesGamerEl.addEventListener('click', function () {
+      cesProfile = 'gamer';
+      syncCesButtons();
+    });
+  }
+  [1, 2, 3, 4, 5].forEach(function (rating) {
+    var eBtn = byId('cesEaseBtn-' + rating);
+    if (eBtn) {
+      eBtn.addEventListener('click', function () {
+        cesEase = rating;
+        syncCesButtons();
+      });
+    }
+  });
+  var cesLagYesEl = byId('cesLagYesBtn');
+  if (cesLagYesEl) {
+    cesLagYesEl.addEventListener('click', function () {
+      cesZeroLag = true;
+      syncCesButtons();
+    });
+  }
+  var cesLagNoEl = byId('cesLagNoBtn');
+  if (cesLagNoEl) {
+    cesLagNoEl.addEventListener('click', function () {
+      cesZeroLag = false;
+      syncCesButtons();
+    });
+  }
+
+  var submitCesEl = byId('submitCesBtn');
+  if (submitCesEl) {
+    submitCesEl.addEventListener('click', function () {
+      var ballot = buildCurrentCesBallot();
+      var idemKey = buildCesIdempotencyKey(ballot);
+      return sendCesBallot(ballot, idemKey, false);
+    });
+    syncCesButtons();
+    var existingPending = loadPendingCesBallot();
+    if (existingPending) {
+      setText(
+        'cesSubmitStatus',
+        isFr
+          ? 'Un retour zéro-PII est en attente localement : clique sur « Réessayer l\'envoi en attente ».'
+          : 'A zero-PII ballot is pending locally: click "Retry Pending Feedback" to send it.'
+      );
+    }
+  }
+
+  var retryCesEl = byId('retryPendingCesBtn');
+  if (retryCesEl) {
+    retryCesEl.addEventListener('click', function () {
+      var pending = loadPendingCesBallot();
+      if (!pending) {
+        setText(
+          'cesSubmitStatus',
+          isFr
+            ? 'Aucun retour zéro-PII en attente dans le stockage local.'
+            : 'No pending zero-PII feedback ballot in local storage.'
+        );
+        return Promise.resolve();
+      }
+      return sendCesBallot(pending.ballot, pending.idempotency_key, true);
     });
   }
 
@@ -606,6 +1114,22 @@ def render_raid_noel_page(
         lbl_fb_ease = "Facilité moyenne"
         lbl_fb_lag = "Sessions sans lag jeu"
         lbl_fb_prof = "Répartition profils"
+        ces_card_h3 = "Micro-sondage 1-clic Zéro-PII : Facilité (CES) & Confort Steam (< 1.5 s)"
+        ces_card_desc = (
+            "Envoie ton avis anonyme en un clic directement depuis le navigateur (aucun identifiant, "
+            "aucun texte libre, zéro PII • 0,00 EUR / 0,00 USD)."
+        )
+        ces_lbl_profile = "Profil :"
+        ces_btn_dev = "Développeur (VS Code / API)"
+        ces_btn_gamer = "Gamer PC (Steam / GPU)"
+        ces_lbl_ease = "Facilité d'accès (1 à 5) :"
+        ces_lbl_lag = "Confort Steam (< 1.5 s libération VRAM) :"
+        ces_btn_lag_yes = "Zéro lag constaté (Oui)"
+        ces_btn_lag_no = "Ralentissement constaté (Non)"
+        ces_btn_submit = "Envoyer mon avis 1-clic (Zéro PII)"
+        ces_btn_retry = "Réessayer l'envoi en attente"
+        ces_init_status = "Prêt : sélectionne ton profil, ta note (défaut 5/5) et ton confort Steam, puis clique en 1 clic."
+        ces_compliance_note = CES_COMPLIANCE_REMINDER_FR
         cmd_hint = f"python3 scripts/hivemind_doctor.py --gateway {safe_gw}"
         cmd_label = "Vérifier son PC en lecture seule (zéro dépendance) :"
         lang_switch = f'<a href="{safe_path}?lang=en">English version (/raid)</a>'
@@ -662,6 +1186,22 @@ def render_raid_noel_page(
         lbl_fb_ease = "Mean Ease Rating"
         lbl_fb_lag = "Zero-Game-Lag Ratio"
         lbl_fb_prof = "By Profile"
+        ces_card_h3 = "1-Click Zero-PII CES & Steam Zero-Lag Micro-Survey (< 1.5 s)"
+        ces_card_desc = (
+            "Share your anonymous ease rating and Steam comfort check in one click right from your browser "
+            "(zero credentials, zero free-text, zero PII • 0.00 EUR / 0.00 USD)."
+        )
+        ces_lbl_profile = "Profile:"
+        ces_btn_dev = "Developer (VS Code / API)"
+        ces_btn_gamer = "PC Gamer (Steam / GPU)"
+        ces_lbl_ease = "Ease Rating (1 to 5):"
+        ces_lbl_lag = "Steam Comfort (< 1.5 s VRAM release):"
+        ces_btn_lag_yes = "Zero Game Lag (Yes)"
+        ces_btn_lag_no = "Noticeable Lag (No)"
+        ces_btn_submit = "Submit 1-Click Feedback (Zero PII)"
+        ces_btn_retry = "Retry Pending Feedback"
+        ces_init_status = "Ready: choose your profile, ease rating (default 5/5), and Steam comfort, then submit in 1 click."
+        ces_compliance_note = CES_COMPLIANCE_REMINDER_EN
         cmd_hint = f"python3 scripts/hivemind_doctor.py --gateway {safe_gw}"
         cmd_label = "Read-only 5-second local preflight check (Python stdlib only):"
         lang_switch = f'<a href="{safe_path}?lang=fr">Version française (/raid-noel)</a>'
@@ -688,6 +1228,16 @@ def render_raid_noel_page(
         plabel = html.escape(p["label_fr"] if is_fr else p["label_en"])
         preset_btns_html.append(
             f'<button type="button" id="{btn_id}" class="chip-btn">{plabel}</button>'
+        )
+
+    ces_ease_btns_html: list[str] = []
+    for rating in range(1, 6):
+        is_default_ease = rating == 5
+        btn_cls = "chip-btn active" if is_default_ease else "chip-btn"
+        pressed_str = "true" if is_default_ease else "false"
+        ces_ease_btns_html.append(
+            f'<button type="button" id="cesEaseBtn-{rating}" class="{btn_cls}" '
+            f'data-ease="{rating}" aria-pressed="{pressed_str}">{rating} / 5</button>'
         )
 
     safe_nonce = html.escape(nonce)
@@ -722,7 +1272,14 @@ def render_raid_noel_page(
     input[type="number"] {{ width: 100%; box-sizing: border-box; background: #020617; color: #f8fafc; border: 1px solid #475569; border-radius: 6px; padding: 8px 10px; font-size: 0.95rem; }}
     .presets {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }}
     .chip-btn, .act-btn {{ background: #1e293b; color: #e2e8f0; border: 1px solid #475569; border-radius: 6px; padding: 7px 12px; font-size: 0.86rem; cursor: pointer; }}
+    .chip-btn.active {{ background: #0284c7; color: #ffffff; border-color: #7dd3fc; font-weight: 600; }}
     .act-btn {{ background: #0284c7; color: #ffffff; border-color: #0284c7; font-weight: 600; margin-top: 10px; }}
+    .ces-card {{ background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px; margin-top: 14px; }}
+    .ces-card h3 {{ font-size: 1rem; margin: 0 0 6px 0; color: #f8fafc; }}
+    .ces-row {{ display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }}
+    .ces-lbl {{ font-size: 0.86rem; color: #cbd5e1; font-weight: 600; margin-right: 4px; }}
+    .ces-actions {{ display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }}
+    .ces-actions .act-btn {{ margin-top: 0; }}
     .calc-out {{ background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-top: 12px; display: flex; flex-wrap: wrap; gap: 20px; align-items: baseline; }}
     .muted {{ color: #94a3b8; font-size: 0.86rem; margin: 6px 0 0 0; }}
     pre {{ background: #020617; color: #a7f3d0; padding: 10px 12px; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; margin: 6px 0 0 0; }}
@@ -839,6 +1396,30 @@ def render_raid_noel_page(
           <span class="stat-lbl">{html.escape(lbl_fb_prof)}</span>
           <span id="raidFeedbackProfiles" class="stat-val">{fb_profiles_txt}</span>
         </div>
+      </div>
+      <div id="cesOneClickCard" class="ces-card">
+        <h3>{html.escape(ces_card_h3)}</h3>
+        <p class="muted">{html.escape(ces_card_desc)}</p>
+        <div class="ces-row" role="group" aria-label="{html.escape(ces_lbl_profile)}">
+          <span class="ces-lbl">{html.escape(ces_lbl_profile)}</span>
+          <button type="button" id="cesProfileDevBtn" class="chip-btn" data-profile="dev" aria-pressed="false">{html.escape(ces_btn_dev)}</button>
+          <button type="button" id="cesProfileGamerBtn" class="chip-btn active" data-profile="gamer" aria-pressed="true">{html.escape(ces_btn_gamer)}</button>
+        </div>
+        <div class="ces-row" role="group" aria-label="{html.escape(ces_lbl_ease)}">
+          <span class="ces-lbl">{html.escape(ces_lbl_ease)}</span>
+          {"".join(ces_ease_btns_html)}
+        </div>
+        <div class="ces-row" role="group" aria-label="{html.escape(ces_lbl_lag)}">
+          <span class="ces-lbl">{html.escape(ces_lbl_lag)}</span>
+          <button type="button" id="cesLagYesBtn" class="chip-btn active" data-zero-lag="true" aria-pressed="true">{html.escape(ces_btn_lag_yes)}</button>
+          <button type="button" id="cesLagNoBtn" class="chip-btn" data-zero-lag="false" aria-pressed="false">{html.escape(ces_btn_lag_no)}</button>
+        </div>
+        <div class="ces-actions">
+          <button type="button" id="submitCesBtn" class="act-btn">{html.escape(ces_btn_submit)}</button>
+          <button type="button" id="retryPendingCesBtn" class="chip-btn">{html.escape(ces_btn_retry)}</button>
+        </div>
+        <p id="cesSubmitStatus" class="muted" role="status" aria-live="polite">{html.escape(ces_init_status)}</p>
+        <p id="cesComplianceReminder" class="muted">{html.escape(ces_compliance_note)}</p>
       </div>
       <p class="muted"><strong>{html.escape(cmd_label)}</strong></p>
       <pre>{cmd_hint}</pre>

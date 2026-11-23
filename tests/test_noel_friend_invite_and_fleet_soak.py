@@ -1194,6 +1194,25 @@ def test_05_real_loopback_http_subprocess_probes_validators_and_edge_branches(
 
     assert verifier.default_http_json("GET", "http://127.0.0.1:1/health", timeout_s=0.25)[0] == 0
 
+    # Regression: base64url CSP nonces containing `<digit>` + `ms-` or ending in `<digit>` + `ms` must NOT false-positive dom_clean
+    seen_csp_nonces: set[str] = set()
+    tricky_nonce = "AbCdEf" + "9" + "m" + "s" + "-XyZ" + "7" + "m" + "s"
+    ok_nonce_contract, meta_nonce_contract, nonce_issues = verifier._inspect_holiday_html_contract(
+        "/noel",
+        {
+            "html": (
+                f'<!DOCTYPE html><html><head><style nonce="{tricky_nonce}"></style></head>'
+                '<body><p>100% personal home PCs — 0.00 EUR / 0.00 USD — AGPL-3.0</p>'
+                f'<script nonce="{tricky_nonce}"></script></body></html>'
+            ),
+            "headers": {"content-security-policy": f"default-src 'none'; script-src 'nonce-{tricky_nonce}'"},
+        },
+        seen_csp_nonces,
+        lang="fr",
+    )
+    assert ok_nonce_contract is True, nonce_issues
+    assert meta_nonce_contract["dom_clean"] is True
+
     # Zero-inference & gateway validation rejections
     untrusted_url = "https" + "://evil.example.com"
     bad_nl_url = "https" + "://bad\n.run.app"

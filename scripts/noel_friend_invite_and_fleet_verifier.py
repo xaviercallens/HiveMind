@@ -1230,7 +1230,8 @@ def _inspect_holiday_html_contract(
     if nonce is not None:
         seen_nonces.add(nonce)
 
-    dom_clean = not (_FORBIDDEN_DOM_SINK_RE.search(html_text) or _STATIC_FIG_UNIT_RE.search(html_text))
+    sanitized_html = _HTML_ATTR_NONCE_RE.sub('nonce=""', html_text)
+    dom_clean = not (_FORBIDDEN_DOM_SINK_RE.search(sanitized_html) or _STATIC_FIG_UNIT_RE.search(sanitized_html))
     low_html = html_text.lower()
     compliance_banner_ok = (
         (

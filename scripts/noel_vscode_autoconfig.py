@@ -26,6 +26,9 @@ standard library:
      `scripts/noel_post_setup_probe.py` in zero-inference mode, with optional `--ease-rating 1..5`
      or `--prompt-ces` passthrough to `POST /v1/hivemind/onboarding/feedback` (`profile='dev'`),
      emitting redacted CLI, `--lang fr|en` Markdown, or `--json` reports with a SHA-256 receipt.
+  4. Streamlined `<60s` Quick-Connect, Live Producer Heartbeat & `<1.5s` Steam-Yield Preflight:
+     `--quick-connect`, `--check-producer-heartbeat`, `--send-opentrainer-heartbeat`,
+     `--gamer-preflight`, `--max-temp-c`, and timeout-safe non-blocking `--post-setup-telemetry`.
 
 Personal Home Use & Non-Monetary Compliance Rule (Amadeus / Personal-PC Rule):
   - 100% personal home PCs & personal hobby/open-source projects only (never corporate hardware).
@@ -35,19 +38,24 @@ Personal Home Use & Non-Monetary Compliance Rule (Amadeus / Personal-PC Rule):
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import importlib.util
 import inspect
+import io
 import json
+import math
 import os
 import platform
 import re
 import secrets
+import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -61,10 +69,71 @@ DEFAULT_MODELS: tuple[str, str] = ("hivemind/coder", "hivemind/bee-stars")
 DEFAULT_MAX_TOKENS = 2048
 SLO_BUDGET_SECONDS = 60.0
 HTTP_TIMEOUT_S = 5.0
+TELEMETRY_TIMEOUT_S = 2.5
+SUBPROCESS_TIMEOUT_S = 3.0
+DEFAULT_MAX_TEMP_C = 70.0
+DEFAULT_MIN_FREE_VRAM_MIB = 2048
+DEFAULT_YIELD_BUDGET_MS = 1500.0
+NON_WORKER_GPU_UTIL_THRESHOLD_PCT = 15.0
+MIN_REPORTABLE_VRAM_TOTAL_MIB = 512
 
 SUPPORTED_LANGS: tuple[str, ...] = ("en", "fr")
 VALID_ROLES: frozenset[str] = frozenset({"consumer", "producer", "prosumer", "trainer"})
+VALID_PROFILES: frozenset[str] = frozenset({"dev", "gamer"})
 ALLOWED_LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1"})
+
+STEAM_DX12_GAME_EXECUTABLES: frozenset[str] = frozenset(
+    {
+        "cs2.exe",
+        "cs2",
+        "eldenring.exe",
+        "cyberpunk2077.exe",
+        "bg3.exe",
+        "bg3_dx11.exe",
+        "helldivers2.exe",
+        "dota2.exe",
+        "dota2",
+        "valorant.exe",
+        "valorant-win64-shipping.exe",
+        "fortniteclient-win64-shipping.exe",
+        "overwatch.exe",
+        "starfield.exe",
+        "witcher3.exe",
+        "gta5.exe",
+        "r5apex.exe",
+        "rustclient.exe",
+        "palworld-win64-shipping.exe",
+        "re4.exe",
+        "alanwake2.exe",
+        "blackmythwukong.exe",
+        "b1-win64-shipping.exe",
+    }
+)
+STEAM_PROCESS_PREFIXES: tuple[str, ...] = ("steam_app_", "steam_game_", "proton_")
+PREFLIGHT_GAME_SIGNATURES: tuple[str, ...] = (
+    "cs2.exe",
+    "eldenring.exe",
+    "cyberpunk2077.exe",
+    "bg3.exe",
+    "helldivers2.exe",
+    "steam_app_730",
+)
+
+_LOCAL_WORKER_YIELD_PROGRAM = (
+    "import sys\n"
+    "buf = bytearray(65536)\n"
+    "buf[0] = 1\n"
+    "sys.stdout.write('HIVEMIND_WORKER_READY\\n')\n"
+    "sys.stdout.flush()\n"
+    "cmd = sys.stdin.readline().strip()\n"
+    "buf[:] = b'\\x00' * len(buf)\n"
+    "del buf\n"
+    "if cmd in ('YIELD', 'STOP', ''):\n"
+    "    sys.stdout.write('HIVEMIND_WORKER_RELEASED:0\\n')\n"
+    "    sys.stdout.flush()\n"
+    "    raise SystemExit(0)\n"
+    "raise SystemExit(3)\n"
+)
 
 CORPORATE_MARKERS: tuple[str, ...] = (
     "amadeus",
@@ -124,6 +193,26 @@ _CORP_TOKEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 HttpFn = Callable[..., tuple[int, Any]]
 ProbeFn = Callable[..., Mapping[str, Any]]
 InputFn = Callable[[str], str]
+RunnerFn = Callable[[Sequence[str], float], tuple[int, str]]
+GpuProbeFn = Callable[..., Any]
+ProcessProbeFn = Callable[..., Iterable[str]]
+WorkerYieldFn = Callable[..., Any]
+ClockFn = Callable[[], float]
+
+
+@dataclass(frozen=True)
+class GpuProbeSnapshot:
+    """Truthful local NVIDIA GPU telemetry without UUID/serial identifiers or invented specs."""
+
+    present: bool
+    parse_error: bool = False
+    name: str | None = None
+    total_vram_mib: int | None = None
+    free_vram_mib: int | None = None
+    used_vram_mib: int | None = None
+    temp_c: float | None = None
+    util_pct: float | None = None
+    reason: str = "ok"
 
 
 class AutoconfigError(ValueError):
@@ -170,6 +259,15 @@ def sanitize_handle(raw: str | None) -> str:
             "(never starting with a sign-in provider prefix)."
         )
     return candidate
+
+
+def sanitize_host_label(raw: str | None) -> str:
+    """Produce a clean 1..64 ASCII personal host label free of PII, secrets, IPs, and home paths."""
+    if raw is None or isinstance(raw, bool) or not str(raw).strip():
+        return "personal-pc"
+    scrubbed = sanitize_text_for_display(str(raw).strip())
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", scrubbed).strip("-._")[:64]
+    return cleaned if cleaned else "personal-pc"
 
 
 def is_valid_hivemind_key(raw_key: object) -> bool:
@@ -292,6 +390,8 @@ def default_http_json(
     url: str,
     payload: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
+    *,
+    timeout_s: float = HTTP_TIMEOUT_S,
 ) -> tuple[int, dict[str, Any]]:
     """Direct, proxy-free stdlib HTTP helper handling JSON and HTML gateway responses."""
     _assert_zero_inference_request(method, url)
@@ -306,10 +406,11 @@ def default_http_json(
         body_bytes = json.dumps(payload).encode("utf-8")
         req_headers["Content-Type"] = "application/json"
 
+    bounded_timeout = min(max(0.2, float(timeout_s)), 15.0)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     req = urllib.request.Request(url, data=body_bytes, headers=req_headers, method=method.upper())
     try:
-        with opener.open(req, timeout=HTTP_TIMEOUT_S) as resp:
+        with opener.open(req, timeout=bounded_timeout) as resp:
             raw = resp.read(262_144).decode("utf-8", errors="replace")
             status_code = int(getattr(resp, "status", 200))
             content_type = str(resp.headers.get("Content-Type", ""))
@@ -339,6 +440,8 @@ def _safe_http_call(
     url: str,
     payload: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
+    *,
+    timeout_s: float | None = None,
 ) -> tuple[int, dict[str, Any]]:
     """Validate URL and zero-inference guard before invoking `http_fn`, catching transport errors."""
     _assert_zero_inference_request(method, url)
@@ -349,11 +452,14 @@ def _safe_http_call(
         if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
     ]
     has_varargs = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in sig.parameters.values())
+    extra_kw: dict[str, Any] = {}
+    if timeout_s is not None and "timeout_s" in sig.parameters:
+        extra_kw["timeout_s"] = timeout_s
     try:
         if has_varargs or len(positional) >= 4:
-            status_code, body = http_fn(method.upper(), url, payload, headers)
+            status_code, body = http_fn(method.upper(), url, payload, headers, **extra_kw)
         else:
-            status_code, body = http_fn(method.upper(), url)
+            status_code, body = http_fn(method.upper(), url, **extra_kw)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         return 0, {"network_error": type(exc).__name__, "detail": str(exc)[:200]}
     norm_body = dict(body) if isinstance(body, Mapping) else {"data": body}
@@ -1510,6 +1616,1014 @@ def _summarize_probe_report(probe_report: Mapping[str, Any], *, home: Path | Non
     }
 
 
+def _invoke_with_supported_kwargs(fn: Callable[..., Any], **candidate_kwargs: Any) -> Any:
+    """Invoke `fn` passing only keyword arguments accepted by its signature."""
+    sig = inspect.signature(fn)
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return fn(**candidate_kwargs)
+    filtered = {k: v for k, v in candidate_kwargs.items() if k in sig.parameters}
+    return fn(**filtered)
+
+
+def default_subprocess_runner(
+    cmd: Sequence[str],
+    timeout_s: float = SUBPROCESS_TIMEOUT_S,
+) -> tuple[int, str]:
+    """Execute a safe read-only command via list argv (`shell=False`) with `<= 3.0s` timeout."""
+    if isinstance(cmd, (str, bytes)) or not cmd:
+        raise AutoconfigError("Subprocess command must be a non-empty sequence of string arguments.")
+    argv = [str(part) for part in cmd]
+    bounded = min(max(0.1, float(timeout_s)), SUBPROCESS_TIMEOUT_S)
+    try:
+        completed = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=bounded,
+            check=False,
+            shell=False,
+        )
+    except (FileNotFoundError, PermissionError, subprocess.TimeoutExpired, OSError):
+        return 127, ""
+    return int(completed.returncode), (completed.stdout or "")
+
+
+def _optional_finite_float(raw: Any) -> float | None:
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        val = float(raw)
+        return val if math.isfinite(val) else None
+    cleaned = str(raw).strip()
+    if not cleaned or cleaned.lower() in ("[n/a]", "n/a", "[not supported]", "not supported"):
+        return None
+    try:
+        val = float(cleaned)
+    except ValueError:
+        return None
+    return val if math.isfinite(val) else None
+
+
+def default_gpu_probe(
+    *,
+    runner: RunnerFn = default_subprocess_runner,
+    timeout_s: float = SUBPROCESS_TIMEOUT_S,
+) -> GpuProbeSnapshot:
+    """Query local `nvidia-smi` metrics (`<= 3s` timeout) without UUID/serial or invented specs."""
+    rc, stdout = runner(
+        [
+            "nvidia-smi",
+            "--query-gpu=name,memory.total,memory.free,memory.used,temperature.gpu,utilization.gpu",
+            "--format=csv,noheader,nounits",
+        ],
+        min(float(timeout_s), SUBPROCESS_TIMEOUT_S),
+    )
+    if rc != 0 or not stdout.strip():
+        return GpuProbeSnapshot(present=False, reason="no_nvidia_gpu")
+
+    discovered: list[GpuProbeSnapshot] = []
+    for raw_line in stdout.strip().splitlines():
+        parts = [p.strip() for p in raw_line.split(",")]
+        if len(parts) < 6 or not parts[0]:
+            return GpuProbeSnapshot(present=True, parse_error=True, reason="nvidia_smi_parse_error")
+        total_f = _optional_finite_float(parts[1])
+        free_f = _optional_finite_float(parts[2])
+        used_f = _optional_finite_float(parts[3])
+        temp_f = _optional_finite_float(parts[4])
+        util_f = _optional_finite_float(parts[5])
+        if total_f is None or free_f is None or total_f <= 0 or free_f < 0:
+            return GpuProbeSnapshot(present=True, parse_error=True, reason="nvidia_smi_parse_error")
+        used_mib = int(used_f) if used_f is not None and used_f >= 0 else max(0, int(total_f) - int(free_f))
+        discovered.append(
+            GpuProbeSnapshot(
+                present=True,
+                parse_error=False,
+                name=parts[0][:128],
+                total_vram_mib=int(total_f),
+                free_vram_mib=int(free_f),
+                used_vram_mib=used_mib,
+                temp_c=round(temp_f, 1) if temp_f is not None else None,
+                util_pct=round(util_f, 1) if util_f is not None else 0.0,
+                reason="ok",
+            )
+        )
+    return max(
+        discovered,
+        key=lambda g: (
+            g.free_vram_mib or 0,
+            -(g.temp_c if g.temp_c is not None else 999.0),
+            g.total_vram_mib or 0,
+        ),
+    )
+
+
+def _normalize_gpu_snapshot(raw: Any) -> GpuProbeSnapshot:
+    """Normalize `None`, `GpuProbeSnapshot`, mapping, or GPU telemetry object without inventing values."""
+    if raw is None:
+        return GpuProbeSnapshot(present=False, reason="no_nvidia_gpu")
+    if isinstance(raw, GpuProbeSnapshot):
+        return raw
+    if isinstance(raw, Mapping):
+        view: Mapping[str, Any] = raw
+    elif hasattr(raw, "present"):
+        view = {
+            "present": getattr(raw, "present", False),
+            "parse_error": getattr(raw, "parse_error", False),
+            "name": getattr(raw, "name", None) or getattr(raw, "gpu_name", None),
+            "total_vram_mib": (
+                getattr(raw, "total_vram_mib", None)
+                if getattr(raw, "total_vram_mib", None) is not None
+                else getattr(raw, "total_mib", None)
+            ),
+            "free_vram_mib": (
+                getattr(raw, "free_vram_mib", None)
+                if getattr(raw, "free_vram_mib", None) is not None
+                else getattr(raw, "free_mib", None)
+            ),
+            "used_vram_mib": (
+                getattr(raw, "used_vram_mib", None)
+                if getattr(raw, "used_vram_mib", None) is not None
+                else getattr(raw, "used_mib", None)
+            ),
+            "temp_c": getattr(raw, "temp_c", None),
+            "util_pct": getattr(raw, "util_pct", None),
+            "reason": getattr(raw, "reason", "ok"),
+        }
+    else:
+        raise AutoconfigError("gpu_probe_fn / gpu_snapshot must be GpuProbeSnapshot, a mapping, or None.")
+
+    present = bool(view.get("present", view.get("gpu_present", False)))
+    if not present:
+        return GpuProbeSnapshot(present=False, reason=str(view.get("reason") or "no_nvidia_gpu"))
+    if bool(view.get("parse_error", False)):
+        return GpuProbeSnapshot(present=True, parse_error=True, reason="nvidia_smi_parse_error")
+
+    name_raw = view.get("name") or view.get("gpu_name") or view.get("gpu_model")
+    clean_name = str(name_raw).strip()[:128] if name_raw is not None and str(name_raw).strip() else None
+    raw_total = view.get("total_vram_mib", view.get("vram_total_mib", view.get("total_mib")))
+    raw_free = view.get("free_vram_mib", view.get("vram_free_mib", view.get("free_mib")))
+    raw_used = view.get("used_vram_mib", view.get("vram_used_mib", view.get("used_mib")))
+    temp_f = _optional_finite_float(view.get("temp_c"))
+    util_f = _optional_finite_float(view.get("util_pct", view.get("utilization_pct")))
+
+    if not clean_name or raw_total is None or raw_free is None:
+        return GpuProbeSnapshot(present=True, parse_error=True, reason="incomplete_gpu_telemetry")
+
+    total_mib = int(raw_total)
+    free_mib = int(raw_free)
+    used_mib = int(raw_used) if raw_used is not None else max(0, total_mib - free_mib)
+    return GpuProbeSnapshot(
+        present=True,
+        parse_error=False,
+        name=clean_name,
+        total_vram_mib=total_mib,
+        free_vram_mib=free_mib,
+        used_vram_mib=used_mib,
+        temp_c=round(temp_f, 1) if temp_f is not None else None,
+        util_pct=round(util_f, 1) if util_f is not None else 0.0,
+        reason=str(view.get("reason") or "ok"),
+    )
+
+
+def default_process_probe(
+    *,
+    runner: RunnerFn = default_subprocess_runner,
+    os_name: str | None = None,
+    timeout_s: float = SUBPROCESS_TIMEOUT_S,
+) -> list[str]:
+    """Inspect active local process names via `tasklist` (Windows) or `ps` (POSIX) in `<= 3s`."""
+    eff_os = os_name if os_name is not None else os.name
+    bounded = min(float(timeout_s), SUBPROCESS_TIMEOUT_S)
+    discovered: list[str] = []
+    seen: set[str] = set()
+    if eff_os == "nt":
+        rc, out = runner(["tasklist", "/FO", "CSV", "/NH"], bounded)
+        if rc != 0 or not out.strip():
+            return discovered
+        try:
+            for row in csv.reader(io.StringIO(out)):
+                if row and row[0].strip():
+                    low = row[0].strip().lower()
+                    if low not in seen:
+                        seen.add(low)
+                        discovered.append(low)
+        except csv.Error:
+            return discovered
+        return discovered
+
+    rc, out = runner(["ps", "-eo", "comm="], bounded)
+    if rc != 0 or not out.strip():
+        return discovered
+    for line in out.splitlines():
+        cleaned = line.strip()
+        if not cleaned:
+            continue
+        for candidate in (cleaned.lower(), Path(cleaned.replace("\\", "/")).name.lower()):
+            if candidate and candidate not in seen:
+                seen.add(candidate)
+                discovered.append(candidate)
+    return discovered
+
+
+def detect_steam_dx12_activity(
+    process_names: Iterable[str],
+    *,
+    non_worker_gpu_util_pct: float | None = None,
+    gpu_util_threshold_pct: float = NON_WORKER_GPU_UTIL_THRESHOLD_PCT,
+) -> dict[str, Any]:
+    """Detect active Steam / DX12 game processes or non-worker GPU utilization `> 15%`."""
+    trunc_prefixes = {exe[:15] for exe in STEAM_DX12_GAME_EXECUTABLES if len(exe) > 15}
+    matched_games: list[str] = []
+    for raw_proc in process_names:
+        raw_low = str(raw_proc).strip().lower().replace("\\", "/")
+        if not raw_low:
+            continue
+        base = raw_low.rsplit("/", 1)[-1]
+        is_steam_game = (
+            base.startswith(STEAM_PROCESS_PREFIXES)
+            or "steamapps/common/" in raw_low
+            or base in ("steam_game", "steam_game_process", "steamwebhelper_game")
+        )
+        if base in STEAM_DX12_GAME_EXECUTABLES or base in trunc_prefixes or is_steam_game:
+            if base not in matched_games:
+                matched_games.append(base)
+
+    gpu_util_triggered = bool(
+        non_worker_gpu_util_pct is not None
+        and math.isfinite(non_worker_gpu_util_pct)
+        and non_worker_gpu_util_pct > gpu_util_threshold_pct
+    )
+    return {
+        "game_detected": bool(matched_games or gpu_util_triggered),
+        "matched_games": matched_games,
+        "gpu_util_triggered": gpu_util_triggered,
+        "non_worker_gpu_util_pct": non_worker_gpu_util_pct,
+        "gpu_util_threshold_pct": gpu_util_threshold_pct,
+    }
+
+
+def default_worker_yield_drill(
+    *,
+    clock_fn: ClockFn = time.monotonic,
+    trigger_exe: str = "cs2.exe",
+    timeout_s: float = SUBPROCESS_TIMEOUT_S,
+) -> dict[str, Any]:
+    """Run a lightweight local subprocess worker preemption drill (`shell=False`, `<= 3s` timeout)."""
+    bounded = min(max(0.2, float(timeout_s)), SUBPROCESS_TIMEOUT_S)
+    proc = subprocess.Popen(
+        [sys.executable, "-u", "-c", _LOCAL_WORKER_YIELD_PROGRAM],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        shell=False,
+    )
+    try:
+        ready_line = proc.stdout.readline().strip() if proc.stdout is not None else ""
+        if ready_line != "HIVEMIND_WORKER_READY":
+            proc.kill()
+            proc.wait(timeout=1.0)
+            return {
+                "worker_started": False,
+                "worker_stopped": False,
+                "clean_release": False,
+                "retained_worker_vram_mib": -1,
+                "yield_latency_ms": None,
+                "trigger_exe": trigger_exe,
+                "method": "local_python_worker_subprocess",
+            }
+
+        t_trigger = clock_fn()
+        if not detect_steam_dx12_activity([trigger_exe])["game_detected"]:
+            proc.kill()
+            proc.wait(timeout=1.0)
+            return {
+                "worker_started": True,
+                "worker_stopped": False,
+                "clean_release": False,
+                "retained_worker_vram_mib": -1,
+                "yield_latency_ms": None,
+                "trigger_exe": trigger_exe,
+                "method": "local_python_worker_subprocess",
+            }
+
+        if proc.stdin is not None:
+            proc.stdin.write("YIELD\n")
+            proc.stdin.flush()
+            proc.stdin.close()
+
+        release_line = proc.stdout.readline().strip() if proc.stdout is not None else ""
+        exit_rc = proc.wait(timeout=bounded)
+        t_done = clock_fn()
+        yield_latency_ms = round(max(0.0, (t_done - t_trigger) * 1000.0), 3)
+
+        retained_mib = -1
+        if release_line.startswith("HIVEMIND_WORKER_RELEASED:"):
+            raw_mib = release_line.split(":", 1)[1].strip()
+            if raw_mib.isdigit():
+                retained_mib = int(raw_mib)
+
+        clean_ok = bool(exit_rc == 0 and proc.poll() is not None and retained_mib == 0)
+        return {
+            "worker_started": True,
+            "worker_stopped": proc.poll() is not None,
+            "clean_release": clean_ok,
+            "retained_worker_vram_mib": retained_mib,
+            "yield_latency_ms": yield_latency_ms,
+            "trigger_exe": trigger_exe,
+            "method": "local_python_worker_subprocess",
+        }
+    except (subprocess.TimeoutExpired, OSError):
+        proc.kill()
+        proc.wait(timeout=1.0)
+        return {
+            "worker_started": True,
+            "worker_stopped": False,
+            "clean_release": False,
+            "retained_worker_vram_mib": -1,
+            "yield_latency_ms": round(bounded * 1000.0, 3),
+            "trigger_exe": trigger_exe,
+            "method": "local_python_worker_subprocess",
+        }
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=1.0)
+        for stream in (proc.stdin, proc.stdout, proc.stderr):
+            if stream is not None and not stream.closed:
+                stream.close()
+
+
+def run_steam_thermal_preflight(
+    *,
+    max_temp_c: float = DEFAULT_MAX_TEMP_C,
+    min_free_vram_mib: int = DEFAULT_MIN_FREE_VRAM_MIB,
+    yield_budget_ms: float = DEFAULT_YIELD_BUDGET_MS,
+    had_game_lag: bool = False,
+    gpu_probe_fn: GpuProbeFn = default_gpu_probe,
+    process_probe_fn: ProcessProbeFn = default_process_probe,
+    worker_yield_fn: WorkerYieldFn = default_worker_yield_drill,
+    clock_fn: ClockFn = time.monotonic,
+    os_name: str | None = None,
+    home: Path | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Run the `<1.5s` Steam GPU yield & `<=70.0 C` quiet-fan thermal preflight check."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    eff_os = os_name if os_name is not None else os.name
+
+    if isinstance(max_temp_c, bool) or not math.isfinite(float(max_temp_c)) or not (25.0 <= float(max_temp_c) <= 95.0):
+        raise AutoconfigError("max_temp_c must be a finite temperature between 25.0 and 95.0 C.")
+    if isinstance(min_free_vram_mib, bool) or int(min_free_vram_mib) < 256:
+        raise AutoconfigError("min_free_vram_mib must be an integer >= 256 MiB.")
+    if isinstance(yield_budget_ms, bool) or not math.isfinite(float(yield_budget_ms)) or float(yield_budget_ms) <= 0.0:
+        raise AutoconfigError("yield_budget_ms must be a positive finite budget.")
+
+    cap_c = round(float(max_temp_c), 1)
+    reserve_mib = int(min_free_vram_mib)
+    budget_ms = round(float(yield_budget_ms), 1)
+
+    raw_gpu = _invoke_with_supported_kwargs(gpu_probe_fn, timeout_s=SUBPROCESS_TIMEOUT_S)
+    gpu = _normalize_gpu_snapshot(raw_gpu)
+
+    live_procs = list(
+        _invoke_with_supported_kwargs(
+            process_probe_fn,
+            os_name=eff_os,
+            timeout_s=SUBPROCESS_TIMEOUT_S,
+        )
+    )
+    live_detection = detect_steam_dx12_activity(
+        live_procs,
+        non_worker_gpu_util_pct=gpu.util_pct if (gpu.present and not gpu.parse_error) else None,
+    )
+
+    signatures_verified = all(
+        detect_steam_dx12_activity([sig])["game_detected"] for sig in PREFLIGHT_GAME_SIGNATURES
+    ) and detect_steam_dx12_activity([], non_worker_gpu_util_pct=20.0)["game_detected"]
+
+    trigger_exe = live_detection["matched_games"][0] if live_detection["matched_games"] else "cs2.exe"
+    t_drill0 = clock_fn()
+    raw_drill = _invoke_with_supported_kwargs(
+        worker_yield_fn,
+        clock_fn=clock_fn,
+        trigger_exe=trigger_exe,
+        timeout_s=SUBPROCESS_TIMEOUT_S,
+    )
+    measured_ms = round(max(0.0, (clock_fn() - t_drill0) * 1000.0), 3)
+
+    if isinstance(raw_drill, (int, float)) and not isinstance(raw_drill, bool):
+        yield_latency_ms: float | None = round(float(raw_drill), 3)
+        worker_started = True
+        worker_stopped = True
+        clean_release = True
+        retained_mib = 0
+        drill_method = "custom_worker_yield_fn"
+    elif isinstance(raw_drill, Mapping):
+        rep_ms = _optional_finite_float(
+            raw_drill.get("yield_latency_ms", raw_drill.get("yield_ms"))
+        )
+        if rep_ms is None:
+            rep_s = _optional_finite_float(raw_drill.get("yield_elapsed_s"))
+            rep_ms = (rep_s * 1000.0) if rep_s is not None else None
+        worker_started = bool(raw_drill.get("worker_started", True))
+        worker_stopped = bool(raw_drill.get("worker_stopped", True))
+        clean_release = bool(raw_drill.get("clean_release", worker_stopped))
+        raw_ret = raw_drill.get("retained_worker_vram_mib", raw_drill.get("retained_vram_mib"))
+        if raw_ret is None:
+            retained_mib = 0 if clean_release else -1
+        else:
+            retained_mib = int(raw_ret)
+        yield_latency_ms = round(rep_ms, 3) if rep_ms is not None else (measured_ms if worker_stopped else None)
+        drill_method = str(raw_drill.get("method") or "custom_worker_yield_fn")
+    else:
+        raise AutoconfigError("worker_yield_fn must return a mapping or numeric latency.")
+
+    yield_slo_ok = bool(
+        signatures_verified
+        and worker_started
+        and worker_stopped
+        and clean_release
+        and retained_mib == 0
+        and yield_latency_ms is not None
+        and 0.0 <= yield_latency_ms < budget_ms
+    )
+
+    budget_s = budget_ms / 1000.0
+    lat_s_str = f"{yield_latency_ms / 1000.0:.3f}s" if yield_latency_ms is not None else "n/a"
+
+    if not gpu.present:
+        thermal_ok = True
+        vram_reserve_ok = True
+        zero_game_lag = bool((not had_game_lag) and yield_slo_ok and thermal_ok)
+        if not yield_slo_ok:
+            status = "yield_slo_exceeded"
+            check_status = "fail"
+            preflight_ok = False
+            summary = (
+                f"Échec du test de cession Steam ({lat_s_str} >= budget {budget_s:.2f}s)."
+                if is_fr
+                else f"Steam worker yield SLO exceeded ({lat_s_str} >= {budget_s:.2f}s budget)."
+            )
+        else:
+            status = "dev_api_only_no_nvidia_gpu"
+            check_status = "ok"
+            preflight_ok = True
+            summary = (
+                f"Aucun GPU NVIDIA détecté — statut 'dev_api_only_no_nvidia_gpu' "
+                f"(API Dev prête, cession worker vérifiée en {lat_s_str} < {budget_s:.2f}s)."
+                if is_fr
+                else f"No NVIDIA GPU detected — honest 'dev_api_only_no_nvidia_gpu' status "
+                f"(Dev API ready, worker yield verified in {lat_s_str} < {budget_s:.2f}s)."
+            )
+        gpu_ready = False
+    elif gpu.parse_error or gpu.temp_c is None or gpu.free_vram_mib is None:
+        status = "gpu_driver_parse_error"
+        check_status = "fail"
+        preflight_ok = False
+        thermal_ok = False
+        vram_reserve_ok = False
+        zero_game_lag = False
+        gpu_ready = False
+        summary = (
+            "Télémetrie `nvidia-smi` incomplète ou illisible — worker GPU maintenu en pause."
+            if is_fr
+            else "Unreadable or incomplete `nvidia-smi` telemetry — GPU worker held paused."
+        )
+    else:
+        thermal_ok = bool(gpu.temp_c <= cap_c)
+        vram_reserve_ok = bool(gpu.free_vram_mib >= reserve_mib)
+        zero_game_lag = bool((not had_game_lag) and yield_slo_ok and thermal_ok)
+        if not yield_slo_ok:
+            status = "yield_slo_exceeded"
+            check_status = "fail"
+            preflight_ok = False
+            gpu_ready = False
+            summary = (
+                f"Échec critique de préemption Steam : {lat_s_str} >= budget {budget_s:.2f}s."
+                if is_fr
+                else f"Steam GPU preemption SLO failed closed: {lat_s_str} >= {budget_s:.2f}s budget."
+            )
+        elif not thermal_ok and not vram_reserve_ok:
+            status = "thermal_and_vram_clamped_paused"
+            check_status = "warn"
+            preflight_ok = True
+            gpu_ready = False
+            summary = (
+                f"{gpu.name} à {gpu.temp_c:.1f} C (> {cap_c:.1f} C) et {gpu.free_vram_mib} MiB libres "
+                f"(< {reserve_mib} MiB) : gouverneur en pause pour garder les ventilateurs silencieux."
+                if is_fr
+                else f"{gpu.name} at {gpu.temp_c:.1f} C (> {cap_c:.1f} C) and {gpu.free_vram_mib} MiB free "
+                f"(< {reserve_mib} MiB): governor paused to keep fans quiet and protect VRAM."
+            )
+        elif not thermal_ok:
+            status = "thermal_clamped_paused"
+            check_status = "warn"
+            preflight_ok = True
+            gpu_ready = False
+            summary = (
+                f"{gpu.name} à {gpu.temp_c:.1f} C (> {cap_c:.1f} C plafond silencieux) : "
+                f"worker GPU mis en pause jusqu'au retour <= {cap_c:.1f} C."
+                if is_fr
+                else f"{gpu.name} at {gpu.temp_c:.1f} C (> {cap_c:.1f} C quiet-fan ceiling): "
+                f"GPU worker paused until <= {cap_c:.1f} C."
+            )
+        elif not vram_reserve_ok:
+            status = "vram_reserve_hold"
+            check_status = "warn"
+            preflight_ok = True
+            gpu_ready = False
+            summary = (
+                f"{gpu.name} a {gpu.free_vram_mib} MiB de VRAM libre (< {reserve_mib} MiB requis) : "
+                "worker GPU maintenu en veille."
+                if is_fr
+                else f"{gpu.name} has {gpu.free_vram_mib} MiB free VRAM (< {reserve_mib} MiB reserve): "
+                "GPU worker held paused."
+            )
+        elif live_detection["game_detected"]:
+            status = "steam_game_active_yielded"
+            check_status = "ok"
+            preflight_ok = True
+            gpu_ready = False
+            games_note = ", ".join(live_detection["matched_games"]) or "gpu_util>15%"
+            summary = (
+                f"Jeu Steam/DX12 actif détecté ({games_note}) : cession complète vérifiée en "
+                f"{lat_s_str} (< {budget_s:.2f}s), {gpu.temp_c:.1f} C <= {cap_c:.1f} C."
+                if is_fr
+                else f"Active Steam/DX12 game detected ({games_note}): full worker yield verified in "
+                f"{lat_s_str} (< {budget_s:.2f}s), {gpu.temp_c:.1f} C <= {cap_c:.1f} C."
+            )
+        else:
+            status = "whisper_ready"
+            check_status = "ok"
+            preflight_ok = True
+            gpu_ready = True
+            summary = (
+                f"{gpu.name} prêt & silencieux ({gpu.temp_c:.1f} C <= {cap_c:.1f} C, "
+                f"{gpu.free_vram_mib} MiB libres >= {reserve_mib} MiB, cession {lat_s_str} < {budget_s:.2f}s)."
+                if is_fr
+                else f"{gpu.name} quiet & ready ({gpu.temp_c:.1f} C <= {cap_c:.1f} C, "
+                f"{gpu.free_vram_mib} MiB free >= {reserve_mib} MiB, yield {lat_s_str} < {budget_s:.2f}s)."
+            )
+
+    return _attach_receipt(
+        {
+            "object": "hivemind.noel_vscode_autoconfig.steam_thermal_preflight",
+            "status": status,
+            "check_status": check_status,
+            "preflight_ok": preflight_ok,
+            "gpu_contributor_ready": gpu_ready,
+            "gpu_present": gpu.present,
+            "gpu_name": gpu.name if (gpu.present and not gpu.parse_error) else None,
+            "vram_total_mib": gpu.total_vram_mib if (gpu.present and not gpu.parse_error) else None,
+            "vram_free_mib": gpu.free_vram_mib if (gpu.present and not gpu.parse_error) else None,
+            "vram_used_mib": gpu.used_vram_mib if (gpu.present and not gpu.parse_error) else None,
+            "temp_c": gpu.temp_c if (gpu.present and not gpu.parse_error) else None,
+            "util_pct": gpu.util_pct if (gpu.present and not gpu.parse_error) else None,
+            "max_temp_c": cap_c,
+            "min_free_vram_mib": reserve_mib,
+            "yield_budget_ms": budget_ms,
+            "yield_latency_ms": yield_latency_ms,
+            "yield_slo_ok": yield_slo_ok,
+            "thermal_ok": thermal_ok,
+            "vram_reserve_ok": vram_reserve_ok,
+            "zero_game_lag": zero_game_lag,
+            "had_game_lag": bool(had_game_lag),
+            "game_detected": bool(live_detection["game_detected"]),
+            "matched_games": list(live_detection["matched_games"]),
+            "gpu_util_triggered": bool(live_detection["gpu_util_triggered"]),
+            "signatures_verified": signatures_verified,
+            "worker_drill": {
+                "worker_started": worker_started,
+                "worker_stopped": worker_stopped,
+                "clean_release": clean_release,
+                "retained_worker_vram_mib": retained_mib,
+                "yield_latency_ms": yield_latency_ms,
+                "trigger_exe": trigger_exe,
+                "method": drill_method,
+            },
+            "summary": sanitize_text_for_display(summary, home=home),
+        }
+    )
+
+
+def verify_producer_heartbeat_readiness(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    api_key: str | None = None,
+    role: str = "prosumer",
+    send_opentrainer_heartbeat: bool = False,
+    host_label: str = "personal-pc",
+    gpu_snapshot: Any = None,
+    http_fn: HttpFn = default_http_json,
+    home: Path | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Zero-inference Live Producer & OpenTrainer Heartbeat Readiness Check."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    clean_gw = validate_gateway_url(gateway)
+    norm_role = normalize_role(role)
+    clean_host_label = sanitize_host_label(host_label)
+
+    clean_key = (api_key or "").strip()
+    if clean_key and not is_valid_hivemind_key(clean_key):
+        raise AutoconfigError("Invalid hm-... API key passed to verify_producer_heartbeat_readiness.")
+    has_key = bool(clean_key)
+    auth_headers = {"Authorization": f"Bearer {clean_key}"} if has_key else None
+
+    gpu = _normalize_gpu_snapshot(gpu_snapshot)
+    honest_gpu_name: str | None = None
+    honest_vram_total: int | None = None
+    honest_vram_free: int | None = None
+    if (
+        gpu.present
+        and not gpu.parse_error
+        and gpu.name
+        and gpu.total_vram_mib is not None
+        and gpu.total_vram_mib >= MIN_REPORTABLE_VRAM_TOTAL_MIB
+        and gpu.free_vram_mib is not None
+        and gpu.free_vram_mib >= 0
+    ):
+        honest_gpu_name = gpu.name[:128]
+        honest_vram_total = int(gpu.total_vram_mib)
+        honest_vram_free = min(int(gpu.free_vram_mib), honest_vram_total)
+
+    diagnostics: list[str] = []
+
+    # Optional outbound-only POST /v1/hivemind/opentrainer/heartbeat (extra='forbid')
+    ot_sent = False
+    ot_accepted = False
+    ot_http_status: int | None = None
+    ot_node_id: str | None = None
+    ot_payload: dict[str, Any] | None = None
+    ot_ok = True
+
+    if not send_opentrainer_heartbeat:
+        ot_status_label = "not_requested"
+    elif not has_key:
+        ot_status_label = "missing_api_key"
+        ot_ok = False
+        diagnostics.append(
+            "Clé `hm-...` requise pour envoyer le heartbeat OpenTrainer sortant."
+            if is_fr
+            else "Valid `hm-...` API key required to send outbound OpenTrainer heartbeat."
+        )
+    elif norm_role == "consumer":
+        ot_status_label = "skipped_consumer_role"
+    else:
+        ot_payload = {
+            "host_label": clean_host_label,
+            "gpu_name": honest_gpu_name,
+            "vram_total_mib": honest_vram_total,
+            "vram_free_mib": honest_vram_free,
+            "network_mode": "outbound-https-relay",
+        }
+        ot_sent = True
+        ot_http_status, ot_body = _safe_http_call(
+            http_fn,
+            "POST",
+            f"{clean_gw}/v1/hivemind/opentrainer/heartbeat",
+            ot_payload,
+            auth_headers,
+        )
+        ot_accepted = ot_http_status in (200, 201)
+        ot_ok = ot_accepted
+        node_doc = ot_body.get("node") if isinstance(ot_body.get("node"), Mapping) else {}
+        if isinstance(node_doc.get("node_id"), str) and node_doc["node_id"].strip():
+            ot_node_id = sanitize_text_for_display(node_doc["node_id"].strip(), home=home)
+        if ot_accepted:
+            ot_status_label = "accepted"
+        else:
+            ot_status_label = "rejected"
+            diagnostics.append(
+                f"Échec sur POST /v1/hivemind/opentrainer/heartbeat (HTTP {ot_http_status})."
+                if is_fr
+                else f"Outbound heartbeat failed on POST /v1/hivemind/opentrainer/heartbeat (HTTP {ot_http_status})."
+            )
+
+    # Inspect GET /v1/hivemind/producers/fleet, GET /v1/hivemind/raid/status, and GET /v1/hivemind/remote/config
+    fleet_code, fleet_body = _safe_http_call(
+        http_fn,
+        "GET",
+        f"{clean_gw}/v1/hivemind/producers/fleet",
+        None,
+        None,
+    )
+    fleet_ok = fleet_code == 200
+    if not fleet_ok:
+        diagnostics.append(
+            f"Échec de lecture GET /v1/hivemind/producers/fleet (HTTP {fleet_code})."
+            if is_fr
+            else f"Fleet check failed on GET /v1/hivemind/producers/fleet (HTTP {fleet_code})."
+        )
+
+    raid_code, raid_body = _safe_http_call(
+        http_fn,
+        "GET",
+        f"{clean_gw}/v1/hivemind/raid/status",
+        None,
+        None,
+    )
+    raid_ok = raid_code == 200
+    stale_raid_route_404 = raid_code == 404
+    if not raid_ok:
+        diagnostics.append(
+            f"Échec de lecture GET /v1/hivemind/raid/status (HTTP {raid_code})."
+            if is_fr
+            else f"Raid status check failed on GET /v1/hivemind/raid/status (HTTP {raid_code})."
+        )
+
+    remote_checked = has_key
+    remote_code: int | None = None
+    remote_ok = True
+    node_state: str | None = None
+    node_paused: bool | None = None
+    vram_cap_mib: int | None = None
+    if has_key:
+        remote_code, remote_body = _safe_http_call(
+            http_fn,
+            "GET",
+            f"{clean_gw}/v1/hivemind/remote/config",
+            None,
+            auth_headers,
+        )
+        remote_ok = remote_code == 200
+        rcfg = remote_body.get("remote_config") if isinstance(remote_body.get("remote_config"), Mapping) else {}
+        if remote_ok:
+            node_state = str(rcfg.get("node_state") or "active")
+            node_paused = bool(rcfg.get("paused", False))
+            raw_cap = rcfg.get("vram_cap_mib")
+            if isinstance(raw_cap, int) and not isinstance(raw_cap, bool):
+                vram_cap_mib = raw_cap
+        else:
+            diagnostics.append(
+                f"Échec de lecture authentifiée GET /v1/hivemind/remote/config (HTTP {remote_code})."
+                if is_fr
+                else f"Authenticated remote config check failed on GET /v1/hivemind/remote/config (HTTP {remote_code})."
+            )
+
+    swarm = raid_body.get("swarm") if isinstance(raid_body.get("swarm"), Mapping) else {}
+
+    def _safe_nonneg_int(val: Any, default: int = 0) -> int:
+        if isinstance(val, int) and not isinstance(val, bool) and val >= 0:
+            return val
+        return default
+
+    online_producers = (
+        _safe_nonneg_int(fleet_body.get("live_hiveminders"))
+        if "live_hiveminders" in fleet_body
+        else _safe_nonneg_int(swarm.get("live_producers"))
+    )
+    registered_producers = _safe_nonneg_int(
+        fleet_body.get("total_hiveminders"),
+        _safe_nonneg_int(swarm.get("registered_producers")),
+    )
+    distinct_gpus = _safe_nonneg_int(fleet_body.get("distinct_physical_gpus"))
+    live_endpoints = _safe_nonneg_int(fleet_body.get("live_endpoints"))
+    raw_live_models = fleet_body.get("live_models")
+    live_models = (
+        [str(m) for m in raw_live_models if isinstance(m, str) and m.strip()]
+        if isinstance(raw_live_models, list)
+        else []
+    )
+    active_trainers = _safe_nonneg_int(swarm.get("active_trainers"))
+    registered_trainer_nodes = _safe_nonneg_int(swarm.get("registered_trainer_nodes"))
+
+    activation_needed = online_producers == 0
+    activation_command = (
+        f"python3 scripts/hivemind_quickstart.py --gateway {clean_gw} --gamer-whisper"
+        if activation_needed
+        else None
+    )
+    if activation_needed:
+        activation_guidance = (
+            f"Aucun producteur d'inférence en ligne (`online_producers=0`) — activez votre PC perso en "
+            f"1 commande silencieuse (<= 70.0 C, cession < 1.5s) : `{activation_command}`"
+            if is_fr
+            else f"Zero live inference producers online (`online_producers=0`) — activate your personal PC in "
+            f"1 quiet Gamer-Whisper command (<= 70.0 C, < 1.5s game yield): `{activation_command}`"
+        )
+    else:
+        activation_guidance = ""
+
+    core_routes_ok = bool(fleet_ok and remote_ok and ot_ok)
+    all_ok = bool(core_routes_ok and raid_ok)
+    swarm_visible = bool(
+        online_producers > 0
+        or active_trainers > 0
+        or registered_producers > 0
+        or registered_trainer_nodes > 0
+    )
+
+    return _attach_receipt(
+        {
+            "object": "hivemind.noel_vscode_autoconfig.producer_heartbeat_readiness",
+            "ok": all_ok,
+            "readiness_ok": all_ok,
+            "core_routes_ok": core_routes_ok,
+            "stale_raid_route_404": stale_raid_route_404,
+            "zero_inference_verified": True,
+            "online_producers": online_producers,
+            "registered_producers": registered_producers,
+            "distinct_physical_gpus": distinct_gpus,
+            "live_endpoints": live_endpoints,
+            "live_models": live_models,
+            "active_trainers": active_trainers,
+            "registered_trainer_nodes": registered_trainer_nodes,
+            "swarm_visible": swarm_visible,
+            "remote_config": {
+                "checked": remote_checked,
+                "ok": remote_ok,
+                "http_status": remote_code,
+                "node_state": node_state,
+                "paused": node_paused,
+                "vram_cap_mib": vram_cap_mib,
+            },
+            "opentrainer_heartbeat": {
+                "requested": bool(send_opentrainer_heartbeat),
+                "sent": ot_sent,
+                "accepted": ot_accepted,
+                "http_status": ot_http_status,
+                "status": ot_status_label,
+                "node_id": ot_node_id,
+                "host_label": clean_host_label,
+                "network_mode": "outbound-https-relay",
+                "gpu_name": honest_gpu_name,
+                "vram_total_mib": honest_vram_total,
+                "vram_free_mib": honest_vram_free,
+                "payload": ot_payload,
+            },
+            "endpoints": {
+                "producers_fleet": {"ok": fleet_ok, "http_status": fleet_code},
+                "raid_status": {"ok": raid_ok, "http_status": raid_code},
+                "remote_config": {
+                    "checked": remote_checked,
+                    "ok": remote_ok,
+                    "http_status": remote_code,
+                },
+            },
+            "activation_needed": activation_needed,
+            "activation_command": activation_command,
+            "activation_guidance": sanitize_text_for_display(activation_guidance, home=home),
+            "diagnostics": [sanitize_text_for_display(d, home=home) for d in diagnostics],
+        }
+    )
+
+
+def submit_post_setup_telemetry(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    profile: str = "dev",
+    ease_rating: int = 5,
+    zero_game_lag: bool | None = None,
+    had_game_lag: bool = False,
+    yield_slo_ok: bool = True,
+    thermal_ok: bool = True,
+    system_name: str | None = None,
+    note: str = "",
+    http_fn: HttpFn = default_http_json,
+    timeout_s: float = TELEMETRY_TIMEOUT_S,
+    home: Path | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Timeout-safe, non-blocking zero-PII CES & `zero_game_lag` post-setup telemetry ping."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    clean_gw = validate_gateway_url(gateway)
+
+    if isinstance(profile, bool) or not isinstance(profile, str) or profile.strip().lower() not in VALID_PROFILES:
+        raise AutoconfigError(f"Unsupported telemetry profile {profile!r}; expected 'dev' or 'gamer'.")
+    norm_profile = profile.strip().lower()
+    if isinstance(ease_rating, bool) or not isinstance(ease_rating, int) or not (1 <= ease_rating <= 5):
+        raise AutoconfigError("ease_rating must be an integer between 1 and 5.")
+
+    effective_zero_lag = (
+        (not bool(had_game_lag))
+        and bool(yield_slo_ok)
+        and bool(thermal_ok)
+        and (True if zero_game_lag is None else bool(zero_game_lag))
+    )
+    clean_platform = _platform_tag(system_name)
+    clean_note = sanitize_text_for_display(str(note or ""), home=home).strip()[:240]
+
+    payload: dict[str, Any] = {
+        "profile": norm_profile,
+        "ease_rating": int(ease_rating),
+        "zero_game_lag": effective_zero_lag,
+        "platform": clean_platform,
+    }
+    if clean_note:
+        payload["note"] = clean_note
+
+    status_code, body = _safe_http_call(
+        http_fn,
+        "POST",
+        f"{clean_gw}/v1/hivemind/onboarding/feedback",
+        payload,
+        None,
+        timeout_s=timeout_s,
+    )
+
+    telemetry_recorded = status_code in (200, 201)
+    stale_cloud_run = status_code == 404
+    raw_mean = body.get("mean_ease_rating")
+    mean_ease = (
+        round(float(raw_mean), 2)
+        if isinstance(raw_mean, (int, float)) and not isinstance(raw_mean, bool)
+        else None
+    )
+    raw_total = body.get("total_responses")
+    total_resp = (
+        int(raw_total)
+        if isinstance(raw_total, int) and not isinstance(raw_total, bool)
+        else None
+    )
+    raw_lag_ratio = body.get("zero_game_lag_ratio")
+    lag_ratio = (
+        round(float(raw_lag_ratio), 4)
+        if isinstance(raw_lag_ratio, (int, float)) and not isinstance(raw_lag_ratio, bool)
+        else None
+    )
+
+    if telemetry_recorded:
+        outcome = "recorded"
+        degraded_reason: str | None = None
+        msg = (
+            f"Télémétrie CES post-installation enregistrée (profil={norm_profile}, ease_rating={ease_rating}/5)."
+            if is_fr
+            else f"Anonymous post-setup CES telemetry recorded (profile={norm_profile}, ease_rating={ease_rating}/5)."
+        )
+    elif status_code == 404:
+        outcome = "missing_route"
+        degraded_reason = "stale_cloud_run_404"
+        msg = (
+            "Télémétrie post-installation ignorée sans bloquer : révision Cloud Run en retard sur `main` (HTTP 404)."
+            if is_fr
+            else "Post-setup telemetry skipped without blocking setup: stale Cloud Run revision returned HTTP 404."
+        )
+    elif status_code == 429:
+        outcome = "rate_limited"
+        degraded_reason = "rate_limited_429"
+        msg = (
+            "Télémétrie post-installation ignorée sans bloquer : limite de débit atteinte (HTTP 429)."
+            if is_fr
+            else "Post-setup telemetry skipped without blocking setup: rate limit reached (HTTP 429)."
+        )
+    elif status_code >= 500:
+        outcome = "server_error"
+        degraded_reason = "gateway_5xx"
+        msg = (
+            f"Télémétrie post-installation ignorée sans bloquer : erreur passerelle (HTTP {status_code})."
+            if is_fr
+            else f"Post-setup telemetry skipped without blocking setup: gateway server error (HTTP {status_code})."
+        )
+    elif status_code == 0:
+        outcome = "network_error"
+        degraded_reason = "network_timeout_or_unreachable"
+        msg = (
+            "Télémétrie post-installation ignorée sans bloquer : délai dépassé ou passerelle injoignable."
+            if is_fr
+            else "Post-setup telemetry skipped without blocking setup: network timeout or gateway unreachable."
+        )
+    else:
+        outcome = "client_error"
+        degraded_reason = f"http_{status_code}"
+        msg = (
+            f"Télémétrie post-installation ignorée sans bloquer (HTTP {status_code})."
+            if is_fr
+            else f"Post-setup telemetry skipped without blocking setup (HTTP {status_code})."
+        )
+
+    return _attach_receipt(
+        {
+            "object": "hivemind.noel_vscode_autoconfig.post_setup_telemetry",
+            "attempted": True,
+            "telemetry_recorded": telemetry_recorded,
+            "submitted": telemetry_recorded,
+            "non_blocking": True,
+            "degraded": not telemetry_recorded,
+            "degraded_reason": degraded_reason,
+            "stale_cloud_run": stale_cloud_run,
+            "status": outcome,
+            "http_status": status_code,
+            "profile": norm_profile,
+            "ease_rating": int(ease_rating),
+            "zero_game_lag": effective_zero_lag,
+            "yield_slo_ok": bool(yield_slo_ok),
+            "thermal_ok": bool(thermal_ok),
+            "platform": clean_platform,
+            "mean_ease_rating": mean_ease,
+            "total_responses": total_resp,
+            "zero_game_lag_ratio": lag_ratio,
+            "zero_pii_payload": payload,
+            "message": sanitize_text_for_display(msg, home=home),
+        }
+    )
+
+
 def run_vscode_autoconfig(
     *,
     gateway: str = DEFAULT_GATEWAY,
@@ -1526,6 +2640,17 @@ def run_vscode_autoconfig(
     ease_rating: int | None = None,
     prompt_ces: bool = False,
     had_game_lag: bool = False,
+    quick_connect: bool = False,
+    check_producer_heartbeat: bool = False,
+    send_opentrainer_heartbeat: bool = False,
+    host_label: str = "personal-pc",
+    gamer_preflight: bool = False,
+    max_temp_c: float = DEFAULT_MAX_TEMP_C,
+    min_free_vram_mib: int = DEFAULT_MIN_FREE_VRAM_MIB,
+    yield_budget_ms: float = DEFAULT_YIELD_BUDGET_MS,
+    post_setup_telemetry: bool = False,
+    profile: str | None = None,
+    gpu_snapshot: Any = None,
     system_name: str | None = None,
     lang: str = "en",
     os_name: str | None = None,
@@ -1535,15 +2660,19 @@ def run_vscode_autoconfig(
     http_fn: HttpFn = default_http_json,
     probe_fn: ProbeFn = default_probe_fn,
     input_fn: InputFn = input,
+    gpu_probe_fn: GpuProbeFn = default_gpu_probe,
+    process_probe_fn: ProcessProbeFn = default_process_probe,
+    worker_yield_fn: WorkerYieldFn = default_worker_yield_drill,
     clock_fn: Callable[[], float] = time.monotonic,
 ) -> tuple[int, dict[str, Any]]:
-    """Run the 1-command VS Code developer autoconfig flow and return `(exit_code, receipted_report)`."""
+    """Run the 1-command VS Code developer autoconfig or Quick-Connect flow and return `(exit_code, receipted_report)`."""
     t0 = clock_fn()
     lang_code = normalize_lang(lang)
     clean_gw = validate_gateway_url(gateway)
     eff_os = os_name if os_name is not None else os.name
     resolved_home = home if home is not None else Path.home()
     resolved_cwd = cwd if cwd is not None else Path.cwd()
+    run_mode = "quick_connect" if quick_connect else "autoconfig"
 
     cred_target = (
         credentials_path
@@ -1598,6 +2727,8 @@ def run_vscode_autoconfig(
                 "failures_count": 0,
                 "ease_rating": None,
                 "mean_ease_rating": None,
+                "zero_game_lag": None,
+                "telemetry_recorded": False,
                 "zero_inference_verified": True,
                 "within_60s_slo": elapsed_un < SLO_BUDGET_SECONDS,
                 "elapsed_s": elapsed_un,
@@ -1620,6 +2751,9 @@ def run_vscode_autoconfig(
                 "targets": {},
                 "uninstall": un_res,
                 "gitignore_safety": None,
+                "gamer_preflight": None,
+                "producer_heartbeat": None,
+                "post_setup_telemetry": None,
                 "probe_skipped": True,
                 "probe": None,
                 "feedback": None,
@@ -1633,6 +2767,16 @@ def run_vscode_autoconfig(
         isinstance(ease_rating, bool) or not isinstance(ease_rating, int) or not (1 <= ease_rating <= 5)
     ):
         raise AutoconfigError("ease_rating must be an integer between 1 and 5.")
+    if profile is not None and (
+        isinstance(profile, bool) or not isinstance(profile, str) or profile.strip().lower() not in VALID_PROFILES
+    ):
+        raise AutoconfigError(f"Unsupported profile {profile!r}; expected 'dev' or 'gamer'.")
+    if isinstance(max_temp_c, bool) or not math.isfinite(float(max_temp_c)) or not (25.0 <= float(max_temp_c) <= 95.0):
+        raise AutoconfigError("max_temp_c must be a finite temperature between 25.0 and 95.0 C.")
+    if isinstance(min_free_vram_mib, bool) or int(min_free_vram_mib) < 256:
+        raise AutoconfigError("min_free_vram_mib must be an integer >= 256 MiB.")
+    if isinstance(yield_budget_ms, bool) or not math.isfinite(float(yield_budget_ms)) or float(yield_budget_ms) <= 0.0:
+        raise AutoconfigError("yield_budget_ms must be a positive finite budget.")
 
     # Step 1: Strictly local Personal-PC & Hobby-Workspace Compliance Gate BEFORE any write or network call
     compliance = evaluate_personal_pc_compliance(
@@ -1647,7 +2791,7 @@ def run_vscode_autoconfig(
                 "schema": SCHEMA,
                 "object": RECEIPT_OBJECT,
                 "campaign_id": CAMPAIGN_ID,
-                "mode": "autoconfig",
+                "mode": run_mode,
                 "lang": lang_code,
                 "gateway": clean_gw,
                 "compliance_ok": False,
@@ -1660,6 +2804,8 @@ def run_vscode_autoconfig(
                 "failures_count": 1,
                 "ease_rating": None,
                 "mean_ease_rating": None,
+                "zero_game_lag": False,
+                "telemetry_recorded": False,
                 "zero_inference_verified": True,
                 "within_60s_slo": elapsed_refused < SLO_BUDGET_SECONDS,
                 "elapsed_s": elapsed_refused,
@@ -1668,6 +2814,9 @@ def run_vscode_autoconfig(
                 "targets": {},
                 "uninstall": None,
                 "gitignore_safety": None,
+                "gamer_preflight": None,
+                "producer_heartbeat": None,
+                "post_setup_telemetry": None,
                 "probe_skipped": True,
                 "probe": None,
                 "feedback": None,
@@ -1706,7 +2855,7 @@ def run_vscode_autoconfig(
                 "schema": SCHEMA,
                 "object": RECEIPT_OBJECT,
                 "campaign_id": CAMPAIGN_ID,
-                "mode": "autoconfig",
+                "mode": run_mode,
                 "lang": lang_code,
                 "gateway": clean_gw,
                 "compliance_ok": True,
@@ -1719,6 +2868,8 @@ def run_vscode_autoconfig(
                 "failures_count": 1,
                 "ease_rating": None,
                 "mean_ease_rating": None,
+                "zero_game_lag": None,
+                "telemetry_recorded": False,
                 "zero_inference_verified": True,
                 "within_60s_slo": elapsed_err < SLO_BUDGET_SECONDS,
                 "elapsed_s": elapsed_err,
@@ -1727,6 +2878,9 @@ def run_vscode_autoconfig(
                 "targets": {},
                 "uninstall": None,
                 "gitignore_safety": None,
+                "gamer_preflight": None,
+                "producer_heartbeat": None,
+                "post_setup_telemetry": None,
                 "probe_skipped": True,
                 "probe": None,
                 "feedback": None,
@@ -1737,6 +2891,7 @@ def run_vscode_autoconfig(
         return fail_rc, conn_fail_report
 
     raw_api_key = str(connected["api_key"])
+    verified_role = str(connected["role"])
     warnings: list[str] = []
     errors: list[str] = []
 
@@ -1785,12 +2940,134 @@ def run_vscode_autoconfig(
             "backup_path": None,
         }
 
-    # Step 4: Optional developer CES feedback hook (profile='dev')
+    # Step 4: Optional <1.5s Steam GPU Yield & <=70.0 C Quiet-Fan Thermal Preflight
+    run_preflight = bool(quick_connect or gamer_preflight)
+    preflight_result: dict[str, Any] | None = None
+    preflight_failed = False
+    if run_preflight:
+        effective_gpu_probe: GpuProbeFn = (
+            (lambda: gpu_snapshot) if gpu_snapshot is not None else gpu_probe_fn
+        )
+        preflight_result = run_steam_thermal_preflight(
+            max_temp_c=max_temp_c,
+            min_free_vram_mib=min_free_vram_mib,
+            yield_budget_ms=yield_budget_ms,
+            had_game_lag=had_game_lag,
+            gpu_probe_fn=effective_gpu_probe,
+            process_probe_fn=process_probe_fn,
+            worker_yield_fn=worker_yield_fn,
+            clock_fn=clock_fn,
+            os_name=eff_os,
+            home=resolved_home,
+            lang=lang_code,
+        )
+        if preflight_result["check_status"] == "fail":
+            preflight_failed = True
+            errors.append(preflight_result["summary"])
+        elif preflight_result["check_status"] == "warn":
+            warnings.append(preflight_result["summary"])
+
+    # Step 5: Optional Live Producer & OpenTrainer Heartbeat Readiness Check
+    run_hb_check = bool(quick_connect or check_producer_heartbeat or send_opentrainer_heartbeat)
+    producer_hb_result: dict[str, Any] | None = None
+    hb_failed = False
+    hb_failure_http: int | None = None
+    if run_hb_check:
+        hb_gpu_source: Any = gpu_snapshot
+        if hb_gpu_source is None:
+            if preflight_result is not None:
+                hb_gpu_source = preflight_result
+            elif send_opentrainer_heartbeat:
+                hb_gpu_source = _invoke_with_supported_kwargs(gpu_probe_fn, timeout_s=SUBPROCESS_TIMEOUT_S)
+        producer_hb_result = verify_producer_heartbeat_readiness(
+            clean_gw,
+            api_key=raw_api_key,
+            role=verified_role,
+            send_opentrainer_heartbeat=bool(send_opentrainer_heartbeat),
+            host_label=host_label,
+            gpu_snapshot=hb_gpu_source,
+            http_fn=http_fn,
+            home=resolved_home,
+            lang=lang_code,
+        )
+        if not producer_hb_result["ok"]:
+            if (
+                quick_connect
+                and not check_producer_heartbeat
+                and producer_hb_result["core_routes_ok"]
+                and producer_hb_result.get("stale_raid_route_404")
+            ):
+                for diag in producer_hb_result["diagnostics"]:
+                    if diag not in warnings:
+                        warnings.append(diag)
+            else:
+                hb_failed = True
+                for diag in producer_hb_result["diagnostics"]:
+                    if diag not in errors:
+                        errors.append(diag)
+                ep_map = producer_hb_result["endpoints"]
+                ot_code = producer_hb_result["opentrainer_heartbeat"].get("http_status")
+                candidate_codes = [
+                    ep_map["producers_fleet"]["http_status"],
+                    ep_map["raid_status"]["http_status"],
+                    ep_map["remote_config"]["http_status"],
+                    ot_code,
+                ]
+                hb_failure_http = 404 if 404 in candidate_codes else 503
+
+    # Step 6: CES feedback or non-blocking --post-setup-telemetry ping
+    eff_yield_ok = bool(preflight_result["yield_slo_ok"]) if preflight_result is not None else True
+    eff_thermal_ok = bool(preflight_result["thermal_ok"]) if preflight_result is not None else True
+    derived_zero_lag = (not bool(had_game_lag)) and eff_yield_ok and eff_thermal_ok
+
     fb_result: dict[str, Any] | None = None
-    if prompt_ces:
+    post_telemetry_result: dict[str, Any] | None = None
+    if post_setup_telemetry:
+        if profile is not None:
+            resolved_profile = profile.strip().lower()
+        elif (
+            send_opentrainer_heartbeat and bool(preflight_result and preflight_result["gpu_present"])
+        ) or verified_role in ("producer", "trainer"):
+            resolved_profile = "gamer"
+        else:
+            resolved_profile = "dev"
+
+        eff_ease = ease_rating if ease_rating is not None else 5
+        if prompt_ces:
+            prompt_ans = ""
+            prompt_label = (
+                "[HiveMind CES 1-question] Notez la simplicité Quick-Connect 1..5 (Entrée=5) : "
+                if lang_code == "fr"
+                else "[HiveMind 1-prompt CES] Rate Quick-Connect ease 1..5 (Enter=5): "
+            )
+            try:
+                prompt_ans = input_fn(prompt_label)
+            except (EOFError, KeyboardInterrupt):
+                prompt_ans = ""
+            parsed_ces = parse_dev_ces_input(prompt_ans, default_had_game_lag=not derived_zero_lag)
+            if not parsed_ces["skipped"] and parsed_ces["ease_rating"] is not None:
+                eff_ease = int(parsed_ces["ease_rating"])
+                derived_zero_lag = bool(derived_zero_lag and parsed_ces["zero_game_lag"])
+
+        post_telemetry_result = submit_post_setup_telemetry(
+            clean_gw,
+            profile=resolved_profile,
+            ease_rating=eff_ease,
+            zero_game_lag=derived_zero_lag,
+            had_game_lag=had_game_lag,
+            yield_slo_ok=eff_yield_ok,
+            thermal_ok=eff_thermal_ok,
+            system_name=system_name,
+            http_fn=http_fn,
+            home=resolved_home,
+            lang=lang_code,
+        )
+        if not post_telemetry_result["telemetry_recorded"]:
+            warnings.append(post_telemetry_result["message"])
+    elif prompt_ces:
         fb_result = prompt_and_submit_dev_ces(
             gateway=clean_gw,
-            default_had_game_lag=had_game_lag,
+            default_had_game_lag=not derived_zero_lag,
             system_name=system_name,
             input_fn=input_fn,
             http_fn=http_fn,
@@ -1800,7 +3077,7 @@ def run_vscode_autoconfig(
         fb_result = submit_dev_ces_feedback(
             gateway=clean_gw,
             ease_rating=ease_rating,
-            zero_game_lag=not had_game_lag,
+            zero_game_lag=derived_zero_lag,
             system_name=system_name,
             http_fn=http_fn,
             lang=lang_code,
@@ -1809,16 +3086,17 @@ def run_vscode_autoconfig(
     if fb_result is not None and fb_result["attempted"] and not fb_result["submitted"]:
         errors.append(sanitize_text_for_display(str(fb_result["message"]), home=resolved_home))
 
-    # Step 5: Automatic zero-inference chaining into scripts/noel_post_setup_probe.py
+    # Step 7: Chained sibling probe (skipped automatically in streamlined --quick-connect mode)
+    eff_skip_probe = bool(skip_probe or quick_connect)
     probe_summary: dict[str, Any] | None = None
-    if not skip_probe:
+    if not eff_skip_probe:
         raw_probe = _invoke_probe_callable(
             probe_fn,
             gateway=clean_gw,
             credentials_path=cred_target,
             continue_path=cont_target,
             http_fn=http_fn,
-            feedback_result=fb_result,
+            feedback_result=post_telemetry_result or fb_result,
             lang=lang_code,
             os_name=eff_os,
             environ=environ,
@@ -1839,20 +3117,29 @@ def run_vscode_autoconfig(
     # Compute aggregated check counts without ever emitting forbidden keys
     local_checks_total = 2 + (1 if should_write_vscode else 0)  # compliance + account/continue [+ vscode]
     local_checks_passed = local_checks_total
+    preflight_total = 1 if preflight_result is not None else 0
+    preflight_passed = 1 if (preflight_result is not None and not preflight_failed) else 0
+    hb_total = 1 if producer_hb_result is not None else 0
+    hb_passed = 1 if (producer_hb_result is not None and not hb_failed) else 0
     probe_passed = probe_summary["checks_passed_count"] if probe_summary is not None else 0
     probe_total = probe_summary["checks_total_count"] if probe_summary is not None else 0
     fb_total = 1 if (fb_result is not None and fb_result["attempted"]) else 0
     fb_passed = 1 if (fb_result is not None and fb_result["submitted"]) else 0
 
-    checks_passed_count = local_checks_passed + probe_passed + fb_passed
-    checks_total_count = local_checks_total + probe_total + fb_total
+    checks_passed_count = local_checks_passed + preflight_passed + hb_passed + probe_passed + fb_passed
+    checks_total_count = local_checks_total + preflight_total + hb_total + probe_total + fb_total
 
     probe_failed = bool(
         probe_summary is not None
         and (not probe_summary["all_routes_ok"] or probe_summary["failures_count"] > 0)
     )
     fb_failed = bool(fb_result is not None and fb_result["attempted"] and not fb_result["submitted"])
-    failures_count = (1 if probe_failed else 0) + (1 if fb_failed else 0)
+    failures_count = (
+        (1 if preflight_failed else 0)
+        + (1 if hb_failed else 0)
+        + (1 if probe_failed else 0)
+        + (1 if fb_failed else 0)
+    )
     warnings_count = len(warnings) + (probe_summary["warnings_count"] if probe_summary is not None else 0)
 
     ready = failures_count == 0
@@ -1863,12 +3150,17 @@ def run_vscode_autoconfig(
     else:
         verdict = "ready"
 
+    active_fb = post_telemetry_result if post_telemetry_result is not None else fb_result
     mean_ease = (
-        fb_result.get("mean_ease_rating")
-        if (fb_result is not None and fb_result.get("mean_ease_rating") is not None)
+        active_fb.get("mean_ease_rating")
+        if (active_fb is not None and active_fb.get("mean_ease_rating") is not None)
         else (probe_summary.get("mean_ease_rating") if probe_summary is not None else None)
     )
-    ease_val = fb_result.get("ease_rating") if fb_result is not None else None
+    ease_val = active_fb.get("ease_rating") if active_fb is not None else None
+    telemetry_recorded = bool(
+        (post_telemetry_result and post_telemetry_result["telemetry_recorded"])
+        or (fb_result and fb_result.get("submitted"))
+    )
     elapsed_s = round(max(0.0, clock_fn() - t0), 3)
 
     account_public = {
@@ -1886,7 +3178,7 @@ def run_vscode_autoconfig(
             "schema": SCHEMA,
             "object": RECEIPT_OBJECT,
             "campaign_id": CAMPAIGN_ID,
-            "mode": "autoconfig",
+            "mode": run_mode,
             "lang": lang_code,
             "gateway": clean_gw,
             "compliance_ok": True,
@@ -1899,6 +3191,8 @@ def run_vscode_autoconfig(
             "failures_count": failures_count,
             "ease_rating": ease_val,
             "mean_ease_rating": mean_ease,
+            "zero_game_lag": derived_zero_lag,
+            "telemetry_recorded": telemetry_recorded,
             "zero_inference_verified": True,
             "within_60s_slo": elapsed_s < SLO_BUDGET_SECONDS,
             "elapsed_s": elapsed_s,
@@ -1907,16 +3201,21 @@ def run_vscode_autoconfig(
             "targets": targets,
             "uninstall": None,
             "gitignore_safety": gitignore_safety,
-            "probe_skipped": bool(skip_probe),
+            "gamer_preflight": preflight_result,
+            "producer_heartbeat": producer_hb_result,
+            "post_setup_telemetry": post_telemetry_result,
+            "probe_skipped": eff_skip_probe,
             "probe": probe_summary,
-            "feedback": fb_result,
+            "feedback": fb_result if fb_result is not None else post_telemetry_result,
             "warnings": warnings,
             "errors": errors,
         }
     )
 
-    if probe_failed:
+    if preflight_failed or probe_failed:
         return 2, report
+    if hb_failed:
+        return (2 if hb_failure_http == 404 else 1), report
     if fb_failed:
         return (2 if fb_result and fb_result.get("http_status") == 404 else 1), report
     return 0, report
@@ -1991,6 +3290,42 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
             ]
         )
 
+    preflight_info = report.get("gamer_preflight")
+    if isinstance(preflight_info, Mapping):
+        lines.extend(
+            [
+                "",
+                "## Pré-Vol Steam (<1.5s) & Ventilateurs Silencieux (<=70 C)"
+                if is_fr
+                else "## Steam Yield (<1.5s) & Quiet-Fan Thermal Preflight (<=70 C)",
+                "",
+                f"- **Status**: `{preflight_info.get('status')}` "
+                f"(`yield_slo_ok={preflight_info.get('yield_slo_ok')}`, "
+                f"`thermal_ok={preflight_info.get('thermal_ok')}`, "
+                f"`vram_reserve_ok={preflight_info.get('vram_reserve_ok')}`, "
+                f"`zero_game_lag={preflight_info.get('zero_game_lag')}`)",
+                f"- **Summary**: {preflight_info.get('summary')}",
+            ]
+        )
+
+    hb_info = report.get("producer_heartbeat")
+    if isinstance(hb_info, Mapping):
+        ot_sub = hb_info.get("opentrainer_heartbeat") if isinstance(hb_info.get("opentrainer_heartbeat"), Mapping) else {}
+        lines.extend(
+            [
+                "",
+                "## État Essaim Producteurs & Heartbeat OpenTrainer"
+                if is_fr
+                else "## Live Producer Fleet & OpenTrainer Heartbeat",
+                "",
+                f"- **Swarm Visibility**: `online_producers={hb_info.get('online_producers')}`, "
+                f"`active_trainers={hb_info.get('active_trainers')}`, "
+                f"`opentrainer_heartbeat={ot_sub.get('status')}`",
+            ]
+        )
+        if hb_info.get("activation_guidance"):
+            lines.append(f"- **Gamer-Whisper 1-Command**: {hb_info.get('activation_guidance')}")
+
     probe_info = report.get("probe")
     if isinstance(probe_info, Mapping):
         lines.extend(
@@ -2061,6 +3396,26 @@ def render_cli_report(report: Mapping[str, Any]) -> str:
             if isinstance(info, Mapping) and info.get("action") != "skipped":
                 lines.append(f"  Target [{name:<17}]: {info.get('path')} ({info.get('action')})")
 
+    preflight_info = report.get("gamer_preflight")
+    if isinstance(preflight_info, Mapping):
+        lines.append(
+            f"  Gamer preflight      : {preflight_info.get('status')} "
+            f"(yield_slo_ok={preflight_info.get('yield_slo_ok')}, "
+            f"thermal_ok={preflight_info.get('thermal_ok')}, "
+            f"zero_game_lag={preflight_info.get('zero_game_lag')})"
+        )
+
+    hb_info = report.get("producer_heartbeat")
+    if isinstance(hb_info, Mapping):
+        ot_sub = hb_info.get("opentrainer_heartbeat") if isinstance(hb_info.get("opentrainer_heartbeat"), Mapping) else {}
+        lines.append(
+            f"  Swarm heartbeat      : online_producers={hb_info.get('online_producers')}, "
+            f"active_trainers={hb_info.get('active_trainers')}, "
+            f"opentrainer={ot_sub.get('status')}"
+        )
+        if hb_info.get("activation_guidance"):
+            lines.append(f"  [TIP] {hb_info.get('activation_guidance')}")
+
     un_info = report.get("uninstall")
     if isinstance(un_info, Mapping):
         lines.append(f"  Removed files        : {un_info.get('removed_count', 0)}")
@@ -2117,6 +3472,56 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Skip writing workspace .vscode/settings.json even when --workspace is given.",
     )
+    parser.add_argument(
+        "--quick-connect",
+        action="store_true",
+        help="Run streamlined <60s 1-command setup, live producer heartbeat check, and <1.5s Steam-yield preflight.",
+    )
+    parser.add_argument(
+        "--check-producer-heartbeat",
+        action="store_true",
+        help="Inspect /v1/hivemind/producers/fleet, /v1/hivemind/raid/status, and /v1/hivemind/remote/config.",
+    )
+    parser.add_argument(
+        "--send-opentrainer-heartbeat",
+        action="store_true",
+        help="Send outbound-only POST /v1/hivemind/opentrainer/heartbeat with honest GPU telemetry.",
+    )
+    parser.add_argument("--host-label", default="personal-pc", help="Personal PC host label for OpenTrainer heartbeat.")
+    parser.add_argument(
+        "--gamer-preflight",
+        action="store_true",
+        help="Run <1.5s Steam GPU yield and <=70.0 C quiet-fan thermal preflight check.",
+    )
+    parser.add_argument(
+        "--max-temp-c",
+        type=float,
+        default=DEFAULT_MAX_TEMP_C,
+        help="Maximum quiet-fan GPU temperature ceiling in Celsius (default: 70.0).",
+    )
+    parser.add_argument(
+        "--min-free-vram-mib",
+        type=int,
+        default=DEFAULT_MIN_FREE_VRAM_MIB,
+        help="Minimum free VRAM reserve in MiB (default: 2048).",
+    )
+    parser.add_argument(
+        "--yield-budget-ms",
+        type=float,
+        default=DEFAULT_YIELD_BUDGET_MS,
+        help="Maximum Steam worker yield budget before WDDM TDR margin (default: 1500.0).",
+    )
+    parser.add_argument(
+        "--post-setup-telemetry",
+        action="store_true",
+        help="Submit timeout-safe non-blocking anonymous CES and zero_game_lag telemetry after setup.",
+    )
+    parser.add_argument(
+        "--profile",
+        default=None,
+        choices=("dev", "gamer"),
+        help="Optional onboarding telemetry profile override ('dev' or 'gamer').",
+    )
     parser.add_argument("--skip-probe", action="store_true", help="Skip chaining into scripts/noel_post_setup_probe.py.")
     parser.add_argument("--ease-rating", type=int, default=None, help="Optional 1..5 developer CES ease rating.")
     parser.add_argument("--prompt-ces", action="store_true", help="Ask a single 1-line developer CES prompt.")
@@ -2128,13 +3533,20 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _emit_report(report: Mapping[str, Any], *, as_json: bool, as_markdown: bool) -> None:
+def _emit_report(
+    report: Mapping[str, Any],
+    *,
+    as_json: bool,
+    as_markdown: bool,
+    out_stream: Any = None,
+) -> None:
+    target_stream = out_stream if out_stream is not None else sys.stdout
     if as_json:
-        print(_assert_safe_output(json.dumps(report, indent=2, ensure_ascii=False)))
+        print(_assert_safe_output(json.dumps(report, indent=2, ensure_ascii=False)), file=target_stream)
     elif as_markdown:
-        print(render_markdown_report(report))
+        print(render_markdown_report(report), file=target_stream)
     else:
-        print(render_cli_report(report))
+        print(render_cli_report(report), file=target_stream)
 
 
 def main(
@@ -2143,14 +3555,23 @@ def main(
     http_fn: HttpFn = default_http_json,
     probe_fn: ProbeFn = default_probe_fn,
     input_fn: InputFn = input,
+    gpu_probe_fn: GpuProbeFn = default_gpu_probe,
+    process_probe_fn: ProcessProbeFn = default_process_probe,
+    worker_yield_fn: WorkerYieldFn = default_worker_yield_drill,
+    clock_fn: ClockFn = time.monotonic,
+    gpu_snapshot: Any = None,
     environ: Mapping[str, str] | None = None,
     home: Path | None = None,
     cwd: Path | None = None,
     os_name: str | None = None,
+    system_name: str | None = None,
+    out_stream: Any = None,
+    err_stream: Any = None,
 ) -> int:
     """CLI entrypoint returning `0` (ready/uninstalled), `1` (transient error), or `2` (refused/failed)."""
     args = build_parser().parse_args(argv)
     resolved_home = home if home is not None else Path.home()
+    target_err = err_stream if err_stream is not None else sys.stderr
     try:
         exit_code, report = run_vscode_autoconfig(
             gateway=args.gateway,
@@ -2167,6 +3588,18 @@ def main(
             ease_rating=args.ease_rating,
             prompt_ces=bool(args.prompt_ces),
             had_game_lag=bool(args.had_game_lag),
+            quick_connect=bool(args.quick_connect),
+            check_producer_heartbeat=bool(args.check_producer_heartbeat),
+            send_opentrainer_heartbeat=bool(args.send_opentrainer_heartbeat),
+            host_label=args.host_label,
+            gamer_preflight=bool(args.gamer_preflight),
+            max_temp_c=args.max_temp_c,
+            min_free_vram_mib=args.min_free_vram_mib,
+            yield_budget_ms=args.yield_budget_ms,
+            post_setup_telemetry=bool(args.post_setup_telemetry),
+            profile=args.profile,
+            gpu_snapshot=gpu_snapshot,
+            system_name=system_name,
             lang=args.lang,
             os_name=os_name,
             environ=environ,
@@ -2175,13 +3608,22 @@ def main(
             http_fn=http_fn,
             probe_fn=probe_fn,
             input_fn=input_fn,
+            gpu_probe_fn=gpu_probe_fn,
+            process_probe_fn=process_probe_fn,
+            worker_yield_fn=worker_yield_fn,
+            clock_fn=clock_fn,
         )
     except AutoconfigError as exc:
         safe_err = sanitize_text_for_display(str(exc), home=resolved_home)
-        print(f"Error: {safe_err}", file=sys.stderr)
+        print(f"Error: {safe_err}", file=target_err)
         return 2
 
-    _emit_report(report, as_json=bool(args.json), as_markdown=bool(args.markdown))
+    _emit_report(
+        report,
+        as_json=bool(args.json),
+        as_markdown=bool(args.markdown),
+        out_stream=out_stream,
+    )
     return exit_code
 
 

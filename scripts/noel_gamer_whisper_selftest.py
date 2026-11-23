@@ -61,9 +61,58 @@ from urllib.parse import urlsplit
 
 SCHEMA = "hivemind.noel_gamer_whisper_selftest/1"
 RECEIPT_OBJECT = "hivemind.noel_gamer_whisper_selftest_receipt"
+MANIFEST_OBJECT = "hivemind.onboarding.manifest"
+FLEET_OBJECT = "hivemind.producer_fleet"
+RAID_STATUS_OBJECT = "hivemind.raid_noel.status"
 CAMPAIGN_ID = "noel-2026-easy-onboard"
 FINANCIAL_PROMISE = "0.00 EUR / 0.00 USD"
 DEFAULT_GATEWAY = "https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app"
+
+DEFAULT_TARGET_ONLINE_PRODUCERS = 8
+DEFAULT_HOST_LABEL = "personal-pc"
+DEFAULT_TRAINING_STACK = "qlora-moe+diloco+amcp-aglet+boinc"
+DEFAULT_ACTIVE_CAMPAIGN = CAMPAIGN_ID
+DEFAULT_NETWORK_MODE = "outbound-https-relay"
+DEFAULT_CREDENTIALS_REL = Path(".hivemind") / "credentials.json"
+MIN_REPORTABLE_VRAM_TOTAL_MIB = 512
+MAX_GPU_VRAM_MIB = 1_048_576
+
+EXPECTED_MANIFEST_HOLIDAY_ROUTES: tuple[str, ...] = (
+    "/noel",
+    "/quick",
+    "/raid-noel",
+    "/v1/hivemind/onboarding/feedback",
+    "/v1/hivemind/onboarding/feedback/summary",
+    "/v1/hivemind/onboarding/manifest",
+    "/v1/hivemind/raid/status",
+)
+VALID_FLEET_BADGES: frozenset[str] = frozenset(
+    {"ONLINE", "BOOTSTRAPPING", "STALE_CLOUD_RUN", "OFFLINE"}
+)
+_ALLOWED_OPENTRAINER_HB_KEYS: frozenset[str] = frozenset(
+    {
+        "host_label",
+        "gpu_name",
+        "vram_total_mib",
+        "vram_free_mib",
+        "network_mode",
+        "training_stack",
+        "active_campaign",
+    }
+)
+_NON_BLOCKING_FEEDBACK_CODES: frozenset[int] = frozenset({0, 404, 408, 429})
+_BUILD_SHA_RE = re.compile(r"^[A-Za-z0-9]{6,64}$")
+_HEX_SHA_RE = re.compile(r"^[0-9a-f]+$")
+_CLOUD_RUN_REVISION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_SECRET_VALUE_MARKERS: tuple[str, ...] = (
+    "secret",
+    "token",
+    "password",
+    "passwd",
+    "apikey",
+    "bearer",
+    "aiza",
+)
 
 SELFTEST_SLO_BUDGET_S = 10.0
 DEFAULT_YIELD_SLO_MS = 1500.0
@@ -288,7 +337,23 @@ def redact_home_path(target: Path | str, home: Path | None = None) -> str:
 
 def sanitize_text_for_display(text: str, *, home: Path | None = None) -> str:
     """Scrub raw `hm-...` keys, Bearer tokens, emails, non-loopback IPv4s, and home paths."""
-    scrubbed = redact_home_path(text, home=home)
+    scrubbed = str(text)
+    effective_home = home if home is not None else Path.home()
+    home_str = str(effective_home)
+    if home_str and home_str not in ("/", "\\", ""):
+        for variant in (
+            home_str,
+            home_str.replace("\\", "/"),
+            home_str.replace("/", "\\"),
+        ):
+            if variant:
+                scrubbed = re.sub(
+                    re.escape(variant) + r"(?=[/\\\s'\",;:]|$)",
+                    "~",
+                    scrubbed,
+                )
+    scrubbed = redact_home_path(scrubbed, home=home)
+    scrubbed = _HOME_PATH_RE.sub("~", scrubbed)
     scrubbed = _BEARER_RE.sub("Bearer <redacted>", scrubbed)
     scrubbed = _API_KEY_RE.sub(lambda m: mask_api_key(m.group(0)), scrubbed)
     scrubbed = _EMAIL_RE.sub("<redacted-email>", scrubbed)
@@ -386,7 +451,7 @@ def _assert_zero_inference_request(method: str, url: str) -> str:
     origin = f"{parts.scheme}://{parts.netloc}"
     validate_gateway_url(origin)
     low_path = (parts.path or "").lower()
-    if "completions" in low_path or "/chat" in low_path:
+    if "completions" in low_path or "/chat" in low_path or "hivemind/coder" in low_path:
         raise SelftestError(
             f"Zero-inference invariant violated: {verb} {parts.path} is strictly forbidden."
         )
@@ -406,7 +471,12 @@ def default_http_json(
         "User-Agent": "hivemind-noel-gamer-whisper-selftest/1.0",
     }
     if headers:
-        req_headers.update(headers)
+        for hk, hv in headers.items():
+            ks = str(hk).strip()
+            vs = str(hv).strip()
+            if any(ord(ch) < 32 or ord(ch) == 127 for ch in ks + vs):
+                raise SelftestError("HTTP headers must not contain control characters.")
+            req_headers[ks] = vs
     body_bytes: bytes | None = None
     if payload is not None:
         body_bytes = json.dumps(payload).encode("utf-8")
@@ -1365,6 +1435,806 @@ def check_gateway_health_and_raid_status(
     }
 
 
+def _safe_nonneg_int(value: Any, default: int = 0) -> int:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return int(value)
+    return default
+
+
+def _safe_opt_nonneg_int(value: Any) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return int(value)
+    return None
+
+
+def _safe_opt_float(value: Any, decimals: int = 2) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value)):
+        return round(float(value), decimals)
+    return None
+
+
+def sanitize_host_label(raw_label: object, *, home: Path | None = None) -> str:
+    """Sanitize a personal PC host label without leaking corporate markers, secrets, or paths."""
+    if raw_label is None or isinstance(raw_label, bool) or not isinstance(raw_label, str):
+        return DEFAULT_HOST_LABEL
+    cleaned = sanitize_text_for_display(raw_label.strip(), home=home)
+    if not cleaned or _find_corporate_markers(cleaned):
+        return DEFAULT_HOST_LABEL
+    normalized = re.sub(r"[^A-Za-z0-9._:-]+", "-", cleaned).strip(".-:")[:128]
+    if not normalized or _find_corporate_markers(normalized):
+        return DEFAULT_HOST_LABEL
+    return normalized
+
+
+def sanitize_build_sha(raw: object) -> str:
+    """Sanitize Cloud Run `build_sha` to alphanumeric/hex or `'unknown'` without leaking secrets."""
+    if not isinstance(raw, str):
+        return "unknown"
+    cleaned = raw.strip()
+    low = cleaned.lower()
+    if (
+        not cleaned
+        or low == "unknown"
+        or not _BUILD_SHA_RE.fullmatch(cleaned)
+        or any(marker in low for marker in _SECRET_VALUE_MARKERS)
+    ):
+        return "unknown"
+    return low
+
+
+def validate_expected_sha(raw: object) -> str:
+    """Validate an explicit `--expected-sha` argument (6..64 alphanumeric/hex characters)."""
+    sanitized = sanitize_build_sha(raw)
+    if sanitized == "unknown":
+        raise SelftestError(
+            "expected_sha must be a 6..64 character alphanumeric/hex SHA (never 'unknown' or a secret)."
+        )
+    return sanitized
+
+
+def shas_match(live_sha: str, expected_sha: str) -> bool:
+    """Return True iff `live_sha` matches `expected_sha` exactly or by hex prefix."""
+    clean_live = sanitize_build_sha(live_sha)
+    clean_exp = sanitize_build_sha(expected_sha)
+    if clean_live == "unknown" or clean_exp == "unknown":
+        return False
+    if clean_live == clean_exp:
+        return True
+    if _HEX_SHA_RE.fullmatch(clean_live) and _HEX_SHA_RE.fullmatch(clean_exp):
+        return clean_live.startswith(clean_exp) or clean_exp.startswith(clean_live)
+    return False
+
+
+def sanitize_cloud_run_revision(raw: object) -> str | None:
+    """Sanitize Cloud Run `K_REVISION` identifier or return `None`."""
+    if not isinstance(raw, str):
+        return None
+    cleaned = raw.strip()
+    low = cleaned.lower()
+    if (
+        not cleaned
+        or not _CLOUD_RUN_REVISION_RE.fullmatch(cleaned)
+        or low.startswith(("hm-", "hm_live_", "sk-", "ghp_"))
+        or any(marker in low for marker in _SECRET_VALUE_MARKERS)
+    ):
+        return None
+    return cleaned
+
+
+def load_saved_credentials(path: Path) -> dict[str, Any] | None:
+    """Load `~/.hivemind/credentials.json` safely if readable and holding a valid `hm-...` key."""
+    if not path.is_file():
+        return None
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(loaded, dict):
+        return None
+    if not is_valid_hivemind_key(loaded.get("api_key")):
+        return None
+    return loaded
+
+
+def build_ces_idempotency_key(
+    *,
+    gateway: str,
+    ease_rating: int,
+    zero_game_lag: bool,
+    platform_tag: str,
+    client_ref: str = "anon",
+) -> str:
+    """Compute a deterministic zero-PII `Idempotency-Key` for `POST /v1/hivemind/onboarding/feedback`."""
+    seed = (
+        f"noel-gamer-whisper-ces/v1|{gateway.rstrip('/')}|{client_ref}|"
+        f"gamer|{ease_rating}|{1 if zero_game_lag else 0}|{platform_tag}"
+    )
+    return "ces-gamer-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32]
+
+
+def validate_opentrainer_heartbeat_payload(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Validate payload strictly matching `OpenTrainerHeartbeatRequest` (`extra='forbid'`)."""
+    if not isinstance(payload, Mapping):
+        raise SelftestError("OpenTrainer heartbeat payload must be a JSON object.")
+    extra_keys = set(payload.keys()) - _ALLOWED_OPENTRAINER_HB_KEYS
+    if extra_keys:
+        joined = ", ".join(sorted(str(k) for k in extra_keys))
+        raise SelftestError(
+            f"Forbidden extra keys in OpenTrainer heartbeat payload (`extra='forbid'`): {joined}."
+        )
+    clean_host = sanitize_host_label(payload.get("host_label"))
+    net_mode = payload.get("network_mode", DEFAULT_NETWORK_MODE)
+    if net_mode != DEFAULT_NETWORK_MODE:
+        raise SelftestError(
+            f"OpenTrainer heartbeat `network_mode` must be {DEFAULT_NETWORK_MODE!r}."
+        )
+    raw_stack = payload.get("training_stack", DEFAULT_TRAINING_STACK)
+    if isinstance(raw_stack, bool) or not isinstance(raw_stack, str) or not raw_stack.strip():
+        raise SelftestError("OpenTrainer heartbeat `training_stack` must be a non-empty string.")
+    clean_stack = raw_stack.strip()[:128]
+    raw_campaign = payload.get("active_campaign", DEFAULT_ACTIVE_CAMPAIGN)
+    if isinstance(raw_campaign, bool) or not isinstance(raw_campaign, str) or not raw_campaign.strip():
+        raise SelftestError("OpenTrainer heartbeat `active_campaign` must be a non-empty string.")
+    clean_campaign = raw_campaign.strip()[:128]
+
+    raw_gpu = payload.get("gpu_name")
+    clean_gpu: str | None = None
+    if raw_gpu is not None:
+        if isinstance(raw_gpu, bool) or not isinstance(raw_gpu, str) or not raw_gpu.strip():
+            raise SelftestError("gpu_name must be a non-empty string or None.")
+        clean_gpu = sanitize_text_for_display(raw_gpu.strip())[:128]
+
+    raw_tot = payload.get("vram_total_mib")
+    clean_tot: int | None = None
+    if raw_tot is not None:
+        if (
+            isinstance(raw_tot, bool)
+            or not isinstance(raw_tot, int)
+            or raw_tot < MIN_REPORTABLE_VRAM_TOTAL_MIB
+            or raw_tot > MAX_GPU_VRAM_MIB
+        ):
+            raise SelftestError(
+                f"vram_total_mib must be None or int in [{MIN_REPORTABLE_VRAM_TOTAL_MIB}, {MAX_GPU_VRAM_MIB}]."
+            )
+        clean_tot = int(raw_tot)
+
+    raw_free = payload.get("vram_free_mib")
+    clean_free: int | None = None
+    if raw_free is not None:
+        if (
+            isinstance(raw_free, bool)
+            or not isinstance(raw_free, int)
+            or raw_free < 0
+            or raw_free > MAX_GPU_VRAM_MIB
+        ):
+            raise SelftestError(f"vram_free_mib must be None or int in [0, {MAX_GPU_VRAM_MIB}].")
+        clean_free = min(int(raw_free), clean_tot) if clean_tot is not None else int(raw_free)
+
+    if clean_tot is None or clean_gpu is None:
+        clean_gpu = None
+        clean_tot = None
+        clean_free = None
+
+    validated: dict[str, Any] = {
+        "host_label": clean_host,
+        "gpu_name": clean_gpu,
+        "vram_total_mib": clean_tot,
+        "vram_free_mib": clean_free,
+        "network_mode": DEFAULT_NETWORK_MODE,
+        "training_stack": clean_stack,
+        "active_campaign": clean_campaign,
+    }
+    _assert_safe_output(json.dumps(validated, sort_keys=True))
+    return validated
+
+
+def build_opentrainer_heartbeat_payload(
+    *,
+    gpu: GpuTelemetry,
+    host_label: str = DEFAULT_HOST_LABEL,
+    training_stack: str = DEFAULT_TRAINING_STACK,
+    active_campaign: str = DEFAULT_ACTIVE_CAMPAIGN,
+    home: Path | None = None,
+) -> dict[str, Any]:
+    """Build truthful `OpenTrainerHeartbeatRequest` payload from real `GpuTelemetry` (zero invented GPU specs)."""
+    reportable_gpu = bool(
+        gpu.present
+        and not gpu.parse_error
+        and gpu.name
+        and gpu.name.strip()
+        and gpu.total_vram_mib is not None
+        and gpu.total_vram_mib >= MIN_REPORTABLE_VRAM_TOTAL_MIB
+    )
+    if reportable_gpu:
+        assert gpu.name is not None
+        assert gpu.total_vram_mib is not None
+        gpu_name: str | None = sanitize_text_for_display(gpu.name.strip(), home=home)[:128]
+        vram_total: int | None = int(gpu.total_vram_mib)
+        vram_free: int | None = (
+            min(max(0, int(gpu.free_vram_mib)), vram_total)
+            if gpu.free_vram_mib is not None
+            else None
+        )
+    else:
+        gpu_name = None
+        vram_total = None
+        vram_free = None
+
+    return validate_opentrainer_heartbeat_payload(
+        {
+            "host_label": sanitize_host_label(host_label, home=home),
+            "gpu_name": gpu_name,
+            "vram_total_mib": vram_total,
+            "vram_free_mib": vram_free,
+            "network_mode": DEFAULT_NETWORK_MODE,
+            "training_stack": training_stack,
+            "active_campaign": active_campaign,
+        }
+    )
+
+
+def _resolve_heartbeat_credentials(
+    *,
+    api_key: str | None,
+    credentials_path: Path | str | None,
+    environ: Mapping[str, str] | None,
+    home: Path,
+) -> tuple[str | None, str, str | None, str]:
+    """Resolve API key from explicit arg -> `HIVEMIND_API_KEY` -> `~/.hivemind/credentials.json`."""
+    env_view = environ if environ is not None else os.environ
+    cred_target = (
+        Path(credentials_path)
+        if (credentials_path is not None and str(credentials_path).strip())
+        else (home / DEFAULT_CREDENTIALS_REL)
+    )
+    shown_cred = redact_home_path(cred_target, home=home)
+
+    if api_key is not None and str(api_key).strip():
+        cleaned = str(api_key).strip()
+        if not is_valid_hivemind_key(cleaned):
+            raise SelftestError(
+                "Provided API key is invalid; expected an 'hm-...' or 'hm_live_...' key."
+            )
+        return cleaned, "explicit_arg", None, shown_cred
+
+    env_key = str(env_view.get("HIVEMIND_API_KEY") or "").strip()
+    if env_key:
+        if not is_valid_hivemind_key(env_key):
+            return None, "invalid_env_key", None, shown_cred
+        return env_key, "env:HIVEMIND_API_KEY", None, shown_cred
+
+    loaded = load_saved_credentials(cred_target)
+    if loaded is not None:
+        saved_role = str(loaded.get("role") or "").strip().lower() or None
+        return str(loaded["api_key"]).strip(), "credentials_file", saved_role, shown_cred
+
+    return None, "missing", None, shown_cred
+
+
+def _send_opentrainer_heartbeat(
+    *,
+    gateway: str,
+    gpu: GpuTelemetry,
+    api_key: str | None,
+    credentials_path: Path | str | None,
+    host_label: str,
+    http_fn: HttpFn,
+    environ: Mapping[str, str] | None,
+    home: Path,
+    lang: str,
+) -> dict[str, Any]:
+    """Check `GET /v1/hivemind/me` and send outbound `POST /v1/hivemind/opentrainer/heartbeat`."""
+    is_fr = lang == "fr"
+    clean_gw = validate_gateway_url(gateway)
+    clean_host = sanitize_host_label(host_label, home=home)
+    resolved_key, key_source, saved_role, shown_cred = _resolve_heartbeat_credentials(
+        api_key=api_key,
+        credentials_path=credentials_path,
+        environ=environ,
+        home=home,
+    )
+
+    if key_source == "invalid_env_key":
+        msg = (
+            "Variable HIVEMIND_API_KEY invalide (préfixe 'hm-...' ou 'hm_live_...' requis)."
+            if is_fr
+            else "Invalid HIVEMIND_API_KEY environment variable (expected 'hm-...' or 'hm_live_...')."
+        )
+        return {
+            "requested": True,
+            "heartbeat_ok": False,
+            "me_checked": False,
+            "me_ok": False,
+            "me_http_status": None,
+            "sent": False,
+            "accepted": False,
+            "opentrainer_registered": False,
+            "http_status": None,
+            "status": "invalid_api_key",
+            "key_source": key_source,
+            "masked_api_key": "<invalid>",
+            "credentials_path": shown_cred,
+            "account_role": saved_role,
+            "host_label": clean_host,
+            "network_mode": DEFAULT_NETWORK_MODE,
+            "training_stack": DEFAULT_TRAINING_STACK,
+            "active_campaign": DEFAULT_ACTIVE_CAMPAIGN,
+            "payload": None,
+            "message": msg,
+        }
+
+    if resolved_key is None:
+        msg = (
+            f"Clé API HiveMind introuvable (--api-key, HIVEMIND_API_KEY ou {shown_cred}) pour le heartbeat OpenTrainer."
+            if is_fr
+            else f"HiveMind API key not found (--api-key, HIVEMIND_API_KEY, or {shown_cred}) for OpenTrainer heartbeat."
+        )
+        return {
+            "requested": True,
+            "heartbeat_ok": False,
+            "me_checked": False,
+            "me_ok": False,
+            "me_http_status": None,
+            "sent": False,
+            "accepted": False,
+            "opentrainer_registered": False,
+            "http_status": None,
+            "status": "missing_api_key",
+            "key_source": key_source,
+            "masked_api_key": None,
+            "credentials_path": shown_cred,
+            "account_role": saved_role,
+            "host_label": clean_host,
+            "network_mode": DEFAULT_NETWORK_MODE,
+            "training_stack": DEFAULT_TRAINING_STACK,
+            "active_campaign": DEFAULT_ACTIVE_CAMPAIGN,
+            "payload": None,
+            "message": msg,
+        }
+
+    masked_key = mask_api_key(resolved_key)
+    auth_headers = {"Authorization": f"Bearer {resolved_key}"}
+    me_code, me_body = _safe_http_call(
+        http_fn,
+        "GET",
+        f"{clean_gw}/v1/hivemind/me",
+        None,
+        auth_headers,
+    )
+    me_ok = me_code == 200
+    account_role = (
+        str(me_body.get("role") or "").strip().lower()
+        if me_ok and isinstance(me_body.get("role"), str) and me_body["role"].strip()
+        else saved_role
+    )
+
+    if not me_ok:
+        if me_code in (401, 403):
+            st = "auth_failed"
+        elif me_code == 404:
+            st = "missing_route"
+        elif me_code == 429:
+            st = "rate_limited"
+        elif me_code >= 500:
+            st = "server_error"
+        elif me_code == 0:
+            st = "network_error"
+        else:
+            st = "client_error"
+        msg = (
+            f"Vérification GET /v1/hivemind/me en échec (HTTP {me_code}, clé={masked_key})."
+            if is_fr
+            else f"GET /v1/hivemind/me verification failed (HTTP {me_code}, key={masked_key})."
+        )
+        return {
+            "requested": True,
+            "heartbeat_ok": False,
+            "me_checked": True,
+            "me_ok": False,
+            "me_http_status": me_code,
+            "sent": False,
+            "accepted": False,
+            "opentrainer_registered": False,
+            "http_status": None,
+            "status": st,
+            "key_source": key_source,
+            "masked_api_key": masked_key,
+            "credentials_path": shown_cred,
+            "account_role": account_role,
+            "host_label": clean_host,
+            "network_mode": DEFAULT_NETWORK_MODE,
+            "training_stack": DEFAULT_TRAINING_STACK,
+            "active_campaign": DEFAULT_ACTIVE_CAMPAIGN,
+            "payload": None,
+            "message": msg,
+        }
+
+    hb_payload = build_opentrainer_heartbeat_payload(
+        gpu=gpu,
+        host_label=clean_host,
+        home=home,
+    )
+    hb_code, hb_body = _safe_http_call(
+        http_fn,
+        "POST",
+        f"{clean_gw}/v1/hivemind/opentrainer/heartbeat",
+        hb_payload,
+        auth_headers,
+    )
+    node_doc = hb_body.get("node") if isinstance(hb_body.get("node"), Mapping) else {}
+    node_role = str(node_doc.get("role") or account_role or "").strip().lower() or None
+
+    if hb_code in (200, 201):
+        heartbeat_ok = True
+        accepted = True
+        registered = True
+        st = "accepted"
+        msg = (
+            f"Heartbeat OpenTrainer accepté via relais HTTPS sortant (clé={masked_key}, campagne={DEFAULT_ACTIVE_CAMPAIGN})."
+            if is_fr
+            else f"Outbound OpenTrainer heartbeat accepted over HTTPS relay (key={masked_key}, campaign={DEFAULT_ACTIVE_CAMPAIGN})."
+        )
+    elif hb_code == 403 and account_role == "consumer":
+        heartbeat_ok = True
+        accepted = False
+        registered = False
+        st = "consumer_me_verified"
+        msg = (
+            f"Compte consumer vérifié via /v1/hivemind/me (clé={masked_key}) ; enregistrement GPU OpenTrainer ignoré."
+            if is_fr
+            else f"Consumer account verified via /v1/hivemind/me (key={masked_key}); OpenTrainer GPU registration skipped."
+        )
+    else:
+        heartbeat_ok = False
+        accepted = False
+        registered = False
+        if hb_code == 404:
+            st = "stale_route_404"
+        elif hb_code in (401, 403):
+            st = "auth_failed"
+        elif hb_code == 429:
+            st = "rate_limited"
+        elif hb_code >= 500:
+            st = "server_error"
+        elif hb_code == 0:
+            st = "network_error"
+        else:
+            st = "client_error"
+        msg = (
+            f"Échec POST /v1/hivemind/opentrainer/heartbeat (HTTP {hb_code}, clé={masked_key})."
+            if is_fr
+            else f"Outbound POST /v1/hivemind/opentrainer/heartbeat failed (HTTP {hb_code}, key={masked_key})."
+        )
+
+    return {
+        "requested": True,
+        "heartbeat_ok": heartbeat_ok,
+        "me_checked": True,
+        "me_ok": True,
+        "me_http_status": me_code,
+        "sent": True,
+        "accepted": accepted,
+        "opentrainer_registered": registered,
+        "http_status": hb_code,
+        "status": st,
+        "key_source": key_source,
+        "masked_api_key": masked_key,
+        "credentials_path": shown_cred,
+        "account_role": node_role,
+        "host_label": clean_host,
+        "network_mode": DEFAULT_NETWORK_MODE,
+        "training_stack": DEFAULT_TRAINING_STACK,
+        "active_campaign": DEFAULT_ACTIVE_CAMPAIGN,
+        "payload": hb_payload,
+        "message": sanitize_text_for_display(msg, home=home),
+    }
+
+
+def _inspect_manifest_response(
+    manifest_code: int,
+    manifest_body: Mapping[str, Any],
+    *,
+    clean_expected_sha: str | None,
+) -> dict[str, Any]:
+    live_build_sha = sanitize_build_sha(manifest_body.get("build_sha"))
+    cloud_run_revision = sanitize_cloud_run_revision(manifest_body.get("cloud_run_revision"))
+    raw_routes = manifest_body.get("holiday_routes")
+    if isinstance(raw_routes, list) and all(isinstance(r, str) for r in raw_routes):
+        missing_routes = [r for r in EXPECTED_MANIFEST_HOLIDAY_ROUTES if r not in raw_routes]
+    else:
+        missing_routes = list(EXPECTED_MANIFEST_HOLIDAY_ROUTES)
+
+    meta_ok = bool(
+        manifest_code == 200
+        and manifest_body.get("object") == MANIFEST_OBJECT
+        and manifest_body.get("campaign_id") in (CAMPAIGN_ID, None)
+        and manifest_body.get("status") in ("ok", None)
+        and manifest_body.get("personal_pc_only") is True
+        and manifest_body.get("financial_promise") == FINANCIAL_PROMISE
+    )
+    manifest_valid = bool(meta_ok and len(missing_routes) == 0)
+
+    sha_matches: bool | None = None
+    sha_drift_detected = False
+    if clean_expected_sha is not None and manifest_code == 200:
+        sha_matches = shas_match(live_build_sha, clean_expected_sha)
+        sha_drift_detected = not sha_matches
+
+    return {
+        "manifest_valid": manifest_valid,
+        "live_build_sha": live_build_sha,
+        "cloud_run_revision": cloud_run_revision,
+        "missing_holiday_routes": missing_routes,
+        "sha_matches": sha_matches,
+        "sha_drift_detected": sha_drift_detected,
+    }
+
+
+def verify_live_fleet_and_badge(
+    *,
+    gateway: str = DEFAULT_GATEWAY,
+    expected_sha: str | None = None,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    http_fn: HttpFn = default_http_json,
+    environ: Mapping[str, str] | None = None,
+    cwd: Path | None = None,
+    enforce_personal_pc: bool = True,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Probe zero-inference health/manifest/raid/fleet routes and compute deterministic `fleet_badge`."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    clean_gw = validate_gateway_url(gateway)
+
+    if (
+        isinstance(target_online_producers, bool)
+        or not isinstance(target_online_producers, int)
+        or target_online_producers < 1
+    ):
+        raise SelftestError("target_online_producers must be an integer >= 1.")
+
+    clean_expected_sha = (
+        validate_expected_sha(expected_sha)
+        if (expected_sha is not None and str(expected_sha).strip())
+        else None
+    )
+
+    if enforce_personal_pc:
+        compliance = evaluate_personal_pc_compliance(environ=environ, cwd=cwd, lang=lang_code)
+        if not compliance["compliance_ok"]:
+            return _attach_receipt(
+                {
+                    "schema": SCHEMA,
+                    "checked": False,
+                    "compliance_ok": False,
+                    "exit_code": 2,
+                    "gateway": clean_gw,
+                    "fleet_ok": False,
+                    "fleet_badge": "OFFLINE",
+                    "status": "refused_compliance",
+                    "holiday_routes_deployed_on_cloud_run": False,
+                    "stale_cloud_run_detected": False,
+                    "online_producers": 0,
+                    "live_hiveminders": 0,
+                    "total_hiveminders": 0,
+                    "distinct_physical_gpus": 0,
+                    "live_endpoints": 0,
+                    "live_models": [],
+                    "active_trainers": 0,
+                    "registered_trainer_nodes": 0,
+                    "target_online_producers": target_online_producers,
+                    "target_producers_met": False,
+                    "producers_remaining_to_target": target_online_producers,
+                    "build_sha": "unknown",
+                    "expected_sha": clean_expected_sha,
+                    "sha_matches": None,
+                    "sha_drift_detected": False,
+                    "cloud_run_revision": None,
+                    "missing_holiday_routes": [],
+                    "health_http_status": None,
+                    "manifest_http_status": None,
+                    "raid_status_http_status": None,
+                    "fleet_http_status": None,
+                    "mean_ease_rating": None,
+                    "zero_game_lag_ratio": None,
+                    "total_responses": None,
+                    "network_calls": 0,
+                    "zero_inference_verified": True,
+                    "compliance": compliance,
+                    "message": sanitize_text_for_display(str(compliance["summary"])),
+                }
+            )
+
+    health_code, health_body = _safe_http_call(http_fn, "GET", f"{clean_gw}/health", None, None)
+    manifest_code, manifest_body = _safe_http_call(
+        http_fn, "GET", f"{clean_gw}/v1/hivemind/onboarding/manifest", None, None
+    )
+    raid_code, raid_body = _safe_http_call(
+        http_fn, "GET", f"{clean_gw}/v1/hivemind/raid/status", None, None
+    )
+    fleet_code, fleet_body = _safe_http_call(
+        http_fn, "GET", f"{clean_gw}/v1/hivemind/producers/fleet", None, None
+    )
+
+    raw_health_status = health_body.get("status")
+    health_ok = bool(
+        health_code == 200
+        and (raw_health_status is None or str(raw_health_status).strip().lower() == "ok")
+    )
+
+    manifest_info = _inspect_manifest_response(
+        manifest_code,
+        manifest_body,
+        clean_expected_sha=clean_expected_sha,
+    )
+    manifest_valid = bool(manifest_info["manifest_valid"])
+    sha_drift_detected = bool(manifest_info["sha_drift_detected"])
+    live_build_sha = str(manifest_info["live_build_sha"])
+    cloud_run_revision = manifest_info["cloud_run_revision"]
+    missing_routes = list(manifest_info["missing_holiday_routes"])
+    sha_matches = manifest_info["sha_matches"]
+
+    raid_obj = raid_body.get("object")
+    raid_ok = bool(
+        raid_code == 200
+        and raid_obj in (RAID_STATUS_OBJECT, None)
+    )
+    swarm = raid_body.get("swarm") if isinstance(raid_body.get("swarm"), Mapping) else {}
+    fb_summary = (
+        raid_body.get("onboarding_feedback")
+        if isinstance(raid_body.get("onboarding_feedback"), Mapping)
+        else (
+            raid_body.get("feedback")
+            if isinstance(raid_body.get("feedback"), Mapping)
+            else (
+                raid_body.get("feedback_summary")
+                if isinstance(raid_body.get("feedback_summary"), Mapping)
+                else {}
+            )
+        )
+    )
+    mean_ease = _safe_opt_float(
+        fb_summary.get("mean_ease_rating", raid_body.get("mean_ease_rating")), decimals=2
+    )
+    lag_ratio = _safe_opt_float(fb_summary.get("zero_game_lag_ratio"), decimals=4)
+    total_responses = _safe_opt_nonneg_int(fb_summary.get("total_responses"))
+
+    fleet_obj = fleet_body.get("object")
+    fleet_route_ok = bool(
+        fleet_code == 200
+        and fleet_obj in (FLEET_OBJECT, None)
+    )
+
+    online_producers = (
+        _safe_nonneg_int(fleet_body.get("live_hiveminders"))
+        if "live_hiveminders" in fleet_body
+        else _safe_nonneg_int(swarm.get("live_producers"))
+    )
+    total_hiveminders = _safe_nonneg_int(
+        fleet_body.get("total_hiveminders"),
+        _safe_nonneg_int(swarm.get("registered_producers")),
+    )
+    distinct_physical_gpus = _safe_nonneg_int(fleet_body.get("distinct_physical_gpus"))
+    live_endpoints = _safe_nonneg_int(fleet_body.get("live_endpoints"))
+    raw_models = fleet_body.get("live_models")
+    live_models = (
+        [str(m) for m in raw_models if isinstance(m, str) and m.strip()]
+        if isinstance(raw_models, list)
+        else []
+    )
+    active_trainers = _safe_nonneg_int(swarm.get("active_trainers"))
+    registered_trainer_nodes = _safe_nonneg_int(swarm.get("registered_trainer_nodes"))
+
+    stale_404 = bool(manifest_code == 404 or raid_code == 404)
+    stale_cloud_run_detected = bool(
+        stale_404
+        or sha_drift_detected
+        or (manifest_code == 200 and not manifest_valid)
+    )
+    holiday_routes_deployed_on_cloud_run = bool(
+        manifest_valid and raid_ok and not stale_cloud_run_detected
+    )
+    gateway_reachable = bool(
+        health_ok and manifest_valid and raid_ok and fleet_route_ok and not sha_drift_detected
+    )
+
+    if stale_cloud_run_detected:
+        fleet_badge = "STALE_CLOUD_RUN"
+        status_slug = "stale_cloud_run"
+        fleet_ok = False
+        exit_code = 2
+        msg = (
+            f"Révision Cloud Run obsolète (badge={fleet_badge}, manifest={manifest_code}, "
+            f"raid={raid_code}, sha={live_build_sha}, drift_sha={sha_drift_detected})."
+            if is_fr
+            else f"Stale Cloud Run revision detected (badge={fleet_badge}, manifest={manifest_code}, "
+            f"raid={raid_code}, sha={live_build_sha}, sha_drift={sha_drift_detected})."
+        )
+    elif not gateway_reachable:
+        fleet_badge = "OFFLINE"
+        status_slug = "offline"
+        fleet_ok = False
+        exit_code = 1
+        msg = (
+            f"Passerelle ou flotte hors ligne (badge={fleet_badge}, /health={health_code}, "
+            f"/manifest={manifest_code}, /raid={raid_code}, /fleet={fleet_code})."
+            if is_fr
+            else f"Gateway or producer fleet offline (badge={fleet_badge}, /health={health_code}, "
+            f"/manifest={manifest_code}, /raid={raid_code}, /fleet={fleet_code})."
+        )
+    elif online_producers >= target_online_producers:
+        fleet_badge = "ONLINE"
+        status_slug = "online"
+        fleet_ok = True
+        exit_code = 0
+        msg = (
+            f"Flotte ONLINE ({online_producers}/{target_online_producers} producteurs en ligne, "
+            f"{distinct_physical_gpus} GPUs distincts, {active_trainers} trainers actifs)."
+            if is_fr
+            else f"Fleet ONLINE ({online_producers}/{target_online_producers} online_producers, "
+            f"{distinct_physical_gpus} distinct GPUs, {active_trainers} active trainers)."
+        )
+    else:
+        fleet_badge = "BOOTSTRAPPING"
+        status_slug = "bootstrapping"
+        fleet_ok = True
+        exit_code = 0
+        msg = (
+            f"Flotte BOOTSTRAPPING ({online_producers}/{target_online_producers} producteurs en ligne, "
+            f"{distinct_physical_gpus} GPUs distincts, {active_trainers} trainers actifs)."
+            if is_fr
+            else f"Fleet BOOTSTRAPPING ({online_producers}/{target_online_producers} online_producers, "
+            f"{distinct_physical_gpus} distinct GPUs, {active_trainers} active trainers)."
+        )
+
+    target_met = bool(online_producers >= target_online_producers)
+    remaining = max(0, target_online_producers - online_producers)
+
+    return _attach_receipt(
+        {
+            "schema": SCHEMA,
+            "checked": True,
+            "compliance_ok": True,
+            "exit_code": exit_code,
+            "gateway": clean_gw,
+            "fleet_ok": fleet_ok,
+            "fleet_badge": fleet_badge,
+            "status": status_slug,
+            "holiday_routes_deployed_on_cloud_run": holiday_routes_deployed_on_cloud_run,
+            "stale_cloud_run_detected": stale_cloud_run_detected,
+            "online_producers": online_producers,
+            "live_hiveminders": online_producers,
+            "total_hiveminders": total_hiveminders,
+            "distinct_physical_gpus": distinct_physical_gpus,
+            "live_endpoints": live_endpoints,
+            "live_models": live_models,
+            "active_trainers": active_trainers,
+            "registered_trainer_nodes": registered_trainer_nodes,
+            "target_online_producers": target_online_producers,
+            "target_producers_met": target_met,
+            "producers_remaining_to_target": remaining,
+            "build_sha": live_build_sha,
+            "expected_sha": clean_expected_sha,
+            "sha_matches": sha_matches,
+            "sha_drift_detected": sha_drift_detected,
+            "cloud_run_revision": cloud_run_revision,
+            "missing_holiday_routes": missing_routes,
+            "health_http_status": health_code,
+            "health_status_text": str(health_body.get("status") or ("ok" if health_ok else "error")),
+            "manifest_http_status": manifest_code,
+            "raid_status_http_status": raid_code,
+            "fleet_http_status": fleet_code,
+            "campaign": str(raid_body.get("campaign") or "") or None,
+            "mean_ease_rating": mean_ease,
+            "zero_game_lag_ratio": lag_ratio,
+            "total_responses": total_responses,
+            "network_calls": 4,
+            "zero_inference_verified": True,
+            "message": sanitize_text_for_display(msg),
+        }
+    )
+
+
 def parse_gamer_ces_input(
     raw_answer: str,
     *,
@@ -1416,6 +2286,9 @@ def submit_gamer_ces_feedback(
     system_name: str | None = None,
     http_fn: HttpFn = default_http_json,
     lang: str = "en",
+    non_blocking_feedback: bool = False,
+    idempotency_key: str | None = None,
+    client_ref: str = "anon",
 ) -> dict[str, Any]:
     """Post zero-PII gamer comfort telemetry (`profile='gamer'`) to `/v1/hivemind/onboarding/feedback`."""
     lang_code = normalize_lang(lang)
@@ -1426,18 +2299,33 @@ def submit_gamer_ces_feedback(
     if not isinstance(zero_game_lag, bool):
         raise SelftestError("zero_game_lag must be a boolean.")
 
+    platform_tag = _platform_tag(system_name)
+    idem_key = (
+        idempotency_key.strip()
+        if (isinstance(idempotency_key, str) and idempotency_key.strip())
+        else build_ces_idempotency_key(
+            gateway=clean_gw,
+            ease_rating=ease_rating,
+            zero_game_lag=zero_game_lag,
+            platform_tag=platform_tag,
+            client_ref=client_ref,
+        )
+    )
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in idem_key):
+        raise SelftestError("idempotency_key must not contain control characters.")
+
     payload: dict[str, Any] = {
         "profile": "gamer",
         "ease_rating": ease_rating,
         "zero_game_lag": zero_game_lag,
-        "platform": _platform_tag(system_name),
+        "platform": platform_tag,
     }
     status_code, body = _safe_http_call(
         http_fn,
         "POST",
         f"{clean_gw}/v1/hivemind/onboarding/feedback",
         payload,
-        None,
+        {"Idempotency-Key": idem_key},
     )
 
     raw_mean = body.get("mean_ease_rating")
@@ -1459,6 +2347,9 @@ def submit_gamer_ces_feedback(
         else None
     )
 
+    degradable_error = status_code in _NON_BLOCKING_FEEDBACK_CODES or status_code >= 500
+    degraded = bool(non_blocking_feedback and degradable_error)
+
     if status_code in (200, 201):
         outcome = "recorded"
         submitted = True
@@ -1472,37 +2363,73 @@ def submit_gamer_ces_feedback(
     elif status_code == 404:
         outcome = "missing_route"
         submitted = False
-        msg = (
-            "POST /v1/hivemind/onboarding/feedback a répondu HTTP 404 : la révision Cloud Run est en "
-            "retard sur `main` (route de retour Noël absente)."
-            if is_fr
-            else "POST /v1/hivemind/onboarding/feedback returned HTTP 404: Cloud Run revision lags behind "
-            "`main` (holiday feedback route missing)."
-        )
+        if degraded:
+            msg = (
+                "POST /v1/hivemind/onboarding/feedback a répondu HTTP 404 (révision Cloud Run antérieure "
+                "à PR #949) ; repli non bloquant activé (ces_recorded=False). Relancez après cutover Cloud Run."
+                if is_fr
+                else "POST /v1/hivemind/onboarding/feedback returned HTTP 404 (stale pre-PR-#949 Cloud Run); "
+                "degraded gracefully without blocking (ces_recorded=False). Retry after Cloud Run cutover."
+            )
+        else:
+            msg = (
+                "POST /v1/hivemind/onboarding/feedback a répondu HTTP 404 : la révision Cloud Run est en "
+                "retard sur `main` (route de retour Noël absente)."
+                if is_fr
+                else "POST /v1/hivemind/onboarding/feedback returned HTTP 404: Cloud Run revision lags behind "
+                "`main` (holiday feedback route missing)."
+            )
     elif status_code == 429:
         outcome = "rate_limited"
         submitted = False
-        msg = (
-            "Limite de débit atteinte (HTTP 429) sur /v1/hivemind/onboarding/feedback ; réessayez dans 1 minute."
-            if is_fr
-            else "Rate limit reached (HTTP 429) on /v1/hivemind/onboarding/feedback; retry in one minute."
-        )
+        if degraded:
+            msg = (
+                "Limite de débit atteinte (HTTP 429) sur /v1/hivemind/onboarding/feedback ; "
+                "repli non bloquant activé (ces_recorded=False), réessayez dans 1 minute."
+                if is_fr
+                else "Rate limit reached (HTTP 429) on /v1/hivemind/onboarding/feedback; "
+                "degraded gracefully (ces_recorded=False), retry in one minute."
+            )
+        else:
+            msg = (
+                "Limite de débit atteinte (HTTP 429) sur /v1/hivemind/onboarding/feedback ; réessayez dans 1 minute."
+                if is_fr
+                else "Rate limit reached (HTTP 429) on /v1/hivemind/onboarding/feedback; retry in one minute."
+            )
     elif status_code >= 500:
         outcome = "server_error"
         submitted = False
-        msg = (
-            f"Erreur temporaire du serveur passerelle (HTTP {status_code}) lors de l'envoi du retour CES Gamer."
-            if is_fr
-            else f"Temporary gateway server error (HTTP {status_code}) while submitting Gamer CES feedback."
-        )
-    elif status_code == 0:
+        if degraded:
+            msg = (
+                f"Erreur serveur passerelle (HTTP {status_code}) sur /v1/hivemind/onboarding/feedback ; "
+                "repli non bloquant activé (ces_recorded=False)."
+                if is_fr
+                else f"Temporary gateway server error (HTTP {status_code}) on /v1/hivemind/onboarding/feedback; "
+                "degraded gracefully (ces_recorded=False)."
+            )
+        else:
+            msg = (
+                f"Erreur temporaire du serveur passerelle (HTTP {status_code}) lors de l'envoi du retour CES Gamer."
+                if is_fr
+                else f"Temporary gateway server error (HTTP {status_code}) while submitting Gamer CES feedback."
+            )
+    elif status_code in (0, 408):
         outcome = "network_error"
         submitted = False
-        msg = (
-            "Impossible de joindre /v1/hivemind/onboarding/feedback (erreur réseau)."
-            if is_fr
-            else "Could not reach /v1/hivemind/onboarding/feedback (network error)."
-        )
+        if degraded:
+            msg = (
+                "Délai réseau dépassé sur /v1/hivemind/onboarding/feedback ; "
+                "repli non bloquant activé (ces_recorded=False)."
+                if is_fr
+                else "Network error/timeout reaching /v1/hivemind/onboarding/feedback; "
+                "degraded gracefully (ces_recorded=False)."
+            )
+        else:
+            msg = (
+                "Impossible de joindre /v1/hivemind/onboarding/feedback (erreur réseau)."
+                if is_fr
+                else "Could not reach /v1/hivemind/onboarding/feedback (network error)."
+            )
     else:
         outcome = "client_error"
         submitted = False
@@ -1515,9 +2442,13 @@ def submit_gamer_ces_feedback(
     return {
         "attempted": True,
         "submitted": submitted,
+        "ces_recorded": submitted,
+        "non_blocking": bool(non_blocking_feedback),
+        "degraded": degraded,
         "skipped": False,
         "status": outcome,
         "http_status": status_code,
+        "idempotency_key": idem_key,
         "profile": "gamer",
         "ease_rating": ease_rating,
         "zero_game_lag": zero_game_lag,
@@ -1537,6 +2468,9 @@ def prompt_and_submit_gamer_ces(
     input_fn: InputFn = input,
     http_fn: HttpFn = default_http_json,
     lang: str = "en",
+    non_blocking_feedback: bool = False,
+    idempotency_key: str | None = None,
+    client_ref: str = "anon",
 ) -> dict[str, Any]:
     """Prompt for 1-line gamer comfort rating (`1..5`) and post zero-PII feedback if answered."""
     lang_code = normalize_lang(lang)
@@ -1565,9 +2499,13 @@ def prompt_and_submit_gamer_ces(
         return {
             "attempted": False,
             "submitted": False,
+            "ces_recorded": False,
+            "non_blocking": bool(non_blocking_feedback),
+            "degraded": False,
             "skipped": True,
             "status": "skipped",
             "http_status": None,
+            "idempotency_key": None,
             "profile": "gamer",
             "ease_rating": None,
             "zero_game_lag": parsed["zero_game_lag"],
@@ -1585,6 +2523,9 @@ def prompt_and_submit_gamer_ces(
         system_name=system_name,
         http_fn=http_fn,
         lang=lang_code,
+        non_blocking_feedback=non_blocking_feedback,
+        idempotency_key=idempotency_key,
+        client_ref=client_ref,
     )
 
 
@@ -1602,6 +2543,15 @@ def run_gamer_whisper_selftest(
     extra_games: Sequence[str] = (),
     drill_game_exe: str = "cs2.exe",
     check_gateway: bool = False,
+    noel_verify: bool = False,
+    verify_fleet: bool = False,
+    send_opentrainer_heartbeat: bool = False,
+    api_key: str | None = None,
+    credentials_path: Path | str | None = None,
+    host_label: str = DEFAULT_HOST_LABEL,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    non_blocking_feedback: bool = False,
+    expected_sha: str | None = None,
     submit_feedback: bool = False,
     prompt_ces: bool = False,
     ease_rating: int | None = None,
@@ -1626,9 +2576,20 @@ def run_gamer_whisper_selftest(
     eff_os = os_name if os_name is not None else os.name
     resolved_home = home if home is not None else Path.home()
     resolved_cwd = cwd if cwd is not None else Path.cwd()
+    clean_host_label = sanitize_host_label(host_label, home=resolved_home)
 
     if isinstance(yield_slo_ms, bool) or not math.isfinite(float(yield_slo_ms)) or float(yield_slo_ms) <= 0:
         raise SelftestError("yield_slo_ms must be a positive finite millisecond budget.")
+    if (
+        isinstance(target_online_producers, bool)
+        or not isinstance(target_online_producers, int)
+        or target_online_producers < 1
+    ):
+        raise SelftestError("target_online_producers must be an integer >= 1.")
+    if expected_sha is not None and str(expected_sha).strip():
+        validate_expected_sha(expected_sha)
+    if api_key is not None and str(api_key).strip() and not is_valid_hivemind_key(str(api_key).strip()):
+        raise SelftestError("Provided API key is invalid; expected an 'hm-...' or 'hm_live_...' key.")
     if submit_feedback and not prompt_ces and ease_rating is None:
         raise SelftestError("--submit-feedback requires --ease-rating 1..5 (or --prompt-ces).")
     if ease_rating is not None and (
@@ -1680,12 +2641,24 @@ def run_gamer_whisper_selftest(
                 "zero_inference_verified": True,
                 "within_10s_slo": elapsed_refused < SELFTEST_SLO_BUDGET_S,
                 "elapsed_s": elapsed_refused,
+                "holiday_routes_deployed_on_cloud_run": None,
+                "stale_cloud_run_detected": False,
+                "online_producers": None,
+                "distinct_physical_gpus": None,
+                "active_trainers": None,
+                "target_online_producers": target_online_producers,
+                "fleet_badge": None,
+                "ces_recorded": False,
+                "masked_api_key": None,
+                "credentials_path": None,
                 "compliance": compliance,
                 "preemption_drill": None,
                 "thermal_vram_governor": None,
                 "cooldown_policy": None,
                 "bandwidth_cap": None,
                 "gateway_check": None,
+                "fleet_check": None,
+                "opentrainer_heartbeat": None,
                 "feedback": None,
                 "warnings": [],
                 "errors": [sanitize_text_for_display(compliance["summary"], home=resolved_home)],
@@ -1835,9 +2808,134 @@ def run_gamer_whisper_selftest(
     if not bandwidth_info["bandwidth_cap_ok"]:
         errors.append(sanitize_text_for_display(bandwidth_info["summary"], home=resolved_home))
 
-    # Step 3: Optional zero-inference gateway check (/health + /v1/hivemind/raid/status)
+    local_hard_fail = bool(
+        (not yield_slo_ok)
+        or (governor["check_status"] == "fail")
+        or (not cooldown_info["cooldown_policy_ok"])
+        or (not bandwidth_info["bandwidth_cap_ok"])
+    )
+    governor_paused = bool(
+        (governor["check_status"] == "warn")
+        or live_detection["game_detected"]
+        or (not cooldown_info["resume_allowed_now"])
+    )
+
+    # Step 3(a): Optional outbound OpenTrainer heartbeat (after local safety checks pass)
+    hb_info: dict[str, Any] | None = None
+    if send_opentrainer_heartbeat:
+        if local_hard_fail:
+            hb_status = "blocked_yield_slo" if not yield_slo_ok else "blocked_safety_gate"
+            hb_msg = (
+                "Heartbeat OpenTrainer bloqué : échec du contrôle local de sécurité/cession <1.5s."
+                if is_fr
+                else "OpenTrainer heartbeat held back: local safety or <1.5s yield SLO check failed."
+            )
+            hb_info = {
+                "requested": True,
+                "heartbeat_ok": False,
+                "me_checked": False,
+                "me_ok": False,
+                "me_http_status": None,
+                "sent": False,
+                "accepted": False,
+                "opentrainer_registered": False,
+                "http_status": None,
+                "status": hb_status,
+                "key_source": None,
+                "masked_api_key": mask_api_key(api_key) if api_key else None,
+                "credentials_path": redact_home_path(
+                    credentials_path or (resolved_home / DEFAULT_CREDENTIALS_REL),
+                    home=resolved_home,
+                ),
+                "account_role": None,
+                "host_label": clean_host_label,
+                "network_mode": DEFAULT_NETWORK_MODE,
+                "training_stack": DEFAULT_TRAINING_STACK,
+                "active_campaign": DEFAULT_ACTIVE_CAMPAIGN,
+                "payload": None,
+                "message": hb_msg,
+            }
+        elif governor_paused:
+            hb_msg = (
+                "Heartbeat OpenTrainer suspendu par le gouverneur local (jeu actif, >70 C, VRAM ou refroidissement)."
+                if is_fr
+                else "OpenTrainer heartbeat held paused by local governor (active game, >70 C, VRAM reserve, or cooldown)."
+            )
+            hb_info = {
+                "requested": True,
+                "heartbeat_ok": True,
+                "me_checked": False,
+                "me_ok": False,
+                "me_http_status": None,
+                "sent": False,
+                "accepted": False,
+                "opentrainer_registered": False,
+                "http_status": None,
+                "status": "paused_governor_hold",
+                "key_source": None,
+                "masked_api_key": mask_api_key(api_key) if api_key else None,
+                "credentials_path": redact_home_path(
+                    credentials_path or (resolved_home / DEFAULT_CREDENTIALS_REL),
+                    home=resolved_home,
+                ),
+                "account_role": None,
+                "host_label": clean_host_label,
+                "network_mode": DEFAULT_NETWORK_MODE,
+                "training_stack": DEFAULT_TRAINING_STACK,
+                "active_campaign": DEFAULT_ACTIVE_CAMPAIGN,
+                "payload": None,
+                "message": hb_msg,
+            }
+            warnings.append(sanitize_text_for_display(hb_msg, home=resolved_home))
+        else:
+            hb_info = _send_opentrainer_heartbeat(
+                gateway=clean_gw,
+                gpu=gpu,
+                api_key=api_key,
+                credentials_path=credentials_path,
+                host_label=clean_host_label,
+                http_fn=http_fn,
+                environ=environ,
+                home=resolved_home,
+                lang=lang_code,
+            )
+            if not hb_info["heartbeat_ok"]:
+                errors.append(sanitize_text_for_display(hb_info["message"], home=resolved_home))
+
+    # Step 3(b): Optional zero-inference fleet / holiday-route verifier & legacy gateway check
+    fleet_info: dict[str, Any] | None = None
     gw_info: dict[str, Any] | None = None
-    if check_gateway:
+    if noel_verify or verify_fleet:
+        fleet_info = verify_live_fleet_and_badge(
+            gateway=clean_gw,
+            expected_sha=expected_sha,
+            target_online_producers=target_online_producers,
+            http_fn=http_fn,
+            environ=environ,
+            cwd=resolved_cwd,
+            enforce_personal_pc=False,
+            lang=lang_code,
+        )
+        if not fleet_info["fleet_ok"]:
+            errors.append(sanitize_text_for_display(fleet_info["message"], home=resolved_home))
+        if check_gateway:
+            gw_info = {
+                "checked": True,
+                "gateway_ok": bool(
+                    fleet_info["health_http_status"] == 200
+                    and fleet_info["raid_status_http_status"] == 200
+                ),
+                "status": fleet_info["status"],
+                "health_http_status": fleet_info["health_http_status"],
+                "raid_status_http_status": fleet_info["raid_status_http_status"],
+                "health_status_text": fleet_info["health_status_text"],
+                "campaign": fleet_info["campaign"],
+                "active_trainers": fleet_info["active_trainers"],
+                "mean_ease_rating": fleet_info["mean_ease_rating"],
+                "zero_inference_verified": True,
+                "message": fleet_info["message"],
+            }
+    elif check_gateway:
         gw_info = check_gateway_health_and_raid_status(
             gateway=clean_gw,
             http_fn=http_fn,
@@ -1864,6 +2962,13 @@ def run_gamer_whisper_selftest(
         and (not had_game_lag)
     )
 
+    ces_key_ref = (
+        str(hb_info.get("masked_api_key") or "anon")
+        if hb_info is not None
+        else (mask_api_key(api_key) if api_key else "anon")
+    )
+    ces_client_ref = f"{clean_host_label}:{ces_key_ref}"
+
     # Step 4: Optional zero-PII Gamer CES feedback submission (profile='gamer')
     fb_info: dict[str, Any] | None = None
     if prompt_ces:
@@ -1874,6 +2979,8 @@ def run_gamer_whisper_selftest(
             input_fn=input_fn,
             http_fn=http_fn,
             lang=lang_code,
+            non_blocking_feedback=non_blocking_feedback,
+            client_ref=ces_client_ref,
         )
     elif submit_feedback or ease_rating is not None:
         assert ease_rating is not None
@@ -1884,6 +2991,8 @@ def run_gamer_whisper_selftest(
             system_name=system_name,
             http_fn=http_fn,
             lang=lang_code,
+            non_blocking_feedback=non_blocking_feedback,
+            client_ref=ces_client_ref,
         )
 
     final_zero_game_lag = (
@@ -1891,8 +3000,15 @@ def run_gamer_whisper_selftest(
         if (fb_info is not None and not fb_info["skipped"])
         else derived_zero_game_lag
     )
+    fb_degraded_non_blocking = bool(
+        fb_info is not None and non_blocking_feedback and fb_info.get("degraded")
+    )
     if fb_info is not None and fb_info["attempted"] and not fb_info["submitted"]:
-        errors.append(sanitize_text_for_display(str(fb_info["message"]), home=resolved_home))
+        fb_msg = sanitize_text_for_display(str(fb_info["message"]), home=resolved_home)
+        if fb_degraded_non_blocking:
+            warnings.append(fb_msg)
+        else:
+            errors.append(fb_msg)
 
     # Tallies across all executed checks (never emitting forbidden 'score' keys)
     check_outcomes: list[bool] = [
@@ -1902,27 +3018,28 @@ def run_gamer_whisper_selftest(
         bool(cooldown_info["cooldown_policy_ok"] and cooldown_info["resume_allowed_now"]),  # 4. 300s cooldown
         bool(bandwidth_info["bandwidth_cap_ok"]),  # 5. <50 MB/h LoRA-delta-only cap
     ]
-    if gw_info is not None:
+    if fleet_info is not None:
+        check_outcomes.append(bool(fleet_info["fleet_ok"]))
+    elif gw_info is not None:
         check_outcomes.append(bool(gw_info["gateway_ok"]))
-    if fb_info is not None and fb_info["attempted"]:
+    if hb_info is not None:
+        check_outcomes.append(bool(hb_info["heartbeat_ok"]))
+    if fb_info is not None and fb_info["attempted"] and not fb_degraded_non_blocking:
         check_outcomes.append(bool(fb_info["submitted"]))
 
     checks_total_count = len(check_outcomes)
     checks_passed_count = sum(1 for item in check_outcomes if item)
 
-    hard_fail = bool(
-        (not yield_slo_ok)
-        or (governor["check_status"] == "fail")
-        or (not cooldown_info["cooldown_policy_ok"])
-        or (not bandwidth_info["bandwidth_cap_ok"])
-        or (not within_10s)
-    )
-    gw_failed = bool(gw_info is not None and not gw_info["gateway_ok"])
-    fb_failed = bool(fb_info is not None and fb_info["attempted"] and not fb_info["submitted"])
-    governor_paused = bool(
-        (governor["check_status"] == "warn")
-        or live_detection["game_detected"]
-        or (not cooldown_info["resume_allowed_now"])
+    hard_fail = bool(local_hard_fail or (not within_10s))
+    fleet_stale = bool(fleet_info is not None and fleet_info["stale_cloud_run_detected"])
+    fleet_offline = bool(fleet_info is not None and not fleet_info["fleet_ok"] and not fleet_stale)
+    gw_failed = bool(gw_info is not None and not gw_info["gateway_ok"] and fleet_info is None)
+    hb_failed = bool(hb_info is not None and not hb_info["heartbeat_ok"])
+    fb_failed = bool(
+        fb_info is not None
+        and fb_info["attempted"]
+        and not fb_info["submitted"]
+        and not fb_degraded_non_blocking
     )
 
     failures_count = (
@@ -1931,7 +3048,8 @@ def run_gamer_whisper_selftest(
         + (1 if not cooldown_info["cooldown_policy_ok"] else 0)
         + (1 if not bandwidth_info["bandwidth_cap_ok"] else 0)
         + (1 if not within_10s else 0)
-        + (1 if gw_failed else 0)
+        + (1 if (fleet_stale or fleet_offline or gw_failed) else 0)
+        + (1 if hb_failed else 0)
         + (1 if fb_failed else 0)
     )
     warnings_count = len(warnings)
@@ -1940,11 +3058,24 @@ def run_gamer_whisper_selftest(
         exit_code = 2
         ready = False
         verdict = "failed_yield_slo" if not yield_slo_ok else "failed_safety_gate"
+    elif fleet_stale:
+        exit_code = 2
+        ready = False
+        verdict = "stale_cloud_run"
+    elif fleet_offline:
+        exit_code = 1
+        ready = False
+        verdict = "fleet_offline"
     elif gw_failed:
         gw_missing = gw_info is not None and gw_info["status"] == "missing_route"
         exit_code = 2 if gw_missing else 1
         ready = False
         verdict = "gateway_unavailable"
+    elif hb_failed:
+        hb_st = hb_info.get("status") if hb_info is not None else ""
+        exit_code = 2 if hb_st in ("missing_api_key", "invalid_api_key", "auth_failed", "missing_route", "stale_route_404") else 1
+        ready = False
+        verdict = "opentrainer_heartbeat_failed"
     elif fb_failed:
         fb_missing = fb_info is not None and fb_info.get("http_status") == 404
         exit_code = 2 if fb_missing else 1
@@ -1973,7 +3104,11 @@ def run_gamer_whisper_selftest(
     mean_ease = (
         fb_info.get("mean_ease_rating")
         if (fb_info is not None and fb_info.get("mean_ease_rating") is not None)
-        else (gw_info.get("mean_ease_rating") if gw_info is not None else None)
+        else (
+            fleet_info.get("mean_ease_rating")
+            if (fleet_info is not None and fleet_info.get("mean_ease_rating") is not None)
+            else (gw_info.get("mean_ease_rating") if gw_info is not None else None)
+        )
     )
     ease_val = fb_info.get("ease_rating") if fb_info is not None else None
     total_elapsed_s = round(max(0.0, clock_fn() - t_start), 4)
@@ -2012,12 +3147,38 @@ def run_gamer_whisper_selftest(
             "zero_inference_verified": True,
             "within_10s_slo": within_10s,
             "elapsed_s": total_elapsed_s,
+            "holiday_routes_deployed_on_cloud_run": (
+                fleet_info["holiday_routes_deployed_on_cloud_run"] if fleet_info is not None else None
+            ),
+            "stale_cloud_run_detected": (
+                fleet_info["stale_cloud_run_detected"] if fleet_info is not None else False
+            ),
+            "online_producers": fleet_info["online_producers"] if fleet_info is not None else None,
+            "distinct_physical_gpus": (
+                fleet_info["distinct_physical_gpus"] if fleet_info is not None else None
+            ),
+            "active_trainers": (
+                fleet_info["active_trainers"]
+                if fleet_info is not None
+                else (gw_info.get("active_trainers") if gw_info is not None else None)
+            ),
+            "target_online_producers": target_online_producers,
+            "fleet_badge": fleet_info["fleet_badge"] if fleet_info is not None else None,
+            "ces_recorded": bool(fb_info["submitted"]) if fb_info is not None else False,
+            "masked_api_key": (
+                hb_info.get("masked_api_key")
+                if hb_info is not None
+                else (mask_api_key(api_key) if api_key else None)
+            ),
+            "credentials_path": hb_info.get("credentials_path") if hb_info is not None else None,
             "compliance": compliance,
             "preemption_drill": preemption_drill,
             "thermal_vram_governor": governor,
             "cooldown_policy": cooldown_info,
             "bandwidth_cap": bandwidth_info,
             "gateway_check": gw_info,
+            "fleet_check": fleet_info,
+            "opentrainer_heartbeat": hb_info,
             "feedback": fb_info,
             "warnings": warnings,
             "errors": errors,
@@ -2060,6 +3221,34 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
         f"- **Checks Passed**: `{report.get('checks_passed_count')}/{report.get('checks_total_count')}`",
         f"- **Zero Game Lag**: `{report.get('zero_game_lag')}` | **CES Ease Rating**: `{ease_str}`",
     ]
+
+    fl = report.get("fleet_check")
+    if isinstance(fl, Mapping):
+        lines.extend(
+            [
+                "",
+                "## Badge Flotte en Direct & Progression Producteurs"
+                if is_fr
+                else "## Live Fleet Badge & Producer Progress",
+                "",
+                f"- **Fleet Badge**: `{fl.get('fleet_badge')}` | **Online Producers**: `{fl.get('online_producers')}/{fl.get('target_online_producers')}` | **Distinct GPUs**: `{fl.get('distinct_physical_gpus')}` | **Active Trainers**: `{fl.get('active_trainers')}`",
+                f"- **Holiday Routes Deployed**: `{fl.get('holiday_routes_deployed_on_cloud_run')}` | **Stale Cloud Run**: `{fl.get('stale_cloud_run_detected')}`",
+                f"- {fl.get('message')}",
+            ]
+        )
+
+    hb = report.get("opentrainer_heartbeat")
+    if isinstance(hb, Mapping):
+        lines.extend(
+            [
+                "",
+                "## Heartbeat OpenTrainer Sortant (Relais HTTPS)"
+                if is_fr
+                else "## Outbound OpenTrainer Heartbeat (HTTPS Relay)",
+                "",
+                f"- **{hb.get('status')}** (`network_mode={hb.get('network_mode')}`, `campaign={hb.get('active_campaign')}`, `key={hb.get('masked_api_key')}`): {hb.get('message')}",
+            ]
+        )
 
     gov = report.get("thermal_vram_governor")
     if isinstance(gov, Mapping):
@@ -2149,6 +3338,25 @@ def render_cli_report(report: Mapping[str, Any]) -> str:
         f"  Checks passed        : {report.get('checks_passed_count')}/{report.get('checks_total_count')}",
     ]
 
+    fl = report.get("fleet_check")
+    if isinstance(fl, Mapping):
+        fleet_lbl = "Badge flotte         " if is_fr else "Fleet badge          "
+        routes_lbl = "Routes Noël Cloud Run" if is_fr else "Holiday routes live  "
+        lines.append(
+            f"  {fleet_lbl}: [{fl.get('fleet_badge')}] online_producers={fl.get('online_producers')}/{fl.get('target_online_producers')} "
+            f"(gpus={fl.get('distinct_physical_gpus')}, trainers={fl.get('active_trainers')})"
+        )
+        lines.append(
+            f"  {routes_lbl}: {fl.get('holiday_routes_deployed_on_cloud_run')} "
+            f"(stale_cloud_run={fl.get('stale_cloud_run_detected')})"
+        )
+
+    hb = report.get("opentrainer_heartbeat")
+    if isinstance(hb, Mapping):
+        lines.append(
+            f"  OpenTrainer heartbeat: {hb.get('status')} (mode={hb.get('network_mode')}, key={hb.get('masked_api_key')})"
+        )
+
     gw = report.get("gateway_check")
     if isinstance(gw, Mapping):
         lines.append(f"  Gateway check        : {gw.get('status')} — {gw.get('message')}")
@@ -2233,6 +3441,54 @@ def build_parser() -> argparse.ArgumentParser:
         help="Verify GET /health and GET /v1/hivemind/raid/status (zero LLM inference).",
     )
     parser.add_argument(
+        "--noel-verify",
+        action="store_true",
+        help="Verify holiday manifest, raid status, and live producer fleet ONLINE badge (zero inference).",
+    )
+    parser.add_argument(
+        "--verify-fleet",
+        action="store_true",
+        help="Alias for --noel-verify probing live fleet registration and ONLINE badge.",
+    )
+    parser.add_argument(
+        "--send-opentrainer-heartbeat",
+        action="store_true",
+        help="Verify GET /v1/hivemind/me and send outbound POST /v1/hivemind/opentrainer/heartbeat.",
+    )
+    parser.add_argument(
+        "--api-key",
+        default=None,
+        help="Optional HiveMind API key (hm-... or hm_live_...); never logged raw.",
+    )
+    parser.add_argument(
+        "--credentials",
+        "--credentials-file",
+        dest="credentials",
+        default=None,
+        help="Optional path to ~/.hivemind/credentials.json.",
+    )
+    parser.add_argument(
+        "--host-label",
+        default=DEFAULT_HOST_LABEL,
+        help="Personal PC host label sent in OpenTrainer heartbeat (default: personal-pc).",
+    )
+    parser.add_argument(
+        "--target-online-producers",
+        type=int,
+        default=DEFAULT_TARGET_ONLINE_PRODUCERS,
+        help="Target live online producers for ONLINE fleet badge (default: 8).",
+    )
+    parser.add_argument(
+        "--non-blocking-feedback",
+        action="store_true",
+        help="Degrade gracefully (ces_recorded=False warning) when CES feedback hits 404/429/5xx/timeout.",
+    )
+    parser.add_argument(
+        "--expected-sha",
+        default=None,
+        help="Optional expected Cloud Run build_sha checked against /v1/hivemind/onboarding/manifest.",
+    )
+    parser.add_argument(
         "--submit-feedback",
         action="store_true",
         help="Submit zero-PII gamer comfort telemetry to POST /v1/hivemind/onboarding/feedback.",
@@ -2305,6 +3561,15 @@ def main(
             extra_games=args.game,
             drill_game_exe=args.drill_game_exe,
             check_gateway=bool(args.check_gateway),
+            noel_verify=bool(args.noel_verify),
+            verify_fleet=bool(args.verify_fleet),
+            send_opentrainer_heartbeat=bool(args.send_opentrainer_heartbeat),
+            api_key=args.api_key,
+            credentials_path=args.credentials,
+            host_label=args.host_label,
+            target_online_producers=args.target_online_producers,
+            non_blocking_feedback=bool(args.non_blocking_feedback),
+            expected_sha=args.expected_sha,
             submit_feedback=bool(args.submit_feedback),
             prompt_ces=bool(args.prompt_ces),
             ease_rating=args.ease_rating,

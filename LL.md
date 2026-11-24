@@ -169,10 +169,30 @@ Context: a joint training weekend with CrowdGPT (Vxtzq) on the dense 1 B model C
   - When a brief's premise is fixed by a later PR, update the brief, so contributors don't implement the old
     assumption.
 
+### 17. Check which data a run actually reads, not only how much (18 November)
+
+- **What happened.** Each learner's MoE shard lays its experts' data out one after another, and the data cursor
+  reads it in order. For three days, about 262 k tokens per learner, learner 0 trained only on general web text and
+  learner 1 only on code. Maths and physics data were first read at run 4 round 107; the all-expert eval then fell
+  5.19 → 5.09 in five rounds. Two evaluations that day (#944 at the row start, then mid-row) had already shown the
+  pattern: code −22 %, maths and exoplanets slightly worse.
+- **Rules.**
+  - A run's receipt must say which experts' tokens were read so far: the manifest now records `shard_layout` and
+    `expert_first_offset` (PR #946).
+  - Prefer `--interleave-block-tokens 1024` for new MoE campaigns. Don't change the layout in the middle of a
+    campaign, because data offsets would change meaning.
+  - When a loss falls suddenly, check the data cursor before you credit the recipe.
+  - Evaluate a model on content as well as format. Scoring from the start of a row mostly measures the template;
+    score mid-row too.
+
 ### 9. Tooling notes for agents
 
 - In worktree-isolated sessions, compound shell commands that touch git are refused: run plain, separate commands.
 - `rm -rf` is refused; delete files by name and `rmdir` the folder.
+- The PR security scanner reads any roadmap ID of the form `HM-S…`/`HM-M…`, or "fixes #N", in a PR's title or body
+  as a claim (CB-02). A docs-only PR that cites one is blocked, so describe such PRs without those IDs.
+- A check that failed and later passed on the same commit stays in `statusCheckRollup`. Judge each check by its
+  latest run.
 - `docs/roadmap/planetary_streams.json` keeps one entry per line: edit it as text. `json.dump` rewrites ~700 lines.
 - Restoring the gateway database for counts: `litestream restore` into a private scratch folder, read aggregates only,
   delete the copy at once.

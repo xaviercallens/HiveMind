@@ -128,3 +128,53 @@ def test_local_extra_sources_come_first_and_carry_a_licence() -> None:
     assert out["experts"][1]["accepted_sources"] == plan["experts"][1]["accepted_sources"]
     assert plan["experts"][0]["accepted_sources"] == [{"dataset_id": "nvidia/OpenMathInstruct-2"}]  # input not mutated
     assert not any("gsm8k" in d or "sciq" in d or "proofnet" in d for d in rs.LOCAL_DATASET_FILES)
+
+
+PLAN_TWO_PER_LEARNER = {
+    "decontamination_benchmarks": [],
+    "experts": [
+        {"expert_id": "A", "assigned_cohort": "GCP Spot Tesla T4", "accepted_sources": [{"dataset_id": "web/a", "config": "default"}]},
+        {"expert_id": "B", "assigned_cohort": "RTX 2070", "accepted_sources": [{"dataset_id": "code/b", "config": "default"}]},
+        {"expert_id": "C", "assigned_cohort": "GCP Spot Tesla T4", "accepted_sources": [{"dataset_id": "math/c", "config": "default"}]},
+        {"expert_id": "D", "assigned_cohort": "RTX 2070", "accepted_sources": [{"dataset_id": "phys/d", "config": "default"}]},
+    ],
+}
+
+
+def _build_two(tmp_path: Path, block: int, train: int = 500):
+    return build_real_expert_shards(PLAN_TWO_PER_LEARNER, _encode, 97, cache_dir=tmp_path / f"rows{block}", fetch=FakeServer(),
+                                    train_tokens_per_expert=train, heldout_tokens_per_expert=50, heldout_rows=5,
+                                    interleave_block_tokens=block)
+
+
+def test_default_layout_is_concatenated_and_the_second_expert_starts_after_the_first(tmp_path: Path) -> None:
+    s0, _s1, _h, m = _build_two(tmp_path, 0)
+    assert m["shard_layout"] == "concatenated" and m["interleave_block_tokens"] == 0
+    assert m["expert_first_offset"]["A"] == 0 and m["expert_first_offset"]["C"] == 500
+    assert m["expert_span_count"] == {"A": 1, "B": 1, "C": 1, "D": 1}
+    assert len(s0) == 1000
+
+
+def test_interleaved_layout_visits_every_expert_from_the_start_with_the_same_tokens(tmp_path: Path) -> None:
+    c0, c1, ch, _ = _build_two(tmp_path, 0)
+    i0, i1, ih, m = _build_two(tmp_path, 64)
+    assert m["shard_layout"].startswith("interleaved") and m["interleave_block_tokens"] == 64
+    # every expert of a learner appears within the first two blocks
+    assert m["expert_first_offset"]["A"] == 0 and m["expert_first_offset"]["C"] == 64
+    assert m["expert_first_offset"]["B"] == 0 and m["expert_first_offset"]["D"] == 64
+    # same tokens, same held-out stream; only the order of training tokens changes
+    assert sorted(c0.tolist()) == sorted(i0.tolist()) and sorted(c1.tolist()) == sorted(i1.tolist())
+    assert torch.equal(ch, ih) and not torch.equal(c0, i0)
+    # the interleaved shard alternates A, C, A, C ... in 64-token blocks
+    assert i0[:64].tolist() == c0[:64].tolist() and i0[64:128].tolist() == c0[500:564].tolist()
+    assert m["expert_span_count"]["A"] == 8  # ceil(500 / 64) blocks
+
+
+def test_interleaving_handles_unequal_sizes_and_rejects_negative_blocks(tmp_path: Path) -> None:
+    s0, _s1, _h, m = build_real_expert_shards(PLAN_TWO_PER_LEARNER, _encode, 97, cache_dir=tmp_path / "u", fetch=FakeServer(),
+                                              train_tokens_per_expert=300, heldout_tokens_per_expert=50, heldout_rows=5,
+                                              interleave_block_tokens=128)
+    assert len(s0) == 600 and m["expert_span_count"]["A"] == 3
+    with pytest.raises(ValueError):
+        build_real_expert_shards(PLAN_TWO_PER_LEARNER, _encode, 97, cache_dir=tmp_path / "n", fetch=FakeServer(),
+                                 interleave_block_tokens=-1)

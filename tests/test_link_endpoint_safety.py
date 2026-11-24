@@ -87,6 +87,19 @@ def _client_configuration(identity: ql.LinkIdentity) -> QuicConfiguration:
     return configuration
 
 
+async def _assert_stream_closed_without_ack(reader: asyncio.StreamReader, timeout: float = 1.0) -> None:
+    """Verify the peer closed the stream/connection without sending any acknowledgement bytes.
+
+    ``aioquic < 1.9`` feeds EOF (``b""``) on ``connection_lost``, whereas ``aioquic >= 1.9``
+    raises ``ConnectionError("Connection closed")`` on open streams lacking a stream FIN.
+    """
+    try:
+        data = await asyncio.wait_for(reader.read(), timeout)
+    except ConnectionError:
+        return
+    assert data == b""
+
+
 @pytest.mark.parametrize("payload", [b"\x00", struct.pack("!I", 100) + b"short",
                                      struct.pack("!I", 0), struct.pack("!I", ql.MAX_FRAME_BYTES + 1)])
 def test_real_quic_rejects_malformed_stream_without_acknowledging_it(payload: bytes) -> None:
@@ -99,7 +112,7 @@ def test_real_quic_rejects_malformed_stream_without_acknowledging_it(payload: by
                 reader, writer = await peer.create_stream()
                 writer.write(payload)
                 writer.write_eof()
-                assert await asyncio.wait_for(reader.read(), 1.0) == b""
+                await _assert_stream_closed_without_ack(reader, 1.0)
             assert received == []
             good = await ql.quic_send_frames("127.0.0.1", server.port, [b"still-alive"], identity.ca_pem)
             assert good.delivered == 1 and received == [b"still-alive"]
@@ -118,7 +131,7 @@ def test_partial_quic_stream_has_a_deadline(monkeypatch: pytest.MonkeyPatch) -> 
             async with connect("127.0.0.1", server.port, configuration=_client_configuration(identity)) as peer:
                 reader, writer = await peer.create_stream()
                 writer.write(struct.pack("!I", 100) + b"partial")
-                assert await asyncio.wait_for(reader.read(), 1.0) == b""
+                await _assert_stream_closed_without_ack(reader, 1.0)
             assert server.frames_received == 0
         finally:
             server.close()
@@ -377,7 +390,7 @@ def test_too_many_open_quic_streams_close_connection(monkeypatch: pytest.MonkeyP
                     readers.append(reader)
                     writers.append(writer)
                     writer.write(b"\x00")
-                assert await asyncio.wait_for(readers[-1].read(), 1.0) == b""
+                await _assert_stream_closed_without_ack(readers[-1], 1.0)
             assert server.frames_received == 0
         finally:
             server.close()

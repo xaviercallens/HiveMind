@@ -204,14 +204,25 @@ def build_real_expert_shards(
     split: str = "train",
     heldout_rows: int = 40,
     max_rows_per_source: int = 600,
+    interleave_block_tokens: int = 0,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict[str, Any]]:
     """Return ``(shard_learner0, shard_learner1, held_out, manifest)`` from real rows of the plan's experts.
 
     Held-out rows are the FIRST ``heldout_rows`` rows of each source and training rows come after them, so the two never
     share a row. Tokens must fall inside ``vocab_size``.
+
+    Shard layout. With ``interleave_block_tokens == 0`` (the default, unchanged since #926) each learner's shard is its
+    experts' training tokens one after another, so a sequential data cursor trains ONE expert's data at a time: on
+    18 Nov 2026 the T4 campaign reached the second expert of each learner only after ~262 k tokens per learner (three
+    days). With ``interleave_block_tokens = B > 0`` the shard takes B tokens from each expert in turn (round-robin, in
+    plan order) until every expert is exhausted, so every expert's data is visited from the first rounds. The same
+    tokens are used either way; only their order changes. The manifest records the layout and each expert's spans.
     """
     if train_tokens_per_expert < 1 or heldout_tokens_per_expert < 1:
         raise ValueError("token budgets must be >= 1")
+    if interleave_block_tokens < 0:
+        raise ValueError("interleave_block_tokens must be >= 0 (0 = concatenated)")
+    per_learner: tuple[list[tuple[str, list[int]]], list[tuple[str, list[int]]]] = ([], [])
     banned = {str(b) for b in plan.get("decontamination_benchmarks", [])}
     shards: tuple[list[int], list[int]] = ([], [])
     held: list[int] = []
@@ -261,9 +272,31 @@ def build_real_expert_shards(
             experts.append(sample)
             continue
         sample.train_tokens, sample.heldout_tokens = len(train_ids), len(held_ids)
-        shards[sample.learner].extend(train_ids)
+        per_learner[sample.learner].append((sample.expert_id, train_ids))
         held.extend(held_ids)
         experts.append(sample)
+    spans: dict[str, list[list[int]]] = {}
+    for learner, items in enumerate(per_learner):
+        shard = shards[learner]
+        if interleave_block_tokens == 0:
+            for eid, ids in items:
+                spans[eid] = [[len(shard), len(shard) + len(ids)]]
+                shard.extend(ids)
+            continue
+        pos = [0] * len(items)
+        while any(pos[i] < len(ids) for i, (_eid, ids) in enumerate(items)):
+            for i, (eid, ids) in enumerate(items):
+                if pos[i] >= len(ids):
+                    continue
+                block = ids[pos[i]:pos[i] + interleave_block_tokens]
+                pos[i] += len(block)
+                start = len(shard)
+                shard.extend(block)
+                prev = spans.setdefault(eid, [])
+                if prev and prev[-1][1] == start:
+                    prev[-1][1] = len(shard)
+                else:
+                    prev.append([start, len(shard)])
     if not shards[0] or not shards[1] or not held:
         raise ValueError("real data gave an empty learner shard or held-out stream; see the manifest")
     manifest = {
@@ -274,6 +307,11 @@ def build_real_expert_shards(
         "split_rule": "held-out rows precede training rows in every source; no row is shared",
         "learner_assignment": "learner 0 = experts in a Tesla T4 cohort, learner 1 = the others",
         "learner_tokens": [len(shards[0]), len(shards[1])],
+        "shard_layout": ("concatenated" if interleave_block_tokens == 0
+                         else f"interleaved, {interleave_block_tokens} tokens per expert in turn"),
+        "interleave_block_tokens": int(interleave_block_tokens),
+        "expert_first_offset": {eid: s[0][0] for eid, s in spans.items()},
+        "expert_span_count": {eid: len(s) for eid, s in spans.items()},
         "heldout_tokens": len(held),
         "experts": [vars(e) for e in experts],
     }

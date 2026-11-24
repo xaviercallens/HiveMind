@@ -1,0 +1,20 @@
+{
+ "checkpoint": "/mnt/disks/disk-socrateai-local-1/gcpcrowd_moe/run_20261123T161237Z_ar_full/crowd_moe_opendiloco_round_15.safetensors",
+ "rounds": 15,
+ "accepted": 7,
+ "segments": [
+  {
+   "run": "run_20261123T161237Z_ar_full",
+   "rounds": 15,
+   "train_best": 4.525928711252553
+  }
+ ],
+ "sha256": "fe6cfaf89cbf9b597c14f3d5bbf482f7af872c0a61da0ccae29126faf5294342",
+ "cfg": {
+  "ilv": 0,
+  "seq": 128,
+  "lr": 0.0001,
+  "init": "/mnt/disks/disk-socrateai-local-1/gcpcrowd_moe/run_20261122T200945Z_c2_full/crowd_moe_opendiloco_round_84.safetensors",
+  "off": 72149
+ }
+}

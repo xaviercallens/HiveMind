@@ -1,0 +1,115 @@
+{
+  "schema": "hivemind.preregistration.v1",
+  "experiment_id": "E-B3-MOE-2-MIDROW",
+  "roadmap_item": "IP-300",
+  "follow_up_of": "E-B3-MOE-PAIRED (PR #944, docs/E_B3_MOE_PAIRED_PREREGISTRATION.json, receipt artifacts/experiments/E_B3_MOE_PAIRED_2026-11-18.json)",
+  "registered_utc": "2026-11-18",
+  "frozen": true,
+  "question": "Does the #944 gain of the MoE LoRA add-on over the frozen base Vxtzq/Crowd-v1 (mean d = -0.3306 nats on the first 64 tokens of unseen rows) survive when the scored tokens are taken from the middle of the row (tokens 64..127), away from each source's opening template, or is it mostly the add-on learning per-source format?",
+  "what_changes_vs_944": "only the scored chunk position (and, as a consequence, which rows are long enough). Base, primary checkpoint, split, loader, test-row rule, scan cap, statistic and decision rule are the same as #944.",
+  "arms": {
+    "base": {
+      "model": "Vxtzq/Crowd-v1 (dense, frozen)",
+      "hf_revision": "b63212a843d662dadbec35f8544b6e0dafa6e72b",
+      "weights_file": "/mnt/disks/disk-socrateai-local-1/crowd_v1_cache/model_b63212a843d6.safetensors",
+      "weights_sha256": "1f8214ca6856280b48817402f9f8f0a3affd938d39718ade8f528f0102c2209f",
+      "tokenizer_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+    },
+    "moe": {
+      "role": "PRIMARY (decisive)",
+      "description": "the same base, upcycled in place, with the checkpoint #944 used loaded",
+      "checkpoint": "/mnt/disks/disk-socrateai-local-1/hivemind_work/ip300_scratch/midrow/primary_round24_0778b9ee.safetensors",
+      "checkpoint_source": "/mnt/disks/disk-socrateai-local-1/gcpcrowd_moe/run_20261118T101755Z_day_full/crowd_moe_opendiloco_round_24.safetensors (byte copy; hf_moe_best now holds a newer round)",
+      "checkpoint_sha256": "0778b9ee4279ee6a70f88e5fdbd02237f620499b1daee5ef8b927d2c3af781f8",
+      "split": {
+        "split_mode": "lora_domain_experts",
+        "num_experts": 8,
+        "top_k": 2,
+        "routing_mode": "sigma_topk",
+        "lora_rank": 8,
+        "resident_expert_indices": [0, 1, 2, 3, 4, 5, 6, 7],
+        "num_layers_upcycled": 24,
+        "num_router_fragments": 4
+      },
+      "loader": "scripts/gcp_t4_crowd_diloco_worker.py load_init_buckets + hivemind.swarm.crowdgpt_moe_opendiloco.load_moe_trainable_buckets (same as #944)"
+    },
+    "moe_secondary": {
+      "role": "SECONDARY (reported, not decisive)",
+      "description": "the current package checkpoint, loaded into the same upcycled model after the primary arm; load_moe_trainable_buckets overwrites every trainable bucket",
+      "checkpoint": "/mnt/disks/disk-socrateai-local-1/hivemind_work/ip300_scratch/midrow/secondary_round69_58696cfe.safetensors",
+      "checkpoint_source": "/mnt/disks/disk-socrateai-local-1/hivemind_work/hf_moe_best/crowd_v1_moe_lora_experts_best.safetensors = run_20261118T101755Z_day_full/crowd_moe_opendiloco_round_69.safetensors (hf_moe_best/round_receipt.json)",
+      "checkpoint_sha256": "58696cfe5660bd91a92acbb52aea2223a81d86c7d59720c857f6a585c1898fa9",
+      "split": "same as the primary arm"
+    },
+    "newer_checkpoints": "not used, even if they appear during the run"
+  },
+  "data": {
+    "manifest": "/mnt/disks/disk-socrateai-local-1/gcpcrowd_moe/run_20261118T101755Z_day_full/real_data_manifest.json",
+    "manifest_sha256": "f4f13461f3086c09ad35f6b2b46dd4029ca382f368f4dc07c92570831484e913",
+    "manifest_note": "the secondary checkpoint (round 69) comes from the same run and the same manifest, so its test rows are unseen by the same rule",
+    "excluded_benchmarks": ["allenai/ai2_arc", "google-research-datasets/mbpp", "openai/openai_humaneval"],
+    "test_row_rule": "identical to #944: for each trained expert (manifest order) and each of its sources (manifest order), test rows start at that source's train_rows[1] and are scanned in increasing order, at most 2000 rows per source; fetched by manifest origin (local_hf_cache -> LocalHFCacheFetcher in file order; datasets_server -> fetch_rows_datasets_server, 100 rows per request). A later source of the same expert is read only if the earlier ones give fewer than chunks_per_expert chunks. Exhausted sources and untrained experts are reported, never substituted. The row-order check of #944 is repeated and aborts on a mismatch.",
+    "expected_skips": {
+      "E3_formal_logic_arc": "no source; not trained",
+      "E4_physics_stem": "maximus-21/PhysicsQA has no rows after train_rows end 370"
+    },
+    "row_set_differs_from_944": "rows need >= 128 token ids here (>= 64 in #944), so rows that were too short here are skipped and the next eligible rows are taken. The row set is therefore a different (longer-row) subset; most visibly E1 code (CodeAlpaca rows are short) and possibly a spill into its second source. N may differ per expert. No row-length census was run before registration.",
+    "text_and_tokens": "text = crowdgpt_real_shards.row_to_text(row); ids = Crowd-v1 tokenizer.encode(text).ids (same calls as training and #944)"
+  },
+  "chunking": {
+    "chunk_offset": 64,
+    "chunk_tokens": 64,
+    "min_row_tokens": 128,
+    "context_tokens": 128,
+    "rule": "one chunk per test row with at least 128 token ids. The model input is ids[0:128] (the row's opening/template is in context); labels[0:64] = -100, so only the next-token predictions of targets ids[64..127] are scored (64 predictions, vs 63 in #944). Rows with fewer than 128 ids are skipped and the next eligible row is taken.",
+    "predictions_per_chunk": 64,
+    "chunks_per_expert": 40,
+    "scan_cap_rows_per_source": 2000,
+    "min_chunks_per_expert": 20,
+    "below_min_per_expert": "an expert with 1..19 chunks is excluded from the primary bootstrap, the verdict and the domain guard; its numbers are listed for information only",
+    "expected_experts": 6,
+    "expected_total_chunks": 240,
+    "min_total_chunks": 200,
+    "min_total_note": "counted over the experts that meet min_chunks_per_expert; fewer than 200 -> INSUFFICIENT_N"
+  },
+  "metric": {
+    "per_chunk_midrow": "mean next-token NLL (nats) over the 64 scored targets ids[64..127], with ids[0:128] as input, computed by the worker's forward_crowd_v1_checkpointed with labels masked to -100 on positions 0..63 (the loss divides by the count of non-masked targets), batch size 1, model.eval(), torch.no_grad()",
+    "per_chunk_rowstart_control": "on the SAME selected rows, also the #944 metric unchanged: chunk_nll(ids[0:64]) (mean NLL over 63 predictions), for base, primary and secondary",
+    "paired_difference": "d_i = NLL_moe_i - NLL_base_i on the mid-row metric (negative = the add-on lowers loss)",
+    "compute": "CPU only (CUDA_VISIBLE_DEVICES empty, asserted in-process), fp32 trunk weights, torch.set_num_threads(4), nice 19",
+    "arm_order": "base (mid-row + row-start) -> gates -> upcycle with zero-delta buckets -> load primary -> primary arm -> load secondary into the same model -> secondary arm",
+    "gates": {
+      "causality_gate": "in the base arm, the masked score of targets ids[1..63] on input ids[0:128] must equal chunk_nll(ids[0:64]) on chunk 0 within 1e-4 nats (later tokens must not change earlier predictions); else abort",
+      "base_equivalence_gate": "after the base arm, the model is upcycled in place with zero-delta (fresh) buckets; its mid-row NLL on chunk 0 must match the dense mid-row NLL within 1e-3 nats; else abort before the MoE arms"
+    }
+  },
+  "statistics": {
+    "primary": "paired bootstrap of mean(d) on the mid-row metric, primary checkpoint: i.i.d. resampling of chunks with replacement, 10000 resamples, numpy.random.default_rng(20261118), percentile 95% CI (2.5, 97.5) -- identical to #944",
+    "secondary_reported": [
+      "per-expert mean base NLL, mean MoE NLL, mean d and relative change (mid-row)",
+      "exact two-sided sign test on d (ties dropped), informational only",
+      "secondary checkpoint: the same statistic, verdict label and guard on the same mid-row chunks, reported but not decisive",
+      "same-row control: the row-start metric for base/primary/secondary on the same rows, with its own bootstrap CI (same seed), and the ratio mean_d_midrow / mean_d_rowstart, overall and per expert; informational"
+    ]
+  },
+  "decision_rule": {
+    "applies_to": "the PRIMARY arm, mid-row metric",
+    "INSUFFICIENT_N": "fewer than 200 chunks in total over experts with >= 20 chunks: no decision",
+    "PASS": "CI upper bound < 0",
+    "HARM": "CI lower bound > 0",
+    "NO_GAIN": "otherwise",
+    "domain_guard": "every evaluated expert (>= 20 chunks) has mean NLL_moe <= 1.01 * mean NLL_base on the mid-row metric",
+    "verdict_reported_as_is": true
+  },
+  "interpretation_rule": {
+    "reference": "#944 primary mean d = -0.3306 nats (row-start chunks); threshold = half of it = -0.1653 nats",
+    "MOSTLY_CONTENT": "verdict PASS and primary mid-row mean d <= -0.1653 nats: the #944 gain mostly survives away from the row start",
+    "MOSTLY_FORMAT_SOME_CONTENT": "verdict PASS and primary mid-row mean d > -0.1653 nats: the #944 gain is mostly format/row-start; a smaller content gain remains",
+    "FORMAT": "verdict NO_GAIN or HARM: no content gain is measured mid-row; the #944 gain is attributed to format/row-start",
+    "NONE": "verdict INSUFFICIENT_N: no interpretation",
+    "context_caveat_stated_in_advance": "mid-row tokens are predicted with up to 127 tokens of context, so base NLL is expected to be lower than at the row start and absolute nat gaps can shrink without any format effect. Relative changes are reported next to nats, and the same-row control (row-start vs mid-row d on identical rows) separates chunk position from which rows were picked. Neither changes the label above, which is decided in nats as stated.",
+    "reported_plainly": "the label is reported as the rule gives it, whatever it is"
+  },
+  "effect_on_944_and_b3": "This follow-up does not change #944's verdict, its receipt or scripts/mvp_scorecard.py (check_b3 reads only GRANITE_ADAPTER_*gate*.json). It qualifies how the #944 gain may be described.",
+  "receipt": "artifacts/experiments/E_B3_MOE_MIDROW_2026-11-18.json, carrying this spec's sha256, the pre-registration commit, the script commit, the row indices used per source, the sha256 of the 128-token chunk ids, per-chunk NLLs (mid-row and row-start, every arm), the gates, start/end times and a deviations list"
+}

@@ -1,0 +1,31 @@
+[2026-11-18T12:49:29Z] hashes match the pre-registration
+[2026-11-18T12:49:29Z] row-order check passed on 4 local sources
+[2026-11-18T12:49:36Z] selected 240 chunks: E0_general_fineweb=40, E1_python_systems_code=40, E2_math_reasoning=40, E3_formal_logic_arc=0, E4_physics_stem=0, E5_exoplanet_transit=40, E6_stellar_spectroscopy=40, E7_defensive_cyber=40
+[2026-11-18T12:50:09Z] base arm (dense Crowd-v1)
+[2026-11-18T12:50:27Z]   20/240 chunks
+[2026-11-18T12:50:45Z]   40/240 chunks
+[2026-11-18T12:51:03Z]   60/240 chunks
+[2026-11-18T12:51:21Z]   80/240 chunks
+[2026-11-18T12:51:39Z]   100/240 chunks
+[2026-11-18T12:51:57Z]   120/240 chunks
+[2026-11-18T12:52:15Z]   140/240 chunks
+[2026-11-18T12:52:34Z]   160/240 chunks
+[2026-11-18T12:52:53Z]   180/240 chunks
+[2026-11-18T12:53:11Z]   200/240 chunks
+[2026-11-18T12:53:30Z]   220/240 chunks
+[2026-11-18T12:53:48Z]   240/240 chunks
+[2026-11-18T12:53:50Z] base-equivalence gate passed: {'tolerance_nats': 0.001, 'zero_delta_chunk0_nll': 4.715309143066406, 'dense_chunk0_nll': 4.715309143066406, 'passed': True}
+[2026-11-18T12:53:51Z] MoE arm (checkpoint loaded)
+[2026-11-18T12:54:22Z]   20/240 chunks
+[2026-11-18T12:54:53Z]   40/240 chunks
+[2026-11-18T12:55:22Z]   60/240 chunks
+[2026-11-18T12:55:50Z]   80/240 chunks
+[2026-11-18T12:56:18Z]   100/240 chunks
+[2026-11-18T12:56:46Z]   120/240 chunks
+[2026-11-18T12:57:15Z]   140/240 chunks
+[2026-11-18T12:57:44Z]   160/240 chunks
+[2026-11-18T12:58:12Z]   180/240 chunks
+[2026-11-18T12:58:40Z]   200/240 chunks
+[2026-11-18T12:59:11Z]   220/240 chunks
+[2026-11-18T12:59:40Z]   240/240 chunks
+[2026-11-18T12:59:40Z] verdict PASS: n=240 mean_d=-0.330578 ci=[-0.386510, -0.276973] guard=True -> /mnt/disks/disk-socrateai-local-1/hivemind_work/ip300_scratch/E_B3_MOE_PAIRED_2026-11-18.json

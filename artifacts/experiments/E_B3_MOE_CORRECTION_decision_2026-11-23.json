@@ -1,0 +1,105 @@
+{
+ "chosen": "W25",
+ "results": {
+  "C2": {
+   "J": 3.7777485597878693,
+   "mean_diff_vs_base": -0.5478093434125185,
+   "ci95": [
+    -0.6302430422014247,
+    -0.46629271600085004
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 3.332,
+    "E1_python_systems_code": -6.411,
+    "E2_math_reasoning": -3.638,
+    "E5_exoplanet_transit": -10.79,
+    "E6_stellar_spectroscopy": -49.562,
+    "E7_defensive_cyber": -16.151
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "W75": {
+   "J": 3.9315465034296113,
+   "mean_diff_vs_base": -0.3940113997707764,
+   "ci95": [
+    -0.4604456274708112,
+    -0.3258333983303358
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 8.298,
+    "E1_python_systems_code": -6.182,
+    "E2_math_reasoning": -4.927,
+    "E5_exoplanet_transit": -9.654,
+    "E6_stellar_spectroscopy": -36.595,
+    "E7_defensive_cyber": -11.082
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "W50": {
+   "J": 4.16292148369054,
+   "mean_diff_vs_base": -0.16263641950984795,
+   "ci95": [
+    -0.20813374783533314,
+    -0.11388857192670306
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 10.532,
+    "E1_python_systems_code": -3.94,
+    "E2_math_reasoning": -2.826,
+    "E5_exoplanet_transit": -5.273,
+    "E6_stellar_spectroscopy": -18.087,
+    "E7_defensive_cyber": -5.421
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "W25": {
+   "J": 4.242761724069714,
+   "mean_diff_vs_base": -0.08279617913067341,
+   "ci95": [
+    -0.09302390612972279,
+    -0.07175718687474729
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 0.644,
+    "E1_python_systems_code": -1.791,
+    "E2_math_reasoning": -1.846,
+    "E5_exoplanet_transit": -1.812,
+    "E6_stellar_spectroscopy": -5.328,
+    "E7_defensive_cyber": -2.055
+   },
+   "excluded_lt_20": [],
+   "guard_ok": true,
+   "corrects": true
+  }
+ },
+ "final_frozen": {
+  "J": 4.207852900028229,
+  "mean_diff_vs_base": -0.07853191494941711,
+  "ci95": [
+   -0.08869417530794939,
+   -0.06785829412440461
+  ],
+  "n": 240,
+  "per_expert_pct_vs_base": {
+   "E0_general_fineweb": 0.769,
+   "E1_python_systems_code": -1.865,
+   "E2_math_reasoning": -1.567,
+   "E5_exoplanet_transit": -1.643,
+   "E6_stellar_spectroscopy": -5.246,
+   "E7_defensive_cyber": -2.071
+  },
+  "excluded_lt_20": [],
+  "guard_ok": true,
+  "corrects": true
+ }
+}

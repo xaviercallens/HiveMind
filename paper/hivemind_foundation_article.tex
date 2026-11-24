@@ -2055,8 +2055,11 @@ test of the first choice.
   \item \textbf{Router versus experts.} The router holds 1.6\,\% of the trainable weights. Interpolating it separately
     gave the best candidate: experts at half way and the \emph{router reset to its start}, which corrects on both the
     selection split (general $+0.10\,\%$) and the third split (general $+0.63\,\%$, mean $-0.086$\,nat, 95\,\% CI
-    $[-0.097,-0.075]$), with every other domain better. The effect is conditional: with full-strength experts, resetting
-    the router is harmful (general $+14.9\,\%$), because the experts were trained jointly with their router.
+    $[-0.097,-0.075]$), with every other domain better. Scored once on the frozen 240 chunks after the choice, it
+    confirms: $-0.087$\,nat (CI $[-0.098,-0.076]$, lower on 197 of 240 chunks), general text $+0.30\,\%$, every other
+    domain better, so it passes the guard on three disjoint sets of rows. The effect is conditional: with full-strength
+    experts, resetting the router is harmful (general $+14.9\,\%$), because the experts were trained jointly with their
+    router.
   \item \textbf{More training does not undo it.} Continuing campaign~2 on the T4 for 15 rounds at a four times lower
     learning rate left general text at $+3.45\,\%$.
   \item \textbf{The price is most of the gain:} about 16\,\% of campaign~2's improvement is kept. Promotion to serving

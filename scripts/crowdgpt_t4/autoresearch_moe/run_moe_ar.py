@@ -55,8 +55,14 @@ def log(msg: str) -> None:
         f.write(line + "\n")
 
 
-def sh(cmd: str, env: dict | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, shell=True, capture_output=True, text=True, env={**os.environ, **(env or {})})
+def sh(argv: list[str], env: dict | None = None, cwd: str | None = None, log_to: pathlib.Path | None = None
+       ) -> subprocess.CompletedProcess:
+    """Run argv without a shell. With log_to, stdout and stderr go to that file instead of being captured."""
+    full_env = {**os.environ, **(env or {})}
+    if log_to is None:
+        return subprocess.run(argv, capture_output=True, text=True, env=full_env, cwd=cwd, check=False)
+    with open(log_to, "w", encoding="utf-8") as fh:
+        return subprocess.run(argv, stdout=fh, stderr=subprocess.STDOUT, text=True, env=full_env, cwd=cwd, check=False)
 
 
 def sha256(p: pathlib.Path) -> str:
@@ -77,12 +83,12 @@ def stopped() -> bool:
 
 
 def producer(active: bool) -> None:
-    sh(f"sudo -n systemctl {'start' if active else 'stop'} {PRODUCER}")
-    log(f"producer {'started' if active else 'stopped'}: {sh(f'systemctl is-active {PRODUCER}').stdout.strip()}")
+    sh(["sudo", "-n", "systemctl", "start" if active else "stop", PRODUCER])
+    log(f"producer {'started' if active else 'stopped'}: {sh(['systemctl', 'is-active', PRODUCER]).stdout.strip()}")
 
 
 def worker_alive() -> bool:
-    return sh("pgrep -f '[g]cp_t4_crowd_diloco_worker[.]py'").returncode == 0
+    return sh(["pgrep", "-f", "[g]cp_t4_crowd_diloco_worker[.]py"]).returncode == 0
 
 
 def load_state() -> dict:
@@ -120,7 +126,7 @@ def train(tid: str, cfg: dict) -> dict:
         env, _extra, _ = flags(cfg, offset)
         if init:
             env["INIT"] = init
-        out = sh(f"bash {LAUNCHER} full {target - done} {INNER}", env=env).stdout.strip()
+        out = sh(["bash", str(LAUNCHER), "full", str(target - done), str(INNER)], env=env).stdout.strip()
         m = re.search(r"logs in (\S+)", out)
         if "launched" not in out or not m:
             fails += 1
@@ -134,7 +140,7 @@ def train(tid: str, cfg: dict) -> dict:
         log(f"{tid}: segment {len(segs) + 1} in {run_dir.name} (rounds {target - done}, offset {offset}, init {init})")
         while worker_alive():
             if stopped():
-                sh("pkill -TERM -f '[g]cp_t4_crowd_diloco_worker[.]py'")
+                sh(["pkill", "-TERM", "-f", "[g]cp_t4_crowd_diloco_worker[.]py"])
             time.sleep(60)
         producer(True)
         rows = []
@@ -173,10 +179,12 @@ def judge(tid: str, ckpt: str) -> dict:
     spec = OUT / f"{tid}_spec.json"
     spec.write_text(json.dumps(s, indent=1))
     rec = OUT / f"{tid}_judge.json"
-    cmd = (f"cd {JUDGE_REPO} && CUDA_VISIBLE_DEVICES= PYTHONPATH=src:. nice -n 19 {PY_EVAL} scripts/crowdgpt_moe_paired_eval.py "
-           f"--spec {spec} --rows-cache-dir {HW}/ip300_scratch/midrow/rows --train-rows-cache-dir {W}/gcpcrowd_moe/rows "
-           f"--tokenizer-json {W}/crowd_v1_cache/tokenizer.json --base-cache-dir {W}/crowd_v1_cache --threads 4 --out {rec}")
-    r = sh(cmd + f" > {OUT}/{tid}_judge.log 2>&1")
+    argv = ["nice", "-n", "19", str(PY_EVAL), "scripts/crowdgpt_moe_paired_eval.py",
+            "--spec", str(spec), "--rows-cache-dir", f"{HW}/ip300_scratch/midrow/rows",
+            "--train-rows-cache-dir", f"{W}/gcpcrowd_moe/rows", "--tokenizer-json", f"{W}/crowd_v1_cache/tokenizer.json",
+            "--base-cache-dir", f"{W}/crowd_v1_cache", "--threads", "4", "--out", str(rec)]
+    r = sh(argv, env={"CUDA_VISIBLE_DEVICES": "", "PYTHONPATH": "src:."}, cwd=str(JUDGE_REPO),
+           log_to=OUT / f"{tid}_judge.log")
     if r.returncode != 0 or not rec.exists():
         raise RuntimeError(f"judge failed (see {tid}_judge.log)")
     return json.loads(rec.read_text())

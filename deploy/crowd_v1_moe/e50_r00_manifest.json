@@ -1,0 +1,41 @@
+{
+  "schema": "hivemind.crowd_v1_moe_addon.v1",
+  "addon_id": "crowd-v1-moe-e50-r00",
+  "addon_file": "crowd_v1_moe_e50_r00.safetensors",
+  "addon_sha256": "80dccfa8246058ea71d56f924b679cad7376d99790f36816cbe998c80fcb22d3",
+  "base": {
+    "hf_repo": "Vxtzq/Crowd-v1",
+    "hf_revision": "b63212a843d662dadbec35f8544b6e0dafa6e72b",
+    "weights_sha256": "1f8214ca6856280b48817402f9f8f0a3affd938d39718ade8f528f0102c2209f",
+    "tokenizer_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+  },
+  "split": {
+    "split_mode": "lora_domain_experts",
+    "num_experts": 8,
+    "top_k": 2,
+    "routing_mode": "sigma_topk",
+    "lora_rank": 8,
+    "lora_alpha": 16.0,
+    "resident_expert_indices": [0, 1, 2, 3, 4, 5, 6, 7],
+    "num_router_fragments": 4,
+    "num_layers_upcycled": 24
+  },
+  "advertised_model_ids": ["hivemind/crowd-v1-moe", "crowd-v1-moe"],
+  "evidence": {
+    "what_it_is": "weight interpolation of the campaign-2 MoE add-on: theta = start + lambda * (C2 - start), where start is the freshly upcycled zero-delta model and C2 the campaign-2 final state (run_20261122T200945Z_c2_full round 84); experts at lambda 0.5, router fragments (router gates and final LayerNorm) at lambda 0, i.e. their upcycle initial values",
+    "preregistration": "docs/E_B3_MOE_CORRECTION_PREREGISTRATION.md (amendments A2 and A4)",
+    "receipts": [
+      "artifacts/experiments/E_B3_MOE_CORRECTION_A2_decision_2026-11-23.json",
+      "artifacts/experiments/E_B3_MOE_CORRECTION_e50_r00_frozen_2026-11-23.json"
+    ],
+    "metric": "mean next-token NLL in nats on tokens 64..127 of never-used rows, paired against the same frozen base (frozen mid-row judge, spec sha256 dce3b43e...)",
+    "frozen_240_chunks": {
+      "mean_diff_vs_base_nats": -0.0869,
+      "ci95": [-0.0979, -0.0758],
+      "lower_than_base": "197 of 240",
+      "relative_change_pct": {"general": 0.30, "code": -1.82, "maths": -1.71, "exoplanets": -1.57, "stars": -6.00, "security": -2.18}
+    },
+    "guard": "every scored domain within +1 % of the base on the selection split, the third split and the frozen 240 chunks",
+    "not_measured": "chat or instruction quality, safety behaviour, long-context behaviour, GPU half-precision equivalence"
+  }
+}

@@ -794,8 +794,20 @@ def create_crowdgpt_producer_app(
     revision_info: Mapping[str, Any] | None = None,
     device_decision: SafeDeviceDecision | None = None,
     sync_hook: Callable[[], dict[str, Any] | None] | None = None,
+    advertised_model_ids: Sequence[str] = ADVERTISED_CROWD_MODEL_IDS,
+    model_repo: str = CROWDGPT_HF_REPO,
+    strict_model_ids: bool = False,
 ) -> Any:
-    """Create an OpenAI-compatible FastAPI server for `hivemind/crowd-v1` (`hf.co/Vxtzq/Crowd-v1`)."""
+    """Create an OpenAI-compatible FastAPI server for `hivemind/crowd-v1` (`hf.co/Vxtzq/Crowd-v1`).
+
+    ``advertised_model_ids``/``model_repo`` let a variant (such as a MoE add-on producer) advertise its own IDs; the
+    first ID is the default ``model`` in responses. With ``strict_model_ids`` a request naming any other model gets a
+    404, so a variant never answers under the base model's name.
+    """
+    model_ids = tuple(str(m) for m in advertised_model_ids)
+    if not model_ids:
+        raise ValueError("advertised_model_ids must not be empty")
+    default_model_id = "hivemind/crowd-v1" if model_ids == ADVERTISED_CROWD_MODEL_IDS else model_ids[0]
     app = FastAPI(title="HiveMind Crowd-v1 Live Producer", docs_url=None, redoc_url=None)
     infer_lock = threading.Lock()
     meta_state: dict[str, Any] = dict(revision_info or {"hf_revision": "main", "global_step": 348})
@@ -804,8 +816,8 @@ def create_crowdgpt_producer_app(
     def healthz() -> dict[str, Any]:
         return {
             "ok": True,
-            "model_repo": CROWDGPT_HF_REPO,
-            "advertised_models": list(ADVERTISED_CROWD_MODEL_IDS),
+            "model_repo": model_repo,
+            "advertised_models": list(model_ids),
             "revision": meta_state,
             "device": asdict(device_decision) if device_decision is not None else {"device": str(model.wte.weight.device)},
         }
@@ -837,7 +849,7 @@ def create_crowdgpt_producer_app(
                     "hf_revision": meta_state.get("hf_revision", "main"),
                     "global_step": meta_state.get("global_step", 348),
                 }
-                for mid in ADVERTISED_CROWD_MODEL_IDS
+                for mid in model_ids
             ],
         }
 
@@ -862,7 +874,13 @@ def create_crowdgpt_producer_app(
         temperature = float(body.get("temperature", 0.7))
         top_p = float(body.get("top_p", 0.9))
         stream = bool(body.get("stream", False))
-        req_model = str(body.get("model") or "hivemind/crowd-v1")
+        req_model = str(body.get("model") or default_model_id)
+        if strict_model_ids and req_model not in model_ids:
+            return JSONResponse(
+                {"error": {"message": f"model {req_model!r} is not served here", "type": "invalid_request_error",
+                           "code": "model_not_found"}},
+                status_code=404,
+            )
 
         prompt_ids = encode_fn(prompt_text)
         with infer_lock:

@@ -230,3 +230,35 @@ def test_default_app_keeps_base_ids() -> None:
         assert c.get("/healthz").json()["advertised_models"] == list(ADVERTISED_CROWD_MODEL_IDS)
         r = c.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "x"}], "max_tokens": 2})
         assert r.json()["model"] == "hivemind/crowd-v1"
+
+
+def _producer_module():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("crowd_v1_moe_producer", REPO / "scripts/hivemind_crowd_v1_moe_producer.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class _Tok:
+    def encode(self, text: str):
+        class _E:
+            ids = [1 + ord(c) % 90 for c in text[:12]]
+
+        return _E()
+
+
+def test_forward_smoke_passes_and_refuses_non_finite(tmp_path: Path) -> None:
+    prod = _producer_module()
+    dense = _dense()
+    addon = _write_addon(tmp_path, dense, perturb=True)
+    model = copy.deepcopy(dense)
+    apply_moe_addon(model, parse_addon_manifest(_manifest_dict(addon_sha=sha256_file(addon))), addon)
+    model.place_for_inference(device="cpu", dtype=torch.float32, offload_engram_to_cpu=False)
+    ok = prod.forward_smoke(model, _Tok(), new_tokens=3)
+    assert ok["ok"] and ok["finite_logits"] and ok["generated_tokens"] > 0
+    with torch.no_grad():
+        model.wte.weight.fill_(float("inf"))
+    bad = prod.forward_smoke(model, _Tok(), new_tokens=3)
+    assert bad["ok"] is False

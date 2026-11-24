@@ -39,6 +39,26 @@ from hivemind.swarm.crowd_v1_moe_addon import (  # noqa: E402
 )
 
 _DTYPES = {"bfloat16": torch.bfloat16, "float16": torch.float16}
+SMOKE_PROMPT = "The star Betelgeuse is"
+
+
+def forward_smoke(model: torch.nn.Module, tokenizer, prompt: str = SMOKE_PROMPT, new_tokens: int = 8) -> dict:
+    """One forward pass and a short greedy generation on the serving device and dtype.
+
+    fp16 trunks (no bf16 on a T4 or an RTX 2070) can overflow, and the router then refuses non-finite logits; this
+    catches that before the first request does.
+    """
+    ids = tokenizer.encode(prompt).ids
+    try:
+        x = torch.tensor([ids], dtype=torch.long, device=model.wte.weight.device)
+        with torch.no_grad():
+            logits, _, _ = model(x)
+        finite = bool(torch.isfinite(logits).all())
+        out = model.generate_ids(ids, max_new_tokens=new_tokens, temperature=0.0, top_p=1.0) if finite else []
+    except (ValueError, RuntimeError) as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"[:300]}
+    return {"ok": finite and len(out) > 0, "finite_logits": finite, "generated_tokens": len(out),
+            "dtype": str(model.wte.weight.dtype), "device": str(model.wte.weight.device)}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -88,16 +108,21 @@ def main(argv: list[str] | None = None) -> int:
         "pinned": True,
         "loaded_utc": round(time.time(), 3),
     }
-    report = {"event": "crowd_v1_moe_loaded", **revision_info, "addon": info["addon"],
+    from tokenizers import Tokenizer
+
+    tokenizer = Tokenizer.from_file(str(tokenizer_json))
+    smoke = forward_smoke(model, tokenizer)
+    report = {"event": "crowd_v1_moe_loaded", **revision_info, "addon": info["addon"], "smoke": smoke,
               "advertised_model_ids": list(manifest.advertised_model_ids), "device_decision": decision.__dict__}
     print(json.dumps(report), flush=True)
+    if not smoke["ok"]:
+        print(json.dumps({"event": "crowd_v1_moe_refused", "reason": smoke.get("error", "non-finite logits")}), flush=True)
+        return 1
     if args.check_only:
         return 0
 
     import uvicorn
-    from tokenizers import Tokenizer
 
-    tokenizer = Tokenizer.from_file(str(tokenizer_json))
     app = create_crowdgpt_producer_app(
         model,
         encode_fn=lambda text: list(tokenizer.encode(text).ids),

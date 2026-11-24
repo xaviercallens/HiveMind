@@ -437,6 +437,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--batch-size", type=int, default=1)
     ap.add_argument("--seq-len", type=int, default=64)
     ap.add_argument("--lr", type=float, default=2e-4)
+    ap.add_argument("--router-lr-scale", type=float, default=1.0,
+                    help="MoE only: inner lr factor for the router gates and final LayerNorm (1 = unchanged, 0 = frozen)")
     ap.add_argument("--outer-lr", type=float, default=0.7)
     ap.add_argument("--outer-momentum", type=float, default=0.9)
     ap.add_argument("--lora-rank", type=int, default=8)
@@ -680,6 +682,7 @@ def main(argv: list[str] | None = None) -> int:
                 lr=args.lr,
                 device=exec_dev,
                 yield_guard=guard,
+                router_lr_scale=args.router_lr_scale,
                 start_offset=cursor_t4,
             )
             dt_t4 = max(0.02, time.monotonic() - t0)
@@ -696,6 +699,7 @@ def main(argv: list[str] | None = None) -> int:
                 lr=args.lr,
                 device=exec_dev,
                 yield_guard=guard,
+                router_lr_scale=args.router_lr_scale,
                 start_offset=cursor_2070,
             )
             dt_2070 = max(0.03, time.monotonic() - t1)

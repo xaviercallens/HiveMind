@@ -780,6 +780,16 @@ def upcycle_crowd_v1_to_sparse_moe(
     )
 
 
+def router_and_final_ln_parameters(model: CrowdV1WithEngram) -> list[nn.Parameter]:
+    """The parameters stored in the ``router_frag_*`` buckets: each MoE block's router gate and the final LayerNorm."""
+    out: list[nn.Parameter] = []
+    for blk in model.blocks:
+        if isinstance(blk.mlp, (CrowdLoRAMoEMLP, CrowdFineGrainedMoEMLP)):
+            out.append(blk.mlp.router.weight)
+    out.extend([model.ln.weight, model.ln.bias])
+    return out
+
+
 def collect_moe_router_aux_loss(model: CrowdV1WithEngram) -> torch.Tensor:
     """Sum Switch load-balancing auxiliary losses across all upcycled MoE blocks."""
     dev = model.ln.weight.device
@@ -1304,8 +1314,13 @@ def run_crowd_moe_opendiloco_inner_steps(
     device: str = "cpu",
     yield_guard: Any | None = None,
     start_offset: int = 0,
+    router_lr_scale: float = 1.0,
 ) -> dict[str, Any]:
     """Execute `steps` inner AdamW updates on an upcycled `CrowdV1WithEngram` MoE learner and return bucket pseudo-gradients.
+
+    ``router_lr_scale`` multiplies the inner lr of the router gates and the final LayerNorm (the ``router_frag_*``
+    buckets). 1.0 (default) is the original single-group optimizer. 0 freezes them for these steps: they get no gradient,
+    are left out of clipping, and their pseudo-gradient is exactly zero; the bucket layout does not change.
 
     ``start_offset`` is the token position where this round's windows start; the result's ``next_offset`` is where the
     next round should start. Without it every round trained on the same first ``steps * seq_len`` tokens, so a
@@ -1322,12 +1337,28 @@ def run_crowd_moe_opendiloco_inner_steps(
     if flat_tokens.numel() < seq_len + 1:
         raise ValueError(f"token_stream ({flat_tokens.numel()}) must have at least seq_len + 1 ({seq_len + 1}) tokens")
 
+    if not math.isfinite(float(router_lr_scale)) or float(router_lr_scale) < 0:
+        raise ValueError("router_lr_scale must be a finite number >= 0")
     buckets_before = extract_moe_trainable_buckets(model, num_router_fragments=num_router_fragments)
+    router_ids = {id(p) for p in router_and_final_ln_parameters(model) if p.requires_grad}
+    frozen_router: list[torch.nn.Parameter] = []
+    if float(router_lr_scale) == 0.0:
+        for p in model.parameters():
+            if id(p) in router_ids:
+                p.requires_grad_(False)
+                frozen_router.append(p)
     trainable_params = [p for p in model.parameters() if p.requires_grad]
     if not trainable_params:
+        for p in frozen_router:
+            p.requires_grad_(True)
         raise RuntimeError("Model has zero trainable MoE parameters; call upcycle_crowd_v1_to_sparse_moe first.")
 
-    optimizer = Blockwise8BitAdamW(trainable_params, lr=lr, weight_decay=0.01)
+    if float(router_lr_scale) in (0.0, 1.0):
+        optimizer = Blockwise8BitAdamW(trainable_params, lr=lr, weight_decay=0.01)
+    else:
+        groups = [{"params": [p for p in trainable_params if id(p) not in router_ids], "lr": lr},
+                  {"params": [p for p in trainable_params if id(p) in router_ids], "lr": lr * float(router_lr_scale)}]
+        optimizer = Blockwise8BitAdamW([g for g in groups if g["params"]], lr=lr, weight_decay=0.01)
     model.train()
 
     initial_loss: float | None = None
@@ -1385,6 +1416,8 @@ def run_crowd_moe_opendiloco_inner_steps(
         tokens_processed += int(batch_size * max(1, seq_len - 1))
         steps_completed += 1
 
+    for p in frozen_router:  # back in the bucket layout before the buckets are read
+        p.requires_grad_(True)
     buckets_after = extract_moe_trainable_buckets(model, num_router_fragments=num_router_fragments)
     pseudo_grads = {
         k: (buckets_before[k] - buckets_after[k]).contiguous()

@@ -71,6 +71,7 @@ DEFAULT_GATEWAY = "https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app"
 
 HTTP_TIMEOUT_S = 5.0
 SUBPROCESS_TIMEOUT_S = 5.0
+PWSH_SUBPROCESS_TIMEOUT_S = 25.0
 DEV_VSCODE_SLO_SECONDS = 60.0
 WIN11_ONBOARD_SLO_SECONDS = 300.0
 DEFAULT_YIELD_BUDGET_MS = 1500.0
@@ -813,9 +814,47 @@ def _invoke_http_fn(
     return _normalize_http_return(raw)
 
 
+_SAFE_RUNTIME_ENV_KEYS: tuple[str, ...] = (
+    "PATH",
+    "HOME",
+    "USERPROFILE",
+    "SYSTEMROOT",
+    "WINDIR",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+)
+
+
+def _build_subprocess_env(environ: Mapping[str, str] | None) -> dict[str, str]:
+    """Build a deterministic subprocess environment without leaking host corporate-proxy false positives."""
+    if environ is None:
+        sub_env = dict(os.environ)
+    else:
+        sub_env = {
+            k: os.environ[k]
+            for k in _SAFE_RUNTIME_ENV_KEYS
+            if k in os.environ and os.environ[k]
+        }
+        for k, v in environ.items():
+            sub_env[str(k)] = str(v)
+    sub_env.setdefault("POWERSHELL_TELEMETRY_OPTOUT", "1")
+    sub_env.setdefault("POWERSHELL_UPDATECHECK", "Off")
+    sub_env.setdefault("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
+    sub_env.setdefault("DOTNET_NOLOGO", "1")
+    return sub_env
+
+
 def default_subprocess_runner(
     argv: Sequence[str],
     timeout_s: float = SUBPROCESS_TIMEOUT_S,
+    *,
+    environ: Mapping[str, str] | None = None,
 ) -> tuple[int, str]:
     """Run a bounded local read-only command with ``shell=False``, blocking ``gcloud`` and lateral tools."""
     if isinstance(argv, (str, bytes)) or not isinstance(argv, Sequence) or not argv:
@@ -835,6 +874,7 @@ def default_subprocess_runner(
             text=True,
             errors="replace",
             timeout=min(max(0.2, float(timeout_s)), 30.0),
+            env=_build_subprocess_env(environ),
             check=False,
             shell=False,
         )
@@ -848,16 +888,28 @@ def default_subprocess_runner(
         return 127, f"os_error:{type(exc).__name__}"
 
 
-def _invoke_runner(runner: RunnerFn, argv: Sequence[str], timeout_s: float) -> tuple[int, str]:
+def _invoke_runner(
+    runner: RunnerFn,
+    argv: Sequence[str],
+    timeout_s: float,
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> tuple[int, str]:
     sig = inspect.signature(runner)
     params = list(sig.parameters.values())
     has_varargs = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params)
+    has_environ_kw = "environ" in sig.parameters
     pos_params = [
         p
         for p in params
         if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
     ]
-    res = runner(list(argv), timeout_s) if (has_varargs or len(pos_params) >= 2) else runner(list(argv))
+    kw: dict[str, Any] = {"environ": environ} if has_environ_kw else {}
+    res = (
+        runner(list(argv), timeout_s, **kw)
+        if (has_varargs or len(pos_params) >= 2)
+        else runner(list(argv), **kw)
+    )
     if isinstance(res, tuple) and len(res) >= 2:
         out = str(res[1] or "")
         if len(res) >= 3 and res[2]:
@@ -1955,10 +2007,14 @@ def audit_windows_launcher_contract(
     bash_help_ok = False
     if sh_exists:
         subprocess_calls += 1
-        rc_syn, _ = _invoke_runner(runner, ["bash", "-n", str(eff_sh)], SUBPROCESS_TIMEOUT_S)
+        rc_syn, _ = _invoke_runner(
+            runner, ["bash", "-n", str(eff_sh)], SUBPROCESS_TIMEOUT_S, environ=environ
+        )
         bash_syntax_ok = rc_syn == 0
         subprocess_calls += 1
-        rc_help, out_help = _invoke_runner(runner, ["bash", str(eff_sh), "--help"], SUBPROCESS_TIMEOUT_S)
+        rc_help, out_help = _invoke_runner(
+            runner, ["bash", str(eff_sh), "--help"], SUBPROCESS_TIMEOUT_S, environ=environ
+        )
         bash_help_ok = rc_help == 0 and "--gamer-whisper" in out_help and "--connect" in out_help
 
     sh_ok = bool(sh_exists and sh_header_ok and sh_flags_ok and sh_safe_ok and bash_syntax_ok and bash_help_ok)
@@ -1989,10 +2045,14 @@ def audit_windows_launcher_contract(
                 "-DryRun",
                 "-Json",
             ],
-            SUBPROCESS_TIMEOUT_S,
+            PWSH_SUBPROCESS_TIMEOUT_S,
+            environ=environ,
         )
+        raw_pw = out_pw.strip()
+        if rc_pw == 0 and raw_pw and not raw_pw.startswith("{") and "{" in raw_pw:
+            raw_pw = raw_pw[raw_pw.find("{") :]
         try:
-            parsed_pw = json.loads(out_pw) if rc_pw == 0 and out_pw.strip() else {}
+            parsed_pw = json.loads(raw_pw) if rc_pw == 0 and raw_pw else {}
         except json.JSONDecodeError:
             parsed_pw = {}
         pwsh_dry_run_ok = bool(

@@ -193,7 +193,7 @@ function Resolve-ValidatedGateway {
     if ([string]::IsNullOrWhiteSpace($RawGateway)) {
         throw "Gateway URL must not be empty."
     }
-    $cleaned = $RawGateway.Trim().TrimEnd("/")
+    $cleaned = ($RawGateway.Trim() -replace '/+$', '')
     if ($cleaned -match '\s' -or $cleaned -match '[\x00-\x1f\x7f]') {
         throw "Gateway URL must not contain whitespace or control characters."
     }
@@ -207,7 +207,7 @@ function Resolve-ValidatedGateway {
     if ($parsed.AbsolutePath -ne "" -and $parsed.AbsolutePath -ne "/") {
         throw "Gateway URL must be a bare origin without a path suffix."
     }
-    $hostLower = $parsed.Host.ToLowerInvariant().Trim("[", "]")
+    $hostLower = (($parsed.Host.ToLowerInvariant()) -replace '^\[|\]$', '')
     $schemeLower = $parsed.Scheme.ToLowerInvariant()
     $isLoopback = $hostLower -in @("127.0.0.1", "localhost", "::1")
     $isRunApp = $hostLower -match '^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+run\.app$'

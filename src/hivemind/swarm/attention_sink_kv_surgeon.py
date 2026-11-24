@@ -461,7 +461,7 @@ def detect_massive_sink_heads_and_channels(
         is_rogue = mid_spike_ratio >= threshold
         is_bos_sink = bos_sink_ratio >= threshold
 
-        ch_mid_max = z64[mid_mask, h_idx, :].abs().max(dim=0).values
+        ch_mid_max = z64[mid_mask][:, h_idx, :].abs().max(dim=0).values
         ch_ratios = ch_mid_max / channel_baseline
         r_chs = [int(c) for c in range(d_h) if float(ch_ratios[c].item()) >= threshold]
         if is_rogue and not r_chs:
@@ -469,7 +469,7 @@ def detect_massive_sink_heads_and_channels(
             r_chs = [int(c) for c in range(d_h) if float(ch_mid_max[c].item()) >= 0.5 * top_val]
 
         if has_sink_tokens:
-            ch_bos_max = z64[sink_mask, h_idx, :].abs().max(dim=0).values
+            ch_bos_max = z64[sink_mask][:, h_idx, :].abs().max(dim=0).values
             b_chs = [int(c) for c in range(d_h) if float(ch_bos_max[c].item() / channel_baseline) >= threshold]
         else:
             b_chs = []
@@ -495,7 +495,7 @@ def detect_massive_sink_heads_and_channels(
             rogue_channels_by_head[h_idx] = r_chs
             rogue_flat_channels.extend(h_idx * d_h + c for c in r_chs)
             spiked_tok_mask = h_mid_norms >= threshold * denom_h
-            z_sp = z64[mid_mask, h_idx, :][spiked_tok_mask]
+            z_sp = z64[mid_mask][:, h_idx, :][spiked_tok_mask]
             rogue_head_directions[h_idx] = _extract_dominant_direction(z_sp)
             if w_o64 is not None:
                 w_h = w_o64[:, rogue_head_slices[h_idx]]
@@ -1268,7 +1268,7 @@ def _measure_target_spike_residual_rms(
         h_idx = int(tgt["head_idx"])
         o_mod, _, _, _ = _resolve_attn_interface(model.blocks[l_idx].attn, block_idx=l_idx)
         w_h = o_mod.weight[:, h_slice].detach().to("cpu", dtype=torch.float64)
-        z_mid = traj["per_layer_heads"][l_idx][mid_mask, h_idx, :].to(torch.float64)
+        z_mid = traj["per_layer_heads"][l_idx][mid_mask][:, h_idx, :].to(torch.float64)
         if proj_mode == "head_input_nullspace":
             proj = (z_mid @ dir_vec).unsqueeze(1) * (w_h @ dir_vec).unsqueeze(0)
         else:

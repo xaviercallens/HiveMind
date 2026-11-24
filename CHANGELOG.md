@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — 2026-11-11 — E15-J draft pre-registration: an LLM-JEPA term on GWAYA-gated fine-tuning (docs only, no version tag)
+
+- `artifacts/experiments/E15J_llm_jepa_prereg_draft.json` is a **draft** preregistration. It is not frozen, has no `design_hash` and no `registered_utc`, and nothing has been run.
+  - **Question:** does the LLM-JEPA embedding-alignment term (Huang, LeCun & Balestriero, arXiv:2509.14252) make E15's inconclusive rejection-sampling fine-tuning pay off?
+  - **Setting:** (λ, k) = (1, 1), fixed in advance.
+  - **Arms:** plain LoRA (A), A + JEPA term (J) and a shuffled-pair control (S), each trained with 3 seeds.
+  - **Primary test:** MBPP-sanitized sign test.
+  - **Memory:** a pre-run T4 free-VRAM gate (AGENTS.md ≥ 4,300 MiB).
+  - **Method source:** the loss is taken from the reference code (`galilai-group/llm-jepa`, Apache-2.0, pinned `ea0017c`).
+- `docs/E15J_LLM_JEPA_PILOT.md`: the plan in prose, with the paper's caveats carried over and the decision table.
+- Foundation paper (`paper/hivemind_foundation_article.tex`): new subsection §E15-J (planned, not run) after §E16, and bibliography entry `huang2025llmjepa`.
+  - It adds no numbers to the claim ledger.
+  - The PDF and the manuscript version (v4.2.0) are left unchanged until the next Zenodo release.
+- `ROADMAP.md` `HM-S10-11`: pointer to the E15-J draft.
+
 ## v3.4.2 — 2026-11-15 — CrowdGPT weekend: honest pages, measured receipts, Multi-Krum (PRs #903, #912–#919, #923)
 
 - **Visitors land on the right page and read true statements (PR #917):** links pasted with trailing punctuation (`/signup)`, `/signup](…`) now redirect (307, allow-listed pages only) instead of returning 404; the `/raid` page shows the configured sign-up grant instead of a hard-coded "500 HMT", describes training the dense Crowd-v1 with CrowdGPT's official client instead of the stopped MoE split, and points to discussion #909; the agent-readable `/v1/hivemind/community/v34-outreach` JSON marks the MoE concept stopped. **Needs a gateway deploy to take effect.**

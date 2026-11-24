@@ -204,3 +204,69 @@ Suite à la discussion de 13 messages sur [`r/SelfHostedAI/comments/1xjc76k/turn
 | **`P6`** | `u/lcpjj_` *(Commentaires #7 & #10)*, `u/OrganizationTop9026` *(Commentaire #9)* | **Durcissement Sécurité, Redaction des Endpoints Publics & Honnêteté du Catalogue Modèles :** Authentification durcie (sans casser la connexion des anciens utilisateurs), omission de `endpoint_url` sur `/v1/hivemind/producers/fleet` pour les appels non authentifiés, bouclier `hivemind_producer_shield.py` (`HIVEMIND_ENDPOINT_TOKEN`, Ollama `>= 0.1.34` contre `CVE-2024-37032`), et marquage honnête *« Planned, not trained yet »* pour les dépôts Hugging Face non publiés. | [`GET /v1/hivemind/producers/fleet`](../src/hivemind/router/gateway.py), [`GET /v1/hivemind/selfhosted-p2p/audit`](../src/hivemind/router/gateway.py) |
 
 
+
+
+---
+
+## 7. Saison 38 (`IP-JEPA-01..04`) : LLM-JEPA (`arXiv:2509.14252`) comme objectif auxiliaire des rondes QLoRA nocturnes — études `E28`, `E28b` et `E29` mesurées sur RTX 2070
+
+**Article :** H. Huang, Y. LeCun, R. Balestriero, *« LLM-JEPA: Large Language Models Meet Joint Embedding Predictive Architectures »*, [`arXiv:2509.14252`](https://arxiv.org/abs/2509.14252) (code : [`rbalestr-lab/llm-jepa`](https://github.com/rbalestr-lab/llm-jepa)).
+
+**Idée :** on garde la perte next-token et on ajoute un terme dans l'espace des embeddings entre deux *vues* d'un même contenu (requête ↔ code, question ↔ réponse, FR ↔ EN) :
+`L = L_LLM + λ · (1 − cos(Pred(Enc(Text)), Enc(Code)))`. Le prédicteur réutilise les poids du modèle via `k` jetons `[PRED]`, et un masque d'attention causal par blocs empaquette les deux vues en une seule passe supplémentaire. Le *loss dropout* `α` ramène le nombre nominal de passes à `(2 − α)×`, avec la règle de co-réglage `λ(1 − α) = const` proposée pour le fine-tuning de modèles pré-entraînés (1B–8B, rangs LoRA 32–512).
+
+**Implémentation (`IP-JEPA-01..04`) :** [`src/hivemind/swarm/llm_jepa.py`](../src/hivemind/swarm/llm_jepa.py) (`pack_two_views`, `block_causal_mask`, `jepa_term`, `llm_jepa_loss`, `cotuned_lambda`, `view_gap_singular_values` et porte de promotion `evaluate_jepa_b3_gate` avec `gating = false` sur `view_gap_sv1`), vérifié à **100 % de couverture** par 12 tests dans [`tests/test_llm_jepa.py`](../tests/test_llm_jepa.py).
+
+### 7.1 Pilote `E28` (`IP-JEPA-01` — 5 graines, LR constant `3e-3`)
+
+Reçu : [`artifacts/experiments/E28_llm_jepa_pilot.json`](../artifacts/experiments/E28_llm_jepa_pilot.json) · Script : [`scripts/run_e28_llm_jepa_pilot.py`](../scripts/run_e28_llm_jepa_pilot.py). Llama 2 couches (`d = 64`) entraîné depuis zéro sur 600 paires d'entraînement / 400 paires tenues à l'écart (`copy/reverse/sort/rotate`).
+
+| Bras | Exact match tenu à l'écart | 1re valeur singulière `σ₁` de l'écart | Temps total / run |
+| :-- | :-- | :-- | :-- |
+| NTP seul | **75,90 % ± 7,43** | 149,85 | 91,8 s |
+| LLM-JEPA (`λ = 1`, `k = 1`) | **80,00 % ± 10,43** | 1,90 | 123,3 s |
+| Contrôle « vues mélangées » | **44,55 % ± 13,77** | 4,81 | 123,6 s |
+
+* **JEPA − NTP : +4,10 pts** (`t = 0,68`, positif 4/5) ⇒ **`P28a` non confirmée** à 5 graines sous LR constant ; **JEPA − vues mélangées : +35,45 pts** (`t = 5,65`, 5/5).
+
+### 7.2 Étude `E28b` (`IP-JEPA-02` — 10 graines, recuit cosinus, *loss dropout* `α ∈ {0,50 ; 0,75}` & co-réglage `λ`)
+
+Reçu : [`artifacts/experiments/E28b_llm_jepa_dropout_cotuning.json`](../artifacts/experiments/E28b_llm_jepa_dropout_cotuning.json) · Script : [`scripts/run_e28b_llm_jepa_dropout_cotuning.py`](../scripts/run_e28b_llm_jepa_dropout_cotuning.py) (10 graines `{82, 23, 37, 84, 4, 11, 19, 29, 41, 53}`, LR cosinus `3e-3 → 3e-4`, temps d'entraînement pur isolé de l'évaluation).
+
+| Bras | Exact match tenu à l'écart | NLL tenue à l'écart | `σ₁` écart | Temps train pur | Ratio vs NTP |
+| :-- | :-- | :-- | :-- | :-- | :-- |
+| `ntp` (`λ = 0`) | 72,68 % ± 13,27 | 0,3324 | 130,91 | 22,05 s | `1,000×` |
+| `jepa_full` (`λ = 1,0`, `α = 0,0`) | **89,02 % ± 6,07** | **0,0987** | **1,11** | 52,86 s | `2,397×` |
+| `jepa_drop50_cotuned` (`λ = 2,0`, `α = 0,50`) | 79,17 % ± 14,09 | 0,2397 | 1,25 | 37,88 s | `1,718×` |
+| `jepa_drop75_cotuned` (`λ = 4,0`, `α = 0,75`) | 61,10 % ± 26,69 | 0,5990 | 1,77 | 30,70 s | `1,392×` |
+| `jepa_drop75_naive` (`λ = 1,0`, `α = 0,75`) | **84,72 % ± 9,61** | **0,1596** | 2,25 | **30,64 s** | **`1,390×`** |
+| `jepa_shuf` (`λ = 1,0`, vues mélangées) | 50,05 % ± 21,72 | 0,7466 | 1,93 | 52,69 s | `2,390×` |
+
+* **`P28b_gain` CONFIRMÉE :** `jepa_full − ntp = +16,35 pts` (9/10 victoires, `t = 3,2805`, `p = 0,004761` unilatéral) et `+38,97 pts` contre `jepa_shuf` (`10/10` victoires, `p = 9,8e-5`), tout en divisant par plus de 2 la variance inter-graines (`13,27 % → 6,07 %`).
+* **`P28b_dropout` RÉFUTÉE pour le co-réglage `λ(1 − α) = const` depuis une initialisation aléatoire :** multiplier `λ` par `4×` à `α = 0,75` (`jepa_drop75_cotuned`) déstabilise certaines graines (`18,50 %` sur la graine 23 ; rétention `68,64 % < 95 %`, `-23,63 pts` face à `λ = 1,0`). En revanche, **garder `λ = 1,0` non mis à l'échelle à `α = 0,75` (`jepa_drop75_naive`)** gagne **`+12,05 pts` sur NTP** (`t = 3,5267`, `p = 0,003224`) et conserve **95,17 %** de la performance de `jepa_full` pour un coût d'entraînement réduit de **42,0 %** (`1,390×` NTP).
+
+### 7.3 Étude `E29` (`IP-JEPA-03` & `IP-JEPA-04` — Stage-2 `NF4` `GraniteMoE` QLoRA DiLoCo + Porte `B3`)
+
+Reçu : [`artifacts/experiments/E29_qlora_moe_jepa_pilot.json`](../artifacts/experiments/E29_qlora_moe_jepa_pilot.json) · Script : [`scripts/run_e29_qlora_moe_jepa_b3_pilot.py`](../scripts/run_e29_qlora_moe_jepa_b3_pilot.py). Vrai modèle `GraniteMoeForCausalLM` 4-bit `NF4` (`bitsandbytes`, 4 experts top-2, LoRA `r = 4` sur `q_proj, v_proj` + `lm_head`, `K = 2` fragments non-IID, 8 rondes DiLoCo × 35 pas internes, 5 graines sur RTX 2070, `≤ 37,03 MiB` de pic VRAM CUDA).
+
+| Bras | NLL cible finale | Acc. jetons | Gain NLL `B3` (IC 95 %) | `σ₁` (non bloquant) | Pic VRAM | Porte `B3` |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+| `qlora_ntp` (`λ = 0`) | **1,293622 ± 0,070025** | **74,06 %** | Référence (`n = 5`) | 70,7279 | 37,01 MiB | Référence |
+| `qlora_jepa_drop75` (`α = 0,75`, `λ = 2,0`) | 1,400363 ± 0,089132 | 72,51 % | `-0,106741` `[-0,1301 ; -0,0830]` | 36,8428 (`0,521×`) | 37,03 MiB | **REFUSÉ** |
+| `qlora_jepa_full` (`α = 0,0`, `λ = 0,5`) | 1,434525 ± 0,068891 | 72,36 % | `-0,140903` `[-0,1522 ; -0,1293]` | 23,1986 (`0,328×`) | 37,01 MiB | **REFUSÉ** |
+| `qlora_jepa_shuf` (vues mélangées) | 1,428569 ± 0,068203 | 72,72 % | `-0,134947` `[-0,1569 ; -0,1130]` | 23,4985 (`0,332×`) | 37,01 MiB | **REFUSÉ** |
+
+* **Validation opérationnelle de `IP-JEPA-03` (`servable = false`) :** sous QLoRA `NF4` à très faible rang (`r = 4` sur l'attention seule, experts FFN gelés en `NF4`), la capacité d'adaptation limitée arbitre l'alignement cosinus du dernier jeton contre la NLL par jeton (`-0,107` à `-0,141` nats). La porte `evaluate_jepa_b3_gate` bloque donc toute promotion (**0 modèle servi modifié**).
+* **Validation empirique décisive de `IP-JEPA-04` (`gating = false`) :** `view_gap_sv1` chute de `70,73` à `23,20` sur `qlora_jepa_full` **et tout autant à `23,50` sur le contrôle négatif à vues mélangées `qlora_jepa_shuf`** alors que la NLL se dégrade ! Utiliser `σ₁` comme critère de promotion aurait promu à tort un adaptateur dégradé ; il reste donc strictement informatif.
+
+### 7.4 État des tickets `IP-JEPA-01..04` et suite planifiée (`E15-J`)
+
+| Ticket | Livrable | Statut & Reçu |
+| :-- | :-- | :-- |
+| `IP-JEPA-01` | Module [`llm_jepa.py`](../src/hivemind/swarm/llm_jepa.py) + 12 tests (100 % cov.) + pilote `E28` | **Livré** (`E28_llm_jepa_pilot.json`, `PROV-87`) |
+| `IP-JEPA-02` | `E28b` à 10 graines + *loss dropout* `α ∈ {0,50 ; 0,75}` + comparaison co-réglé vs non mis à l'échelle | **Livré** (`E28b_llm_jepa_dropout_cotuning.json`, `PROV-88` : `P28b_gain` confirmée `+16,35 pts`, `jepa_drop75_naive` `+12,05 pts`) |
+| `IP-JEPA-03` | Intégration Stage-2 `NF4` `GraniteMoE` QLoRA DiLoCo + porte de promotion `evaluate_jepa_b3_gate` (`E29`) | **Livré** (`E29_qlora_moe_jepa_pilot.json`, `PROV-89` : refus `B3` vérifié sur `r = 4`, `≤ 37,03 MiB` VRAM) |
+| `IP-JEPA-04` | Valeur singulière `view_gap_sv1` journalisée avec `gating = false` à côté de la NLL tenue à l'écart | **Livré** (preuve empirique sur `qlora_jepa_shuf` qu'elle ne doit jamais bloquer/promouvoir) |
+| `E15-J` (`HM-S10-11`) | Test 3 graines sur modèle pré-entraîné `Qwen2.5-Coder-1.5B` (RFT GWAYA, rang LoRA `r ≥ 16–32` attention + MLP, `(λ, k) = (1, 1)`, `α = 0,75` non sur-amplifié) | **Planifié (non exécuté)** — fenêtre Spot T4 avec plancher `≥ 4 300 MiB` VRAM libre et porte `B3` |
+
+> Aucun modèle servi ne change tant qu'un adaptateur pré-entraîné (`r ≥ 16–32`, `E15-J` ou ronde `hmq_00148+` FR/EN) n'a pas franchi positivement la porte `B3`. Toujours respecter le plancher de **≥ 4 300 MiB** de VRAM libre sur le T4 et le budget GCP **≤ 150 USD/mois**.

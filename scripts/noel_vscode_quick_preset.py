@@ -43,6 +43,7 @@ import re
 import secrets
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -54,6 +55,7 @@ from urllib.parse import urlsplit
 
 SCHEMA = "hivemind.noel_vscode_quick_preset/1"
 RECEIPT_OBJECT = "hivemind.noel_vscode_quick_preset_receipt"
+CES_QUEUE_SCHEMA = "hivemind.vscode_setup_ces_queue/1"
 MANIFEST_OBJECT = "hivemind.onboarding.manifest"
 CAMPAIGN_ID = "noel-2026-easy-onboard"
 FINANCIAL_PROMISE = "0.00 EUR / 0.00 USD"
@@ -65,6 +67,10 @@ DEFAULT_ROLE = "prosumer"
 DEFAULT_HOST_LABEL = "personal-pc"
 DEFAULT_TRAINING_STACK = "qlora-moe+diloco+amcp-aglet+boinc"
 DEFAULT_ACTIVE_CAMPAIGN = "E8-STAGE2-TINY-GRANITE-MOE-QLORA"
+DEFAULT_CES_QUEUE_REL = ".hivemind/vscode_setup_ces_queue.json"
+DEFAULT_MAX_CES_QUEUE_ENTRIES = 128
+DEFAULT_MAX_CES_DELIVERED = 512
+MAX_CES_QUEUE_ENTRIES_CEILING = 4096
 
 SLO_BUDGET_SECONDS = 60.0
 HTTP_TIMEOUT_S = 5.0
@@ -251,6 +257,11 @@ _GIT_REMOTE_URL_RE = re.compile(
 )
 _CSP_HEADER_NONCE_RE = re.compile(r"'nonce-([A-Za-z0-9_+=/=-]{8,128})'")
 _HTML_ATTR_NONCE_RE = re.compile(r'\bnonce="([A-Za-z0-9_+=/=-]{8,128})"')
+_HTML_SINGLE_NONCE_ATTR_RE = re.compile(r"\bnonce='([A-Za-z0-9_+=/=-]{8,128})'")
+_STRIP_ANY_NONCE_ATTR_RE = re.compile(r"""\bnonce=(?:"[^"]*"|'[^']*')""")
+_SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+_CES_LOCK_GUARD = threading.Lock()
+_CES_PATH_LOCKS: dict[Path, threading.Lock] = {}
 _FORBIDDEN_DOM_SINK_RE = re.compile(
     r"\b(?:" + "inner" + "HTML|" + "outer" + "HTML|" + "insertAdjacent" + r"HTML|document\.write)\b"
 )
@@ -925,7 +936,7 @@ def _inspect_holiday_html_route(
     has_doctype = "<!doctype html" in html_text.lower()
     csp_unsafe = "'unsafe-inline'" in csp_hdr.lower() or "'unsafe-eval'" in csp_hdr.lower()
     hdr_nonces = _CSP_HEADER_NONCE_RE.findall(csp_hdr)
-    attr_nonces = _HTML_ATTR_NONCE_RE.findall(html_text)
+    attr_nonces = _HTML_ATTR_NONCE_RE.findall(html_text) + _HTML_SINGLE_NONCE_ATTR_RE.findall(html_text)
     nonce = hdr_nonces[0] if hdr_nonces else None
 
     csp_verified = bool(
@@ -939,7 +950,7 @@ def _inspect_holiday_html_route(
     if nonce is not None:
         seen_nonces.add(nonce)
 
-    stripped_html = _HTML_ATTR_NONCE_RE.sub('nonce=""', html_text)
+    stripped_html = _STRIP_ANY_NONCE_ATTR_RE.sub('nonce=""', html_text)
     dom_clean = not (
         _FORBIDDEN_DOM_SINK_RE.search(stripped_html) or _STATIC_FIG_UNIT_RE.search(stripped_html)
     )
@@ -1014,12 +1025,14 @@ def _inspect_manifest_json(body: Mapping[str, Any]) -> tuple[bool, dict[str, Any
 
 
 def _inspect_feedback_summary_json(body: Mapping[str, Any]) -> tuple[bool, dict[str, Any], str]:
-    required_keys = ("total_responses", "mean_ease_rating", "zero_game_lag_ratio", "by_profile")
-    if not all(k in body for k in required_keys):
+    has_ease = "mean_ease_rating" in body or "average_ease_rating" in body
+    if not has_ease or not all(
+        k in body for k in ("total_responses", "zero_game_lag_ratio", "by_profile")
+    ):
         return False, {}, "missing_feedback_summary_keys"
 
     tot = body.get("total_responses")
-    mean_ease = body.get("mean_ease_rating")
+    mean_ease = body["mean_ease_rating"] if "mean_ease_rating" in body else body["average_ease_rating"]
     lag_ratio = body.get("zero_game_lag_ratio")
     by_prof = body.get("by_profile")
 
@@ -1333,6 +1346,233 @@ def verify_cloud_run_holiday_parity(
     )
 
 
+def run_one_shot_quick_health_preflight(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    http_fn: HttpFn = default_http_request,
+    require_holiday_routes: bool = False,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Zero-inference 1-shot `/health` + `/v1/models` + `/quick` + `/feedback/summary` health preflight."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    clean_gw = validate_gateway_url(gateway)
+
+    compliance = evaluate_personal_pc_compliance(env=env, cwd=cwd, lang=lang_code)
+    if not compliance["compliance_ok"]:
+        return _attach_receipt(
+            {
+                "schema": SCHEMA,
+                "mode": "one_shot_quick_preflight",
+                "ok": False,
+                "ready": False,
+                "preflight_ok": False,
+                "compliance_ok": False,
+                "exit_code": 2,
+                "verdict": "blocked_corporate_environment",
+                "gateway": clean_gw,
+                "lang": lang_code,
+                "health_ok": False,
+                "models_preflight_ok": False,
+                "quick_route_ok": False,
+                "feedback_endpoint_ok": False,
+                "live_models_count": 0,
+                "coder_model_present": False,
+                "models": [],
+                "stale_revision_detected": False,
+                "missing_or_stale_routes": [],
+                "require_holiday_routes": bool(require_holiday_routes),
+                "feedback_summary": {},
+                "local_fallback_guidance": compliance["summary"],
+                "routes": {},
+                "diagnostics": [compliance["summary"]],
+                "zero_inference_verified": True,
+                "file_writes": 0,
+                "network_calls": 0,
+                "compliance": compliance,
+                "summary": compliance["summary"],
+            }
+        )
+
+    routes_report: dict[str, dict[str, Any]] = {}
+    missing_or_stale: list[str] = []
+    diagnostics: list[str] = []
+    seen_nonces: set[str] = set()
+    network_calls = 0
+
+    h_status, h_body = _invoke_http_fn(http_fn, "GET", f"{clean_gw}/health", timeout_s=HTTP_TIMEOUT_S)
+    network_calls += 1
+    health_ok = bool(h_status == 200 and h_body.get("status") == "ok")
+    if not health_ok:
+        missing_or_stale.append("/health")
+        diagnostics.append(f"/health:http_{h_status}")
+    routes_report["/health"] = {
+        "path": "/health",
+        "status_code": h_status,
+        "ok": health_ok,
+        "reason": "ok" if health_ok else f"http_{h_status}",
+    }
+
+    m_status, m_body = _invoke_http_fn(http_fn, "GET", f"{clean_gw}/v1/models", timeout_s=HTTP_TIMEOUT_S)
+    network_calls += 1
+    raw_models = m_body.get("data")
+    model_ids = (
+        [
+            str(item["id"]).strip()
+            for item in raw_models
+            if isinstance(item, Mapping) and isinstance(item.get("id"), str) and item["id"].strip()
+        ]
+        if isinstance(raw_models, list)
+        else []
+    )
+    live_models_count = len(model_ids)
+    coder_model_present = DEFAULT_MODELS[0] in model_ids
+    models_preflight_ok = bool(
+        m_status == 200 and isinstance(raw_models, list) and live_models_count > 0 and coder_model_present
+    )
+    if not models_preflight_ok:
+        missing_or_stale.append("/v1/models")
+        m_reason = (
+            f"http_{m_status}"
+            if m_status != 200 or not isinstance(raw_models, list)
+            else ("empty_model_list" if live_models_count == 0 else "missing_hivemind_coder")
+        )
+        diagnostics.append(f"/v1/models:{m_reason}")
+    else:
+        m_reason = "ok"
+    routes_report["/v1/models"] = {
+        "path": "/v1/models",
+        "status_code": m_status,
+        "ok": models_preflight_ok,
+        "live_models_count": live_models_count,
+        "coder_model_present": coder_model_present,
+        "reason": m_reason,
+    }
+
+    q_status, q_body = _invoke_http_fn(http_fn, "GET", f"{clean_gw}/quick", timeout_s=HTTP_TIMEOUT_S)
+    network_calls += 1
+    quick_route_ok, quick_detail = _inspect_holiday_html_route("/quick", q_status, q_body, seen_nonces)
+    routes_report["/quick"] = quick_detail
+    if not quick_route_ok:
+        missing_or_stale.append("/quick")
+        diagnostics.append(f"/quick:{quick_detail['reason']}")
+
+    fb_status, fb_body = _invoke_http_fn(
+        http_fn, "GET", f"{clean_gw}/v1/hivemind/onboarding/feedback/summary", timeout_s=HTTP_TIMEOUT_S
+    )
+    network_calls += 1
+    feedback_summary: dict[str, Any] = {}
+    if fb_status == 200:
+        feedback_endpoint_ok, feedback_summary, fb_reason = _inspect_feedback_summary_json(fb_body)
+    else:
+        feedback_endpoint_ok = False
+        fb_reason = f"http_{fb_status}"
+    if not feedback_endpoint_ok:
+        missing_or_stale.append("/v1/hivemind/onboarding/feedback/summary")
+        diagnostics.append(f"/v1/hivemind/onboarding/feedback/summary:{fb_reason}")
+    routes_report["/v1/hivemind/onboarding/feedback/summary"] = {
+        "path": "/v1/hivemind/onboarding/feedback/summary",
+        "status_code": fb_status,
+        "ok": feedback_endpoint_ok,
+        "reason": fb_reason,
+    }
+
+    core_ok = bool(health_ok and models_preflight_ok)
+    holiday_ok = bool(quick_route_ok and feedback_endpoint_ok)
+    stale_revision_detected = bool(
+        q_status == 404
+        or fb_status == 404
+        or (q_status == 200 and not quick_route_ok)
+        or (fb_status == 200 and not feedback_endpoint_ok)
+        or ((health_ok or m_status == 200) and not holiday_ok)
+    )
+    ready = bool(core_ok and (holiday_ok if require_holiday_routes else True))
+    exit_code = 0 if ready else 2
+
+    if not core_ok:
+        local_fallback_guidance = (
+            "Passerelle /health ou /v1/models (hivemind/coder) indisponible : vérifiez l'URL Cloud Run "
+            "ou démarrez un nœud local sur http://127.0.0.1:8000 (sans jamais utiliser de PC d'entreprise)."
+            if is_fr
+            else "Gateway /health or /v1/models (hivemind/coder) failed: verify your Cloud Run URL or "
+            "point --gateway to a local loopback gateway at http://127.0.0.1:8000 (personal PC only)."
+        )
+        verdict = "gateway_preflight_failed"
+        summary = (
+            f"ÉCHEC PRÉ-VOL PASSERELLE ({', '.join(missing_or_stale)}). {local_fallback_guidance}"
+            if is_fr
+            else f"GATEWAY PREFLIGHT FAILED ({', '.join(missing_or_stale)}). {local_fallback_guidance}"
+        )
+    elif not holiday_ok:
+        local_fallback_guidance = (
+            "Révision Cloud Run en retard détectée sur /quick ou /feedback/summary : votre configuration "
+            "Continue locale (~/.continue/config.yaml) reste prête sur /v1/models et les retours CES sont "
+            "mis en file locale (~/.hivemind/vscode_setup_ces_queue.json) pour --flush-ces-queue."
+            if is_fr
+            else "Stale Cloud Run revision detected on /quick or /feedback/summary: your local VS Code "
+            "Continue config (~/.continue/config.yaml) still works via /v1/models, and CES feedback "
+            "spools locally to ~/.hivemind/vscode_setup_ces_queue.json for later --flush-ces-queue."
+        )
+        verdict = "stale_cloud_run_revision" if require_holiday_routes else "ready_local_fallback"
+        summary = (
+            (
+                f"ÉCHEC PRÉ-VOL ROUTES NOËL ({', '.join(missing_or_stale)}). {local_fallback_guidance}"
+                if require_holiday_routes
+                else f"Passerelle /health et /v1/models prêts (mode repli local : {', '.join(missing_or_stale)})."
+            )
+            if is_fr
+            else (
+                f"HOLIDAY ROUTE PREFLIGHT BLOCKED ({', '.join(missing_or_stale)}). {local_fallback_guidance}"
+                if require_holiday_routes
+                else f"Gateway /health & /v1/models ready (local fallback active; stale routes: {', '.join(missing_or_stale)})."
+            )
+        )
+    else:
+        local_fallback_guidance = ""
+        verdict = "ready"
+        summary = (
+            f"Pré-vol 1-shot validé (/health, /v1/models={live_models_count}, /quick CSP, /feedback/summary)."
+            if is_fr
+            else f"1-shot quick preflight passed (/health, /v1/models={live_models_count}, /quick CSP, /feedback/summary)."
+        )
+
+    return _attach_receipt(
+        {
+            "schema": SCHEMA,
+            "mode": "one_shot_quick_preflight",
+            "ok": ready,
+            "ready": ready,
+            "preflight_ok": ready,
+            "compliance_ok": True,
+            "exit_code": exit_code,
+            "verdict": verdict,
+            "gateway": clean_gw,
+            "lang": lang_code,
+            "health_ok": health_ok,
+            "models_preflight_ok": models_preflight_ok,
+            "quick_route_ok": quick_route_ok,
+            "feedback_endpoint_ok": feedback_endpoint_ok,
+            "live_models_count": live_models_count,
+            "coder_model_present": coder_model_present,
+            "models": model_ids,
+            "stale_revision_detected": stale_revision_detected,
+            "missing_or_stale_routes": missing_or_stale,
+            "require_holiday_routes": bool(require_holiday_routes),
+            "feedback_summary": feedback_summary,
+            "local_fallback_guidance": local_fallback_guidance,
+            "routes": routes_report,
+            "diagnostics": diagnostics,
+            "zero_inference_verified": True,
+            "file_writes": 0,
+            "network_calls": network_calls,
+            "compliance": compliance,
+            "summary": summary,
+        }
+    )
+
+
 def _write_file_secure_atomic(path: Path, content: str, *, posix_mode: int, eff_os: str) -> None:
     """Atomically write UTF-8 `content` to `path` with `posix_mode` (`0600`) from creation."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1519,6 +1759,199 @@ def _assert_workspace_content_secret_free(content: str) -> str:
     return content
 
 
+_CONTINUE_MANAGED_HEADER_LINES: tuple[str, ...] = (
+    "# HiveMind personal hobby/open-source coding preset for VS Code (Continue)",
+    "# 100% personal home PCs & personal hobby/open-source projects ONLY (0.00 EUR / 0.00 USD, AGPL-3.0).",
+    "# Never use on corporate hardware or send corporate/confidential source code.",
+)
+
+
+def _strip_yaml_scalar_comment(raw: str) -> str:
+    """Strip unquoted inline YAML `# comment` and surrounding matching quotes."""
+    in_sq = False
+    in_dq = False
+    out: list[str] = []
+    for idx, ch in enumerate(raw):
+        if ch == "'" and not in_dq:
+            in_sq = not in_sq
+        elif ch == '"' and not in_sq and (idx == 0 or raw[idx - 1] != "\\"):
+            in_dq = not in_dq
+        elif ch == "#" and not in_sq and not in_dq and (idx == 0 or raw[idx - 1].isspace()):
+            break
+        out.append(ch)
+    cleaned = "".join(out).strip()
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in ("'", '"'):
+        return cleaned[1:-1].strip()
+    return cleaned
+
+
+def _build_continue_model_dicts(
+    gateway: str,
+    api_key: str,
+    *,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> list[dict[str, Any]]:
+    clean_gw = validate_gateway_url(gateway)
+    if not is_valid_hivemind_key(api_key):
+        raise QuickPresetError("Cannot render Continue config without a valid hm-... API key.")
+    if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 64:
+        raise QuickPresetError("max_tokens must be an integer >= 64.")
+    clean_key = api_key.strip()
+    api_base = f"{clean_gw}/v1"
+    return [
+        {
+            "name": "HiveMind Coder",
+            "provider": "openai",
+            "model": DEFAULT_MODELS[0],
+            "apiBase": api_base,
+            "apiKey": clean_key,
+            "roles": ["chat", "edit", "apply"],
+            "defaultCompletionOptions": {"maxTokens": max_tokens},
+        },
+        {
+            "name": "HiveMind Bee-Stars (Science)",
+            "provider": "openai",
+            "model": DEFAULT_MODELS[1],
+            "apiBase": api_base,
+            "apiKey": clean_key,
+            "roles": ["chat"],
+            "defaultCompletionOptions": {"maxTokens": max_tokens},
+        },
+    ]
+
+
+def _render_continue_model_yaml_lines(
+    gateway: str,
+    api_key: str,
+    *,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    item_indent: str = "  ",
+) -> list[str]:
+    models = _build_continue_model_dicts(gateway, api_key, max_tokens=max_tokens)
+    sub = item_indent + "  "
+    sub2 = sub + "  "
+    lines: list[str] = []
+    for entry in models:
+        lines.extend(
+            [
+                f"{item_indent}- name: {entry['name']}",
+                f"{sub}provider: {entry['provider']}",
+                f"{sub}model: {entry['model']}",
+                f"{sub}apiBase: {entry['apiBase']}",
+                f"{sub}apiKey: {entry['apiKey']}",
+                f"{sub}roles:",
+                *[f"{sub2}- {role}" for role in entry["roles"]],
+                f"{sub}defaultCompletionOptions:",
+                f"{sub2}maxTokens: {entry['defaultCompletionOptions']['maxTokens']}",
+            ]
+        )
+    return lines
+
+
+def _is_hivemind_continue_model_dict(entry: Any) -> bool:
+    if not isinstance(entry, Mapping):
+        return False
+    model_val = str(entry.get("model") or "").strip().lower()
+    name_val = str(entry.get("name") or entry.get("title") or "").strip().lower()
+    api_base = str(entry.get("apiBase") or "").strip().lower()
+    api_key = str(entry.get("apiKey") or "").strip().lower()
+    provider = str(entry.get("provider") or "").strip().lower()
+    if model_val in {"hivemind/coder", "hivemind/bee-stars", "hivemind/auto"} or model_val.startswith("hivemind/"):
+        return True
+    return bool(
+        name_val.startswith("hivemind")
+        and (
+            provider == "openai"
+            or ".run.app" in api_base
+            or api_key.startswith(("hm-", "hm_live_"))
+            or "hivemind" in api_base
+        )
+    )
+
+
+def _is_hivemind_continue_model_item(item_lines: Sequence[str]) -> bool:
+    kv: dict[str, str] = {}
+    for raw_ln in item_lines:
+        stripped = raw_ln.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("-"):
+            stripped = stripped[1:].strip()
+        if ":" in stripped and not stripped.startswith("- "):
+            k_raw, v_raw = stripped.split(":", 1)
+            k = k_raw.strip().lower()
+            if k and " " not in k:
+                kv[k] = _strip_yaml_scalar_comment(v_raw)
+    return _is_hivemind_continue_model_dict(
+        {
+            "name": kv.get("name") or kv.get("title") or "",
+            "provider": kv.get("provider") or "",
+            "model": kv.get("model") or "",
+            "apiBase": kv.get("apibase") or "",
+            "apiKey": kv.get("apikey") or "",
+        }
+    )
+
+
+def _split_continue_yaml_models(
+    lines: list[str],
+) -> tuple[int | None, int, list[str], list[list[str]], int]:
+    """Locate top-level `models:` block and split it into sequence item line groups."""
+    models_idx: int | None = None
+    for idx, ln in enumerate(lines):
+        if ln and not ln[0].isspace() and not ln.startswith("#"):
+            m = re.match(r"^models\s*:(.*)$", ln)
+            if m:
+                inline_val = _strip_yaml_scalar_comment(m.group(1))
+                if inline_val and inline_val.lower() not in ("[]", "~", "null"):
+                    raise QuickPresetError("Existing Continue config.yaml has non-block 'models' value.")
+                models_idx = idx
+                break
+    if models_idx is None:
+        return None, len(lines), [], [], 2
+
+    end_idx = len(lines)
+    for idx in range(models_idx + 1, len(lines)):
+        ln = lines[idx]
+        if ln and not ln[0].isspace() and not ln.startswith(("#", "-")):
+            end_idx = idx
+            break
+
+    while end_idx > models_idx + 1 and (
+        not lines[end_idx - 1].strip() or lines[end_idx - 1].startswith("#")
+    ):
+        end_idx -= 1
+
+    body = lines[models_idx + 1 : end_idx]
+    seq_indent: int | None = None
+    for ln in body:
+        lst = ln.lstrip(" ")
+        if lst == "-" or lst.startswith("- "):
+            seq_indent = len(ln) - len(lst)
+            break
+    if seq_indent is None:
+        return models_idx, end_idx, body, [], 2
+
+    leading_comments: list[str] = []
+    items: list[list[str]] = []
+    current: list[str] | None = None
+    for ln in body:
+        lst = ln.lstrip(" ")
+        indent = len(ln) - len(lst)
+        is_item_start = indent == seq_indent and (lst == "-" or lst.startswith("- "))
+        if is_item_start:
+            if current is not None:
+                items.append(current)
+            current = [ln]
+        elif current is not None:
+            current.append(ln)
+        else:
+            leading_comments.append(ln)
+    if current is not None:
+        items.append(current)
+    return models_idx, end_idx, leading_comments, items, seq_indent
+
+
 def build_continue_provider_yaml(
     gateway: str,
     api_key: str,
@@ -1526,41 +1959,138 @@ def build_continue_provider_yaml(
     max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> str:
     """Render Continue OpenAI-compatible YAML (`hivemind/coder` & `hivemind/bee-stars`)."""
-    clean_gw = validate_gateway_url(gateway)
-    if not is_valid_hivemind_key(api_key):
-        raise QuickPresetError("Cannot render Continue provider YAML without a valid hm-... API key.")
-    if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 64:
-        raise QuickPresetError("max_tokens must be an integer >= 64.")
-    clean_key = api_key.strip()
-    return (
-        "# HiveMind personal hobby/open-source coding preset for VS Code (Continue)\n"
-        "# 100% personal home PCs & personal hobby/open-source projects ONLY (0.00 EUR / 0.00 USD, AGPL-3.0).\n"
-        "# Never use on corporate hardware or send corporate/confidential source code.\n"
-        "name: HiveMind Holiday Quick Preset\n"
-        "version: 0.0.1\n"
-        "schema: v1\n"
-        "models:\n"
-        "  - name: HiveMind Coder\n"
-        "    provider: openai\n"
-        f"    model: {DEFAULT_MODELS[0]}\n"
-        f"    apiBase: {clean_gw}/v1\n"
-        f"    apiKey: {clean_key}\n"
-        "    roles:\n"
-        "      - chat\n"
-        "      - edit\n"
-        "      - apply\n"
-        "    defaultCompletionOptions:\n"
-        f"      maxTokens: {max_tokens}\n"
-        "  - name: HiveMind Bee-Stars (Science)\n"
-        "    provider: openai\n"
-        f"    model: {DEFAULT_MODELS[1]}\n"
-        f"    apiBase: {clean_gw}/v1\n"
-        f"    apiKey: {clean_key}\n"
-        "    roles:\n"
-        "      - chat\n"
-        "    defaultCompletionOptions:\n"
-        f"      maxTokens: {max_tokens}\n"
+    model_lines = _render_continue_model_yaml_lines(
+        gateway, api_key, max_tokens=max_tokens, item_indent="  "
     )
+    return "\n".join(
+        [
+            *_CONTINUE_MANAGED_HEADER_LINES,
+            "name: HiveMind Holiday Quick Preset",
+            "version: 0.0.1",
+            "schema: v1",
+            "models:",
+            *model_lines,
+        ]
+    ) + "\n"
+
+
+def merge_continue_config_yaml(
+    existing_text: str | None,
+    *,
+    gateway: str,
+    api_key: str,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> str:
+    """Merge HiveMind models into `~/.continue/config.yaml` while preserving non-HiveMind user config."""
+    hivemind_dicts = _build_continue_model_dicts(gateway, api_key, max_tokens=max_tokens)
+    if existing_text is None or not existing_text.strip():
+        return build_continue_provider_yaml(gateway, api_key, max_tokens=max_tokens)
+    if "\x00" in existing_text:
+        raise QuickPresetError("Existing Continue config.yaml contains invalid null bytes.")
+
+    normalized = existing_text.replace("\r\n", "\n")
+    stripped_start = normalized.lstrip()
+    if stripped_start.startswith(("{", "[")):
+        try:
+            loaded = json.loads(normalized)
+        except json.JSONDecodeError as exc:
+            raise QuickPresetError("Existing Continue config contains invalid JSON; refusing to overwrite.") from exc
+        if not isinstance(loaded, dict):
+            raise QuickPresetError("Existing Continue config JSON root must be an object.")
+        raw_models = loaded.get("models", [])
+        if not isinstance(raw_models, list):
+            raise QuickPresetError("Existing Continue config 'models' field must be a list.")
+        preserved_dicts = [m for m in raw_models if not _is_hivemind_continue_model_dict(m)]
+        merged_doc = {**loaded, "models": [*preserved_dicts, *hivemind_dicts]}
+        return json.dumps(merged_doc, indent=2, ensure_ascii=False) + "\n"
+
+    if stripped_start.startswith("- "):
+        raise QuickPresetError("Existing Continue config.yaml must be a YAML mapping, not a top-level list.")
+
+    lines = normalized.splitlines()
+    models_idx, end_idx, leading_comments, items, seq_indent = _split_continue_yaml_models(lines)
+    hm_lines = _render_continue_model_yaml_lines(
+        gateway, api_key, max_tokens=max_tokens, item_indent=" " * seq_indent
+    )
+
+    if models_idx is None:
+        trimmed = list(lines)
+        while trimmed and not trimmed[-1].strip():
+            trimmed.pop()
+        out_lines = [*trimmed, "models:", *hm_lines]
+        return "\n".join(out_lines) + "\n"
+
+    preserved_items = [item for item in items if not _is_hivemind_continue_model_item(item)]
+    merged_item_lines: list[str] = []
+    for item in preserved_items:
+        merged_item_lines.extend(item)
+    merged_item_lines.extend(hm_lines)
+
+    out_lines = [
+        *lines[:models_idx],
+        "models:",
+        *leading_comments,
+        *merged_item_lines,
+        *lines[end_idx:],
+    ]
+    return "\n".join(out_lines).rstrip("\n") + "\n"
+
+
+def remove_hivemind_from_continue_config_yaml(existing_text: str) -> str | None:
+    """Remove only HiveMind entries from `~/.continue/config.yaml`; return `None` if nothing user-owned remains."""
+    if not existing_text or not existing_text.strip():
+        return None
+    normalized = existing_text.replace("\r\n", "\n")
+    stripped_start = normalized.lstrip()
+    if stripped_start.startswith(("{", "[")):
+        try:
+            loaded = json.loads(normalized)
+        except json.JSONDecodeError:
+            return existing_text
+        if not isinstance(loaded, dict):
+            return existing_text
+        raw_models = loaded.get("models")
+        if not isinstance(raw_models, list):
+            return existing_text
+        preserved = [m for m in raw_models if not _is_hivemind_continue_model_dict(m)]
+        other_keys = {k: v for k, v in loaded.items() if k != "models"}
+        if not preserved and not other_keys:
+            return None
+        rebuilt = {**other_keys, "models": preserved}
+        return json.dumps(rebuilt, indent=2, ensure_ascii=False) + "\n"
+
+    raw_lines = normalized.splitlines()
+    lines = [ln for ln in raw_lines if ln not in _CONTINUE_MANAGED_HEADER_LINES]
+    models_idx, end_idx, leading_comments, items, _ = _split_continue_yaml_models(lines)
+    if models_idx is None:
+        return existing_text
+
+    preserved_items = [item for item in items if not _is_hivemind_continue_model_item(item)]
+    before_lines = lines[:models_idx]
+    after_lines = lines[end_idx:]
+
+    if preserved_items:
+        merged_item_lines: list[str] = []
+        for item in preserved_items:
+            merged_item_lines.extend(item)
+        out_lines = [*before_lines, "models:", *leading_comments, *merged_item_lines, *after_lines]
+        return "\n".join(out_lines).strip("\n") + "\n"
+
+    default_meta = {
+        "name: hivemind holiday quick preset",
+        "version: 0.0.1",
+        "schema: v1",
+    }
+    has_user_keys = any(
+        ln.strip()
+        and not ln.strip().startswith("#")
+        and ln.strip().lower() not in default_meta
+        for ln in (*before_lines, *after_lines)
+    )
+    if not has_user_keys:
+        return None
+    out_lines = [*before_lines, "models: []", *after_lines]
+    return "\n".join(out_lines).strip("\n") + "\n"
 
 
 def build_merged_vscode_settings_json(existing_text: str | None, *, gateway: str) -> str:
@@ -2524,6 +3054,1020 @@ def submit_preset_ces_feedback(
     )
 
 
+def _get_ces_path_lock(path: Path) -> threading.Lock:
+    resolved = path.resolve()
+    with _CES_LOCK_GUARD:
+        lock = _CES_PATH_LOCKS.get(resolved)
+        if lock is None:
+            lock = threading.Lock()
+            _CES_PATH_LOCKS[resolved] = lock
+        return lock
+
+
+def default_ces_queue_path(
+    *,
+    home: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> Path:
+    """Return the default `0600` CES retry spool path (`~/.hivemind/vscode_setup_ces_queue.json`)."""
+    env_view = env if env is not None else os.environ
+    resolved_home = (
+        Path(home)
+        if home is not None
+        else Path(env_view.get("HOME") or env_view.get("USERPROFILE") or Path.home())
+    )
+    return resolved_home / DEFAULT_CES_QUEUE_REL
+
+
+def _validate_ces_spool_payload(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, Mapping):
+        raise QuickPresetError("CES feedback payload must be a JSON object.")
+    allowed_keys = {"profile", "ease_rating", "zero_game_lag", "platform", "note"}
+    extra_keys = set(raw.keys()) - allowed_keys
+    if extra_keys:
+        raise QuickPresetError(f"CES feedback payload contains unsupported keys: {sorted(extra_keys)}")
+    prof = normalize_profile(raw.get("profile"))
+    ease = parse_ease_rating(raw.get("ease_rating"))  # type: ignore[arg-type]
+    zero_lag = raw.get("zero_game_lag")
+    if not isinstance(zero_lag, bool):
+        raise QuickPresetError("CES feedback zero_game_lag must be a boolean.")
+    plat_raw = str(raw.get("platform") or "unknown").strip().lower()
+    if not _PLATFORM_RE.fullmatch(plat_raw):
+        raise QuickPresetError("CES feedback platform contains unsupported characters.")
+    note_raw = raw.get("note", "")
+    if not isinstance(note_raw, str) or note_raw != "":
+        raise QuickPresetError("CES feedback note must remain empty to guarantee zero PII.")
+    return {
+        "profile": prof,
+        "ease_rating": ease,
+        "zero_game_lag": zero_lag,
+        "platform": plat_raw,
+        "note": "",
+    }
+
+
+def _classify_ces_flush_status(status_code: int) -> tuple[str, str]:
+    if 200 <= status_code < 300:
+        return "delivered", "ok"
+    if status_code == 404:
+        return "retryable", "stale_cloud_run_404"
+    if status_code == 408:
+        return "retryable", "request_timeout_408"
+    if status_code == 429:
+        return "retryable", "rate_limited_429"
+    if status_code == 0:
+        return "retryable", "network_timeout"
+    if status_code >= 500:
+        return "retryable", f"gateway_{status_code}"
+    return "permanent_quarantine", f"permanent_http_{status_code}"
+
+
+class VscodeCesRetrySpool:
+    """Thread-safe, atomic `0600`, bounded local CES retry spool (`max_entries=128`, `max_delivered=512`)."""
+
+    def __init__(
+        self,
+        queue_file: Path | str | None = None,
+        *,
+        max_entries: int = DEFAULT_MAX_CES_QUEUE_ENTRIES,
+        max_delivered: int = DEFAULT_MAX_CES_DELIVERED,
+        home: Path | str | None = None,
+        env: Mapping[str, str] | None = None,
+        os_name: str | None = None,
+    ) -> None:
+        if (
+            isinstance(max_entries, bool)
+            or not isinstance(max_entries, int)
+            or not (1 <= max_entries <= MAX_CES_QUEUE_ENTRIES_CEILING)
+        ):
+            raise QuickPresetError(
+                f"max_entries must be an integer in 1..{MAX_CES_QUEUE_ENTRIES_CEILING}."
+            )
+        if (
+            isinstance(max_delivered, bool)
+            or not isinstance(max_delivered, int)
+            or not (1 <= max_delivered <= 16384)
+        ):
+            raise QuickPresetError("max_delivered must be an integer in 1..16384.")
+        env_view = env if env is not None else os.environ
+        resolved_home = (
+            Path(home)
+            if home is not None
+            else Path(env_view.get("HOME") or env_view.get("USERPROFILE") or Path.home())
+        )
+        self._home = resolved_home
+        self._eff_os = os_name if os_name is not None else os.name
+        self._max_entries = int(max_entries)
+        self._max_delivered = int(max_delivered)
+
+        if queue_file is not None and str(queue_file).strip():
+            raw_str = str(queue_file).strip()
+            if raw_str == "~" or raw_str.startswith("~/"):
+                suffix = raw_str[2:] if raw_str.startswith("~/") else ""
+                raw_path = (resolved_home / suffix) if suffix else resolved_home
+            else:
+                raw_path = Path(raw_str)
+        else:
+            raw_path = default_ces_queue_path(home=resolved_home, env=env_view)
+
+        self._path = raw_path.resolve()
+        self._lock = _get_ces_path_lock(self._path)
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    @property
+    def redacted_path(self) -> str:
+        return redact_home_path(self._path, home=self._home)
+
+    def _empty_state(self) -> dict[str, Any]:
+        return {
+            "schema": CES_QUEUE_SCHEMA,
+            "max_entries": self._max_entries,
+            "max_delivered": self._max_delivered,
+            "dropped_overflow_count": 0,
+            "pending": [],
+            "delivered_ids": [],
+            "quarantined": [],
+        }
+
+    def _load_state_unlocked(self) -> tuple[dict[str, Any], bool]:
+        if not self._path.is_file():
+            return self._empty_state(), False
+        try:
+            parsed = json.loads(self._path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            recovered = self._empty_state()
+            recovered["quarantined"] = [
+                {
+                    "event_id": hashlib.sha256(b"corrupted_vscode_ces_spool").hexdigest(),
+                    "idempotency_key": "corrupted-spool-recovered",
+                    "http_status": 0,
+                    "reason": "corrupted_queue_json_recovered",
+                }
+            ]
+            return recovered, True
+
+        if not isinstance(parsed, Mapping):
+            return self._empty_state(), True
+
+        mutated = False
+        delivered: list[str] = []
+        seen_delivered: set[str] = set()
+        raw_delivered = parsed.get("delivered_ids")
+        if isinstance(raw_delivered, list):
+            for item in raw_delivered:
+                if isinstance(item, str) and item.strip() and item.strip() not in seen_delivered:
+                    tok = item.strip()[:128]
+                    delivered.append(tok)
+                    seen_delivered.add(tok)
+                else:
+                    mutated = True
+        if len(delivered) > self._max_delivered:
+            delivered = delivered[-self._max_delivered :]
+            mutated = True
+
+        quarantined: list[dict[str, Any]] = []
+        raw_quar = parsed.get("quarantined")
+        if isinstance(raw_quar, list):
+            for q_item in raw_quar[-self._max_entries :]:
+                if isinstance(q_item, Mapping) and isinstance(q_item.get("event_id"), str):
+                    q_status = q_item.get("http_status")
+                    quarantined.append(
+                        {
+                            "event_id": q_item["event_id"][:64],
+                            "idempotency_key": str(q_item.get("idempotency_key") or "")[:128],
+                            "http_status": (
+                                int(q_status)
+                                if not isinstance(q_status, bool) and isinstance(q_status, int)
+                                else 422
+                            ),
+                            "reason": sanitize_text_for_display(
+                                str(q_item.get("reason") or "quarantined")[:80],
+                                home=self._home,
+                            ),
+                        }
+                    )
+
+        pending: list[dict[str, Any]] = []
+        seen_pending: set[str] = set()
+        raw_pending = parsed.get("pending")
+        if isinstance(raw_pending, list):
+            for entry in raw_pending:
+                if not isinstance(entry, Mapping):
+                    mutated = True
+                    continue
+                idem_raw = str(entry.get("idempotency_key") or "").strip()[:128]
+                eid_raw = entry.get("event_id")
+                eid = (
+                    eid_raw
+                    if isinstance(eid_raw, str) and _SHA256_HEX_RE.fullmatch(eid_raw)
+                    else hashlib.sha256((idem_raw or json.dumps(entry, sort_keys=True, default=str)).encode("utf-8")).hexdigest()
+                )
+                dedup_tok = idem_raw or eid
+                if dedup_tok in seen_delivered or eid in seen_delivered or dedup_tok in seen_pending or eid in seen_pending:
+                    mutated = True
+                    continue
+                try:
+                    clean_payload = _validate_ces_spool_payload(entry.get("payload"))
+                except QuickPresetError:
+                    mutated = True
+                    quarantined.append(
+                        {
+                            "event_id": eid,
+                            "idempotency_key": idem_raw,
+                            "http_status": 422,
+                            "reason": "tampered_or_invalid_local_payload",
+                        }
+                    )
+                    quarantined = quarantined[-self._max_entries :]
+                    continue
+                raw_rc = entry.get("retry_count", 0)
+                rc = max(0, int(raw_rc)) if not isinstance(raw_rc, bool) and isinstance(raw_rc, int) else 0
+                raw_st = entry.get("last_http_status")
+                last_st = int(raw_st) if not isinstance(raw_st, bool) and isinstance(raw_st, int) else None
+                raw_ts = entry.get("enqueued_epoch", 0.0)
+                enq_ts = round(max(0.0, float(raw_ts)), 3) if not isinstance(raw_ts, bool) and isinstance(raw_ts, (int, float)) else 0.0
+                pending.append(
+                    {
+                        "event_id": eid,
+                        "idempotency_key": idem_raw or f"ces-noel-{eid[:32]}",
+                        "payload": clean_payload,
+                        "enqueued_epoch": enq_ts,
+                        "retry_count": rc,
+                        "last_http_status": last_st,
+                        "last_reason": sanitize_text_for_display(str(entry.get("last_reason") or "")[:80], home=self._home),
+                    }
+                )
+                seen_pending.add(dedup_tok)
+                seen_pending.add(eid)
+
+        raw_dropped = parsed.get("dropped_overflow_count", 0)
+        dropped_count = (
+            max(0, int(raw_dropped))
+            if not isinstance(raw_dropped, bool) and isinstance(raw_dropped, int)
+            else 0
+        )
+        if len(pending) > self._max_entries:
+            overflow = len(pending) - self._max_entries
+            pending = pending[-self._max_entries :]
+            dropped_count += overflow
+            mutated = True
+
+        return (
+            {
+                "schema": CES_QUEUE_SCHEMA,
+                "max_entries": self._max_entries,
+                "max_delivered": self._max_delivered,
+                "dropped_overflow_count": dropped_count,
+                "pending": pending,
+                "delivered_ids": delivered,
+                "quarantined": quarantined[-self._max_entries :],
+            },
+            mutated,
+        )
+
+    def _atomic_save_unlocked(self, state: Mapping[str, Any]) -> None:
+        doc = {
+            "schema": CES_QUEUE_SCHEMA,
+            "max_entries": self._max_entries,
+            "max_delivered": self._max_delivered,
+            "dropped_overflow_count": int(state.get("dropped_overflow_count", 0)),
+            "pending": list(state.get("pending", [])),
+            "delivered_ids": list(state.get("delivered_ids", []))[-self._max_delivered :],
+            "quarantined": list(state.get("quarantined", []))[-self._max_entries :],
+        }
+        serialized = _assert_safe_output(
+            json.dumps(doc, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+        )
+        if self._eff_os != "nt" and not self._path.parent.exists():
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            os.chmod(self._path.parent, 0o700)
+        _write_file_secure_atomic(
+            self._path, serialized, posix_mode=0o600, eff_os=self._eff_os
+        )
+
+    def snapshot(self, *, lang: str = "en") -> dict[str, Any]:
+        """Return a sanitized read-only snapshot of the retry spool without creating any file."""
+        lang_code = normalize_lang(lang)
+        with self._lock:
+            state, _ = self._load_state_unlocked()
+            exists = self._path.is_file()
+        return _attach_receipt(
+            {
+                "schema": SCHEMA,
+                "mode": "ces_queue_snapshot",
+                "lang": lang_code,
+                "queue_file": self.redacted_path,
+                "queue_exists": exists,
+                "max_entries": self._max_entries,
+                "max_delivered": self._max_delivered,
+                "pending_count": len(state["pending"]),
+                "delivered_ledger_count": len(state["delivered_ids"]),
+                "quarantined_count": len(state["quarantined"]),
+                "dropped_overflow_count": int(state["dropped_overflow_count"]),
+                "pending_idempotency_keys": [item["idempotency_key"] for item in state["pending"]],
+            }
+        )
+
+    def enqueue(
+        self,
+        *,
+        gateway: str = DEFAULT_GATEWAY,
+        account_ref: str = "anon",
+        profile: str = "dev",
+        ease_rating: int = 5,
+        zero_game_lag: bool = True,
+        system_name: str | None = None,
+        platform: str | None = None,
+        idempotency_key: str | None = None,
+        last_http_status: int | None = None,
+        last_reason: str = "",
+        enforce_personal_pc: bool = True,
+        env: Mapping[str, str] | None = None,
+        cwd: Path | str | None = None,
+        lang: str = "en",
+    ) -> dict[str, Any]:
+        """Validate compliance & zero-PII schema, deduplicate, cap pending at `max_entries`, and save `0600`."""
+        lang_code = normalize_lang(lang)
+        clean_gw = validate_gateway_url(gateway)
+        comp_doc = evaluate_personal_pc_compliance(env=env, cwd=cwd, lang=lang_code)
+        if enforce_personal_pc and not comp_doc["compliance_ok"]:
+            return _attach_receipt(
+                {
+                    "schema": SCHEMA,
+                    "mode": "enqueue_ces",
+                    "ok": False,
+                    "ready": False,
+                    "compliance_ok": False,
+                    "exit_code": 2,
+                    "queue_file": self.redacted_path,
+                    "enqueued": False,
+                    "deduplicated": False,
+                    "duplicate_state": "compliance_blocked",
+                    "evicted_oldest": False,
+                    "file_writes": 0,
+                    "network_calls": 0,
+                    "compliance": comp_doc,
+                    "summary": comp_doc["summary"],
+                }
+            )
+
+        plat = (
+            platform.strip().lower()
+            if (isinstance(platform, str) and platform.strip())
+            else _platform_tag(system_name)
+        )
+        clean_payload = _validate_ces_spool_payload(
+            {
+                "profile": profile,
+                "ease_rating": ease_rating,
+                "zero_game_lag": zero_game_lag,
+                "platform": plat,
+                "note": "",
+            }
+        )
+        if idempotency_key is not None:
+            if isinstance(idempotency_key, bool) or not isinstance(idempotency_key, str):
+                raise QuickPresetError("idempotency_key must be a string.")
+            idem_key = idempotency_key.strip()
+            if not idem_key or len(idem_key) > 128 or not idem_key.isascii() or any(ord(c) < 32 or ord(c) == 127 for c in idem_key):
+                raise QuickPresetError("idempotency_key must be 1..128 printable ASCII characters.")
+        else:
+            idem_key = build_ces_idempotency_key(
+                gateway=clean_gw,
+                account_ref=account_ref,
+                profile=clean_payload["profile"],
+                ease_rating=clean_payload["ease_rating"],
+                zero_game_lag=clean_payload["zero_game_lag"],
+                platform_tag=clean_payload["platform"],
+            )
+        event_id = hashlib.sha256(idem_key.encode("utf-8")).hexdigest()
+        ts = round(time.time(), 3)
+
+        with self._lock:
+            state, recovered = self._load_state_unlocked()
+            delivered_ids: list[str] = state["delivered_ids"]
+            pending: list[dict[str, Any]] = state["pending"]
+
+            if idem_key in delivered_ids or event_id in delivered_ids:
+                if recovered:
+                    self._atomic_save_unlocked(state)
+                return _attach_receipt(
+                    {
+                        "schema": SCHEMA,
+                        "mode": "enqueue_ces",
+                        "ok": True,
+                        "ready": True,
+                        "compliance_ok": True,
+                        "exit_code": 0,
+                        "queue_file": self.redacted_path,
+                        "enqueued": False,
+                        "deduplicated": True,
+                        "duplicate_state": "already_delivered",
+                        "evicted_oldest": False,
+                        "event_id": event_id,
+                        "idempotency_key": idem_key,
+                        "payload": clean_payload,
+                        "pending_count": len(pending),
+                        "delivered_ledger_count": len(delivered_ids),
+                        "quarantined_count": len(state["quarantined"]),
+                        "dropped_overflow_count": int(state["dropped_overflow_count"]),
+                        "network_calls": 0,
+                        "compliance": comp_doc,
+                    }
+                )
+
+            if any(item["idempotency_key"] == idem_key or item["event_id"] == event_id for item in pending):
+                if recovered:
+                    self._atomic_save_unlocked(state)
+                return _attach_receipt(
+                    {
+                        "schema": SCHEMA,
+                        "mode": "enqueue_ces",
+                        "ok": True,
+                        "ready": True,
+                        "compliance_ok": True,
+                        "exit_code": 0,
+                        "queue_file": self.redacted_path,
+                        "enqueued": False,
+                        "deduplicated": True,
+                        "duplicate_state": "already_pending",
+                        "evicted_oldest": False,
+                        "event_id": event_id,
+                        "idempotency_key": idem_key,
+                        "payload": clean_payload,
+                        "pending_count": len(pending),
+                        "delivered_ledger_count": len(delivered_ids),
+                        "quarantined_count": len(state["quarantined"]),
+                        "dropped_overflow_count": int(state["dropped_overflow_count"]),
+                        "network_calls": 0,
+                        "compliance": comp_doc,
+                    }
+                )
+
+            evicted_oldest = False
+            if len(pending) >= self._max_entries:
+                pending.pop(0)
+                state["dropped_overflow_count"] = int(state["dropped_overflow_count"]) + 1
+                evicted_oldest = True
+
+            pending.append(
+                {
+                    "event_id": event_id,
+                    "idempotency_key": idem_key,
+                    "payload": clean_payload,
+                    "enqueued_epoch": ts,
+                    "retry_count": 0,
+                    "last_http_status": last_http_status,
+                    "last_reason": sanitize_text_for_display(str(last_reason or "")[:80], home=self._home),
+                }
+            )
+            self._atomic_save_unlocked(state)
+            pending_count = len(pending)
+            delivered_count = len(delivered_ids)
+            quarantined_count = len(state["quarantined"])
+            dropped_count = int(state["dropped_overflow_count"])
+
+        return _attach_receipt(
+            {
+                "schema": SCHEMA,
+                "mode": "enqueue_ces",
+                "ok": True,
+                "ready": True,
+                "compliance_ok": True,
+                "exit_code": 0,
+                "queue_file": self.redacted_path,
+                "enqueued": True,
+                "deduplicated": False,
+                "duplicate_state": "none",
+                "evicted_oldest": evicted_oldest,
+                "event_id": event_id,
+                "idempotency_key": idem_key,
+                "payload": clean_payload,
+                "pending_count": pending_count,
+                "delivered_ledger_count": delivered_count,
+                "quarantined_count": quarantined_count,
+                "dropped_overflow_count": dropped_count,
+                "network_calls": 0,
+                "compliance": comp_doc,
+            }
+        )
+
+    def flush(
+        self,
+        gateway: str = DEFAULT_GATEWAY,
+        *,
+        http_fn: HttpFn = default_http_request,
+        enforce_personal_pc: bool = True,
+        env: Mapping[str, str] | None = None,
+        cwd: Path | str | None = None,
+        lang: str = "en",
+    ) -> dict[str, Any]:
+        """Idempotently flush pending CES events with `Idempotency-Key` headers (no file created if empty)."""
+        lang_code = normalize_lang(lang)
+        is_fr = lang_code == "fr"
+        clean_gw = validate_gateway_url(gateway)
+        comp_doc = evaluate_personal_pc_compliance(env=env, cwd=cwd, lang=lang_code)
+        if enforce_personal_pc and not comp_doc["compliance_ok"]:
+            return _attach_receipt(
+                {
+                    "schema": SCHEMA,
+                    "mode": "flush_ces_queue",
+                    "ok": False,
+                    "ready": False,
+                    "compliance_ok": False,
+                    "exit_code": 2,
+                    "gateway": clean_gw,
+                    "queue_file": self.redacted_path,
+                    "queue_exists": self._path.is_file(),
+                    "flush_ok": False,
+                    "flushed_count": 0,
+                    "delivered_count": 0,
+                    "retained_retry_count": 0,
+                    "quarantined_count": 0,
+                    "pending_count": 0,
+                    "delivered_ledger_count": 0,
+                    "total_quarantined_count": 0,
+                    "stale_cloud_run_detected": False,
+                    "file_writes": 0,
+                    "network_calls": 0,
+                    "zero_inference_verified": True,
+                    "outcomes": [],
+                    "diagnostics": [comp_doc["summary"]],
+                    "compliance": comp_doc,
+                    "summary": comp_doc["summary"],
+                }
+            )
+
+        post_url = f"{clean_gw}/v1/hivemind/onboarding/feedback"
+        delivered_now = 0
+        retained_retry = 0
+        quarantined_now = 0
+        network_calls = 0
+        stale_404_seen = False
+        outcomes: list[dict[str, Any]] = []
+
+        with self._lock:
+            if not self._path.is_file():
+                summary_empty = (
+                    "File CES vide (aucun fichier créé, 0 appel réseau)."
+                    if is_fr
+                    else "CES retry queue empty (no queue file created, 0 network calls)."
+                )
+                return _attach_receipt(
+                    {
+                        "schema": SCHEMA,
+                        "mode": "flush_ces_queue",
+                        "ok": True,
+                        "ready": True,
+                        "compliance_ok": True,
+                        "exit_code": 0,
+                        "gateway": clean_gw,
+                        "queue_file": self.redacted_path,
+                        "queue_exists": False,
+                        "flush_ok": True,
+                        "flushed_count": 0,
+                        "delivered_count": 0,
+                        "retained_retry_count": 0,
+                        "quarantined_count": 0,
+                        "pending_count": 0,
+                        "delivered_ledger_count": 0,
+                        "total_quarantined_count": 0,
+                        "stale_cloud_run_detected": False,
+                        "file_writes": 0,
+                        "network_calls": 0,
+                        "zero_inference_verified": True,
+                        "outcomes": [],
+                        "diagnostics": [],
+                        "compliance": comp_doc,
+                        "summary": summary_empty,
+                    }
+                )
+
+            state, mutated = self._load_state_unlocked()
+            if mutated:
+                quarantined_now += len(state["quarantined"])
+            delivered_set = set(state["delivered_ids"])
+            next_pending: list[dict[str, Any]] = []
+
+            for entry in state["pending"]:
+                eid = str(entry["event_id"])
+                idem_key = str(entry["idempotency_key"])
+                if idem_key in delivered_set or eid in delivered_set:
+                    mutated = True
+                    continue
+
+                code, _ = _invoke_http_fn(
+                    http_fn,
+                    "POST",
+                    post_url,
+                    payload=dict(entry["payload"]),
+                    headers={"Idempotency-Key": idem_key},
+                    timeout_s=TELEMETRY_TIMEOUT_S,
+                )
+                network_calls += 1
+                disposition, reason = _classify_ces_flush_status(code)
+                mutated = True
+
+                if disposition == "delivered":
+                    state["delivered_ids"].append(idem_key)
+                    delivered_set.add(idem_key)
+                    delivered_set.add(eid)
+                    delivered_now += 1
+                    outcomes.append(
+                        {
+                            "event_id": eid,
+                            "idempotency_key": idem_key,
+                            "disposition": "delivered",
+                            "http_status": code,
+                        }
+                    )
+                elif disposition == "retryable":
+                    if code == 404:
+                        stale_404_seen = True
+                    new_rc = int(entry.get("retry_count", 0)) + 1
+                    next_pending.append(
+                        {
+                            **entry,
+                            "retry_count": new_rc,
+                            "last_http_status": code,
+                            "last_reason": reason,
+                        }
+                    )
+                    retained_retry += 1
+                    outcomes.append(
+                        {
+                            "event_id": eid,
+                            "idempotency_key": idem_key,
+                            "disposition": "retained_for_retry",
+                            "http_status": code,
+                            "reason": reason,
+                            "retry_count": new_rc,
+                        }
+                    )
+                else:
+                    state["quarantined"].append(
+                        {
+                            "event_id": eid,
+                            "idempotency_key": idem_key,
+                            "http_status": code,
+                            "reason": reason,
+                        }
+                    )
+                    state["quarantined"] = state["quarantined"][-self._max_entries :]
+                    quarantined_now += 1
+                    outcomes.append(
+                        {
+                            "event_id": eid,
+                            "idempotency_key": idem_key,
+                            "disposition": "quarantined",
+                            "http_status": code,
+                            "reason": reason,
+                        }
+                    )
+
+            state["pending"] = next_pending
+            state["delivered_ids"] = state["delivered_ids"][-self._max_delivered :]
+            if mutated:
+                self._atomic_save_unlocked(state)
+
+            pending_after = len(state["pending"])
+            delivered_total = len(state["delivered_ids"])
+            quarantined_total = len(state["quarantined"])
+
+        diagnostics: list[str] = []
+        if stale_404_seen:
+            diagnostics.append(
+                "HTTP 404 sur /v1/hivemind/onboarding/feedback : retours CES conservés dans la file 0600."
+                if is_fr
+                else "HTTP 404 on /v1/hivemind/onboarding/feedback: CES items retained safely in 0600 spool."
+            )
+        if quarantined_now > 0:
+            diagnostics.append(
+                f"{quarantined_now} entrée(s) permanente(s) 400/422 mise(s) en quarantaine."
+                if is_fr
+                else f"{quarantined_now} permanent 400/422 entry/entries moved to quarantine."
+            )
+
+        flush_ok = retained_retry == 0 and quarantined_now == 0
+        summary = (
+            f"Vidage file CES : {delivered_now} envoyé(s), {retained_retry} en attente, {quarantined_now} en quarantaine."
+            if is_fr
+            else f"CES queue flush: {delivered_now} delivered, {retained_retry} retained, {quarantined_now} quarantined."
+        )
+        return _attach_receipt(
+            {
+                "schema": SCHEMA,
+                "mode": "flush_ces_queue",
+                "ok": flush_ok,
+                "ready": flush_ok,
+                "compliance_ok": True,
+                "exit_code": 0 if flush_ok else 2,
+                "gateway": clean_gw,
+                "queue_file": self.redacted_path,
+                "queue_exists": self._path.is_file(),
+                "flush_ok": flush_ok,
+                "flushed_count": delivered_now,
+                "delivered_count": delivered_now,
+                "retained_retry_count": retained_retry,
+                "quarantined_count": quarantined_now,
+                "pending_count": pending_after,
+                "delivered_ledger_count": delivered_total,
+                "total_quarantined_count": quarantined_total,
+                "stale_cloud_run_detected": stale_404_seen,
+                "file_writes": 1 if mutated else 0,
+                "network_calls": network_calls,
+                "zero_inference_verified": True,
+                "outcomes": outcomes,
+                "diagnostics": diagnostics,
+                "compliance": comp_doc,
+                "summary": summary,
+            }
+        )
+
+    def purge(self, *, lang: str = "en") -> dict[str, Any]:
+        """Remove local CES retry spool and any temporary files (always permitted, 0 HTTP calls)."""
+        lang_code = normalize_lang(lang)
+        is_fr = lang_code == "fr"
+        removed = False
+        with self._lock:
+            if self._path.is_file():
+                self._path.unlink(missing_ok=True)
+                removed = True
+            if self._path.parent.is_dir():
+                for extra in self._path.parent.glob(f".{self._path.name}.*"):
+                    if extra.is_file():
+                        extra.unlink(missing_ok=True)
+        return _attach_receipt(
+            {
+                "schema": SCHEMA,
+                "mode": "purge_ces_queue",
+                "ok": True,
+                "ready": True,
+                "exit_code": 0,
+                "queue_file": self.redacted_path,
+                "purged": removed,
+                "network_calls": 0,
+                "summary": (
+                    f"File CES purgée ({self.redacted_path})."
+                    if is_fr
+                    else f"CES retry queue purged ({self.redacted_path})."
+                ),
+            }
+        )
+
+
+def enqueue_vscode_ces_event(
+    *,
+    queue_file: Path | str | None = None,
+    gateway: str = DEFAULT_GATEWAY,
+    account_ref: str = "anon",
+    profile: str = "dev",
+    ease_rating: int = 5,
+    zero_game_lag: bool = True,
+    system_name: str | None = None,
+    platform: str | None = None,
+    idempotency_key: str | None = None,
+    last_http_status: int | None = None,
+    last_reason: str = "",
+    max_entries: int = DEFAULT_MAX_CES_QUEUE_ENTRIES,
+    max_delivered: int = DEFAULT_MAX_CES_DELIVERED,
+    home: Path | str | None = None,
+    enforce_personal_pc: bool = True,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    os_name: str | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Convenience wrapper around `VscodeCesRetrySpool.enqueue(...)`."""
+    spool = VscodeCesRetrySpool(
+        queue_file,
+        max_entries=max_entries,
+        max_delivered=max_delivered,
+        home=home,
+        env=env,
+        os_name=os_name,
+    )
+    return spool.enqueue(
+        gateway=gateway,
+        account_ref=account_ref,
+        profile=profile,
+        ease_rating=ease_rating,
+        zero_game_lag=zero_game_lag,
+        system_name=system_name,
+        platform=platform,
+        idempotency_key=idempotency_key,
+        last_http_status=last_http_status,
+        last_reason=last_reason,
+        enforce_personal_pc=enforce_personal_pc,
+        env=env,
+        cwd=cwd,
+        lang=lang,
+    )
+
+
+def flush_vscode_ces_queue(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    queue_file: Path | str | None = None,
+    max_entries: int = DEFAULT_MAX_CES_QUEUE_ENTRIES,
+    max_delivered: int = DEFAULT_MAX_CES_DELIVERED,
+    home: Path | str | None = None,
+    enforce_personal_pc: bool = True,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    os_name: str | None = None,
+    http_fn: HttpFn = default_http_request,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Convenience wrapper around `VscodeCesRetrySpool.flush(...)`."""
+    spool = VscodeCesRetrySpool(
+        queue_file,
+        max_entries=max_entries,
+        max_delivered=max_delivered,
+        home=home,
+        env=env,
+        os_name=os_name,
+    )
+    return spool.flush(
+        gateway,
+        http_fn=http_fn,
+        enforce_personal_pc=enforce_personal_pc,
+        env=env,
+        cwd=cwd,
+        lang=lang,
+    )
+
+
+def parse_ces_ease_input(
+    raw: str,
+    *,
+    default_profile: str = "dev",
+    default_had_game_lag: bool = False,
+) -> dict[str, Any]:
+    """Parse 1-prompt zero-PII CES input (`'5'`, `'4/5 nolag'`, `'3 gamer lag'`, or empty/skip)."""
+    norm_default_profile = normalize_profile(default_profile)
+    cleaned = (raw or "").strip()
+    if not cleaned or cleaned.lower() in ("skip", "s", "q", "quit", "no", "non", "pass"):
+        return {
+            "skipped": True,
+            "profile": norm_default_profile,
+            "ease_rating": None,
+            "had_game_lag": bool(default_had_game_lag),
+            "zero_game_lag": not bool(default_had_game_lag),
+        }
+
+    normalized = re.sub(r"\s*/\s*5\b", "", cleaned, count=1)
+    tokens = [tok.strip(",;:").lower() for tok in normalized.split() if tok.strip(",;:")]
+    rating: int | None = None
+    resolved_profile = norm_default_profile
+    had_lag = bool(default_had_game_lag)
+
+    for tok in tokens:
+        if tok.lstrip("+-").isdigit():
+            val = int(tok)
+            if not (1 <= val <= 5) or rating is not None:
+                raise QuickPresetError("CES ease_rating must be a single integer from 1 to 5.")
+            rating = val
+        elif tok in ("dev", "developer", "d"):
+            resolved_profile = "dev"
+        elif tok in ("gamer", "gaming", "g"):
+            resolved_profile = "gamer"
+        elif tok in ("lag", "yes-lag", "had-lag", "had-game-lag", "had_game_lag", "stutter", "saccade"):
+            had_lag = True
+        elif tok in ("nolag", "no-lag", "no_lag", "zero-lag", "zero_lag", "smooth", "ok", "fluide"):
+            had_lag = False
+        else:
+            raise QuickPresetError(
+                f"Unrecognized CES token {tok!r}; expected 1..5 [dev|gamer] [lag|nolag] or Enter to skip."
+            )
+
+    if rating is None:
+        raise QuickPresetError("Interactive CES input must include an integer ease_rating from 1 to 5.")
+
+    return {
+        "skipped": False,
+        "profile": resolved_profile,
+        "ease_rating": rating,
+        "had_game_lag": had_lag,
+        "zero_game_lag": not had_lag,
+    }
+
+
+def prompt_and_submit_ces(
+    *,
+    gateway: str = DEFAULT_GATEWAY,
+    account_ref: str = "anon",
+    profile: str = "dev",
+    default_had_game_lag: bool = False,
+    system_name: str | None = None,
+    input_fn: Callable[[str], str] | None = None,
+    http_fn: HttpFn = default_http_request,
+    ces_queue_file: Path | str | None = None,
+    home: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    os_name: str | None = None,
+    spool_on_failure: bool = True,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Prompt once for zero-PII 1..5 ease rating (+ optional lag), submit, and spool on transient failure."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    clean_gw = validate_gateway_url(gateway)
+    norm_profile = normalize_profile(profile)
+    eff_input = input_fn if input_fn is not None else input
+
+    prompt_text = (
+        f"[HiveMind CES 1-question | profil={norm_profile}] Notez la simplicité 1..5 "
+        "(optionnel : 'lag' ou 'nolag' ; Entrée pour ignorer) : "
+        if is_fr
+        else f"[HiveMind 1-prompt CES | profile={norm_profile}] Rate setup ease 1..5 "
+        "(optional: 'lag' or 'nolag'; Enter to skip): "
+    )
+    try:
+        raw_answer = eff_input(prompt_text)
+    except (EOFError, KeyboardInterrupt):
+        raw_answer = ""
+
+    parsed = parse_ces_ease_input(
+        raw_answer,
+        default_profile=norm_profile,
+        default_had_game_lag=default_had_game_lag,
+    )
+    if parsed["skipped"]:
+        return {
+            "attempted": False,
+            "skipped": True,
+            "ces_recorded": False,
+            "queued_for_retry": False,
+            "status": "skipped",
+            "http_status": None,
+            "idempotency_key": None,
+            "profile": parsed["profile"],
+            "ease_rating": None,
+            "zero_game_lag": parsed["zero_game_lag"],
+            "total_responses": None,
+            "mean_ease_rating": None,
+            "queue_file": None,
+            "network_calls": 0,
+            "message": (
+                "Retour CES 1-question ignoré (aucun envoi réseau)."
+                if is_fr
+                else "1-prompt CES skipped (no network call)."
+            ),
+        }
+
+    ces_rep, net_calls = submit_preset_ces_feedback(
+        gateway=clean_gw,
+        account_ref=account_ref,
+        profile=str(parsed["profile"]),
+        ease_rating=int(parsed["ease_rating"]),
+        zero_game_lag=bool(parsed["zero_game_lag"]),
+        system_name=system_name,
+        http_fn=http_fn,
+        lang=lang_code,
+    )
+    queued_for_retry = False
+    queue_redacted: str | None = None
+    http_st = int(ces_rep["http_status"])
+    if (
+        not ces_rep["ces_recorded"]
+        and spool_on_failure
+        and (http_st in (0, 404, 408, 429) or http_st >= 500)
+    ):
+        enq = enqueue_vscode_ces_event(
+            queue_file=ces_queue_file,
+            gateway=clean_gw,
+            account_ref=account_ref,
+            profile=str(parsed["profile"]),
+            ease_rating=int(parsed["ease_rating"]),
+            zero_game_lag=bool(parsed["zero_game_lag"]),
+            system_name=system_name,
+            idempotency_key=str(ces_rep["idempotency_key"]),
+            last_http_status=http_st,
+            last_reason=str(ces_rep["status"]),
+            home=home,
+            enforce_personal_pc=False,
+            env=env,
+            cwd=cwd,
+            os_name=os_name,
+            lang=lang_code,
+        )
+        queued_for_retry = bool(enq.get("enqueued") or enq.get("deduplicated"))
+        queue_redacted = str(enq.get("queue_file") or "") or None
+
+    return {
+        **ces_rep,
+        "skipped": False,
+        "queued_for_retry": queued_for_retry,
+        "queue_file": queue_redacted,
+        "network_calls": net_calls,
+    }
+
+
 def install_vscode_quick_preset(
     gateway: str = DEFAULT_GATEWAY,
     *,
@@ -2956,6 +4500,8 @@ def uninstall_vscode_quick_preset(
     workspace_dir: Path | str | None = None,
     credentials_path: Path | str | None = None,
     continue_config_path: Path | str | None = None,
+    continue_main_config_path: Path | str | None = None,
+    ces_queue_file: Path | str | None = None,
     env: Mapping[str, str] | None = None,
     home: Path | str | None = None,
     os_name: str | None = None,
@@ -2982,6 +4528,16 @@ def uninstall_vscode_quick_preset(
         if continue_config_path is not None
         else (resolved_home / ".continue" / "hivemind_provider.yaml")
     )
+    cont_main_path = (
+        Path(continue_main_config_path)
+        if continue_main_config_path is not None
+        else (resolved_home / ".continue" / "config.yaml")
+    )
+    queue_path = (
+        Path(ces_queue_file)
+        if ces_queue_file is not None
+        else default_ces_queue_path(home=resolved_home, env=env_view)
+    )
 
     vscode_dir = ws_path / ".vscode"
     tasks_path = vscode_dir / "tasks.json"
@@ -2995,12 +4551,30 @@ def uninstall_vscode_quick_preset(
         Path(f"{cred_path}.bak"),
         cont_path,
         Path(f"{cont_path}.bak"),
+        Path(f"{cont_main_path}.bak"),
         Path(f"{tasks_path}.bak"),
         Path(f"{settings_path}.bak"),
     ):
         if managed.is_file():
             managed.unlink()
             removed_files.append(redact_home_path(managed, home=resolved_home))
+
+    if cont_main_path.is_file():
+        raw_main = cont_main_path.read_text(encoding="utf-8")
+        cleaned_main = remove_hivemind_from_continue_config_yaml(raw_main)
+        if cleaned_main is None:
+            cont_main_path.unlink()
+            removed_files.append(redact_home_path(cont_main_path, home=resolved_home))
+        elif cleaned_main != raw_main:
+            _write_file_secure_atomic(cont_main_path, cleaned_main, posix_mode=0o600, eff_os=eff_os)
+            preserved_files.append(redact_home_path(cont_main_path, home=resolved_home))
+
+    if queue_path.is_file():
+        purge_res = VscodeCesRetrySpool(
+            queue_path, home=resolved_home, env=env_view, os_name=eff_os
+        ).purge(lang=lang_code)
+        if purge_res.get("purged"):
+            removed_files.append(redact_home_path(queue_path, home=resolved_home))
 
     if settings_path.is_file():
         raw_settings = strip_jsonc_comments_and_trailing_commas(settings_path.read_text(encoding="utf-8"))
@@ -3074,6 +4648,499 @@ def uninstall_vscode_quick_preset(
     )
 
 
+def run_vscode_setup(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    workspace_dir: Path | str | None = None,
+    credentials_path: Path | str | None = None,
+    continue_config_path: Path | str | None = None,
+    continue_main_config_path: Path | str | None = None,
+    write_continue_config: bool = False,
+    ces_queue_file: Path | str | None = None,
+    handle: str | None = DEFAULT_HANDLE,
+    role: str = DEFAULT_ROLE,
+    explicit_api_key: str | None = None,
+    host_label: str | None = None,
+    expected_sha: str | None = None,
+    skip_preflight: bool = False,
+    require_holiday_routes: bool = False,
+    prompt_ces: bool = False,
+    submit_ces: bool = False,
+    flush_ces_queue: bool = False,
+    profile: str = "dev",
+    ease_rating: int = 5,
+    had_game_lag: bool = False,
+    run_gamer_preflight: bool = False,
+    max_temp_c: float = DEFAULT_MAX_TEMP_C,
+    yield_budget_ms: float = DEFAULT_YIELD_BUDGET_MS,
+    send_first_heartbeat: bool = False,
+    uninstall: bool = False,
+    gpu_probe_fn: GpuProbeFn = default_gpu_probe,
+    yield_drill_fn: YieldDrillFn = default_worker_yield_drill,
+    process_probe_fn: ProcessProbeFn | None = default_process_probe,
+    http_fn: HttpFn = default_http_request,
+    input_fn: Callable[[str], str] | None = None,
+    env: Mapping[str, str] | None = None,
+    home: Path | str | None = None,
+    os_name: str | None = None,
+    system_name: str | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Unified `< 60 s` `hivemind vscode-setup` orchestrator with preflight, Continue config, and CES spool."""
+    if uninstall:
+        return uninstall_vscode_quick_preset(
+            workspace_dir=workspace_dir,
+            credentials_path=credentials_path,
+            continue_config_path=continue_config_path,
+            continue_main_config_path=continue_main_config_path,
+            ces_queue_file=ces_queue_file,
+            env=env,
+            home=home,
+            os_name=os_name,
+            lang=lang,
+        )
+
+    t0 = time.perf_counter()
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    norm_profile = normalize_profile(profile)
+    norm_role = normalize_role(role)
+    clean_ease = parse_ease_rating(ease_rating)
+    clean_gw = validate_gateway_url(gateway)
+    clean_expected = validate_expected_sha(expected_sha) if expected_sha is not None else None
+
+    env_view = env if env is not None else os.environ
+    eff_os = os_name if os_name is not None else os.name
+    resolved_home = (
+        Path(home)
+        if home is not None
+        else Path(env_view.get("HOME") or env_view.get("USERPROFILE") or Path.home())
+    )
+    ws_path = Path(workspace_dir) if workspace_dir is not None else Path.cwd()
+    cred_path = (
+        Path(credentials_path)
+        if credentials_path is not None
+        else (resolved_home / ".hivemind" / "credentials.json")
+    )
+    cont_path = (
+        Path(continue_config_path)
+        if continue_config_path is not None
+        else (resolved_home / ".continue" / "hivemind_provider.yaml")
+    )
+    cont_main_path = (
+        Path(continue_main_config_path)
+        if continue_main_config_path is not None
+        else (resolved_home / ".continue" / "config.yaml")
+    )
+    queue_path = (
+        Path(ces_queue_file)
+        if ces_queue_file is not None
+        else default_ces_queue_path(home=resolved_home, env=env_view)
+    )
+
+    compliance = evaluate_personal_pc_compliance(env=env_view, cwd=ws_path, lang=lang_code)
+    if not compliance["compliance_ok"]:
+        return _attach_receipt(
+            {
+                "schema": SCHEMA,
+                "mode": "vscode_setup",
+                "ok": False,
+                "ready": False,
+                "compliance_ok": False,
+                "exit_code": 2,
+                "verdict": "blocked_corporate_environment",
+                "gateway": clean_gw,
+                "elapsed_s": round(time.perf_counter() - t0, 4),
+                "within_60s_slo": True,
+                "account": None,
+                "files": {},
+                "file_writes": 0,
+                "network_calls": 0,
+                "task_labels": [],
+                "gitignore_check": None,
+                "quick_preflight": None,
+                "models_preflight_ok": False,
+                "quick_route_ok": False,
+                "feedback_endpoint_ok": False,
+                "live_models_count": 0,
+                "holiday_routes_deployed_on_cloud_run": None,
+                "onboarding_feedback_deployed": None,
+                "stale_revision_detected": False,
+                "missing_or_stale_routes": [],
+                "local_fallback_guidance": compliance["summary"],
+                "write_continue_config": bool(write_continue_config),
+                "preflight": None,
+                "first_heartbeat_ok": None,
+                "heartbeat": {"attempted": False, "sent": False, "ok": False},
+                "ces_recorded": False,
+                "ces_queued_for_retry": False,
+                "ces_feedback": {"attempted": False, "ces_recorded": False, "status": "blocked"},
+                "ces_flush": None,
+                "ces_queue_file": redact_home_path(queue_path, home=resolved_home),
+                "ces_queue_exists": queue_path.is_file(),
+                "zero_inference_verified": True,
+                "compliance": compliance,
+                "summary": compliance["summary"],
+            }
+        )
+
+    network_calls = 0
+    quick_preflight: dict[str, Any] | None = None
+    if not skip_preflight:
+        quick_preflight = run_one_shot_quick_health_preflight(
+            clean_gw,
+            http_fn=http_fn,
+            require_holiday_routes=require_holiday_routes,
+            env=env_view,
+            cwd=ws_path,
+            lang=lang_code,
+        )
+        network_calls += int(quick_preflight["network_calls"])
+        if quick_preflight["exit_code"] != 0:
+            return _attach_receipt(
+                {
+                    "schema": SCHEMA,
+                    "mode": "vscode_setup",
+                    "ok": False,
+                    "ready": False,
+                    "compliance_ok": True,
+                    "exit_code": 2,
+                    "verdict": str(quick_preflight["verdict"]),
+                    "gateway": clean_gw,
+                    "elapsed_s": round(time.perf_counter() - t0, 4),
+                    "within_60s_slo": (time.perf_counter() - t0) < SLO_BUDGET_SECONDS,
+                    "account": None,
+                    "files": {},
+                    "file_writes": 0,
+                    "network_calls": network_calls,
+                    "task_labels": [],
+                    "gitignore_check": None,
+                    "quick_preflight": quick_preflight,
+                    "models_preflight_ok": bool(quick_preflight["models_preflight_ok"]),
+                    "quick_route_ok": bool(quick_preflight["quick_route_ok"]),
+                    "feedback_endpoint_ok": bool(quick_preflight["feedback_endpoint_ok"]),
+                    "live_models_count": int(quick_preflight["live_models_count"]),
+                    "holiday_routes_deployed_on_cloud_run": bool(
+                        quick_preflight["quick_route_ok"] and quick_preflight["feedback_endpoint_ok"]
+                    ),
+                    "onboarding_feedback_deployed": bool(quick_preflight["feedback_endpoint_ok"]),
+                    "stale_revision_detected": bool(quick_preflight["stale_revision_detected"]),
+                    "missing_or_stale_routes": list(quick_preflight["missing_or_stale_routes"]),
+                    "local_fallback_guidance": str(quick_preflight["local_fallback_guidance"]),
+                    "write_continue_config": bool(write_continue_config),
+                    "preflight": None,
+                    "first_heartbeat_ok": None,
+                    "heartbeat": {"attempted": False, "sent": False, "ok": False},
+                    "ces_recorded": False,
+                    "ces_queued_for_retry": False,
+                    "ces_feedback": {"attempted": False, "ces_recorded": False, "status": "preflight_blocked"},
+                    "ces_flush": None,
+                    "ces_queue_file": redact_home_path(queue_path, home=resolved_home),
+                    "ces_queue_exists": queue_path.is_file(),
+                    "zero_inference_verified": True,
+                    "compliance": compliance,
+                    "summary": str(quick_preflight["summary"]),
+                }
+            )
+
+    preset_report = install_vscode_quick_preset(
+        clean_gw,
+        workspace_dir=ws_path,
+        credentials_path=cred_path,
+        continue_config_path=cont_path,
+        handle=handle,
+        role=norm_role,
+        explicit_api_key=explicit_api_key,
+        host_label=host_label,
+        expected_sha=clean_expected,
+        send_first_heartbeat=send_first_heartbeat,
+        submit_ces=False,
+        profile=norm_profile,
+        ease_rating=clean_ease,
+        had_game_lag=had_game_lag,
+        require_holiday_routes=bool(require_holiday_routes or clean_expected is not None),
+        run_gamer_preflight=run_gamer_preflight,
+        max_temp_c=max_temp_c,
+        yield_budget_ms=yield_budget_ms,
+        gpu_probe_fn=gpu_probe_fn,
+        yield_drill_fn=yield_drill_fn,
+        process_probe_fn=process_probe_fn,
+        http_fn=http_fn,
+        env=env_view,
+        home=resolved_home,
+        os_name=eff_os,
+        system_name=system_name,
+        lang=lang_code,
+    )
+    network_calls += int(preset_report["network_calls"])
+
+    if preset_report["exit_code"] != 0:
+        return _attach_receipt(
+            {
+                **{k: v for k, v in preset_report.items() if k != "receipt_sha256"},
+                "mode": "vscode_setup",
+                "elapsed_s": round(time.perf_counter() - t0, 4),
+                "within_60s_slo": (time.perf_counter() - t0) < SLO_BUDGET_SECONDS,
+                "network_calls": network_calls,
+                "quick_preflight": quick_preflight,
+                "models_preflight_ok": (
+                    bool(quick_preflight["models_preflight_ok"]) if quick_preflight is not None else False
+                ),
+                "quick_route_ok": (
+                    bool(quick_preflight["quick_route_ok"]) if quick_preflight is not None else None
+                ),
+                "feedback_endpoint_ok": (
+                    bool(quick_preflight["feedback_endpoint_ok"]) if quick_preflight is not None else None
+                ),
+                "live_models_count": (
+                    int(quick_preflight["live_models_count"]) if quick_preflight is not None else 0
+                ),
+                "stale_revision_detected": bool(
+                    preset_report.get("stale_revision_detected")
+                    or (quick_preflight and quick_preflight.get("stale_revision_detected"))
+                ),
+                "local_fallback_guidance": (
+                    str(quick_preflight["local_fallback_guidance"]) if quick_preflight is not None else ""
+                ),
+                "write_continue_config": bool(write_continue_config),
+                "ces_queued_for_retry": False,
+                "ces_flush": None,
+                "ces_queue_file": redact_home_path(queue_path, home=resolved_home),
+                "ces_queue_exists": queue_path.is_file(),
+            }
+        )
+
+    files_map = dict(preset_report.get("files") or {})
+    file_writes = int(preset_report.get("file_writes") or 0)
+
+    if write_continue_config:
+        saved_cred = load_saved_credentials(cred_path, expected_gateway=clean_gw)
+        if saved_cred is None or not is_valid_hivemind_key(saved_cred.get("api_key")):
+            raise QuickPresetError("Unable to load saved credentials for Continue config.yaml merge.")
+        existing_main = cont_main_path.read_text(encoding="utf-8") if cont_main_path.is_file() else None
+        merged_main = merge_continue_config_yaml(
+            existing_main,
+            gateway=clean_gw,
+            api_key=str(saved_cred["api_key"]),
+        )
+        main_write = atomic_write_config_file(
+            cont_main_path,
+            merged_main,
+            posix_mode=0o600,
+            create_backup=True,
+            os_name=eff_os,
+            home=resolved_home,
+        )
+        files_map["continue_main_config"] = main_write
+        if main_write.get("written"):
+            file_writes += 1
+
+    acct_public = dict(preset_report.get("account") or {})
+    account_ref = str(acct_public.get("account_id") or acct_public.get("masked_key") or "anon")
+    gamer_pf = preset_report.get("preflight")
+    eff_zero_lag = not bool(had_game_lag)
+    if isinstance(gamer_pf, Mapping) and not bool(gamer_pf.get("yield_ok", True)):
+        eff_zero_lag = False
+
+    ces_recorded = False
+    ces_spooled = False
+    ces_report: dict[str, Any] = {"attempted": False, "ces_recorded": False, "status": "not_requested"}
+    stale_revision = bool(
+        preset_report.get("stale_revision_detected")
+        or (quick_preflight is not None and quick_preflight.get("stale_revision_detected"))
+    )
+    missing_routes = list(preset_report.get("missing_or_stale_routes") or [])
+    if quick_preflight is not None:
+        for route_item in quick_preflight.get("missing_or_stale_routes") or []:
+            if route_item not in missing_routes:
+                missing_routes.append(route_item)
+
+    if prompt_ces:
+        ces_report = prompt_and_submit_ces(
+            gateway=clean_gw,
+            account_ref=account_ref,
+            profile=norm_profile,
+            default_had_game_lag=not eff_zero_lag,
+            system_name=system_name,
+            input_fn=input_fn,
+            http_fn=http_fn,
+            ces_queue_file=queue_path,
+            home=resolved_home,
+            env=env_view,
+            cwd=ws_path,
+            os_name=eff_os,
+            spool_on_failure=True,
+            lang=lang_code,
+        )
+        network_calls += int(ces_report.get("network_calls") or 0)
+        ces_recorded = bool(ces_report.get("ces_recorded"))
+        ces_spooled = bool(ces_report.get("queued_for_retry"))
+        if ces_report.get("http_status") == 404:
+            stale_revision = True
+            if "/v1/hivemind/onboarding/feedback" not in missing_routes:
+                missing_routes.append("/v1/hivemind/onboarding/feedback")
+    elif submit_ces:
+        ces_report, ces_calls = submit_preset_ces_feedback(
+            gateway=clean_gw,
+            account_ref=account_ref,
+            profile=norm_profile,
+            ease_rating=clean_ease,
+            zero_game_lag=eff_zero_lag,
+            system_name=system_name,
+            http_fn=http_fn,
+            lang=lang_code,
+        )
+        network_calls += ces_calls
+        ces_recorded = bool(ces_report.get("ces_recorded"))
+        http_st = int(ces_report.get("http_status") or 0)
+        if not ces_recorded and (http_st in (0, 404, 408, 429) or http_st >= 500):
+            enq_res = enqueue_vscode_ces_event(
+                queue_file=queue_path,
+                gateway=clean_gw,
+                account_ref=account_ref,
+                profile=norm_profile,
+                ease_rating=clean_ease,
+                zero_game_lag=eff_zero_lag,
+                system_name=system_name,
+                idempotency_key=str(ces_report["idempotency_key"]),
+                last_http_status=http_st,
+                last_reason=str(ces_report["status"]),
+                home=resolved_home,
+                enforce_personal_pc=False,
+                env=env_view,
+                cwd=ws_path,
+                os_name=eff_os,
+                lang=lang_code,
+            )
+            ces_spooled = bool(enq_res.get("enqueued") or enq_res.get("deduplicated"))
+            ces_report = {
+                **ces_report,
+                "queued_for_retry": ces_spooled,
+                "queue_file": enq_res.get("queue_file"),
+            }
+        if http_st == 404:
+            stale_revision = True
+            if "/v1/hivemind/onboarding/feedback" not in missing_routes:
+                missing_routes.append("/v1/hivemind/onboarding/feedback")
+
+    flush_report: dict[str, Any] | None = None
+    if flush_ces_queue and not ces_spooled:
+        flush_report = flush_vscode_ces_queue(
+            clean_gw,
+            queue_file=queue_path,
+            home=resolved_home,
+            enforce_personal_pc=False,
+            env=env_view,
+            cwd=ws_path,
+            os_name=eff_os,
+            http_fn=http_fn,
+            lang=lang_code,
+        )
+        network_calls += int(flush_report.get("network_calls") or 0)
+        if flush_report.get("stale_cloud_run_detected"):
+            stale_revision = True
+
+    ces_attempted = bool(ces_report.get("attempted"))
+    ces_gate_failed = bool(require_holiday_routes and ces_attempted and not ces_recorded)
+    overall_ready = not ces_gate_failed
+    elapsed_s = round(time.perf_counter() - t0, 4)
+
+    holiday_deployed = preset_report.get("holiday_routes_deployed_on_cloud_run")
+    feedback_deployed = preset_report.get("onboarding_feedback_deployed")
+    if quick_preflight is not None and holiday_deployed is None:
+        holiday_deployed = bool(
+            quick_preflight["quick_route_ok"] and quick_preflight["feedback_endpoint_ok"] and not stale_revision
+        )
+        feedback_deployed = bool(quick_preflight["feedback_endpoint_ok"] and not stale_revision)
+
+    acct_models = list(acct_public.get("models") or [])
+    models_ok = (
+        bool(quick_preflight["models_preflight_ok"])
+        if quick_preflight is not None
+        else (len(acct_models) > 0 and DEFAULT_MODELS[0] in acct_models)
+    )
+    live_models_count = (
+        int(quick_preflight["live_models_count"])
+        if quick_preflight is not None
+        else len(acct_models)
+    )
+
+    fallback_guidance = str(quick_preflight["local_fallback_guidance"]) if quick_preflight is not None else ""
+    if stale_revision and not fallback_guidance:
+        fallback_guidance = (
+            "Révision Cloud Run en retard : retours CES mis en file locale 0600 pour --flush-ces-queue."
+            if is_fr
+            else "Stale Cloud Run revision detected: CES feedback queued in 0600 local spool for --flush-ces-queue."
+        )
+
+    verdict = "ready" if overall_ready else "stale_cloud_run_revision"
+    summary = (
+        (
+            f"Configuration VS Code < 60 s terminée en {elapsed_s:.2f}s (clé={acct_public.get('masked_key')}, "
+            f"CES={ces_recorded}, file_retry={ces_spooled}, {FINANCIAL_PROMISE})."
+            if is_fr
+            else f"VS Code < 60 s setup completed in {elapsed_s:.2f}s (key={acct_public.get('masked_key')}, "
+            f"ces_recorded={ces_recorded}, queued_for_retry={ces_spooled}, {FINANCIAL_PROMISE})."
+        )
+        if overall_ready
+        else (
+            "Configuration VS Code bloquée : routes Cloud Run en retard."
+            if is_fr
+            else "VS Code setup blocked by stale Cloud Run holiday routes."
+        )
+    )
+
+    return _attach_receipt(
+        {
+            "schema": SCHEMA,
+            "mode": "vscode_setup",
+            "ok": overall_ready,
+            "ready": overall_ready,
+            "compliance_ok": True,
+            "exit_code": 0 if overall_ready else 2,
+            "verdict": verdict,
+            "gateway": clean_gw,
+            "elapsed_s": elapsed_s,
+            "within_60s_slo": elapsed_s < SLO_BUDGET_SECONDS,
+            "account": acct_public,
+            "files": files_map,
+            "file_writes": file_writes,
+            "network_calls": network_calls,
+            "task_labels": list(PRESET_TASK_LABELS),
+            "gitignore_check": preset_report.get("gitignore_check"),
+            "quick_preflight": quick_preflight,
+            "models_preflight_ok": models_ok,
+            "quick_route_ok": (
+                bool(quick_preflight["quick_route_ok"]) if quick_preflight is not None else None
+            ),
+            "feedback_endpoint_ok": (
+                bool(quick_preflight["feedback_endpoint_ok"]) if quick_preflight is not None else None
+            ),
+            "live_models_count": live_models_count,
+            "holiday_routes_deployed_on_cloud_run": holiday_deployed,
+            "onboarding_feedback_deployed": feedback_deployed,
+            "stale_revision_detected": stale_revision,
+            "missing_or_stale_routes": missing_routes,
+            "online_producers": preset_report.get("online_producers"),
+            "local_fallback_guidance": fallback_guidance,
+            "write_continue_config": bool(write_continue_config),
+            "parity": preset_report.get("parity"),
+            "preflight": gamer_pf,
+            "first_heartbeat_ok": preset_report.get("first_heartbeat_ok"),
+            "heartbeat": preset_report.get("heartbeat"),
+            "ces_recorded": ces_recorded,
+            "ces_queued_for_retry": ces_spooled,
+            "ces_feedback": ces_report,
+            "ces_flush": flush_report,
+            "ces_queue_file": redact_home_path(queue_path, home=resolved_home),
+            "ces_queue_exists": queue_path.is_file(),
+            "zero_inference_verified": True,
+            "compliance": compliance,
+            "summary": summary,
+        }
+    )
+
+
 def render_human_report(report: Mapping[str, Any], *, lang: str = "en") -> str:
     """Render a zero-secret, `~`-redacted CLI summary in English or French."""
     lang_code = normalize_lang(lang)
@@ -3084,6 +5151,9 @@ def render_human_report(report: Mapping[str, Any], *, lang: str = "en") -> str:
         f"Compliance: {COMPLIANCE_NOTICE_BILINGUAL}",
         f"Receipt SHA-256: {report.get('receipt_sha256', '')}",
     ]
+    guidance = str(report.get("local_fallback_guidance") or "").strip()
+    if guidance:
+        lines.append(f"Fallback Guidance: {guidance}")
     git_chk = report.get("gitignore_check")
     if isinstance(git_chk, Mapping) and git_chk.get("warning"):
         lines.append(f"Notice: {git_chk['warning']}")
@@ -3108,9 +5178,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--expected-sha", default=None, help="Expected Cloud Run manifest build_sha.")
     parser.add_argument("--install-preset", action="store_true", help="Install <60s VS Code quick-connect preset.")
+    parser.add_argument("--vscode-setup", action="store_true", help="Run unified <60s VS Code setup orchestrator.")
+    parser.add_argument("--skip-preflight", action="store_true", help="Skip 1-shot /v1/models + /quick health preflight.")
     parser.add_argument("--workspace", default=None, help="Target personal workspace directory.")
     parser.add_argument("--credentials-path", default=None, help="Override ~/.hivemind/credentials.json path.")
     parser.add_argument("--continue-config-path", default=None, help="Override ~/.continue/hivemind_provider.yaml.")
+    parser.add_argument("--continue-main-config-path", default=None, help="Override ~/.continue/config.yaml.")
+    parser.add_argument("--write-continue-config", action="store_true", help="Atomically merge HiveMind models into ~/.continue/config.yaml.")
+    parser.add_argument("--ces-queue-file", default=None, help="Override ~/.hivemind/vscode_setup_ces_queue.json.")
     parser.add_argument("--uninstall", action="store_true", help="Remove HiveMind preset artifacts locally.")
     parser.add_argument("--handle", default=DEFAULT_HANDLE, help="Personal handle for registration.")
     parser.add_argument("--role", default=DEFAULT_ROLE, choices=sorted(VALID_ROLES), help="Account role.")
@@ -3118,7 +5193,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--first-heartbeat", action="store_true", help="Send outbound OpenTrainer first heartbeat.")
     parser.add_argument("--gamer-preflight", action="store_true", help="Run <1.5s Steam yield & <=70 C check.")
     parser.add_argument("--max-temp-c", type=float, default=DEFAULT_MAX_TEMP_C, help="Thermal guard ceiling in C.")
+    parser.add_argument("--prompt-ces", action="store_true", help="Ask a 1-line zero-PII CES question interactively.")
     parser.add_argument("--submit-ces", action="store_true", help="Submit non-blocking zero-PII CES feedback.")
+    parser.add_argument("--flush-ces-queue", action="store_true", help="Flush pending 0600 CES retry spool entries.")
     parser.add_argument("--profile", default="dev", choices=sorted(VALID_PROFILES), help="CES profile (dev|gamer).")
     parser.add_argument("--ease-rating", type=int, default=5, help="CES ease rating (1..5).")
     parser.add_argument("--had-game-lag", action="store_true", help="Report whether any game lag occurred.")
@@ -3139,6 +5216,7 @@ def main(
     gpu_probe_fn: GpuProbeFn = default_gpu_probe,
     yield_drill_fn: YieldDrillFn = default_worker_yield_drill,
     process_probe_fn: ProcessProbeFn | None = default_process_probe,
+    input_fn: Callable[[str], str] | None = None,
     stdout: Any = None,
 ) -> int:
     """CLI entrypoint returning `0` on success or `2` on fail-closed compliance/parity/preset errors."""
@@ -3154,9 +5232,67 @@ def main(
                 workspace_dir=eff_cwd,
                 credentials_path=args.credentials_path,
                 continue_config_path=args.continue_config_path,
+                continue_main_config_path=args.continue_main_config_path,
+                ces_queue_file=args.ces_queue_file,
                 env=env,
                 home=home,
                 os_name=os_name,
+                lang=lang_code,
+            )
+        elif (
+            args.flush_ces_queue
+            and not args.vscode_setup
+            and not args.install_preset
+            and not args.check_parity
+            and not args.write_continue_config
+            and not args.prompt_ces
+            and not args.submit_ces
+            and not args.first_heartbeat
+            and not args.gamer_preflight
+        ):
+            report = flush_vscode_ces_queue(
+                args.gateway,
+                queue_file=args.ces_queue_file,
+                home=home,
+                env=env,
+                cwd=eff_cwd,
+                os_name=os_name,
+                http_fn=http_fn,
+                lang=lang_code,
+            )
+        elif args.vscode_setup:
+            report = run_vscode_setup(
+                args.gateway,
+                workspace_dir=eff_cwd,
+                credentials_path=args.credentials_path,
+                continue_config_path=args.continue_config_path,
+                continue_main_config_path=args.continue_main_config_path,
+                write_continue_config=bool(args.write_continue_config),
+                ces_queue_file=args.ces_queue_file,
+                handle=args.handle,
+                role=args.role,
+                host_label=args.host_label,
+                expected_sha=args.expected_sha,
+                skip_preflight=bool(args.skip_preflight),
+                require_holiday_routes=bool(args.require_holiday_routes),
+                prompt_ces=bool(args.prompt_ces),
+                submit_ces=bool(args.submit_ces),
+                flush_ces_queue=bool(args.flush_ces_queue),
+                profile=args.profile,
+                ease_rating=args.ease_rating,
+                had_game_lag=bool(args.had_game_lag),
+                run_gamer_preflight=bool(args.gamer_preflight),
+                max_temp_c=float(args.max_temp_c),
+                send_first_heartbeat=bool(args.first_heartbeat),
+                gpu_probe_fn=gpu_probe_fn,
+                yield_drill_fn=yield_drill_fn,
+                process_probe_fn=process_probe_fn,
+                http_fn=http_fn,
+                input_fn=input_fn,
+                env=env,
+                home=home,
+                os_name=os_name,
+                system_name=system_name,
                 lang=lang_code,
             )
         elif args.check_parity and not args.install_preset:

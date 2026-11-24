@@ -4,9 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import inspect
 import json
 import os
 import sys
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
@@ -28,6 +32,8 @@ from hivemind.core.quantization import (
 )
 
 console = Console()
+_VSCODE_QUICK_PRESET_SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "noel_vscode_quick_preset.py"
+_DEFAULT_VSCODE_GATEWAY = "https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app"
 
 
 def _positive_int(value: str) -> int:
@@ -173,7 +179,11 @@ def cmd_serve_coordinator(host: str, port: int, public_url: str | None = None, i
     import sys
 
     import uvicorn
-    from hivemind.boinc.coordinator_api import BOINCCoordinatorService, create_coordinator_fastapi_app
+
+    from hivemind.boinc.coordinator_api import (
+        BOINCCoordinatorService,
+        create_coordinator_fastapi_app,
+    )
     from hivemind.client.steam_identity import SteamIdentityGate
 
     if isinstance(host, bool) or not isinstance(host, str):
@@ -229,6 +239,127 @@ def cmd_serve_coordinator(host: str, port: int, public_url: str | None = None, i
     app = create_coordinator_fastapi_app(coord, identity=identity)
     uvicorn.run(app, host=host_clean, port=int(port))
     return 0
+
+
+def _load_vscode_quick_preset_module(script_path: Path | str | None = None) -> Any:
+    """Load `scripts/noel_vscode_quick_preset.py` cleanly without touching torch/CUDA."""
+    target = Path(script_path) if script_path is not None else _VSCODE_QUICK_PRESET_SCRIPT
+    if not target.is_file():
+        raise FileNotFoundError(f"VS Code quick preset helper script not found: {target}")
+    resolved_target = target.resolve()
+    for mod_name in ("scripts.noel_vscode_quick_preset", "noel_vscode_quick_preset"):
+        existing = sys.modules.get(mod_name)
+        existing_file = getattr(existing, "__file__", None)
+        if existing is not None and existing_file and Path(existing_file).resolve() == resolved_target:
+            return existing
+    spec = importlib.util.spec_from_file_location("noel_vscode_quick_preset", resolved_target)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load VS Code quick preset helper from {resolved_target}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["noel_vscode_quick_preset"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _build_vscode_setup_argv(args: argparse.Namespace) -> list[str]:
+    """Translate parsed `hivemind vscode-setup` options into helper CLI arguments."""
+    forwarded: list[str] = []
+    if not bool(getattr(args, "uninstall", False)):
+        forwarded.append("--vscode-setup")
+
+    value_flags: tuple[tuple[str, str], ...] = (
+        ("gateway", "--gateway"),
+        ("workspace", "--workspace"),
+        ("credentials_path", "--credentials-path"),
+        ("continue_config_path", "--continue-config-path"),
+        ("continue_main_config_path", "--continue-main-config-path"),
+        ("ces_queue_file", "--ces-queue-file"),
+        ("handle", "--handle"),
+        ("role", "--role"),
+        ("host_label", "--host-label"),
+        ("expected_sha", "--expected-sha"),
+        ("profile", "--profile"),
+        ("ease_rating", "--ease-rating"),
+        ("max_temp_c", "--max-temp-c"),
+        ("lang", "--lang"),
+    )
+    for attr_name, flag_name in value_flags:
+        val = getattr(args, attr_name, None)
+        if val is not None:
+            forwarded.extend([flag_name, str(val)])
+
+    bool_flags: tuple[tuple[str, str], ...] = (
+        ("write_continue_config", "--write-continue-config"),
+        ("skip_preflight", "--skip-preflight"),
+        ("require_holiday_routes", "--require-holiday-routes"),
+        ("prompt_ces", "--prompt-ces"),
+        ("submit_ces", "--submit-ces"),
+        ("flush_ces_queue", "--flush-ces-queue"),
+        ("had_game_lag", "--had-game-lag"),
+        ("gamer_preflight", "--gamer-preflight"),
+        ("first_heartbeat", "--first-heartbeat"),
+        ("uninstall", "--uninstall"),
+        ("json_output", "--json"),
+    )
+    for attr_name, flag_name in bool_flags:
+        if bool(getattr(args, attr_name, False)):
+            forwarded.append(flag_name)
+
+    return forwarded
+
+
+def cmd_vscode_setup(
+    args: argparse.Namespace | Sequence[str] | None = None,
+    *,
+    script_path: Path | str | None = None,
+) -> int:
+    """Execute `< 60 s` personal VS Code setup via `noel_vscode_quick_preset.py` without CUDA init."""
+    if isinstance(args, argparse.Namespace):
+        forwarded_argv = _build_vscode_setup_argv(args)
+        want_json = bool(getattr(args, "json_output", False))
+    else:
+        raw_list = [str(item) for item in args] if args is not None else []
+        if "--uninstall" not in raw_list and "--vscode-setup" not in raw_list:
+            forwarded_argv = ["--vscode-setup", *raw_list]
+        else:
+            forwarded_argv = raw_list
+        want_json = "--json" in forwarded_argv
+
+    try:
+        helper_mod = _load_vscode_quick_preset_module(script_path=script_path)
+    except (FileNotFoundError, ImportError, OSError) as exc:
+        err_msg = f"VS Code setup helper unavailable: {exc}"
+        if want_json:
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "ready": False,
+                        "exit_code": 2,
+                        "mode": "vscode_setup_helper_missing",
+                        "error": err_msg,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+        else:
+            print(err_msg, file=sys.stderr)
+        return 2
+
+    main_fn = helper_mod.main
+    sig = inspect.signature(main_fn)
+    call_kwargs: dict[str, Any] = {}
+    if "http_fn" in sig.parameters and hasattr(helper_mod, "default_http_request"):
+        call_kwargs["http_fn"] = helper_mod.default_http_request
+    if "gpu_probe_fn" in sig.parameters and hasattr(helper_mod, "default_gpu_probe"):
+        call_kwargs["gpu_probe_fn"] = helper_mod.default_gpu_probe
+    if "yield_drill_fn" in sig.parameters and hasattr(helper_mod, "default_worker_yield_drill"):
+        call_kwargs["yield_drill_fn"] = helper_mod.default_worker_yield_drill
+    if "process_probe_fn" in sig.parameters and hasattr(helper_mod, "default_process_probe"):
+        call_kwargs["process_probe_fn"] = helper_mod.default_process_probe
+    return int(main_fn(forwarded_argv, **call_kwargs))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -410,7 +541,39 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_lab.add_argument("lab_args", nargs=argparse.REMAINDER, help="arguments of the lab CLI, e.g. `simulate --preset churn` (use `-h` after the lab command for help)")
 
+    p_vscode = sub.add_parser(
+        "vscode-setup",
+        help="Configure < 60 s personal VS Code / Continue.dev quick preset (0.00 EUR / 0.00 USD, AGPL-3.0)",
+    )
+    p_vscode.add_argument("--gateway", default=_DEFAULT_VSCODE_GATEWAY, help="HiveMind gateway URL.")
+    p_vscode.add_argument("--workspace", default=None, help="Target personal workspace directory.")
+    p_vscode.add_argument("--credentials-path", default=None, help="Override ~/.hivemind/credentials.json path.")
+    p_vscode.add_argument("--continue-config-path", default=None, help="Override ~/.continue/hivemind_provider.yaml.")
+    p_vscode.add_argument("--continue-main-config-path", default=None, help="Override ~/.continue/config.yaml.")
+    p_vscode.add_argument("--write-continue-config", action="store_true", help="Atomically merge HiveMind models into ~/.continue/config.yaml.")
+    p_vscode.add_argument("--ces-queue-file", default=None, help="Override ~/.hivemind/vscode_setup_ces_queue.json.")
+    p_vscode.add_argument("--handle", default="noel-dev", help="Personal handle for registration.")
+    p_vscode.add_argument("--role", default="prosumer", choices=["consumer", "producer", "prosumer", "trainer"], help="Account role.")
+    p_vscode.add_argument("--host-label", default=None, help="Sanitized personal host label for OpenTrainer.")
+    p_vscode.add_argument("--expected-sha", default=None, help="Expected Cloud Run manifest build_sha.")
+    p_vscode.add_argument("--skip-preflight", action="store_true", help="Skip 1-shot /v1/models + /quick preflight.")
+    p_vscode.add_argument("--require-holiday-routes", action="store_true", help="Fail closed (exit code 2) if Cloud Run holiday routes are stale.")
+    p_vscode.add_argument("--prompt-ces", action="store_true", help="Ask a 1-line zero-PII CES question interactively.")
+    p_vscode.add_argument("--submit-ces", action="store_true", help="Submit non-blocking zero-PII CES feedback.")
+    p_vscode.add_argument("--flush-ces-queue", action="store_true", help="Flush pending 0600 CES retry spool entries.")
+    p_vscode.add_argument("--profile", default="dev", choices=["dev", "gamer"], help="CES profile (dev|gamer).")
+    p_vscode.add_argument("--ease-rating", type=int, default=5, help="CES ease rating (1..5).")
+    p_vscode.add_argument("--had-game-lag", action="store_true", help="Report whether any game lag occurred.")
+    p_vscode.add_argument("--gamer-preflight", action="store_true", help="Run < 1.5 s Steam yield & <= 70 C check.")
+    p_vscode.add_argument("--max-temp-c", type=float, default=70.0, help="Thermal guard ceiling in C.")
+    p_vscode.add_argument("--first-heartbeat", action="store_true", help="Send outbound OpenTrainer first heartbeat.")
+    p_vscode.add_argument("--uninstall", action="store_true", help="Remove HiveMind preset artifacts locally.")
+    p_vscode.add_argument("--lang", default="en", choices=["en", "fr"], help="Output language (en|fr).")
+    p_vscode.add_argument("--json", action="store_true", dest="json_output", help="Emit JSON report.")
+
     args = parser.parse_args(argv)
+    if args.command == "vscode-setup":
+        return cmd_vscode_setup(args)
     if args.command == "swarm-lab":
         from hivemind.lab.swarm_lab import main as swarm_lab_main
 
@@ -488,6 +651,7 @@ def main(argv: list[str] | None = None) -> int:
         import sys
 
         import uvicorn
+
         from hivemind.game.steam_edition import create_hack_miner_fastapi_app
 
         host_clean = str(args.host).strip()

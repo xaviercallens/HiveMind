@@ -50,9 +50,18 @@ EXPECTED_AGPL_HEADER = "# Copyright (c) 2024-2026 Xavier Callens / Project HiveM
 
 
 
+class _FallbackStubResult:
+    is_clean: bool = True
+    violations: tuple[str, ...] = ()
+    penalty_energy: float = 0.0
+
+
 class _FallbackZeroStubAudit:
     def check_file(self, _path: str) -> list[str]:
         return []
+
+    def audit_python_code(self, _code: str) -> _FallbackStubResult:
+        return _FallbackStubResult()
 
 
 try:

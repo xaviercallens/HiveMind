@@ -258,18 +258,17 @@ def test_collector_lru_idempotency_tracemalloc_and_http_validation(tmp_path: Pat
         "object": "hivemind.onboarding_feedback_summary",
         "total_responses": 0,
         "mean_ease_rating": None,
-        "average_ease_rating": None,
         "zero_game_lag_ratio": None,
         "by_profile": {"dev": 0, "gamer": 0},
     }
 
     # 3. True O(1) LRU eviction: k1, k2, k3 inserted; replay k1 refreshes MRU; k4 evicts k2 (not k1)
     s1 = collector.record(profile="dev", ease_rating=5, zero_game_lag=True, idempotency_key="k1")
-    assert s1["mean_ease_rating"] == s1["average_ease_rating"] == 5.0
+    assert s1["mean_ease_rating"] == 5.0
     collector.record(profile="gamer", ease_rating=4, zero_game_lag=True, idempotency_key="k2")
     s3 = collector.record(profile="dev", ease_rating=3, zero_game_lag=False, idempotency_key="k3")
     assert s3["total_responses"] == 3
-    assert s3["mean_ease_rating"] == s3["average_ease_rating"] == 4.0
+    assert s3["mean_ease_rating"] == 4.0
 
     # Replay k1 with surrounding spaces -> normalized to "k1", deduplicated & refreshed in LRU
     replay_k1 = collector.record(profile="dev", ease_rating=5, zero_game_lag=True, idempotency_key="  k1  ")
@@ -401,7 +400,7 @@ def test_collector_lru_idempotency_tracemalloc_and_http_validation(tmp_path: Pat
             )
             assert r_ws2.status_code == 200
             assert r_ws2.json()["total_responses"] == 2
-            assert r_ws2.json()["mean_ease_rating"] == r_ws2.json()["average_ease_rating"] == 5.0
+            assert r_ws2.json()["mean_ease_rating"] == 5.0
 
             # Duplicate non-empty Idempotency-Key does not double count
             r_k1 = client.post(
@@ -942,7 +941,7 @@ def test_concurrent_48_user_holiday_retry_soak_sqlite_wal_and_smoke_parity(
                             sqlite_lock_hits.append(resp.text)
                     assert resp.status_code == 200, f"Feedback retry failed: {resp.status_code} {resp.text}"
                     doc = resp.json()
-                    assert doc["mean_ease_rating"] == doc["average_ease_rating"]
+                    assert isinstance(doc["mean_ease_rating"], float)
                     assert "score" not in _collect_all_keys(doc)
                 return {
                     "idx": idx,
@@ -991,7 +990,6 @@ def test_concurrent_48_user_holiday_retry_soak_sqlite_wal_and_smoke_parity(
                 "object": "hivemind.onboarding_feedback_summary",
                 "total_responses": 48,
                 "mean_ease_rating": expected_mean,
-                "average_ease_rating": expected_mean,
                 "zero_game_lag_ratio": expected_lag,
                 "by_profile": {"dev": 24, "gamer": 24},
             }

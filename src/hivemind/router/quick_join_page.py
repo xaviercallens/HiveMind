@@ -158,7 +158,6 @@ class OnboardingFeedbackCollector:
                 "object": "hivemind.onboarding_feedback_summary",
                 "total_responses": 0,
                 "mean_ease_rating": None,
-                "average_ease_rating": None,
                 "zero_game_lag_ratio": None,
                 "by_profile": {"dev": 0, "gamer": 0},
             }
@@ -167,7 +166,6 @@ class OnboardingFeedbackCollector:
             "object": "hivemind.onboarding_feedback_summary",
             "total_responses": total,
             "mean_ease_rating": mean_ease,
-            "average_ease_rating": mean_ease,
             "zero_game_lag_ratio": round(self._zero_lag_count / total, 4),
             "by_profile": {
                 "dev": self._by_profile["dev"],

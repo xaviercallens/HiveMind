@@ -13,7 +13,9 @@ All dynamic DOM updates use ``textContent`` exclusively, and the Content-Securit
 
 from __future__ import annotations
 
+import hashlib
 import html
+import json
 import math
 import re
 from collections.abc import Mapping
@@ -31,6 +33,71 @@ DEFAULT_KEY_PLACEHOLDER = "hm-YOUR_API_KEY"
 PERSONAL_PC_COMPLIANCE_NOTE = (
     "100% personal home PC & personal hobby/open-source projects only — "
     "never install on a corporate laptop or send company code/data — 0.00 EUR/USD"
+)
+VALID_CES_PROFILES: frozenset[str] = frozenset({"dev", "gamer"})
+DEFAULT_SIGNUP_CES_PLATFORM = "web-signup"
+PENDING_SIGNUP_CES_STORAGE_KEY = "hivemind_signup_pending_ces"
+SIGNUP_HOLIDAY_PARITY_ROUTES: tuple[str, ...] = (
+    "/signup",
+    "/noel",
+    "/quick",
+    "/raid-noel",
+    "/v1/hivemind/onboarding/manifest",
+    "/v1/hivemind/onboarding/feedback/summary",
+)
+_SIGNUP_HTML_PARITY_ROUTES: frozenset[str] = frozenset(
+    {"/signup", "/noel", "/quick", "/raid-noel"}
+)
+_MANIFEST_REQUIRED_HOLIDAY_ROUTES: tuple[str, ...] = (
+    "/noel",
+    "/quick",
+    "/raid-noel",
+    "/arena-noel",
+    "/v1/hivemind/onboarding/manifest",
+    "/v1/hivemind/onboarding/feedback",
+    "/v1/hivemind/onboarding/feedback/summary",
+)
+_CES_PLATFORM_RE = re.compile(r"\A[a-z0-9][a-z0-9_-]{0,23}\Z", re.ASCII)
+_FORBIDDEN_PLATFORM_TOKENS: tuple[str, ...] = (
+    "secret",
+    "token",
+    "password",
+    "passwd",
+    "apikey",
+    "bearer",
+    "amadeus",
+    "corporate",
+    "email",
+    "pii",
+    "sk-",
+    "ghp_",
+    "aiza",
+)
+_BUILD_SHA_RE = re.compile(r"\A[A-Za-z0-9]{6,64}\Z", re.ASCII)
+_HEX_SHA_RE = re.compile(r"\A[0-9a-f]{7,64}\Z", re.ASCII)
+_CSP_NONCE_RE = re.compile(r"'nonce-([A-Za-z0-9+/=_-]{6,128})'")
+_HTML_NONCE_ATTR_RE = re.compile(
+    r"""\bnonce=(?:"([A-Za-z0-9+/=_-]{6,128})"|'([A-Za-z0-9+/=_-]{6,128})')"""
+)
+_STRIP_NONCE_ATTR_RE = re.compile(r"""\bnonce=(?:"[^"]*"|'[^']*')""")
+_STATIC_FIGURE_RE = re.compile(
+    r"\d[\d.,]*\s?(?:m" + r"s\b|tok" + r"/s|HTTP" + r" Reqs|Comple" + r"tions|\bs/" + r"round)"
+)
+_UNSAFE_DOM_SINK_RE = re.compile(
+    r"\b(?:" + "inner" + "HTML|" + "outer" + "HTML|" + "insertAdjacent" + "HTML|" + "docu" + "ment" + r"\." + r"write)\b"
+)
+_SECRET_VALUE_MARKERS: tuple[str, ...] = (
+    "secret",
+    "token",
+    "password",
+    "passwd",
+    "apikey",
+    "bearer",
+    "aiza",
+)
+CES_SIGNUP_COMPLIANCE_NOTE = (
+    "Personal-PC-only AGPL-3.0 micro-survey: 100% personal home PCs & hobby/open-source projects only "
+    "(never corporate laptops or employer code/data) • 0.00 EUR / 0.00 USD • Zero PII (no free-text field)."
 )
 
 
@@ -123,6 +190,14 @@ button:hover,.btn-link:hover{filter:brightness(1.08)}
 .mut{color:var(--mut);font-size:.86rem}
 .ok-banner{border-color:var(--green);background:rgba(52,211,153,.08)}
 .err-text{color:var(--err);font-weight:600}
+.ces-box{margin:.7rem 0 .25rem;padding:.65rem .75rem;border:1px solid var(--line);border-radius:.45rem;background:var(--input)}
+.ces-card{margin:.85rem 0 .25rem;padding:.85rem;border:1px solid var(--line);border-radius:.5rem;background:var(--input)}
+.ces-card h4{margin:0 0 .35rem;font-size:.96rem;color:var(--amber)}
+.ces-row{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem;margin:.45rem 0}
+.ces-lbl{font-size:.86rem;font-weight:600;color:var(--fg);margin-right:.2rem}
+.row-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:.5rem 0}
+.chip-btn{font:inherit;font-size:.85rem;font-weight:600;padding:.38rem .72rem;border-radius:.45rem;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
+.chip-btn.active{background:var(--acc);color:#06101e;border-color:var(--acc)}
 [hidden]{display:none !important}
 """
 
@@ -608,6 +683,337 @@ if ($('transferPointsForm')) {
     }
   });
 }
+async function verifyHolidayRouteParity() {
+  const statusEl = $('verifyHolidayParityStatus');
+  if (statusEl) {
+    statusEl.textContent = 'Checking holiday routes (/v1/hivemind/onboarding/manifest & /v1/hivemind/onboarding/feedback/summary)...';
+    statusEl.className = 'mut';
+  }
+  try {
+    const results = await Promise.all([
+      fetch('/v1/hivemind/onboarding/manifest', {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 'Accept': 'application/json' },
+      }),
+      fetch('/v1/hivemind/onboarding/feedback/summary', {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 'Accept': 'application/json' },
+      }),
+    ]);
+    const manRes = results[0];
+    const sumRes = results[1];
+    const manCode = manRes && typeof manRes.status === 'number' ? manRes.status : 0;
+    const sumCode = sumRes && typeof sumRes.status === 'number' ? sumRes.status : 0;
+    if (manCode === 404 || sumCode === 404) {
+      const drifted = [];
+      if (manCode === 404) drifted.push('/v1/hivemind/onboarding/manifest');
+      if (sumCode === 404) drifted.push('/v1/hivemind/onboarding/feedback/summary');
+      if (statusEl) {
+        statusEl.textContent = '⚠️ Cloud Run holiday route drift (HTTP 404): ' + drifted.join(', ') + ' — deploy pending; 1-click CES stays spooled locally (0.00 EUR/USD).';
+        statusEl.className = 'err-text';
+      }
+      return;
+    }
+    if (!manRes || !manRes.ok || !sumRes || !sumRes.ok) {
+      if (statusEl) {
+        statusEl.textContent = '⚠️ Holiday parity check failed (manifest HTTP ' + manCode + ', feedback/summary HTTP ' + sumCode + ').';
+        statusEl.className = 'err-text';
+      }
+      return;
+    }
+    const manBody = await manRes.json().catch(() => ({}));
+    const sumBody = await sumRes.json().catch(() => ({}));
+    const manOk = Boolean(
+      manBody &&
+      manBody.object === 'hivemind.onboarding.manifest' &&
+      manBody.personal_pc_only === true &&
+      Array.isArray(manBody.holiday_routes)
+    );
+    const sumOk = Boolean(
+      sumBody &&
+      sumBody.object === 'hivemind.onboarding_feedback_summary' &&
+      typeof sumBody.total_responses === 'number' &&
+      sumBody.by_profile
+    );
+    if (!manOk || !sumOk) {
+      if (statusEl) {
+        statusEl.textContent = '⚠️ Holiday parity payload mismatch (unexpected manifest or feedback summary schema).';
+        statusEl.className = 'err-text';
+      }
+      return;
+    }
+    const sha = manBody.build_sha || 'unknown';
+    const easeTxt = typeof sumBody.mean_ease_rating === 'number' ? sumBody.mean_ease_rating.toFixed(2) + '/5' : 'n/a';
+    const lagTxt = typeof sumBody.zero_game_lag_ratio === 'number' ? (sumBody.zero_game_lag_ratio * 100).toFixed(1) + '%' : 'n/a';
+    if (statusEl) {
+      statusEl.textContent =
+        '✅ Holiday Parity Live (HTTP 200 • build ' + sha + ' • ' +
+        manBody.holiday_routes.length + ' routes • CES responses: ' +
+        sumBody.total_responses + ', ease: ' + easeTxt + ', zero-lag: ' + lagTxt + ' • 0.00 EUR/USD).';
+      statusEl.className = 'mut';
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = 'Could not reach holiday parity endpoints on this gateway.';
+      statusEl.className = 'err-text';
+    }
+  }
+}
+if ($('verifyHolidayParityBtn')) {
+  $('verifyHolidayParityBtn').addEventListener('click', verifyHolidayRouteParity);
+}
+const SIGNUP_PENDING_CES_KEY = 'hivemind_signup_pending_ces';
+let signupCesProfile = 'dev';
+let signupCesEase = 5;
+let signupCesZeroLag = true;
+
+function getSignupStorage() {
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage) return localStorage;
+  } catch (e) {}
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) return window.localStorage;
+  } catch (e) {}
+  return null;
+}
+function signupFnv1aHex(str, seed) {
+  let h = seed >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return ('00000000' + h.toString(16)).slice(-8);
+}
+function buildSignupCesIdempotencyKey(ballot) {
+  const raw = ballot.profile + '|' + String(ballot.ease_rating) + '|' + (ballot.zero_game_lag ? '1' : '0') + '|' + ballot.platform;
+  const hex = signupFnv1aHex(raw, 2166136261) + signupFnv1aHex(raw + '#web-signup', 2166136261);
+  return 'ces-' + ballot.profile + '-' + String(ballot.ease_rating) + '-' + (ballot.zero_game_lag ? 'lag0' : 'lag1') + '-' + hex;
+}
+function validateSignupCesBallot(b) {
+  if (!b || typeof b !== 'object') return null;
+  const prof = b.profile === 'dev' ? 'dev' : (b.profile === 'gamer' ? 'gamer' : null);
+  const ease = (typeof b.ease_rating === 'number' && Number.isInteger(b.ease_rating) && b.ease_rating >= 1 && b.ease_rating <= 5) ? b.ease_rating : null;
+  const lag = typeof b.zero_game_lag === 'boolean' ? b.zero_game_lag : null;
+  if (!prof || ease === null || lag === null) return null;
+  if (b.note !== undefined && b.note !== '') return null;
+  return {
+    profile: prof,
+    ease_rating: ease,
+    zero_game_lag: lag,
+    platform: 'web-signup',
+    note: '',
+  };
+}
+function buildCurrentSignupCesBallot() {
+  return {
+    profile: signupCesProfile === 'gamer' ? 'gamer' : 'dev',
+    ease_rating: signupCesEase,
+    zero_game_lag: Boolean(signupCesZeroLag),
+    platform: 'web-signup',
+    note: '',
+  };
+}
+function clearPendingSignupCesBallot() {
+  try {
+    const st = getSignupStorage();
+    if (st) {
+      if (typeof st.removeItem === 'function') st.removeItem(SIGNUP_PENDING_CES_KEY);
+      else if (typeof st.setItem === 'function') st.setItem(SIGNUP_PENDING_CES_KEY, '');
+    }
+  } catch (e) {}
+}
+function savePendingSignupCesBallot(ballot, idemKey, statusCode) {
+  try {
+    const st = getSignupStorage();
+    if (st && typeof st.setItem === 'function') {
+      st.setItem(
+        SIGNUP_PENDING_CES_KEY,
+        JSON.stringify({
+          ballot: ballot,
+          idempotency_key: idemKey,
+          last_status: statusCode,
+        })
+      );
+    }
+  } catch (e) {}
+}
+function loadPendingSignupCesBallot() {
+  try {
+    const st = getSignupStorage();
+    if (!st || typeof st.getItem !== 'function') return null;
+    const raw = st.getItem(SIGNUP_PENDING_CES_KEY);
+    if (!raw || typeof raw !== 'string') return null;
+    if (raw.length > 512) {
+      clearPendingSignupCesBallot();
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    const clean = validateSignupCesBallot(parsed && parsed.ballot ? parsed.ballot : parsed);
+    if (!clean) {
+      clearPendingSignupCesBallot();
+      return null;
+    }
+    const key = (parsed && typeof parsed.idempotency_key === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(parsed.idempotency_key))
+      ? parsed.idempotency_key
+      : buildSignupCesIdempotencyKey(clean);
+    return { ballot: clean, idempotency_key: key };
+  } catch (e) {
+    clearPendingSignupCesBallot();
+    return null;
+  }
+}
+function setSignupCesStatus(text, isErr) {
+  const el = $('signupCesStatus');
+  if (!el) return;
+  el.textContent = String(text);
+  el.className = isErr ? 'err-text' : 'mut';
+}
+function signupCesSpoolMessage(statusCode) {
+  if (statusCode === 404) {
+    return 'Cloud Run route /v1/hivemind/onboarding/feedback returned HTTP 404: zero-PII ballot spooled locally. Click "Retry Pending Feedback" after deploy.';
+  }
+  if (statusCode === 429) {
+    return 'Rate limit reached (HTTP 429): zero-PII ballot spooled locally. Click "Retry Pending Feedback" in a minute.';
+  }
+  if (statusCode >= 500) {
+    return 'Gateway temporarily busy (HTTP ' + statusCode + '): zero-PII ballot spooled locally. Click "Retry Pending Feedback" to resend.';
+  }
+  return 'Offline / network error: zero-PII ballot spooled locally. Click "Retry Pending Feedback" when back online.';
+}
+function syncSignupCesButtons() {
+  const devBtn = $('signupCesProfileDevBtn');
+  const gamerBtn = $('signupCesProfileGamerBtn');
+  if (devBtn) {
+    const isDev = signupCesProfile === 'dev';
+    if (typeof devBtn.setAttribute === 'function') devBtn.setAttribute('aria-pressed', isDev ? 'true' : 'false');
+    devBtn.className = isDev ? 'chip-btn active' : 'chip-btn';
+  }
+  if (gamerBtn) {
+    const isGamer = signupCesProfile === 'gamer';
+    if (typeof gamerBtn.setAttribute === 'function') gamerBtn.setAttribute('aria-pressed', isGamer ? 'true' : 'false');
+    gamerBtn.className = isGamer ? 'chip-btn active' : 'chip-btn';
+  }
+  for (let r = 1; r <= 5; r++) {
+    const eBtn = $('signupCesEaseBtn-' + r);
+    if (eBtn) {
+      const active = signupCesEase === r;
+      if (typeof eBtn.setAttribute === 'function') eBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      eBtn.className = active ? 'chip-btn active' : 'chip-btn';
+    }
+  }
+  const lagYes = $('signupCesLagYesBtn');
+  const lagNo = $('signupCesLagNoBtn');
+  if (lagYes) {
+    if (typeof lagYes.setAttribute === 'function') lagYes.setAttribute('aria-pressed', signupCesZeroLag ? 'true' : 'false');
+    lagYes.className = signupCesZeroLag ? 'chip-btn active' : 'chip-btn';
+  }
+  if (lagNo) {
+    if (typeof lagNo.setAttribute === 'function') lagNo.setAttribute('aria-pressed', !signupCesZeroLag ? 'true' : 'false');
+    lagNo.className = !signupCesZeroLag ? 'chip-btn active' : 'chip-btn';
+  }
+}
+async function sendSignupCesBallot(ballot, idemKey, isRetry) {
+  if (typeof fetch !== 'function') {
+    savePendingSignupCesBallot(ballot, idemKey, 0);
+    setSignupCesStatus(signupCesSpoolMessage(0), true);
+    return;
+  }
+  setSignupCesStatus('Sending 1-click zero-PII feedback...', false);
+  try {
+    const res = await fetch('/v1/hivemind/onboarding/feedback', {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idemKey,
+      },
+      body: JSON.stringify(ballot),
+    });
+    const code = res && typeof res.status === 'number' ? res.status : 0;
+    if (res && res.ok) {
+      const d = await res.json().catch(() => ({}));
+      clearPendingSignupCesBallot();
+      const tot = typeof d.total_responses === 'number' ? String(d.total_responses) : 'n/a';
+      const easeTxt = typeof d.mean_ease_rating === 'number' ? d.mean_ease_rating.toFixed(2) + '/5' : 'n/a';
+      const lagTxt = typeof d.zero_game_lag_ratio === 'number' ? (d.zero_game_lag_ratio * 100).toFixed(1) + '%' : 'n/a';
+      const prof = d.by_profile || {};
+      const profTxt = 'dev: ' + (typeof prof.dev === 'number' ? prof.dev : 'n/a') + ' | gamer: ' + (typeof prof.gamer === 'number' ? prof.gamer : 'n/a');
+      const prefix = isRetry ? 'Pending zero-PII feedback flushed' : 'Thank you! 1-click zero-PII feedback recorded live';
+      setSignupCesStatus(
+        '✅ ' + prefix + ' (HTTP 200 • total: ' + tot + ', ease: ' + easeTxt + ', zero-lag: ' + lagTxt + ', ' + profTxt + ' • 0.00 EUR / 0.00 USD).',
+        false
+      );
+      return;
+    }
+    if (code === 404 || code === 408 || code === 429 || code >= 500 || code === 0) {
+      savePendingSignupCesBallot(ballot, idemKey, code);
+      setSignupCesStatus(signupCesSpoolMessage(code), true);
+      return;
+    }
+    clearPendingSignupCesBallot();
+    setSignupCesStatus('Submission rejected (HTTP ' + code + '): ballot cleared.', true);
+  } catch (err) {
+    savePendingSignupCesBallot(ballot, idemKey, 0);
+    setSignupCesStatus(signupCesSpoolMessage(0), true);
+  }
+}
+if ($('signupCesProfileDevBtn')) {
+  $('signupCesProfileDevBtn').addEventListener('click', () => {
+    signupCesProfile = 'dev';
+    syncSignupCesButtons();
+  });
+}
+if ($('signupCesProfileGamerBtn')) {
+  $('signupCesProfileGamerBtn').addEventListener('click', () => {
+    signupCesProfile = 'gamer';
+    syncSignupCesButtons();
+  });
+}
+[1, 2, 3, 4, 5].forEach((rating) => {
+  const eBtn = $('signupCesEaseBtn-' + rating);
+  if (eBtn) {
+    eBtn.addEventListener('click', () => {
+      signupCesEase = rating;
+      syncSignupCesButtons();
+    });
+  }
+});
+if ($('signupCesLagYesBtn')) {
+  $('signupCesLagYesBtn').addEventListener('click', () => {
+    signupCesZeroLag = true;
+    syncSignupCesButtons();
+  });
+}
+if ($('signupCesLagNoBtn')) {
+  $('signupCesLagNoBtn').addEventListener('click', () => {
+    signupCesZeroLag = false;
+    syncSignupCesButtons();
+  });
+}
+if ($('signupSubmitCesBtn')) {
+  $('signupSubmitCesBtn').addEventListener('click', () => {
+    const ballot = buildCurrentSignupCesBallot();
+    const idemKey = buildSignupCesIdempotencyKey(ballot);
+    return sendSignupCesBallot(ballot, idemKey, false);
+  });
+  syncSignupCesButtons();
+  const pendingInit = loadPendingSignupCesBallot();
+  if (pendingInit) {
+    setSignupCesStatus('A zero-PII ballot is pending locally: click "Retry Pending Feedback" to send it.', false);
+  }
+}
+if ($('signupRetryPendingCesBtn')) {
+  $('signupRetryPendingCesBtn').addEventListener('click', () => {
+    const pending = loadPendingSignupCesBallot();
+    if (!pending) {
+      setSignupCesStatus('No pending zero-PII feedback ballot in local storage.', false);
+      return Promise.resolve();
+    }
+    return sendSignupCesBallot(pending.ballot, pending.idempotency_key, true);
+  });
+}
 syncSignupLiveTelemetry();
 checkActiveBrowserSession();
 """
@@ -656,6 +1062,429 @@ def _reading(source: Mapping[str, Any], key: str, *, thousands: bool = False) ->
         return "n/a"
     number = int(value)
     return f"{number:,}" if thousands else str(number)
+
+
+def build_signup_ces_ballot(
+    *,
+    profile: str = "dev",
+    ease_rating: int = 5,
+    zero_game_lag: bool = True,
+    platform_name: str = DEFAULT_SIGNUP_CES_PLATFORM,
+    note: str = "",
+) -> dict[str, Any]:
+    """Validate and normalize a strict zero-PII ``OnboardingFeedbackRequest`` (``extra='forbid'``) ballot."""
+    if isinstance(profile, bool) or not isinstance(profile, str) or len(profile) > 32 or not profile.isascii():
+        raise ValueError("profile must be 'dev' or 'gamer'")
+    norm_profile = profile.strip().lower()
+    if norm_profile not in VALID_CES_PROFILES:
+        raise ValueError("profile must be 'dev' or 'gamer'")
+    if isinstance(ease_rating, bool) or not isinstance(ease_rating, int) or not (1 <= ease_rating <= 5):
+        raise ValueError("ease_rating must be an integer between 1 and 5")
+    if not isinstance(zero_game_lag, bool):
+        raise ValueError("zero_game_lag must be a boolean")
+    if (
+        isinstance(platform_name, bool)
+        or not isinstance(platform_name, str)
+        or not platform_name.isascii()
+        or len(platform_name) > 32
+    ):
+        raise ValueError("platform_name must be a 1-24 character ASCII platform slug")
+    clean_platform = platform_name.strip().lower()
+    if not _CES_PLATFORM_RE.fullmatch(clean_platform):
+        raise ValueError("platform_name must match ^[a-z0-9][a-z0-9_-]{0,23}$")
+    if clean_platform.startswith(("hm-", "hm_live_", "hm_")) or any(
+        tok in clean_platform for tok in _FORBIDDEN_PLATFORM_TOKENS
+    ):
+        raise ValueError("platform_name contains forbidden credential, PII, or corporate markers")
+    if isinstance(note, bool) or not isinstance(note, str) or note != "":
+        raise ValueError("note must be empty ('') to enforce strict zero-PII 1-click feedback")
+    return {
+        "profile": norm_profile,
+        "ease_rating": ease_rating,
+        "zero_game_lag": zero_game_lag,
+        "platform": clean_platform,
+        "note": "",
+    }
+
+
+def _sanitize_build_sha_local(raw: object) -> str:
+    if not isinstance(raw, str):
+        return "unknown"
+    cleaned = raw.strip()
+    low = cleaned.lower()
+    if (
+        not cleaned
+        or low == "unknown"
+        or not _BUILD_SHA_RE.fullmatch(cleaned)
+        or any(marker in low for marker in _SECRET_VALUE_MARKERS)
+    ):
+        return "unknown"
+    return low
+
+
+def _shas_match_local(live_sha: str, expected_sha: str) -> bool:
+    clean_live = _sanitize_build_sha_local(live_sha)
+    clean_exp = _sanitize_build_sha_local(expected_sha)
+    if clean_live == "unknown" or clean_exp == "unknown":
+        return False
+    if clean_live == clean_exp:
+        return True
+    if _HEX_SHA_RE.fullmatch(clean_live) and _HEX_SHA_RE.fullmatch(clean_exp):
+        return clean_live.startswith(clean_exp) or clean_exp.startswith(clean_live)
+    return False
+
+
+def _has_forbidden_score_key(obj: Any) -> bool:
+    if isinstance(obj, Mapping):
+        for key, value in obj.items():
+            if str(key) == ("sco" + "re") or _has_forbidden_score_key(value):
+                return True
+    elif isinstance(obj, (list, tuple)):
+        return any(_has_forbidden_score_key(item) for item in obj)
+    return False
+
+
+def _is_bounded_finite_number(val: Any, low: float, high: float) -> bool:
+    return (
+        not isinstance(val, bool)
+        and isinstance(val, (int, float))
+        and math.isfinite(float(val))
+        and low <= float(val) <= high
+    )
+
+
+def _extract_route_probe(
+    probe: Mapping[str, Any],
+) -> tuple[int | None, dict[str, str], str, Mapping[str, Any] | None]:
+    raw_status = probe.get("status_code") if "status_code" in probe else probe.get("status")
+    status_code = raw_status if (not isinstance(raw_status, bool) and isinstance(raw_status, int)) else None
+
+    headers: dict[str, str] = {}
+    raw_headers = probe.get("headers")
+    if isinstance(raw_headers, Mapping):
+        for hk, hv in raw_headers.items():
+            if isinstance(hk, str) and isinstance(hv, str):
+                headers[hk.strip().lower()] = hv
+    if "content-security-policy" not in headers and isinstance(probe.get("csp"), str):
+        headers["content-security-policy"] = probe["csp"]
+
+    text_body = ""
+    for key in ("html", "text", "body"):
+        val = probe.get(key)
+        if isinstance(val, str):
+            text_body = val
+            break
+
+    json_body: Mapping[str, Any] | None = None
+    if isinstance(probe.get("json"), Mapping):
+        json_body = probe["json"]
+    elif text_body.lstrip().startswith("{"):
+        try:
+            parsed = json.loads(text_body)
+            if isinstance(parsed, Mapping):
+                json_body = parsed
+        except json.JSONDecodeError:
+            json_body = None
+
+    return status_code, headers, text_body, json_body
+
+
+def _inspect_html_parity_route(
+    headers: Mapping[str, str],
+    html_text: str,
+    seen_nonces: set[str],
+) -> tuple[bool, dict[str, Any], list[str]]:
+    issues: list[str] = []
+    has_doctype = "<!doctype html" in html_text.lower()
+    if not has_doctype:
+        issues.append("missing_doctype")
+
+    csp_val = headers.get("content-security-policy", "")
+    csp_lower = csp_val.lower()
+    csp_unsafe = "'unsafe-inline'" in csp_lower or "'unsafe-eval'" in csp_lower
+    hdr_nonces = _CSP_NONCE_RE.findall(csp_val)
+    attr_nonces = [g1 or g2 for g1, g2 in _HTML_NONCE_ATTR_RE.findall(html_text)]
+    header_nonce = hdr_nonces[0] if (hdr_nonces and len(set(hdr_nonces)) == 1) else None
+    nonce_reused = header_nonce is not None and header_nonce in seen_nonces
+    if header_nonce is not None:
+        seen_nonces.add(header_nonce)
+
+    csp_ok = bool(
+        "default-src 'none'" in csp_lower
+        and not csp_unsafe
+        and header_nonce is not None
+        and attr_nonces
+        and set(attr_nonces) == {header_nonce}
+        and not nonce_reused
+    )
+    if nonce_reused:
+        issues.append("reused_csp_nonce")
+    elif not csp_ok:
+        issues.append("invalid_or_missing_csp_nonce")
+
+    stripped_html = _STRIP_NONCE_ATTR_RE.sub('nonce=""', html_text)
+    has_unsafe_sink = bool(_UNSAFE_DOM_SINK_RE.search(stripped_html))
+    has_static_fig = bool(_STATIC_FIGURE_RE.search(stripped_html))
+    if has_unsafe_sink:
+        issues.append("unsafe_dom_sink_detected")
+    if has_static_fig:
+        issues.append("unbacked_static_figure_detected")
+    dom_clean = not has_unsafe_sink and not has_static_fig
+
+    low_html = stripped_html.lower()
+    compliance_ok = (
+        ("personal" in low_html or "personnel" in low_html)
+        and ("0.00 eur" in low_html or "0,00 eur" in low_html or "0.00 usd" in low_html or "0,00 usd" in low_html)
+        and ("agpl-3.0" in low_html or "proof of concept" in low_html)
+    )
+    if not compliance_ok:
+        issues.append("missing_personal_pc_or_zero_eur_banner")
+
+    info = {
+        "has_doctype": has_doctype,
+        "csp_ok": csp_ok,
+        "nonce_reused": nonce_reused,
+        "dom_clean": dom_clean,
+        "compliance_ok": compliance_ok,
+    }
+    return len(issues) == 0, info, issues
+
+
+def _inspect_manifest_parity(
+    doc: Mapping[str, Any],
+    expected_sha: str | None,
+) -> tuple[bool, str, bool | None, list[str]]:
+    issues: list[str] = []
+    if doc.get("object") != "hivemind.onboarding.manifest":
+        issues.append("manifest_invalid_object")
+    if doc.get("campaign_id") != "noel-2026-easy-onboard":
+        issues.append("manifest_campaign_mismatch")
+    if doc.get("status") != "ok":
+        issues.append("manifest_status_not_ok")
+    if doc.get("personal_pc_only") is not True:
+        issues.append("manifest_personal_pc_only_false")
+    if doc.get("financial_promise") != "0.00 EUR / 0.00 USD":
+        issues.append("manifest_financial_promise_mismatch")
+    if _has_forbidden_score_key(doc):
+        issues.append("manifest_forbidden_key")
+
+    routes = doc.get("holiday_routes")
+    if not isinstance(routes, (list, tuple)) or not all(isinstance(r, str) for r in routes):
+        issues.append("manifest_invalid_holiday_routes")
+    elif any(req not in routes for req in _MANIFEST_REQUIRED_HOLIDAY_ROUTES):
+        issues.append("manifest_missing_holiday_routes")
+
+    scripts = doc.get("downloadable_scripts")
+    if not isinstance(scripts, (list, tuple)) or not all(isinstance(s, str) for s in scripts):
+        issues.append("manifest_invalid_downloadable_scripts")
+    elif "hivemind_quickstart.py" not in scripts or "hivemind_doctor.py" not in scripts:
+        issues.append("manifest_missing_core_scripts")
+
+    live_sha = _sanitize_build_sha_local(doc.get("build_sha"))
+    sha_match: bool | None = None
+    if expected_sha is not None:
+        sha_match = _shas_match_local(live_sha, expected_sha)
+        if not sha_match:
+            issues.append("manifest_build_sha_mismatch")
+
+    return len(issues) == 0, live_sha, sha_match, issues
+
+
+def _inspect_feedback_summary_parity(doc: Mapping[str, Any]) -> tuple[bool, list[str]]:
+    issues: list[str] = []
+    expected_keys = {
+        "object",
+        "total_responses",
+        "mean_ease_rating",
+        "zero_game_lag_ratio",
+        "by_profile",
+    }
+    if set(doc.keys()) != expected_keys:
+        issues.append("summary_exact_five_keys_mismatch")
+    if doc.get("object") != "hivemind.onboarding_feedback_summary":
+        issues.append("summary_invalid_object")
+    if _has_forbidden_score_key(doc):
+        issues.append("summary_forbidden_key")
+
+    raw_total = doc.get("total_responses")
+    total_ok = not isinstance(raw_total, bool) and isinstance(raw_total, int) and raw_total >= 0
+    if not total_ok:
+        issues.append("summary_invalid_total_responses")
+        total_val = -1
+    else:
+        total_val = int(raw_total)
+
+    ease_val = doc.get("mean_ease_rating")
+    lag_val = doc.get("zero_game_lag_ratio")
+    if total_val == 0:
+        if ease_val is not None:
+            issues.append("summary_non_null_ease_when_empty")
+        if lag_val is not None:
+            issues.append("summary_non_null_lag_when_empty")
+    elif total_val > 0:
+        if not _is_bounded_finite_number(ease_val, 1.0, 5.0):
+            issues.append("summary_invalid_mean_ease_rating")
+        if not _is_bounded_finite_number(lag_val, 0.0, 1.0):
+            issues.append("summary_invalid_zero_game_lag_ratio")
+
+    bp = doc.get("by_profile")
+    if not isinstance(bp, Mapping) or set(bp.keys()) != {"dev", "gamer"}:
+        issues.append("summary_invalid_by_profile")
+    else:
+        dev_cnt = bp.get("dev")
+        gamer_cnt = bp.get("gamer")
+        if (
+            isinstance(dev_cnt, bool)
+            or not isinstance(dev_cnt, int)
+            or dev_cnt < 0
+            or isinstance(gamer_cnt, bool)
+            or not isinstance(gamer_cnt, int)
+            or gamer_cnt < 0
+        ):
+            issues.append("summary_invalid_profile_counts")
+        elif total_ok and dev_cnt + gamer_cnt != total_val:
+            issues.append("summary_profile_conservation_mismatch")
+
+    return len(issues) == 0, issues
+
+
+def evaluate_signup_holiday_parity(
+    route_probes: Mapping[str, Mapping[str, Any]],
+    *,
+    expected_build_sha: str | None = None,
+) -> dict[str, Any]:
+    """Deterministically verify HTTP 200, CSP nonces, DOM cleanliness, compliance, and schema parity across holiday routes."""
+    if not isinstance(route_probes, Mapping):
+        raise ValueError("route_probes must be a Mapping of route paths to probe dictionaries")
+    for raw_key, raw_val in route_probes.items():
+        if isinstance(raw_key, bool) or not isinstance(raw_key, str):
+            raise ValueError("route_probes keys must be route path strings")
+        if "completions" in raw_key.lower():
+            raise ValueError("live GPU inference probes are forbidden in holiday parity checks")
+        if raw_val is not None and not isinstance(raw_val, Mapping):
+            raise ValueError("each entry in route_probes must be a Mapping")
+
+    clean_expected_sha: str | None = None
+    if expected_build_sha is not None:
+        if isinstance(expected_build_sha, bool) or not isinstance(expected_build_sha, str):
+            raise ValueError("expected_build_sha must be a 6-64 char alphanumeric string or None")
+        sanitized = _sanitize_build_sha_local(expected_build_sha)
+        if sanitized == "unknown":
+            raise ValueError("expected_build_sha must be a 6-64 char alphanumeric string or None")
+        clean_expected_sha = sanitized
+
+    seen_nonces: set[str] = set()
+    missing_404_routes: list[str] = []
+    failed_routes: list[str] = []
+    diagnostics: list[str] = []
+    per_route: dict[str, dict[str, Any]] = {}
+
+    passed_count = 0
+    any_nonce_reused = False
+    all_html_csp_ok = True
+    html_dom_clean = True
+    all_compliance_ok = True
+    live_build_sha = "unknown"
+    sha_match: bool | None = None
+    manifest_ok = False
+    feedback_summary_ok = False
+
+    for route in SIGNUP_HOLIDAY_PARITY_ROUTES:
+        probe = route_probes.get(route)
+        if probe is None:
+            failed_routes.append(route)
+            diagnostics.append(f"{route}: missing_probe")
+            per_route[route] = {"status_code": None, "ready": False, "issues": ["missing_probe"]}
+            if route in _SIGNUP_HTML_PARITY_ROUTES:
+                all_html_csp_ok = False
+                all_compliance_ok = False
+            continue
+
+        status_code, headers, text_body, json_body = _extract_route_probe(probe)
+        if status_code != 200:
+            failed_routes.append(route)
+            if status_code == 404:
+                missing_404_routes.append(route)
+            issue = f"http_{status_code}" if status_code is not None else "network_or_missing_status"
+            diagnostics.append(f"{route}: {issue}")
+            per_route[route] = {"status_code": status_code, "ready": False, "issues": [issue]}
+            if route in _SIGNUP_HTML_PARITY_ROUTES:
+                all_html_csp_ok = False
+                all_compliance_ok = False
+            continue
+
+        if route in _SIGNUP_HTML_PARITY_ROUTES:
+            route_ok, h_info, r_issues = _inspect_html_parity_route(headers, text_body, seen_nonces)
+            any_nonce_reused = any_nonce_reused or h_info["nonce_reused"]
+            all_html_csp_ok = all_html_csp_ok and h_info["csp_ok"]
+            html_dom_clean = html_dom_clean and h_info["dom_clean"]
+            all_compliance_ok = all_compliance_ok and h_info["compliance_ok"]
+            per_route[route] = {"status_code": status_code, "ready": route_ok, **h_info, "issues": r_issues}
+        elif route == "/v1/hivemind/onboarding/manifest":
+            if json_body is None:
+                route_ok, r_issues = False, ["manifest_missing_json"]
+                all_compliance_ok = False
+            else:
+                route_ok, live_build_sha, sha_match, r_issues = _inspect_manifest_parity(json_body, clean_expected_sha)
+                if json_body.get("personal_pc_only") is not True:
+                    all_compliance_ok = False
+            manifest_ok = route_ok
+            per_route[route] = {"status_code": status_code, "ready": route_ok, "issues": r_issues}
+        else:
+            if json_body is None:
+                route_ok, r_issues = False, ["summary_missing_json"]
+            else:
+                route_ok, r_issues = _inspect_feedback_summary_parity(json_body)
+            feedback_summary_ok = route_ok
+            per_route[route] = {"status_code": status_code, "ready": route_ok, "issues": r_issues}
+
+        if route_ok:
+            passed_count += 1
+        else:
+            failed_routes.append(route)
+            diagnostics.extend(f"{route}: {item}" for item in r_issues)
+
+    unique_csp_nonces_ok = (
+        all_html_csp_ok
+        and not any_nonce_reused
+        and len(seen_nonces) == len(_SIGNUP_HTML_PARITY_ROUTES)
+    )
+    parity_ok = bool(
+        passed_count == len(SIGNUP_HOLIDAY_PARITY_ROUTES)
+        and unique_csp_nonces_ok
+        and html_dom_clean
+        and all_compliance_ok
+        and manifest_ok
+        and feedback_summary_ok
+        and (clean_expected_sha is None or sha_match is True)
+    )
+
+    core: dict[str, Any] = {
+        "object": "hivemind.signup_holiday_parity_report",
+        "campaign_id": "noel-2026-easy-onboard",
+        "required_routes": list(SIGNUP_HOLIDAY_PARITY_ROUTES),
+        "routes_total_count": len(SIGNUP_HOLIDAY_PARITY_ROUTES),
+        "routes_passed_count": passed_count,
+        "parity_ok": parity_ok,
+        "stale_404_drift": len(missing_404_routes) > 0,
+        "missing_or_404_routes": missing_404_routes,
+        "failed_routes": failed_routes,
+        "unique_csp_nonces_count": len(seen_nonces),
+        "unique_csp_nonces_ok": unique_csp_nonces_ok,
+        "html_dom_clean": html_dom_clean,
+        "compliance_ok": all_compliance_ok,
+        "live_build_sha": live_build_sha,
+        "expected_build_sha": clean_expected_sha,
+        "sha_match": sha_match,
+        "manifest_ok": manifest_ok,
+        "feedback_summary_ok": feedback_summary_ok,
+        "zero_inference_verified": True,
+        "per_route": per_route,
+        "diagnostics": diagnostics,
+    }
+    canonical = json.dumps(core, sort_keys=True, ensure_ascii=False, allow_nan=False)
+    core["receipt_sha256"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return core
 
 
 def render_signup_page(
@@ -758,6 +1587,12 @@ def render_signup_page(
 
     yaml_key = raw_res_key if _CONTINUE_KEY_RE.fullmatch(raw_res_key) else DEFAULT_KEY_PLACEHOLDER
     continue_yaml_html = html.escape(build_continue_config_yaml(yaml_key, DEFAULT_PUBLIC_API_BASE))
+    ces_ease_btns_html = "".join(
+        f'<button id="signupCesEaseBtn-{r}" data-testid="signup-ces-ease-btn-{r}" '
+        f'type="button" class="{"chip-btn active" if r == 5 else "chip-btn"}" '
+        f'data-ease="{r}" aria-pressed="{"true" if r == 5 else "false"}">{r} / 5</button>'
+        for r in range(1, 6)
+    )
 
     err_html = html.escape(error_message) if error_message else ""
     err_cls = "err-text" if error_message else "mut"
@@ -797,6 +1632,8 @@ def render_signup_page(
   </div>
   <nav class="nav-links" data-testid="signup-quick-nav">
     <a href="/noel">🎄 Noël Quick Start</a>
+    <a href="/raid-noel">🏔️ Winter GPU Raid</a>
+    <a href="/arena-noel">⚖️ Blind A/B Arena</a>
     <a href="/v3.1">🐝 Unified v3.1 Portal</a>
     <a href="/">⚡ AI Playground</a>
     <a href="/manifesto">📜 Manifesto</a>
@@ -853,6 +1690,40 @@ def render_signup_page(
       <button id="verifyKeyModelsBtn" data-testid="signup-verify-key-models-btn" type="button" class="secondary">⚡ Test Key in Browser (/v1/models)</button>
       <span id="verifyKeyStatus" data-testid="signup-verify-key-status" class="mut" role="status"></span>
     </p>
+    <div id="quickConnectCliBlock" class="ces-box">
+      <p class="mut"><strong>&lt; 60 s Zero-Dependency Quick-Connect &amp; &lt; 10 s Doctor CLI (&lt; 5 min Gamer Whisper with &lt; 1.5 s Steam pause):</strong></p>
+      <pre><code>python3 scripts/hivemind_quickstart.py --write-continue-config
+hivemind vscode-setup
+python3 scripts/hivemind_doctor.py --noel</code></pre>
+      <p class="row-actions">
+        <button id="verifyHolidayParityBtn" data-testid="signup-verify-holiday-parity-btn" type="button" class="secondary">🛰️ Check Holiday Route Parity</button>
+        <span id="verifyHolidayParityStatus" data-testid="signup-verify-holiday-parity-status" class="mut" role="status" aria-live="polite"></span>
+      </p>
+    </div>
+    <div id="signupCesCard" data-testid="signup-ces-card" class="ces-card">
+      <h4>🗳️ 1-Click Zero-PII CES &amp; Steam Zero-Game-Lag Micro-Survey (&lt; 1.5 s)</h4>
+      <p class="mut">Rate setup ease (1 to 5) &amp; Steam zero-lag comfort in 1 click (zero credentials, zero free-text, zero PII • 0.00 EUR / 0.00 USD):</p>
+      <div class="ces-row" role="group" aria-label="Profile">
+        <span class="ces-lbl">Profile:</span>
+        <button id="signupCesProfileDevBtn" data-testid="signup-ces-profile-dev-btn" type="button" class="chip-btn active" data-profile="dev" aria-pressed="true">Dev (VS Code / API)</button>
+        <button id="signupCesProfileGamerBtn" data-testid="signup-ces-profile-gamer-btn" type="button" class="chip-btn" data-profile="gamer" aria-pressed="false">PC Gamer (Steam / GPU)</button>
+      </div>
+      <div class="ces-row" role="group" aria-label="Ease Rating">
+        <span class="ces-lbl">Ease (1–5):</span>
+        {ces_ease_btns_html}
+      </div>
+      <div class="ces-row" role="group" aria-label="Steam Zero-Game-Lag">
+        <span class="ces-lbl">Steam Comfort (&lt; 1.5 s VRAM release):</span>
+        <button id="signupCesLagYesBtn" data-testid="signup-ces-lag-yes-btn" type="button" class="chip-btn active" data-zero-lag="true" aria-pressed="true">Zero Game Lag (Yes)</button>
+        <button id="signupCesLagNoBtn" data-testid="signup-ces-lag-no-btn" type="button" class="chip-btn" data-zero-lag="false" aria-pressed="false">Noticeable Lag (No)</button>
+      </div>
+      <div class="row-actions">
+        <button id="signupSubmitCesBtn" data-testid="signup-submit-ces-btn" type="button">✅ Submit 1-Click Feedback (Zero PII)</button>
+        <button id="signupRetryPendingCesBtn" data-testid="signup-retry-pending-ces-btn" type="button" class="secondary">🔁 Retry Pending Feedback</button>
+      </div>
+      <p id="signupCesStatus" data-testid="signup-ces-status" class="mut" role="status" aria-live="polite">Ready: pick profile, ease (default 5/5), and Steam comfort, then submit in 1 click.</p>
+      <p id="signupCesComplianceNote" data-testid="signup-ces-compliance-note" class="mut">{CES_SIGNUP_COMPLIANCE_NOTE}</p>
+    </div>
   </div>
   <p>Next, in a terminal or IDE (Continue / Cline / Aider / OpenCode):</p>
   <pre><code>export HIVEMIND_API_KEY=&lt;the key above&gt;

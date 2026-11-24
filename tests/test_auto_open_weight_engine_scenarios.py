@@ -71,7 +71,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ENGINE_PATH = REPO_ROOT / "src" / "hivemind" / "swarm" / "auto_open_weight_engine.py"
 CLI_PATH = REPO_ROOT / "scripts" / "hivemind_auto_open_weight.py"
 DOC_PATH = REPO_ROOT / "docs" / "AUTO_OPEN_WEIGHT_CAPABILITY_PLAN.md"
-ROADMAP_PATH = REPO_ROOT / "ROADMAP.md"
 
 
 def _load_cli_module() -> Any:
@@ -719,12 +718,12 @@ def test_s6_validation_errors_roadmap_and_security_stub_compliance_gates(tmp_pat
     with pytest.raises(ValueError, match="tau_temp"):
         cli.run_offline_s5_checkpoint_surgery({"w": np.ones((2,))}, {}, tau_temp=0.0)
 
-    # ROADMAP.md & docs/AUTO_OPEN_WEIGHT_CAPABILITY_PLAN.md verification
-    roadmap_text = ROADMAP_PATH.read_text(encoding="utf-8")
-    assert "3.25 Season 35" in roadmap_text
-    for task_id in ("HM-S35-01", "HM-S35-02", "HM-S35-03", "HM-S35-04", "HM-S35-05", "HM-S35-06", "HM-S35-07", "HM-S35-08"):
-        assert task_id in roadmap_text, f"Missing {task_id} in ROADMAP.md"
+    # docs/AUTO_OPEN_WEIGHT_CAPABILITY_PLAN.md Season 35 specification verification
     assert DOC_PATH.exists()
+    doc_text = DOC_PATH.read_text(encoding="utf-8")
+    assert "Season 35" in doc_text
+    for task_id in ("HM-S35-01", "HM-S35-02", "HM-S35-03", "HM-S35-04", "HM-S35-05", "HM-S35-06", "HM-S35-07", "HM-S35-08"):
+        assert task_id in doc_text, f"Missing {task_id} in docs/AUTO_OPEN_WEIGHT_CAPABILITY_PLAN.md"
 
     # AGPL-3.0 header, ZeroStubAudit, Lateral-Movement AST, and PRSecurityScanner gates
     auditor = ZeroStubAudit()
@@ -743,7 +742,6 @@ def test_s6_validation_errors_roadmap_and_security_stub_compliance_gates(tmp_pat
         "src/hivemind/swarm/auto_open_weight_engine.py",
         "scripts/hivemind_auto_open_weight.py",
         "docs/AUTO_OPEN_WEIGHT_CAPABILITY_PLAN.md",
-        "ROADMAP.md",
         "tests/test_auto_open_weight_engine_scenarios.py",
     ]
     changed_payloads = [
@@ -755,10 +753,10 @@ def test_s6_validation_errors_roadmap_and_security_stub_compliance_gates(tmp_pat
     ]
     sec_report = scanner.audit_pull_request(
         pr_number=1008,
-        pr_title="feat(swarm,roadmap): Season 35 Auto Open-Weight S5 PASS-Synergy Engine and master roadmap",
-        pr_body="Implements HM-S35-02 S5 PASS-Synergy engine, CLI, and Season 35 roadmap.",
+        pr_title="feat(swarm): Season 35 Auto Open-Weight S5 PASS-Synergy Engine, CLI & Capability Spec",
+        pr_body="Implements HM-S35-02 S5 PASS-Synergy engine, CLI, and Season 35 capability spec.",
         author="xaviercallens",
         changed_files=changed_payloads,
-        author_email="callensxavier@gmail.com",
+        author_email=None,
     )
     assert len(sec_report.findings) == 0

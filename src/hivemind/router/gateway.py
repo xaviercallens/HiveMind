@@ -3230,12 +3230,23 @@ def create_router_app(
     def submit_onboarding_feedback(request: Request, payload: OnboardingFeedbackRequest) -> dict[str, Any]:
         if not register_limiter.allow(client_key(request), clock()):
             raise RouterError(429, "Too many feedback submissions; try again in a minute.", "rate_limit_error", "rate_limited")
-        return onboarding_feedback.record(
-            profile=payload.profile,
-            ease_rating=payload.ease_rating,
-            zero_game_lag=payload.zero_game_lag,
-            platform_name=payload.platform,
-        )
+        raw_idem = request.headers.get("Idempotency-Key")
+        idem_key = None if raw_idem is None or raw_idem.strip(" \t") == "" else raw_idem
+        try:
+            return onboarding_feedback.record(
+                profile=payload.profile,
+                ease_rating=payload.ease_rating,
+                zero_game_lag=payload.zero_game_lag,
+                platform_name=payload.platform,
+                idempotency_key=idem_key,
+            )
+        except ValueError as exc:
+            raise RouterError(
+                400,
+                f"invalid onboarding feedback: {exc}",
+                "invalid_request_error",
+                "invalid_onboarding_feedback",
+            ) from None
 
     @app.get("/v1/hivemind/onboarding/feedback/summary")
     def get_onboarding_feedback_summary() -> dict[str, Any]:

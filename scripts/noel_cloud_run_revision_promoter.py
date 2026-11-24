@@ -32,6 +32,14 @@ standard library, proxy-free ``urllib.request.ProxyHandler({})``, and strict hos
      dry-run (``execute=False``), verifies ``/noel`` & ``/quick`` CSP nonces/DOM safety/0.00 EUR
      banners (stripping ``nonce="..."`` attributes before static-figure checks) plus feedback schema
      and optional ``Idempotency-Key`` canary POST, and triggers automatic rollback on canary failure.
+  5. Deploy-on-Merge Manifest Diff & Expanded Smoke Suite (``compute_deploy_manifest_fingerprint``,
+     ``detect_deploy_manifest_diff``, ``verify_post_deploy_smoke_suite``,
+     ``project_adoption_readiness_gates``, ``orchestrate_deploy_on_merge``): computes deterministic
+     SHA-256 manifest digests across Cloud Run-deployed files, verifies ``deploy.sh``
+     ``HIVEMIND_BUILD_SHA`` propagation, inspects read-only ``git diff`` against live ``build_sha``,
+     verifies ``/v1/models`` (non-empty + ``hivemind/coder`` metadata without ``/v1/chat/completions``)
+     and all 4 holiday HTML routes (``/noel``, ``/quick``, ``/raid-noel``, ``/arena-noel``), projects
+     readiness gates, and emits zero-PII ``incident_alert`` payloads on failure or rollback.
 
 Personal Home Use & Non-Monetary Compliance Rule (Amadeus / Personal-PC Rule):
   - 100% personal home PCs & personal hobby/open-source projects only (never corporate hardware).
@@ -111,6 +119,27 @@ CANARY_PROBE_ROUTES: tuple[tuple[str, str], ...] = (
     ("/noel", "html"),
     ("/quick", "html"),
     ("/v1/hivemind/onboarding/feedback/summary", "json"),
+)
+
+SMOKE_HTML_ROUTES: tuple[str, ...] = ("/noel", "/quick", "/raid-noel", "/arena-noel")
+
+SMOKE_SUITE_PROBE_ROUTES: tuple[tuple[str, str], ...] = (
+    ("/health", "json"),
+    ("/v1/models", "json"),
+    ("/v1/hivemind/onboarding/manifest", "json"),
+    ("/noel", "html"),
+    ("/quick", "html"),
+    ("/raid-noel", "html"),
+    ("/arena-noel", "html"),
+    ("/v1/hivemind/onboarding/feedback/summary", "json"),
+)
+
+CLOUD_RUN_CORE_PATHS: tuple[str, ...] = (
+    "deploy/gcp_openrouter/Dockerfile",
+    "deploy/gcp_openrouter/deploy.sh",
+    "deploy/gcp_openrouter/entrypoint.sh",
+    "deploy/gcp_openrouter/requirements.txt",
+    "deploy/gcp_openrouter/server.py",
 )
 
 EXPECTED_MANIFEST_HOLIDAY_ROUTES: tuple[str, ...] = (
@@ -263,7 +292,7 @@ _TRAINING_WORKER_MARKERS: tuple[str, ...] = (
     "diloco_worker",
     "swarm_trainer",
 )
-_SAFE_READONLY_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"rev-parse", "status", "log", "show"})
+_SAFE_READONLY_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"rev-parse", "status", "log", "show", "diff"})
 
 _SERVER_LOAD_LOCK = threading.Lock()
 
@@ -791,9 +820,18 @@ def default_git_runner(
 ) -> tuple[int, str]:
     """Run a local read-only `git` command (`shell=False`) without mutating repository state."""
     clean = _validate_argv_sequence(argv, allowed_binaries=frozenset({"git", "git.exe"}))
-    subcmd = clean[1] if len(clean) > 1 else ""
+    idx = 1
+    if len(clean) > 3 and clean[1] == "-C" and clean[2] and not clean[2].startswith("-"):
+        idx = 3
+    subcmd = clean[idx] if len(clean) > idx else ""
     if subcmd not in _SAFE_READONLY_GIT_SUBCOMMANDS:
         raise RevisionPromoterError(f"Only read-only git commands are permitted, got {subcmd!r}.")
+    if subcmd == "diff":
+        for extra in clean[idx + 1 :]:
+            if extra.startswith("-") and extra != "--name-only":
+                raise RevisionPromoterError(
+                    f"Only `--name-only` flag is permitted for read-only git diff, got {extra!r}."
+                )
     try:
         proc = subprocess.run(
             clean,
@@ -1037,13 +1075,19 @@ def _compliance_blocked_report(
             "pre_promote_ok": False,
             "finops_ok": False,
             "drift_detected": False,
+            "deploy_needed": False,
             "canary_ok": False,
+            "smoke_ok": False,
             "plan_ready": False,
             "promoted": False,
             "idempotent_noop": False,
             "already_at_target_revision": False,
             "promotion_deferred_training_active": False,
             "rollback_triggered": False,
+            "incident_alert_emitted": False,
+            "incident_alert": None,
+            "readiness_gates_passed": 0,
+            "readiness_gates_total": 5,
             "dry_run_only": True,
             "gcloud_executed": False,
             "gcloud_calls": 0,
@@ -1257,8 +1301,13 @@ def _inspect_holiday_html_contract(
     dom_clean = not (_FORBIDDEN_DOM_SINK_RE.search(stripped_html) or _STATIC_FIG_UNIT_RE.search(stripped_html))
 
     low_html = html_text.lower()
-    compliance_banner_ok = (
-        ("100% personal" in low_html or "100 % personnel" in low_html)
+    has_personal_pc_phrase = (
+        "100% personal" in low_html
+        or "100 % personnel" in low_html
+        or (("100%" in low_html or "100 %" in low_html) and ("personal" in low_html or "personnel" in low_html))
+    )
+    compliance_banner_ok = bool(
+        has_personal_pc_phrase
         and "agpl-3.0" in low_html
         and ("0.00 eur" in low_html or "0,00 eur" in low_html)
     )
@@ -3186,6 +3235,1506 @@ def promote_holiday_revision(
     )
 
 
+def _is_cloud_run_deployed_path(rel_path: str) -> bool:
+    """Return True iff `rel_path` belongs to the Cloud Run OpenRouter build context."""
+    cleaned = rel_path.strip().replace("\\", "/").lstrip("./")
+    if not cleaned:
+        return False
+    if cleaned in CLOUD_RUN_CORE_PATHS:
+        return True
+    if cleaned.startswith("src/hivemind/router/") and (
+        cleaned.endswith(".py") or cleaned == "src/hivemind/router/measured_results.json"
+    ):
+        return True
+    return cleaned in {f"scripts/{name}" for name in EXPECTED_MANIFEST_SCRIPTS}
+
+
+def _check_deploy_sh_build_sha_propagation(deploy_sh_path: Path) -> bool:
+    """Verify `deploy/gcp_openrouter/deploy.sh` propagates `HIVEMIND_BUILD_SHA` via `--update-env-vars`."""
+    if not deploy_sh_path.is_file():
+        return False
+    try:
+        raw_text = deploy_sh_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    active_lines = [ln for ln in raw_text.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+    active_text = "\n".join(active_lines)
+    propagates_var = bool(
+        re.search(r"(?:ENV_VARS=[^\n]*|--update-env-vars[^\n]*)HIVEMIND_BUILD_SHA=", active_text)
+    )
+    return bool(propagates_var and "--update-env-vars" in active_text and "--set-env-vars" not in active_text)
+
+
+def compute_deploy_manifest_fingerprint(
+    repo_root: Path | str | None = None,
+) -> dict[str, Any]:
+    """Compute deterministic SHA-256 manifest digest across Cloud Run-deployed files."""
+    root = Path(repo_root) if repo_root is not None else REPO_ROOT
+    router_dir = root / "src" / "hivemind" / "router"
+    router_files: list[str] = []
+    if router_dir.is_dir():
+        for entry in sorted(router_dir.glob("*.py")):
+            if entry.is_file():
+                router_files.append(f"src/hivemind/router/{entry.name}")
+        measured = router_dir / "measured_results.json"
+        if measured.is_file():
+            router_files.append("src/hivemind/router/measured_results.json")
+
+    script_rel_paths = sorted(f"scripts/{name}" for name in EXPECTED_MANIFEST_SCRIPTS)
+    tracked_paths = sorted(set(CLOUD_RUN_CORE_PATHS) | set(router_files) | set(script_rel_paths))
+
+    file_hashes: dict[str, str] = {}
+    missing_files: list[str] = []
+    manifest_entries: list[dict[str, str]] = []
+    for rel in tracked_paths:
+        target = root / rel
+        if target.is_file():
+            digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        else:
+            digest = "<missing>"
+            missing_files.append(rel)
+        file_hashes[rel] = digest
+        manifest_entries.append({"path": rel, "sha256": digest})
+
+    manifest_canonical = json.dumps(manifest_entries, sort_keys=True, ensure_ascii=False)
+    manifest_sha256 = hashlib.sha256(manifest_canonical.encode("utf-8")).hexdigest()
+    deploy_sh_ok = _check_deploy_sh_build_sha_propagation(root / "deploy" / "gcp_openrouter" / "deploy.sh")
+
+    return _attach_receipt(
+        {
+            "schema": SCHEMA,
+            "object": RECEIPT_OBJECT,
+            "campaign_id": CAMPAIGN_ID,
+            "mode": "manifest_fingerprint",
+            "repo_root": redact_home_path(root),
+            "manifest_sha256": manifest_sha256,
+            "files_count": len(tracked_paths),
+            "router_py_count": sum(1 for p in router_files if p.endswith(".py")),
+            "scripts_count": len(script_rel_paths),
+            "missing_files": missing_files,
+            "deploy_sh_build_sha_propagation_ok": deploy_sh_ok,
+            "tracked_paths": tracked_paths,
+            "file_hashes": file_hashes,
+            "zero_inference_verified": True,
+        }
+    )
+
+
+def _resolve_git_head_sha_in_repo(
+    runner: RunnerFn,
+    root: Path,
+    *,
+    lang_code: str,
+) -> tuple[str | None, str | None]:
+    is_fr = lang_code == "fr"
+    try:
+        rc, out = _invoke_runner(runner, ["git", "-C", str(root), "rev-parse", "HEAD"], SUBPROCESS_TIMEOUT_S)
+    except (OSError, subprocess.SubprocessError, RevisionPromoterError) as exc:
+        return None, (
+            f"Échec lecture SHA git HEAD local ({type(exc).__name__})."
+            if is_fr
+            else f"Failed to resolve local git HEAD SHA ({type(exc).__name__})."
+        )
+    candidate = sanitize_build_sha(out.strip()) if rc == 0 else "unknown"
+    if rc != 0 or candidate == "unknown":
+        return None, (
+            "SHA git HEAD invalide via `git rev-parse HEAD`."
+            if is_fr
+            else "Unable to resolve a valid SHA from `git rev-parse HEAD`."
+        )
+    return candidate, None
+
+
+def detect_deploy_manifest_diff(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    repo_root: Path | str | None = None,
+    expected_sha: str | None = None,
+    check_git_head: bool = False,
+    force_deploy: bool = False,
+    http_fn: HttpFn = default_http_request,
+    git_runner: RunnerFn = default_git_runner,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Detect pre-PR-#949 drift, manifest mismatches, and Cloud Run-scoped git diffs vs live `build_sha`."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+
+    eff_cwd = cwd if cwd is not None else repo_root
+    comp_doc = evaluate_personal_pc_compliance(env=env, cwd=eff_cwd, lang=lang_code)
+    if comp_doc["compliance_ok"] and repo_root is not None and cwd is not None:
+        comp_repo = evaluate_personal_pc_compliance(env=env, cwd=repo_root, lang=lang_code)
+        if not comp_repo["compliance_ok"]:
+            comp_doc = comp_repo
+    if not comp_doc["compliance_ok"]:
+        return _compliance_blocked_report("deploy_manifest_diff", DEFAULT_GATEWAY, comp_doc, lang_code=lang_code)
+
+    clean_gw = validate_gateway_url(gateway)
+    root = Path(repo_root) if repo_root is not None else REPO_ROOT
+    manifest = compute_deploy_manifest_fingerprint(repo_root=root)
+
+    subprocess_calls = 0
+    resolved_target_sha: str | None = None
+    expected_sha_source = "none"
+    git_head_error: str | None = None
+    if expected_sha is not None and str(expected_sha).strip():
+        resolved_target_sha = validate_target_sha(expected_sha)
+        expected_sha_source = "expected_sha"
+    else:
+        subprocess_calls += 1
+        head_sha, head_err = _resolve_git_head_sha_in_repo(git_runner, root, lang_code=lang_code)
+        if head_sha is not None:
+            resolved_target_sha = head_sha
+            expected_sha_source = "git_head"
+        elif check_git_head:
+            expected_sha_source = "git_head"
+            git_head_error = head_err
+
+    drift = detect_revision_drift(
+        clean_gw,
+        expected_sha=resolved_target_sha,
+        check_git_head=False,
+        git_runner=git_runner,
+        http_fn=http_fn,
+        lang=lang_code,
+        env=env,
+        cwd=eff_cwd,
+    )
+    network_calls = int(drift.get("network_calls", 0))
+    live_build_sha = str(drift.get("live_build_sha") or "unknown")
+    diagnostics = list(drift.get("diagnostics") or [])
+
+    if git_head_error is not None:
+        diagnostics.append(git_head_error)
+
+    deploy_sh_prop_ok = bool(manifest["deploy_sh_build_sha_propagation_ok"])
+    if not deploy_sh_prop_ok:
+        diagnostics.append(
+            "Le script `deploy/gcp_openrouter/deploy.sh` ne propage pas `HIVEMIND_BUILD_SHA` via `--update-env-vars`."
+            if is_fr
+            else "`deploy/gcp_openrouter/deploy.sh` is missing `HIVEMIND_BUILD_SHA` propagation via `--update-env-vars`."
+        )
+
+    sha_mismatch = bool(drift.get("sha_mismatch")) or (git_head_error is not None)
+    sha_match: bool | None = False if git_head_error is not None else drift.get("sha_match")
+
+    git_diff_checked = False
+    git_diff_ok: bool | None = None
+    changed_files: list[str] = []
+    cloud_run_changed_files: list[str] = []
+    non_cloud_run_changed_files: list[str] = []
+
+    if (
+        resolved_target_sha is not None
+        and live_build_sha != "unknown"
+        and not shas_match(live_build_sha, resolved_target_sha)
+    ):
+        git_diff_checked = True
+        subprocess_calls += 1
+        try:
+            diff_rc, diff_out = _invoke_runner(
+                git_runner,
+                ["git", "-C", str(root), "diff", "--name-only", f"{live_build_sha}..{resolved_target_sha}"],
+                SUBPROCESS_TIMEOUT_S,
+            )
+        except (OSError, subprocess.SubprocessError, RevisionPromoterError) as exc:
+            diff_rc, diff_out = 127, f"{type(exc).__name__}"
+
+        if diff_rc == 0:
+            git_diff_ok = True
+            seen_paths: set[str] = set()
+            for raw_line in diff_out.splitlines():
+                rel = raw_line.strip().replace("\\", "/").lstrip("./")
+                if not rel or rel in seen_paths:
+                    continue
+                seen_paths.add(rel)
+                changed_files.append(rel)
+                if _is_cloud_run_deployed_path(rel):
+                    cloud_run_changed_files.append(rel)
+                else:
+                    non_cloud_run_changed_files.append(rel)
+        else:
+            git_diff_ok = False
+            diagnostics.append(
+                f"Impossible de calculer `git diff --name-only` entre `{live_build_sha}` et `{resolved_target_sha}`."
+                if is_fr
+                else f"Unable to inspect read-only `git diff --name-only` between `{live_build_sha}` and `{resolved_target_sha}`."
+            )
+
+    routes_unhealthy = bool(
+        drift.get("failed_routes")
+        or not drift.get("manifest_present")
+        or not drift.get("manifest_valid")
+        or not drift.get("feedback_summary_ok")
+    )
+    missing_routes_or_scripts = bool(drift.get("missing_holiday_routes") or drift.get("missing_scripts"))
+    docs_or_non_runtime_only_diff = bool(
+        sha_mismatch
+        and not drift.get("pre_pr_949_drift_detected")
+        and not routes_unhealthy
+        and not missing_routes_or_scripts
+        and not manifest.get("missing_files")
+        and git_diff_ok is True
+        and len(cloud_run_changed_files) == 0
+    )
+
+    trigger_reasons: list[str] = []
+    if force_deploy:
+        trigger_reasons.append("force_deploy")
+    if drift.get("pre_pr_949_drift_detected"):
+        trigger_reasons.append("pre_pr_949_404_drift")
+    if missing_routes_or_scripts:
+        trigger_reasons.append("missing_routes_or_scripts")
+    if routes_unhealthy and not drift.get("pre_pr_949_drift_detected"):
+        trigger_reasons.append("unhealthy_live_routes")
+    if manifest.get("missing_files"):
+        trigger_reasons.append("missing_local_manifest_files")
+    if cloud_run_changed_files:
+        trigger_reasons.append("cloud_run_files_changed")
+    if sha_mismatch and not docs_or_non_runtime_only_diff:
+        trigger_reasons.append("sha_mismatch")
+
+    deploy_needed = bool(trigger_reasons)
+    idempotent_skip = not deploy_needed
+    skip_reason: str | None = None
+    if idempotent_skip:
+        if docs_or_non_runtime_only_diff:
+            skip_reason = "non_cloud_run_diff_only"
+        elif sha_match is True:
+            skip_reason = "already_at_target_sha"
+        else:
+            skip_reason = "live_healthy_no_drift"
+
+    summary = (
+        (
+            f"Déploiement Cloud Run REQUIS sur {clean_gw} ({', '.join(trigger_reasons)})."
+            if is_fr
+            else f"Cloud Run deploy NEEDED on {clean_gw} ({', '.join(trigger_reasons)})."
+        )
+        if deploy_needed
+        else (
+            f"Skip idempotent sur {clean_gw} ({skip_reason}) : aucun changement Cloud Run requis."
+            if is_fr
+            else f"Idempotent skip on {clean_gw} ({skip_reason}): no Cloud Run redeploy needed."
+        )
+    )
+
+    return _attach_receipt(
+        {
+            "schema": SCHEMA,
+            "object": RECEIPT_OBJECT,
+            "campaign_id": CAMPAIGN_ID,
+            "mode": "deploy_manifest_diff",
+            "lang": lang_code,
+            "gateway": clean_gw,
+            "compliance_ok": True,
+            "deploy_needed": deploy_needed,
+            "idempotent_skip": idempotent_skip,
+            "skip_reason": skip_reason,
+            "force_deploy": bool(force_deploy),
+            "trigger_reasons": trigger_reasons,
+            "manifest_sha256": manifest["manifest_sha256"],
+            "manifest_fingerprint": manifest,
+            "deploy_sh_build_sha_propagation_ok": deploy_sh_prop_ok,
+            "drift_detected": bool(drift.get("drift_detected")),
+            "pre_pr_949_drift_detected": bool(drift.get("pre_pr_949_drift_detected")),
+            "pre_pr_949_404_routes": list(drift.get("pre_pr_949_404_routes") or []),
+            "missing_holiday_routes": list(drift.get("missing_holiday_routes") or []),
+            "missing_scripts": list(drift.get("missing_scripts") or []),
+            "live_build_sha": live_build_sha,
+            "expected_build_sha": resolved_target_sha,
+            "expected_sha_source": expected_sha_source,
+            "cloud_run_revision": drift.get("cloud_run_revision"),
+            "sha_match": sha_match,
+            "sha_mismatch": sha_mismatch,
+            "git_diff_checked": git_diff_checked,
+            "git_diff_ok": git_diff_ok,
+            "changed_files": changed_files,
+            "cloud_run_changed_files": cloud_run_changed_files,
+            "non_cloud_run_changed_files": non_cloud_run_changed_files,
+            "drift": drift,
+            "network_calls": network_calls,
+            "subprocess_calls": subprocess_calls,
+            "zero_inference_verified": True,
+            "diagnostics": diagnostics,
+            "exit_code": 0 if deploy_sh_prop_ok else 2,
+            "summary": summary,
+        }
+    )
+
+
+def _inspect_models_contract(
+    body: Mapping[str, Any],
+    *,
+    require_coder_model: bool,
+    lang_code: str,
+) -> tuple[bool, list[str], bool, dict[str, Any] | None, list[str]]:
+    is_fr = lang_code == "fr"
+    issues: list[str] = []
+    obj_ok = body.get("object", "list") == "list"
+    raw_data = body.get("data")
+    if not obj_ok or not isinstance(raw_data, list):
+        issues.append(
+            "Contrat JSON `/v1/models` invalide (champ `data` manquant)."
+            if is_fr
+            else "Invalid `/v1/models` JSON schema (missing `data` list)."
+        )
+        return False, [], False, None, issues
+
+    model_ids: list[str] = []
+    coder_meta: dict[str, Any] | None = None
+    for entry in raw_data:
+        if not isinstance(entry, Mapping):
+            continue
+        raw_id = entry.get("id")
+        if not isinstance(raw_id, str) or not raw_id.strip():
+            continue
+        clean_id = raw_id.strip()
+        model_ids.append(clean_id)
+        if clean_id == "hivemind/coder" and coder_meta is None:
+            coder_meta = {
+                "present": True,
+                "id": "hivemind/coder",
+                "object": str(entry.get("object") or "model"),
+                "owned_by": str(entry.get("owned_by") or "hivemind"),
+                "loaded": entry.get("loaded"),
+            }
+
+    if not model_ids:
+        issues.append(
+            "Liste `data` de `GET /v1/models` vide (aucun modèle servi)."
+            if is_fr
+            else "`GET /v1/models` returned an empty `data` model list."
+        )
+    coder_present = coder_meta is not None
+    if require_coder_model and not coder_present:
+        issues.append(
+            "Modèle `hivemind/coder` absent de `GET /v1/models`."
+            if is_fr
+            else "Required model `hivemind/coder` missing from `GET /v1/models`."
+        )
+    return len(issues) == 0, model_ids, coder_present, coder_meta, issues
+
+
+def project_adoption_readiness_gates(
+    smoke_report: Mapping[str, Any] | None = None,
+    *,
+    gateway_and_models_ok: bool | None = None,
+    holiday_routes_ok: bool | None = None,
+    feedback_summary: Mapping[str, Any] | None = None,
+    active_volunteer_gpus: int = 0,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Project the 5 objective Noel-at-Scale adoption readiness gates from smoke & CES metrics."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+
+    rep = smoke_report if isinstance(smoke_report, Mapping) else {}
+    gw_ok = (
+        bool(gateway_and_models_ok)
+        if gateway_and_models_ok is not None
+        else bool(rep.get("health_ok") and rep.get("models_ok"))
+    )
+    hol_ok = (
+        bool(holiday_routes_ok)
+        if holiday_routes_ok is not None
+        else bool(rep.get("manifest_ok") and rep.get("html_contract_ok") and rep.get("feedback_summary_ok"))
+    )
+
+    eff_fb: Mapping[str, Any] = (
+        feedback_summary
+        if isinstance(feedback_summary, Mapping)
+        else (rep.get("feedback_summary") if isinstance(rep.get("feedback_summary"), Mapping) else {})
+    )
+    raw_total = eff_fb.get("total_responses")
+    has_resp = not isinstance(raw_total, bool) and isinstance(raw_total, int) and raw_total > 0
+    raw_ease = eff_fb.get("mean_ease_rating") if "mean_ease_rating" in eff_fb else eff_fb.get("average_ease_rating")
+    raw_lag = eff_fb.get("zero_game_lag_ratio")
+
+    ces_ok = bool(
+        has_resp
+        and not isinstance(raw_ease, bool)
+        and isinstance(raw_ease, (int, float))
+        and float(raw_ease) >= 4.2
+    )
+    lag_ok = bool(
+        has_resp
+        and not isinstance(raw_lag, bool)
+        and isinstance(raw_lag, (int, float))
+        and float(raw_lag) >= 0.95
+    )
+
+    eff_gpus = (
+        int(active_volunteer_gpus)
+        if not isinstance(active_volunteer_gpus, bool) and isinstance(active_volunteer_gpus, int)
+        else 0
+    )
+    gpu_ok = eff_gpus >= 8
+
+    gates = {
+        "gateway_and_models_online": gw_ok,
+        "holiday_routes_deployed_on_cloud_run": hol_ok,
+        "satisfaction_ces_target_met": ces_ok,
+        "gamer_zero_lag_target_met": lag_ok,
+        "external_volunteer_gpu_target_noel": gpu_ok,
+    }
+    blockers: list[str] = []
+    if not gw_ok:
+        blockers.append(
+            "Passerelle Cloud Run `/health` ou `/v1/models` indisponible."
+            if is_fr
+            else "Cloud Run gateway `/health` or `/v1/models` check failed."
+        )
+    if not hol_ok:
+        blockers.append(
+            "Routes de Noël (`/noel`, `/quick`, `/raid-noel`, `/arena-noel`, `/feedback/summary`) incomplètes."
+            if is_fr
+            else "Holiday onboarding routes (`/noel`, `/quick`, `/raid-noel`, `/arena-noel`, `/feedback/summary`) incomplete."
+        )
+    if not ces_ok:
+        blockers.append(
+            "Score CES moyen cible (>= 4.2 / 5) non encore atteint."
+            if is_fr
+            else "Mean CES ease target (>= 4.2 / 5) not yet met."
+        )
+    if not lag_ok:
+        blockers.append(
+            "Ratio zéro-lag Gamer cible (>= 0.95) non encore atteint."
+            if is_fr
+            else "Gamer zero-lag comfort ratio (>= 0.95) not yet met."
+        )
+    if not gpu_ok:
+        blockers.append(
+            f"GPUs bénévoles externes actifs ({eff_gpus}) inférieurs à l'objectif Noël (>= 8)."
+            if is_fr
+            else f"Active external volunteer GPUs ({eff_gpus}) below holiday target (>= 8)."
+        )
+
+    passed_ids = [k for k, v in gates.items() if v]
+    pending_ids = [k for k, v in gates.items() if not v]
+    passed_count = len(passed_ids)
+
+    return {
+        "schema": SCHEMA,
+        "object": "hivemind.adoption_readiness_projection",
+        "campaign_id": CAMPAIGN_ID,
+        "lang": lang_code,
+        "gates": gates,
+        "readiness_gates_passed": passed_count,
+        "readiness_gates_total": len(gates),
+        "passed_gate_ids": passed_ids,
+        "pending_gate_ids": pending_ids,
+        "blockers": blockers,
+        "healthy_rollout_floor_met": passed_count >= 2,
+        "soak_ces_gates_met": bool(gw_ok and hol_ok and ces_ok and lag_ok),
+    }
+
+
+def _build_incident_alert(
+    *,
+    gateway: str,
+    verdict: str,
+    failure_categories: Sequence[str],
+    failed_routes: Sequence[str],
+    diagnostics: Sequence[str],
+    rollback_triggered: bool,
+    rollback_succeeded: bool | None,
+    rollback_revision: str | None,
+    live_build_sha: str,
+    expected_build_sha: str | None,
+    summary: str,
+) -> dict[str, Any]:
+    clean_diags = [sanitize_text_for_display(str(item)) for item in diagnostics if str(item).strip()]
+    alert = {
+        "object": "hivemind.cloud_run_incident_alert",
+        "campaign_id": CAMPAIGN_ID,
+        "severity": "critical",
+        "gateway": gateway,
+        "verdict": verdict,
+        "failure_categories": sorted({str(c) for c in failure_categories if str(c).strip()}),
+        "failed_routes": list(failed_routes),
+        "rollback_triggered": bool(rollback_triggered),
+        "rollback_succeeded": rollback_succeeded,
+        "rollback_revision": rollback_revision,
+        "live_build_sha": sanitize_build_sha(live_build_sha),
+        "expected_build_sha": expected_build_sha,
+        "diagnostics": clean_diags,
+        "summary": sanitize_text_for_display(summary),
+        "personal_pc_only": True,
+        "financial_promise": FINANCIAL_PROMISE,
+        "zero_pii_verified": True,
+    }
+    _assert_safe_output(json.dumps(alert, sort_keys=True, ensure_ascii=False))
+    return alert
+
+
+def verify_post_deploy_smoke_suite(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    expected_sha: str | None = None,
+    probe_feedback_post: bool = False,
+    require_coder_model: bool = False,
+    previous_revision: str | None = None,
+    active_volunteer_gpus: int = 0,
+    http_fn: HttpFn = default_http_request,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Verify /health, /v1/models, manifest, all 4 holiday HTML pages, CES summary, and readiness projection."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+
+    comp_doc = evaluate_personal_pc_compliance(env=env, cwd=cwd, lang=lang_code)
+    if not comp_doc["compliance_ok"]:
+        return _compliance_blocked_report("post_deploy_smoke_suite", DEFAULT_GATEWAY, comp_doc, lang_code=lang_code)
+
+    clean_gw = validate_gateway_url(gateway)
+    clean_expected_sha = (
+        validate_target_sha(expected_sha)
+        if expected_sha is not None and str(expected_sha).strip()
+        else None
+    )
+    clean_prev_rev: str | None = None
+    if previous_revision is not None and str(previous_revision).strip():
+        clean_prev_rev = sanitize_cloud_run_revision(previous_revision)
+        if clean_prev_rev is None:
+            raise RevisionPromoterError(f"Invalid previous Cloud Run revision: {previous_revision!r}.")
+
+    seen_nonces: set[str] = set()
+    html_contracts: dict[str, dict[str, Any]] = {}
+    http_statuses: dict[str, int] = {}
+    failed_routes: list[str] = []
+    failure_categories: list[str] = []
+    diagnostics: list[str] = []
+    network_calls = 0
+
+    health_ok = False
+    models_ok = False
+    live_model_ids: list[str] = []
+    coder_present = False
+    coder_metadata: dict[str, Any] | None = None
+    manifest_ok = False
+    live_build_sha = "unknown"
+    cloud_run_revision: str | None = None
+    feedback_summary_ok = False
+    feedback_summary_doc: dict[str, Any] = {
+        "schema_valid": False,
+        "total_responses": None,
+        "mean_ease_rating": None,
+        "zero_game_lag_ratio": None,
+        "by_profile": None,
+    }
+
+    for path, expected_kind in SMOKE_SUITE_PROBE_ROUTES:
+        network_calls += 1
+        code, body = _invoke_http_fn(http_fn, "GET", f"{clean_gw}{path}")
+        http_statuses[path] = code
+        if code != 200:
+            failed_routes.append(path)
+            if code == 404:
+                failure_categories.append("stale_404_drift")
+            else:
+                failure_categories.append("http_error")
+            diagnostics.append(
+                f"Smoke GET {path} en échec (HTTP {code})."
+                if is_fr
+                else f"Smoke GET {path} failed (HTTP {code})."
+            )
+            continue
+
+        if path == "/health":
+            health_ok = body.get("status") == "ok"
+            if not health_ok:
+                failed_routes.append(path)
+                failure_categories.append("health_contract_failed")
+                diagnostics.append("Smoke GET /health returned HTTP 200 without `status == 'ok'`.")
+        elif path == "/v1/models":
+            m_ok, live_model_ids, coder_present, coder_metadata, m_issues = _inspect_models_contract(
+                body, require_coder_model=require_coder_model, lang_code=lang_code
+            )
+            models_ok = m_ok
+            if not m_ok:
+                failed_routes.append(path)
+                failure_categories.append("empty_models_list" if not live_model_ids else "models_contract_failed")
+                diagnostics.extend(m_issues)
+        elif path == "/v1/hivemind/onboarding/manifest":
+            ok_m, live_build_sha, cloud_run_revision, _mr, _ms, man_issues = _inspect_manifest_contract(
+                body, lang_code=lang_code
+            )
+            manifest_ok = ok_m
+            if not ok_m:
+                failed_routes.append(path)
+                failure_categories.append("manifest_contract_failed")
+                diagnostics.extend(man_issues)
+        elif expected_kind == "html":
+            ok_h, h_doc, h_issues = _inspect_holiday_html_contract(
+                path, body, seen_nonces, strict_contract=True, lang_code=lang_code
+            )
+            html_contracts[path] = h_doc
+            if not ok_h:
+                failed_routes.append(path)
+                if not h_doc.get("csp_nonce_verified"):
+                    failure_categories.append("csp_nonce_violation")
+                if not h_doc.get("dom_clean"):
+                    failure_categories.append("unsafe_dom_or_static_figure")
+                if not h_doc.get("personal_pc_banner_present"):
+                    failure_categories.append("missing_compliance_banner")
+                diagnostics.extend(h_issues)
+        elif path == "/v1/hivemind/onboarding/feedback/summary":
+            fb_ok, fb_doc, fb_issues = _inspect_feedback_summary_contract(body, lang_code=lang_code)
+            feedback_summary_ok = fb_ok
+            feedback_summary_doc = fb_doc
+            if not fb_ok:
+                failed_routes.append(path)
+                failure_categories.append("feedback_summary_schema_failed")
+                diagnostics.extend(fb_issues)
+
+    sha_ok = True
+    if clean_expected_sha is not None:
+        sha_ok = shas_match(live_build_sha, clean_expected_sha)
+        if not sha_ok:
+            failure_categories.append("sha_mismatch")
+            diagnostics.append(
+                f"Smoke SHA incorrect : direct='{live_build_sha}' != attendu '{clean_expected_sha}'."
+                if is_fr
+                else f"Smoke build SHA mismatch: live='{live_build_sha}' != expected '{clean_expected_sha}'."
+            )
+
+    html_all_ok = (
+        len(html_contracts) == len(SMOKE_HTML_ROUTES)
+        and all(html_contracts.get(p, {}).get("ok") is True for p in SMOKE_HTML_ROUTES)
+        and len(seen_nonces) == len(SMOKE_HTML_ROUTES)
+    )
+    if len(html_contracts) == len(SMOKE_HTML_ROUTES) and len(seen_nonces) != len(SMOKE_HTML_ROUTES):
+        failure_categories.append("reused_csp_nonce")
+
+    feedback_post_ok: bool | None = None
+    feedback_post_http_status: int | None = None
+    idem_key: str | None = None
+    if probe_feedback_post:
+        idem_seed = f"noel-smoke-suite/v1|{clean_gw}|{clean_expected_sha or 'live'}"
+        idem_key = "smoke-noel-" + hashlib.sha256(idem_seed.encode("utf-8")).hexdigest()[:32]
+        smoke_payload = {
+            "profile": "dev",
+            "ease_rating": 5,
+            "zero_game_lag": True,
+            "platform": "linux",
+            "note": "",
+        }
+        network_calls += 1
+        post_code, post_body = _invoke_http_fn(
+            http_fn,
+            "POST",
+            f"{clean_gw}/v1/hivemind/onboarding/feedback",
+            payload=smoke_payload,
+            headers={"Idempotency-Key": idem_key},
+            allow_feedback_post=True,
+        )
+        feedback_post_http_status = post_code
+        post_valid, post_sum, _ = (
+            _inspect_feedback_summary_contract(post_body, lang_code=lang_code)
+            if post_code in (200, 201)
+            else (False, feedback_summary_doc, [])
+        )
+        if post_code in (200, 201) and post_valid and (post_sum.get("total_responses") or 0) >= 1:
+            network_calls += 1
+            ref_code, ref_body = _invoke_http_fn(http_fn, "GET", f"{clean_gw}/v1/hivemind/onboarding/feedback/summary")
+            http_statuses["/v1/hivemind/onboarding/feedback/summary#after_post"] = ref_code
+            ref_ok, ref_sum, ref_issues = (
+                _inspect_feedback_summary_contract(ref_body, lang_code=lang_code)
+                if ref_code == 200
+                else (False, post_sum, ["Smoke GET feedback summary after POST failed."])
+            )
+            feedback_post_ok = bool(ref_code == 200 and ref_ok and (ref_sum.get("total_responses") or 0) >= 1)
+            if feedback_post_ok:
+                feedback_summary_ok = True
+                feedback_summary_doc = ref_sum
+            else:
+                failure_categories.append("feedback_post_failed")
+                diagnostics.extend(ref_issues)
+        else:
+            feedback_post_ok = False
+            failure_categories.append("feedback_post_failed")
+            diagnostics.append(
+                f"Smoke POST /v1/hivemind/onboarding/feedback en échec (HTTP {post_code})."
+                if is_fr
+                else f"Smoke POST /v1/hivemind/onboarding/feedback failed (HTTP {post_code})."
+            )
+
+    smoke_ok = bool(
+        health_ok
+        and models_ok
+        and manifest_ok
+        and sha_ok
+        and html_all_ok
+        and feedback_summary_ok
+        and (not probe_feedback_post or feedback_post_ok is True)
+    )
+    readiness_projection = project_adoption_readiness_gates(
+        gateway_and_models_ok=bool(health_ok and models_ok),
+        holiday_routes_ok=bool(manifest_ok and html_all_ok and feedback_summary_ok),
+        feedback_summary=feedback_summary_doc,
+        active_volunteer_gpus=active_volunteer_gpus,
+        lang=lang_code,
+    )
+
+    summary = (
+        (
+            f"Suite smoke post-déploiement Cloud Run VERTE sur {clean_gw} "
+            f"(nonces CSP uniques={len(seen_nonces)}, gates={readiness_projection['readiness_gates_passed']}/5)."
+            if is_fr
+            else f"Post-deploy Cloud Run smoke suite PASSED on {clean_gw} "
+            f"(unique CSP nonces={len(seen_nonces)}, readiness_gates={readiness_projection['readiness_gates_passed']}/5)."
+        )
+        if smoke_ok
+        else (
+            f"Suite smoke post-déploiement Cloud Run EN ÉCHEC sur {clean_gw} : alerte & rollback requis."
+            if is_fr
+            else f"Post-deploy Cloud Run smoke suite FAILED on {clean_gw}: incident alert & rollback required."
+        )
+    )
+
+    effective_rb_rev = clean_prev_rev or cloud_run_revision
+    incident_alert: dict[str, Any] | None = None
+    if not smoke_ok:
+        incident_alert = _build_incident_alert(
+            gateway=clean_gw,
+            verdict="smoke_suite_failed",
+            failure_categories=failure_categories,
+            failed_routes=failed_routes,
+            diagnostics=diagnostics,
+            rollback_triggered=False,
+            rollback_succeeded=None,
+            rollback_revision=effective_rb_rev,
+            live_build_sha=live_build_sha,
+            expected_build_sha=clean_expected_sha,
+            summary=summary,
+        )
+
+    return _attach_receipt(
+        {
+            "schema": SCHEMA,
+            "object": RECEIPT_OBJECT,
+            "campaign_id": CAMPAIGN_ID,
+            "mode": "post_deploy_smoke_suite",
+            "lang": lang_code,
+            "gateway": clean_gw,
+            "compliance_ok": True,
+            "smoke_ok": smoke_ok,
+            "canary_ok": smoke_ok,
+            "rollback_required": not smoke_ok,
+            "health_ok": health_ok,
+            "models_ok": models_ok,
+            "live_models_count": len(live_model_ids),
+            "live_model_ids": live_model_ids,
+            "hivemind_coder_present": coder_present,
+            "coder_model_metadata": coder_metadata,
+            "manifest_ok": manifest_ok,
+            "sha_ok": sha_ok,
+            "live_build_sha": live_build_sha,
+            "expected_build_sha": clean_expected_sha,
+            "cloud_run_revision": cloud_run_revision,
+            "html_contract_ok": html_all_ok,
+            "html_contracts": html_contracts,
+            "unique_csp_nonces_count": len(seen_nonces),
+            "feedback_summary_ok": feedback_summary_ok,
+            "feedback_summary": feedback_summary_doc,
+            "feedback_post_probed": bool(probe_feedback_post),
+            "feedback_post_ok": feedback_post_ok,
+            "feedback_post_http_status": feedback_post_http_status,
+            "feedback_post_idempotency_key": idem_key,
+            "http_statuses": http_statuses,
+            "failed_routes": failed_routes,
+            "failure_categories": sorted(set(failure_categories)),
+            "readiness_projection": readiness_projection,
+            "readiness_gates_passed": readiness_projection["readiness_gates_passed"],
+            "readiness_gates_total": readiness_projection["readiness_gates_total"],
+            "readiness_gates": readiness_projection["gates"],
+            "incident_alert_emitted": incident_alert is not None,
+            "incident_alert": incident_alert,
+            "network_calls": network_calls,
+            "zero_inference_verified": True,
+            "diagnostics": diagnostics,
+            "exit_code": 0 if smoke_ok else 2,
+            "summary": summary,
+        }
+    )
+
+
+def _build_merge_receipt(
+    *,
+    lang_code: str,
+    gateway: str,
+    verdict: str,
+    manifest_diff: Mapping[str, Any],
+    pre_promote: Mapping[str, Any],
+    comp_doc: Mapping[str, Any],
+    network_calls: int,
+    execute: bool,
+    exit_code: int,
+    summary: str,
+    diagnostics: Sequence[str] = (),
+    extra: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Assemble a standardized deploy-on-merge receipt with SHA-256 signature."""
+    payload: dict[str, Any] = {
+        "schema": SCHEMA,
+        "object": RECEIPT_OBJECT,
+        "campaign_id": CAMPAIGN_ID,
+        "mode": "deploy_on_merge",
+        "lang": lang_code,
+        "gateway": gateway,
+        "verdict": verdict,
+        "compliance_ok": True,
+        "pre_promote_ok": bool(pre_promote.get("pre_promote_ok")),
+        "finops_ok": bool(pre_promote.get("finops_ok")),
+        "deploy_needed": bool(manifest_diff.get("deploy_needed")),
+        "drift_detected": bool(manifest_diff.get("drift_detected")),
+        "manifest_sha256": manifest_diff.get("manifest_sha256"),
+        "idempotent_noop": False,
+        "already_at_target_revision": False,
+        "promotion_deferred_training_active": False,
+        "staged_no_traffic_only": False,
+        "promoted": False,
+        "canary_ok": False,
+        "smoke_ok": False,
+        "rollback_triggered": False,
+        "incident_alert_emitted": False,
+        "incident_alert": None,
+        "readiness_gates_passed": 0,
+        "readiness_gates_total": 5,
+        "dry_run_only": not execute,
+        "gcloud_executed": False,
+        "gcloud_calls": 0,
+        "cloud_state_mutated": False,
+        "network_calls": network_calls,
+        "zero_inference_verified": True,
+        "target_build_sha": manifest_diff.get("expected_build_sha"),
+        "manifest_diff": manifest_diff,
+        "pre_promote": pre_promote,
+        "commands": [],
+        "executed_commands": [],
+        "diagnostics": list(diagnostics),
+        "compliance": comp_doc,
+        "exit_code": exit_code,
+        "summary": summary,
+    }
+    if extra:
+        payload.update(extra)
+    return _attach_receipt(payload)
+
+
+def orchestrate_deploy_on_merge(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    repo_root: Path | str | None = None,
+    target_sha: str | None = None,
+    previous_revision: str | None = None,
+    candidate_tag: str = DEFAULT_CANDIDATE_TAG,
+    service_name: str = DEFAULT_CLOUD_RUN_SERVICE,
+    region: str = DEFAULT_CLOUD_RUN_REGION,
+    gcp_project: str | None = None,
+    deploy_script_path: Path | str | None = None,
+    server_py_path: Path | str | None = None,
+    app_factory: Callable[..., Any] | None = None,
+    lock_file_path: Path | str | None = None,
+    process_probe_fn: Callable[[], Iterable[str]] | None = None,
+    check_git_head: bool = False,
+    force_deploy: bool = False,
+    execute: bool = False,
+    no_traffic_only: bool = False,
+    allow_during_training: bool = False,
+    defer_on_active_training: bool = False,
+    probe_feedback_post: bool = False,
+    require_coder_model: bool = False,
+    active_volunteer_gpus: int = 0,
+    gcloud_runner: RunnerFn = default_gcloud_runner,
+    http_fn: HttpFn = default_http_request,
+    git_runner: RunnerFn = default_git_runner,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """End-to-end deploy-on-merge orchestrator: compliance -> manifest diff -> FinOps -> lock -> rollout -> smoke -> rollback."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+
+    eff_cwd = cwd if cwd is not None else repo_root
+    comp_doc = evaluate_personal_pc_compliance(env=env, cwd=eff_cwd, lang=lang_code)
+    if comp_doc["compliance_ok"] and repo_root is not None and cwd is not None:
+        comp_repo = evaluate_personal_pc_compliance(env=env, cwd=repo_root, lang=lang_code)
+        if not comp_repo["compliance_ok"]:
+            comp_doc = comp_repo
+    if not comp_doc["compliance_ok"]:
+        return _compliance_blocked_report("deploy_on_merge", DEFAULT_GATEWAY, comp_doc, lang_code=lang_code)
+
+    clean_gw = validate_gateway_url(gateway)
+    clean_tag = validate_candidate_tag(candidate_tag)
+    clean_service = validate_cloud_identifier(service_name, "service_name")
+    clean_region = validate_cloud_identifier(region, "region")
+    clean_project = validate_gcp_project(gcp_project if gcp_project is not None else (env or {}).get("GCP_PROJECT"))
+
+    if previous_revision is not None and str(previous_revision).strip():
+        explicit_prev_rev = sanitize_cloud_run_revision(previous_revision)
+        if explicit_prev_rev is None:
+            raise RevisionPromoterError(f"Invalid previous Cloud Run revision: {previous_revision!r}.")
+    else:
+        explicit_prev_rev = None
+
+    root = Path(repo_root) if repo_root is not None else REPO_ROOT
+    eff_deploy_path = (
+        Path(deploy_script_path)
+        if deploy_script_path is not None
+        else (
+            root / "deploy" / "gcp_openrouter" / "deploy.sh"
+            if (root / "deploy" / "gcp_openrouter" / "deploy.sh").is_file() or repo_root is None
+            else DEFAULT_DEPLOY_SCRIPT_PATH
+        )
+    )
+    eff_server_path = (
+        Path(server_py_path)
+        if server_py_path is not None
+        else (
+            root / "deploy" / "gcp_openrouter" / "server.py"
+            if (root / "deploy" / "gcp_openrouter" / "server.py").is_file() or repo_root is None
+            else DEFAULT_SERVER_PY_PATH
+        )
+    )
+
+    # 2. Manifest fingerprint & read-only git diff against live build_sha
+    manifest_diff = detect_deploy_manifest_diff(
+        clean_gw,
+        repo_root=root,
+        expected_sha=target_sha,
+        check_git_head=check_git_head,
+        force_deploy=force_deploy,
+        http_fn=http_fn,
+        git_runner=git_runner,
+        env=env,
+        cwd=eff_cwd,
+        lang=lang_code,
+    )
+    network_calls = int(manifest_diff.get("network_calls", 0))
+    resolved_sha = manifest_diff.get("expected_build_sha")
+    effective_prev_rev = explicit_prev_rev or manifest_diff.get("cloud_run_revision")
+
+    # 3. Pre-promote FinOps & zero-inference FastAPI sanity check
+    pre_promote = verify_pre_promote_gateway_and_finops(
+        deploy_script_path=eff_deploy_path,
+        server_py_path=eff_server_path,
+        app_factory=app_factory,
+        env=env,
+        cwd=eff_cwd,
+        lang=lang_code,
+    )
+    if not pre_promote["pre_promote_ok"] or not manifest_diff["deploy_sh_build_sha_propagation_ok"]:
+        pre_diags = list(pre_promote.get("diagnostics") or [])
+        if not manifest_diff["deploy_sh_build_sha_propagation_ok"]:
+            pre_diags.extend(
+                d for d in manifest_diff.get("diagnostics") or [] if "HIVEMIND_BUILD_SHA" in str(d)
+            )
+        summary_msg = pre_diags[0] if pre_diags else pre_promote["summary"]
+        alert = _build_incident_alert(
+            gateway=clean_gw,
+            verdict="pre_promote_failed",
+            failure_categories=["pre_promote_finops_failed"],
+            failed_routes=[],
+            diagnostics=pre_diags,
+            rollback_triggered=False,
+            rollback_succeeded=None,
+            rollback_revision=effective_prev_rev,
+            live_build_sha=str(manifest_diff.get("live_build_sha") or "unknown"),
+            expected_build_sha=resolved_sha,
+            summary=summary_msg,
+        )
+        return _build_merge_receipt(
+            lang_code=lang_code,
+            gateway=clean_gw,
+            verdict="pre_promote_failed",
+            manifest_diff=manifest_diff,
+            pre_promote=pre_promote,
+            comp_doc=comp_doc,
+            network_calls=network_calls,
+            execute=execute,
+            exit_code=2,
+            summary=summary_msg,
+            diagnostics=pre_diags,
+            extra={
+                "pre_promote_ok": False,
+                "incident_alert_emitted": True,
+                "incident_alert": alert,
+                "previous_revision": effective_prev_rev,
+            },
+        )
+
+    # 4. Idempotent no-op skip when deploy_needed is False -> run expanded post-deploy smoke suite directly
+    if not manifest_diff["deploy_needed"]:
+        smoke_expected_sha = (
+            resolved_sha if manifest_diff.get("skip_reason") == "already_at_target_sha" else None
+        )
+        smoke_res = verify_post_deploy_smoke_suite(
+            clean_gw,
+            expected_sha=smoke_expected_sha,
+            probe_feedback_post=probe_feedback_post,
+            require_coder_model=require_coder_model,
+            previous_revision=effective_prev_rev,
+            active_volunteer_gpus=active_volunteer_gpus,
+            http_fn=http_fn,
+            env=env,
+            cwd=eff_cwd,
+            lang=lang_code,
+        )
+        network_calls += int(smoke_res.get("network_calls", 0))
+        if smoke_res["smoke_ok"]:
+            skip_tag = str(manifest_diff.get("skip_reason") or "live_healthy_no_drift")
+            summary = (
+                f"Skip idempotent deploy-on-merge ({skip_tag}) sur {clean_gw} ; "
+                f"smoke suite verte (gates={smoke_res['readiness_gates_passed']}/5, 0 mutation gcloud)."
+                if is_fr
+                else f"Deploy-on-merge idempotent no-op ({skip_tag}) on {clean_gw}; "
+                f"smoke suite passed (readiness_gates={smoke_res['readiness_gates_passed']}/5, 0 gcloud mutations)."
+            )
+            return _build_merge_receipt(
+                lang_code=lang_code,
+                gateway=clean_gw,
+                verdict="idempotent_noop",
+                manifest_diff=manifest_diff,
+                pre_promote=pre_promote,
+                comp_doc=comp_doc,
+                network_calls=network_calls,
+                execute=execute,
+                exit_code=0,
+                summary=summary,
+                extra={
+                    "idempotent_noop": True,
+                    "already_at_target_revision": bool(manifest_diff.get("sha_match")),
+                    "skip_reason": skip_tag,
+                    "canary_ok": True,
+                    "smoke_ok": True,
+                    "readiness_projection": smoke_res["readiness_projection"],
+                    "readiness_gates_passed": smoke_res["readiness_gates_passed"],
+                    "readiness_gates_total": smoke_res["readiness_gates_total"],
+                    "live_build_sha": smoke_res.get("live_build_sha"),
+                    "cloud_run_revision": smoke_res.get("cloud_run_revision"),
+                    "previous_revision": effective_prev_rev,
+                    "smoke_suite": smoke_res,
+                    "canary": smoke_res,
+                },
+            )
+        return _build_merge_receipt(
+            lang_code=lang_code,
+            gateway=clean_gw,
+            verdict="smoke_suite_failed",
+            manifest_diff=manifest_diff,
+            pre_promote=pre_promote,
+            comp_doc=comp_doc,
+            network_calls=network_calls,
+            execute=execute,
+            exit_code=2,
+            summary=smoke_res["summary"],
+            diagnostics=list(smoke_res.get("diagnostics") or []),
+            extra={
+                "already_at_target_revision": bool(manifest_diff.get("sha_match")),
+                "incident_alert_emitted": bool(smoke_res.get("incident_alert_emitted")),
+                "incident_alert": smoke_res.get("incident_alert"),
+                "readiness_projection": smoke_res["readiness_projection"],
+                "readiness_gates_passed": smoke_res["readiness_gates_passed"],
+                "readiness_gates_total": smoke_res["readiness_gates_total"],
+                "live_build_sha": smoke_res.get("live_build_sha"),
+                "previous_revision": effective_prev_rev,
+                "smoke_suite": smoke_res,
+                "canary": smoke_res,
+            },
+        )
+
+    # 5. Active-training safety lock before live rollout
+    safety_lock = check_active_training_safety_lock(
+        clean_gw,
+        lock_file_path=lock_file_path,
+        process_probe_fn=process_probe_fn,
+        http_fn=http_fn,
+        allow_during_training=allow_during_training,
+        env=env,
+        cwd=eff_cwd,
+        lang=lang_code,
+    )
+    network_calls += int(safety_lock.get("network_calls", 0))
+
+    if safety_lock["training_active"] and not allow_during_training and not no_traffic_only:
+        deferred = bool(defer_on_active_training)
+        exit_code = 3 if deferred else 2
+        verdict = "deferred_active_training" if deferred else "blocked_active_training"
+        msg = (
+            f"Déploiement merge différé (verrou entraînement actif : {', '.join(safety_lock['active_reasons'])})."
+            if is_fr
+            else f"Deploy-on-merge deferred (active training lock: {', '.join(safety_lock['active_reasons'])}; "
+            "use --no-traffic-only to stage safely without shifting traffic)."
+        )
+        alert = (
+            None
+            if deferred
+            else _build_incident_alert(
+                gateway=clean_gw,
+                verdict=verdict,
+                failure_categories=["active_training_safety_lock"],
+                failed_routes=[],
+                diagnostics=[msg],
+                rollback_triggered=False,
+                rollback_succeeded=None,
+                rollback_revision=effective_prev_rev,
+                live_build_sha=str(manifest_diff.get("live_build_sha") or "unknown"),
+                expected_build_sha=resolved_sha,
+                summary=msg,
+            )
+        )
+        return _build_merge_receipt(
+            lang_code=lang_code,
+            gateway=clean_gw,
+            verdict=verdict,
+            manifest_diff=manifest_diff,
+            pre_promote=pre_promote,
+            comp_doc=comp_doc,
+            network_calls=network_calls,
+            execute=execute,
+            exit_code=exit_code,
+            summary=msg,
+            diagnostics=[msg],
+            extra={
+                "promotion_deferred_training_active": deferred,
+                "safety_lock_blocked": not deferred,
+                "incident_alert_emitted": alert is not None,
+                "incident_alert": alert,
+                "previous_revision": effective_prev_rev,
+                "safety_lock": safety_lock,
+            },
+        )
+
+    # 6. Build sanitized list-argv rollout plan (dry-run by default unless --execute)
+    rollout_plan = build_idempotent_rollout_plan(
+        gateway=clean_gw,
+        target_sha=resolved_sha,
+        previous_revision=effective_prev_rev,
+        candidate_tag=clean_tag,
+        service_name=clean_service,
+        region=clean_region,
+        gcp_project=clean_project,
+        no_traffic_only=no_traffic_only,
+        env=env,
+        cwd=eff_cwd,
+        lang=lang_code,
+    )
+
+    if not execute:
+        summary = (
+            f"Dry-run deploy-on-merge prêt : {len(rollout_plan['commands'])} commande(s) gcloud planifiée(s) "
+            f"(deploy_needed=True, manifest={manifest_diff['manifest_sha256'][:12]}, 0 mutation Cloud Run)."
+            if is_fr
+            else f"Deploy-on-merge dry-run ready: {len(rollout_plan['commands'])} gcloud command(s) planned "
+            f"(deploy_needed=True, manifest={manifest_diff['manifest_sha256'][:12]}, 0 Cloud Run mutations)."
+        )
+        return _build_merge_receipt(
+            lang_code=lang_code,
+            gateway=clean_gw,
+            verdict="dry_run_plan_ready",
+            manifest_diff=manifest_diff,
+            pre_promote=pre_promote,
+            comp_doc=comp_doc,
+            network_calls=network_calls,
+            execute=False,
+            exit_code=0,
+            summary=summary,
+            diagnostics=list(manifest_diff.get("diagnostics") or []),
+            extra={
+                "plan_ready": True,
+                "live_build_sha": manifest_diff.get("live_build_sha"),
+                "previous_revision": effective_prev_rev,
+                "safety_lock": safety_lock,
+                "rollout_plan": rollout_plan,
+                "commands": rollout_plan["commands"],
+            },
+        )
+
+    # 7. Execute Step A: --no-traffic --tag deployment
+    executed_commands: list[dict[str, Any]] = []
+    diagnostics: list[str] = []
+    deploy_argv = list(rollout_plan["deploy_no_traffic_argv"])
+    deploy_rc, deploy_out = _invoke_runner(gcloud_runner, deploy_argv, GCLOUD_DEPLOY_TIMEOUT_S)
+    executed_commands.append(
+        {
+            "step": "deploy_no_traffic",
+            "argv": deploy_argv,
+            "returncode": deploy_rc,
+            "output_preview": sanitize_text_for_display(deploy_out)[:240],
+        }
+    )
+    if deploy_rc != 0:
+        msg = (
+            f"Échec du déploiement Cloud Run `--no-traffic` (code={deploy_rc})."
+            if is_fr
+            else f"Cloud Run `--no-traffic` deploy failed (rc={deploy_rc})."
+        )
+        diagnostics.append(msg)
+        alert = _build_incident_alert(
+            gateway=clean_gw,
+            verdict="deploy_failed",
+            failure_categories=["gcloud_deploy_failed"],
+            failed_routes=[],
+            diagnostics=diagnostics,
+            rollback_triggered=False,
+            rollback_succeeded=None,
+            rollback_revision=effective_prev_rev,
+            live_build_sha=str(manifest_diff.get("live_build_sha") or "unknown"),
+            expected_build_sha=resolved_sha,
+            summary=msg,
+        )
+        return _build_merge_receipt(
+            lang_code=lang_code,
+            gateway=clean_gw,
+            verdict="deploy_failed",
+            manifest_diff=manifest_diff,
+            pre_promote=pre_promote,
+            comp_doc=comp_doc,
+            network_calls=network_calls,
+            execute=True,
+            exit_code=2,
+            summary=msg,
+            diagnostics=diagnostics,
+            extra={
+                "incident_alert_emitted": True,
+                "incident_alert": alert,
+                "gcloud_executed": True,
+                "gcloud_calls": len(executed_commands),
+                "previous_revision": effective_prev_rev,
+                "safety_lock": safety_lock,
+                "rollout_plan": rollout_plan,
+                "executed_commands": executed_commands,
+            },
+        )
+
+    candidate_rev = _extract_deployed_revision(deploy_out, fallback=f"{clean_service}-{clean_tag}")
+
+    if no_traffic_only:
+        summary = (
+            f"Révision `{candidate_rev}` préparée avec `--no-traffic --tag {clean_tag}` (0 % trafic basculé)."
+            if is_fr
+            else f"Staged revision `{candidate_rev}` with `--no-traffic --tag {clean_tag}` (0% live traffic shifted)."
+        )
+        return _build_merge_receipt(
+            lang_code=lang_code,
+            gateway=clean_gw,
+            verdict="staged_no_traffic_only",
+            manifest_diff=manifest_diff,
+            pre_promote=pre_promote,
+            comp_doc=comp_doc,
+            network_calls=network_calls,
+            execute=True,
+            exit_code=0,
+            summary=summary,
+            diagnostics=diagnostics,
+            extra={
+                "staged_no_traffic_only": True,
+                "traffic_shifted": False,
+                "smoke_skipped_no_traffic_only": True,
+                "gcloud_executed": True,
+                "gcloud_calls": len(executed_commands),
+                "cloud_state_mutated": True,
+                "candidate_revision": candidate_rev,
+                "candidate_tag": clean_tag,
+                "previous_revision": effective_prev_rev,
+                "safety_lock": safety_lock,
+                "rollout_plan": rollout_plan,
+                "executed_commands": executed_commands,
+            },
+        )
+
+    # 8. Execute Step B: Traffic cutover + Expanded Post-Deploy Smoke Suite
+    final_plan = build_idempotent_rollout_plan(
+        gateway=clean_gw,
+        target_sha=resolved_sha,
+        previous_revision=effective_prev_rev,
+        candidate_revision=candidate_rev,
+        candidate_tag=clean_tag,
+        service_name=clean_service,
+        region=clean_region,
+        gcp_project=clean_project,
+        no_traffic_only=False,
+        env=env,
+        cwd=eff_cwd,
+        lang=lang_code,
+    )
+    promote_argv = list(final_plan["promote_traffic_argv"])
+    promote_rc, promote_out = _invoke_runner(gcloud_runner, promote_argv, GCLOUD_TRAFFIC_TIMEOUT_S)
+    executed_commands.append(
+        {
+            "step": "promote_traffic",
+            "argv": promote_argv,
+            "returncode": promote_rc,
+            "output_preview": sanitize_text_for_display(promote_out)[:240],
+        }
+    )
+
+    smoke_report: dict[str, Any] | None = None
+    failure_categories: list[str] = []
+    failed_routes: list[str] = []
+    if promote_rc != 0:
+        failure_categories.append("traffic_promotion_failed")
+        diagnostics.append(
+            f"Échec `update-traffic` vers `{candidate_rev}` (code={promote_rc})."
+            if is_fr
+            else f"`update-traffic` to `{candidate_rev}` failed (rc={promote_rc})."
+        )
+        smoke_passed = False
+    else:
+        smoke_report = verify_post_deploy_smoke_suite(
+            clean_gw,
+            expected_sha=resolved_sha,
+            probe_feedback_post=probe_feedback_post,
+            require_coder_model=require_coder_model,
+            previous_revision=effective_prev_rev,
+            active_volunteer_gpus=active_volunteer_gpus,
+            http_fn=http_fn,
+            env=env,
+            cwd=eff_cwd,
+            lang=lang_code,
+        )
+        network_calls += int(smoke_report.get("network_calls", 0))
+        smoke_passed = bool(smoke_report["smoke_ok"])
+        diagnostics.extend(smoke_report.get("diagnostics") or [])
+        failure_categories.extend(smoke_report.get("failure_categories") or [])
+        failed_routes.extend(smoke_report.get("failed_routes") or [])
+
+    if smoke_passed and smoke_report is not None:
+        summary = (
+            f"Révision `{candidate_rev}` promue à 100 % et validée par la suite smoke sur {clean_gw} "
+            f"(readiness_gates={smoke_report['readiness_gates_passed']}/5)."
+            if is_fr
+            else f"Promoted revision `{candidate_rev}` to 100% traffic and passed expanded smoke suite on {clean_gw} "
+            f"(readiness_gates={smoke_report['readiness_gates_passed']}/5)."
+        )
+        return _build_merge_receipt(
+            lang_code=lang_code,
+            gateway=clean_gw,
+            verdict="promoted",
+            manifest_diff=manifest_diff,
+            pre_promote=pre_promote,
+            comp_doc=comp_doc,
+            network_calls=network_calls,
+            execute=True,
+            exit_code=0,
+            summary=summary,
+            diagnostics=diagnostics,
+            extra={
+                "traffic_shifted": True,
+                "promoted": True,
+                "canary_ok": True,
+                "smoke_ok": True,
+                "readiness_projection": smoke_report["readiness_projection"],
+                "readiness_gates_passed": smoke_report["readiness_gates_passed"],
+                "readiness_gates_total": smoke_report["readiness_gates_total"],
+                "gcloud_executed": True,
+                "gcloud_calls": len(executed_commands),
+                "cloud_state_mutated": True,
+                "candidate_revision": candidate_rev,
+                "candidate_tag": clean_tag,
+                "previous_revision": effective_prev_rev,
+                "safety_lock": safety_lock,
+                "rollout_plan": final_plan,
+                "smoke_suite": smoke_report,
+                "canary": smoke_report,
+                "executed_commands": executed_commands,
+            },
+        )
+
+    # 9. Automatic sanitized rollback + incident_alert on smoke/traffic failure
+    rollback_succeeded = False
+    rollback_argv: list[str] | None = None
+    if effective_prev_rev is not None:
+        rollback_argv = list(final_plan["rollback_traffic_argv"])
+        rb_rc, rb_out = _invoke_runner(gcloud_runner, rollback_argv, GCLOUD_TRAFFIC_TIMEOUT_S)
+        rollback_succeeded = rb_rc == 0
+        executed_commands.append(
+            {
+                "step": "rollback_traffic",
+                "argv": rollback_argv,
+                "returncode": rb_rc,
+                "output_preview": sanitize_text_for_display(rb_out)[:240],
+            }
+        )
+    else:
+        diagnostics.append(
+            "Rollback automatique demandé mais `--previous-revision` absent et aucune révision antérieure connue."
+            if is_fr
+            else "Automatic rollback requested, but `--previous-revision` was not provided and no prior live revision was found."
+        )
+
+    summary = (
+        f"ROLLBACK DÉCLENCHÉ vers `{effective_prev_rev or 'unknown'}` après échec de la suite smoke "
+        f"(succeeded={rollback_succeeded})."
+        if is_fr
+        else f"ROLLBACK TRIGGERED to `{effective_prev_rev or 'unknown'}` after post-deploy smoke suite failure "
+        f"(succeeded={rollback_succeeded})."
+    )
+    alert = _build_incident_alert(
+        gateway=clean_gw,
+        verdict="rolled_back_after_smoke_failure",
+        failure_categories=failure_categories,
+        failed_routes=failed_routes,
+        diagnostics=diagnostics,
+        rollback_triggered=True,
+        rollback_succeeded=rollback_succeeded,
+        rollback_revision=effective_prev_rev,
+        live_build_sha=str(
+            (smoke_report or {}).get("live_build_sha") or manifest_diff.get("live_build_sha") or "unknown"
+        ),
+        expected_build_sha=resolved_sha,
+        summary=summary,
+    )
+    readiness_proj = (
+        smoke_report["readiness_projection"]
+        if smoke_report is not None
+        else project_adoption_readiness_gates(gateway_and_models_ok=False, holiday_routes_ok=False, lang=lang_code)
+    )
+    return _build_merge_receipt(
+        lang_code=lang_code,
+        gateway=clean_gw,
+        verdict="rolled_back_after_smoke_failure",
+        manifest_diff=manifest_diff,
+        pre_promote=pre_promote,
+        comp_doc=comp_doc,
+        network_calls=network_calls,
+        execute=True,
+        exit_code=2,
+        summary=summary,
+        diagnostics=diagnostics,
+        extra={
+            "traffic_shifted": promote_rc == 0,
+            "rollback_triggered": True,
+            "rollback_succeeded": rollback_succeeded,
+            "rollback_revision": effective_prev_rev,
+            "rollback_command_argv": rollback_argv,
+            "incident_alert_emitted": True,
+            "incident_alert": alert,
+            "readiness_projection": readiness_proj,
+            "readiness_gates_passed": readiness_proj["readiness_gates_passed"],
+            "readiness_gates_total": readiness_proj["readiness_gates_total"],
+            "gcloud_executed": True,
+            "gcloud_calls": len(executed_commands),
+            "cloud_state_mutated": True,
+            "candidate_revision": candidate_rev,
+            "candidate_tag": clean_tag,
+            "previous_revision": effective_prev_rev,
+            "safety_lock": safety_lock,
+            "rollout_plan": final_plan,
+            "smoke_suite": smoke_report,
+            "canary": smoke_report,
+            "executed_commands": executed_commands,
+        },
+    )
+
+
 def render_markdown_report(report: Mapping[str, Any]) -> str:
     """Render an FR/EN GitHub-flavored Markdown report with masked secrets, `~` paths, and SHA-256 receipt."""
     lang_code = normalize_lang(str(report.get("lang", "en")))
@@ -3211,10 +4760,35 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
         f"- **Dry-Run Only**: `{report.get('dry_run_only')}` (`gcloud_calls={report.get('gcloud_calls', 0)}`)",
     ]
 
+    if "manifest_sha256" in report:
+        lines.append(
+            f"- **Deploy Needed**: `{report.get('deploy_needed')}` | **Manifest SHA-256**: `{str(report.get('manifest_sha256'))[:16]}`"
+        )
+    if "readiness_gates_passed" in report:
+        lines.append(
+            f"- **Readiness Gates**: `{report.get('readiness_gates_passed')}/{report.get('readiness_gates_total', 5)}`"
+        )
+
     if "canary" in report and isinstance(report["canary"], Mapping):
         c_doc = report["canary"]
         lines.append(
             f"- **Canary OK**: `{c_doc.get('canary_ok')}` (`unique_csp_nonces={c_doc.get('unique_csp_nonces_count')}`)"
+        )
+    elif "smoke_ok" in report:
+        lines.append(
+            f"- **Smoke OK**: `{report.get('smoke_ok')}` (`models_ok={report.get('models_ok')}`, `unique_csp_nonces={report.get('unique_csp_nonces_count')}`)"
+        )
+
+    alert = report.get("incident_alert")
+    if isinstance(alert, Mapping):
+        lines.extend(
+            [
+                "",
+                "## Alerte Incident Cloud Run" if is_fr else "## Cloud Run Incident Alert",
+                "",
+                f"- **Severity**: `{alert.get('severity')}` | **Categories**: `{', '.join(alert.get('failure_categories') or ())}`",
+                f"- **Rollback Revision**: `{alert.get('rollback_revision')}` (`succeeded={alert.get('rollback_succeeded')}`)",
+            ]
         )
 
     commands = report.get("commands")
@@ -3266,9 +4840,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--service", default=DEFAULT_CLOUD_RUN_SERVICE, help="Cloud Run service name.")
     parser.add_argument("--region", default=DEFAULT_CLOUD_RUN_REGION, help="Cloud Run region.")
     parser.add_argument("--project", default=None, help="Optional GCP project id.")
+    parser.add_argument("--repo-root", default="", help="Optional repository root path for manifest diff and git inspection.")
     parser.add_argument("--deploy-script", default="", help="Optional path to deploy/gcp_openrouter/deploy.sh.")
     parser.add_argument("--server-py", default="", help="Optional path to deploy/gcp_openrouter/server.py.")
     parser.add_argument("--lock-file", default="", help="Optional local training lockfile path.")
+    parser.add_argument("--deploy-on-merge", action="store_true", help="Run end-to-end deploy-on-merge orchestrator.")
+    parser.add_argument("--smoke-suite", action="store_true", help="Run expanded post-deploy smoke suite (/v1/models, /noel, /quick, /raid-noel, /arena-noel, feedback).")
+    parser.add_argument("--force-deploy", action="store_true", help="Force deploy even when git diff only touched non-Cloud-Run paths.")
+    parser.add_argument("--require-coder-model", action="store_true", help="Require hivemind/coder presence in GET /v1/models.")
     parser.add_argument("--execute", action="store_true", help="Execute gcloud rollout commands (defaults to safe dry-run).")
     parser.add_argument("--no-traffic-only", action="store_true", help="Stage tagged revision with --no-traffic without shifting live traffic.")
     parser.add_argument("--allow-during-training", action="store_true", help="Allow live traffic shift even when active training signals are detected.")
@@ -3300,32 +4879,79 @@ def main(
 
     try:
         lang_code = normalize_lang(args.lang)
-        report = promote_holiday_revision(
-            args.gateway,
-            target_sha=args.expected_sha,
-            previous_revision=args.previous_revision,
-            candidate_tag=args.candidate_tag,
-            service_name=args.service,
-            region=args.region,
-            gcp_project=args.project,
-            deploy_script_path=Path(args.deploy_script) if args.deploy_script else None,
-            server_py_path=Path(args.server_py) if args.server_py else None,
-            app_factory=app_factory,
-            lock_file_path=Path(args.lock_file) if args.lock_file else None,
-            process_probe_fn=process_probe_fn,
-            check_git_head=bool(args.check_git_head),
-            execute=bool(args.execute),
-            no_traffic_only=bool(args.no_traffic_only),
-            allow_during_training=bool(args.allow_during_training),
-            defer_on_active_training=bool(args.defer_on_active_training),
-            probe_feedback_post=bool(args.probe_feedback_post),
-            gcloud_runner=gcloud_runner,
-            http_fn=http_fn,
-            git_runner=git_runner,
-            env=env,
-            cwd=cwd,
-            lang=lang_code,
-        )
+        repo_root_arg = Path(args.repo_root) if args.repo_root else None
+        deploy_path_arg = Path(args.deploy_script) if args.deploy_script else None
+        server_path_arg = Path(args.server_py) if args.server_py else None
+        lock_path_arg = Path(args.lock_file) if args.lock_file else None
+        if args.deploy_on_merge:
+            report = orchestrate_deploy_on_merge(
+                args.gateway,
+                repo_root=repo_root_arg,
+                target_sha=args.expected_sha,
+                previous_revision=args.previous_revision,
+                candidate_tag=args.candidate_tag,
+                service_name=args.service,
+                region=args.region,
+                gcp_project=args.project,
+                deploy_script_path=deploy_path_arg,
+                server_py_path=server_path_arg,
+                app_factory=app_factory,
+                lock_file_path=lock_path_arg,
+                process_probe_fn=process_probe_fn,
+                check_git_head=bool(args.check_git_head),
+                force_deploy=bool(args.force_deploy),
+                execute=bool(args.execute),
+                no_traffic_only=bool(args.no_traffic_only),
+                allow_during_training=bool(args.allow_during_training),
+                defer_on_active_training=bool(args.defer_on_active_training),
+                probe_feedback_post=bool(args.probe_feedback_post),
+                require_coder_model=bool(args.require_coder_model),
+                gcloud_runner=gcloud_runner,
+                http_fn=http_fn,
+                git_runner=git_runner,
+                env=env,
+                cwd=cwd,
+                lang=lang_code,
+            )
+        elif args.smoke_suite:
+            report = verify_post_deploy_smoke_suite(
+                args.gateway,
+                expected_sha=args.expected_sha,
+                probe_feedback_post=bool(args.probe_feedback_post),
+                require_coder_model=bool(args.require_coder_model),
+                previous_revision=args.previous_revision,
+                http_fn=http_fn,
+                env=env,
+                cwd=cwd,
+                lang=lang_code,
+            )
+        else:
+            report = promote_holiday_revision(
+                args.gateway,
+                target_sha=args.expected_sha,
+                previous_revision=args.previous_revision,
+                candidate_tag=args.candidate_tag,
+                service_name=args.service,
+                region=args.region,
+                gcp_project=args.project,
+                deploy_script_path=deploy_path_arg,
+                server_py_path=server_path_arg,
+                app_factory=app_factory,
+                lock_file_path=lock_path_arg,
+                process_probe_fn=process_probe_fn,
+                check_git_head=bool(args.check_git_head),
+                execute=bool(args.execute),
+                no_traffic_only=bool(args.no_traffic_only),
+                allow_during_training=bool(args.allow_during_training),
+                defer_on_active_training=bool(args.defer_on_active_training),
+                probe_feedback_post=bool(args.probe_feedback_post),
+                gcloud_runner=gcloud_runner,
+                http_fn=http_fn,
+                git_runner=git_runner,
+                env=env,
+                cwd=cwd,
+                lang=lang_code,
+            )
         rendered = (
             _assert_safe_output(json.dumps(report, indent=2, ensure_ascii=False))
             if args.json

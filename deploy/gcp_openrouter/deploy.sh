@@ -21,16 +21,100 @@
 # so Litestream keeps replicating between requests. These flags match the live service.
 set -euo pipefail
 
-: "${GCP_PROJECT:?set GCP_PROJECT to the Google Cloud project id}"
-: "${HIVEMIND_ROUTER_ADMIN_KEY_HASH:?set HIVEMIND_ROUTER_ADMIN_KEY_HASH to the admin key HMAC hex}"
+DRY_RUN=0
+if [ "${HIVEMIND_DEPLOY_DRY_RUN:-0}" = "1" ] || [ "${HIVEMIND_DEPLOY_DRY_RUN:-0}" = "true" ]; then
+  DRY_RUN=1
+fi
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run)
+      DRY_RUN=1
+      ;;
+    *)
+      echo "Unknown argument: $arg (supported: --dry-run)" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ "$DRY_RUN" = "1" ]; then
+  GCP_PROJECT="${GCP_PROJECT:-hivemind-dry-run}"
+else
+  : "${GCP_PROJECT:?set GCP_PROJECT to the Google Cloud project id}"
+  : "${HIVEMIND_ROUTER_ADMIN_KEY_HASH:?set HIVEMIND_ROUTER_ADMIN_KEY_HASH to the admin key HMAC hex}"
+fi
 REGION="${REGION:-us-central1}"
 SECRET_NAME="${SECRET_NAME:-hivemind-router-secret}"
 SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-hivemind-openrouter@${GCP_PROJECT}.iam.gserviceaccount.com}"
-PROJECT_NUMBER="$(gcloud projects describe "$GCP_PROJECT" --format 'value(projectNumber)')"
-LEDGER_BUCKET="${LEDGER_BUCKET:-hivemind-openrouter-ledger-${PROJECT_NUMBER}}"
+if [ -z "${LEDGER_BUCKET:-}" ]; then
+  if [ "$DRY_RUN" = "1" ]; then
+    LEDGER_BUCKET="hivemind-openrouter-ledger-dry-run"
+  else
+    PROJECT_NUMBER="$(gcloud projects describe "$GCP_PROJECT" --format 'value(projectNumber)')"
+    LEDGER_BUCKET="hivemind-openrouter-ledger-${PROJECT_NUMBER}"
+  fi
+fi
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
+
+sanitize_build_sha() {
+  local raw="$1"
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  local low
+  low="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  if [ -z "$low" ] || [ "$low" = "unknown" ]; then
+    printf '%s' "unknown"
+    return 0
+  fi
+  if [[ ! "$low" =~ ^[a-z0-9]{6,64}$ ]]; then
+    printf '%s' "unknown"
+    return 0
+  fi
+  case "$low" in
+    *secret*|*token*|*password*|*passwd*|*apikey*|*bearer*|*aiza*)
+      printf '%s' "unknown"
+      return 0
+      ;;
+  esac
+  printf '%s' "$low"
+}
+
+RAW_BUILD_SHA="${HIVEMIND_BUILD_SHA:-}"
+if [ -z "${RAW_BUILD_SHA//[[:space:]]/}" ]; then
+  RAW_BUILD_SHA="$(git -C "$repo" rev-parse --short=12 HEAD 2>/dev/null || true)"
+fi
+BUILD_SHA="$(sanitize_build_sha "$RAW_BUILD_SHA")"
+
+STARTER_GRANT_HMT="${HIVEMIND_STARTER_GRANT_HMT:-0}"
+STARTER_GRANTS_PER_IP_24H="${HIVEMIND_STARTER_GRANTS_PER_IP_24H:-5}"
+REGISTRATION_BONUS_HMT="${HIVEMIND_REGISTRATION_BONUS_HMT:-0}"
+ALLOW_BONUSES="${HIVEMIND_ALLOW_BONUSES:-0}"
+PARTNER_TESTING_GRANTS="${HIVEMIND_PARTNER_TESTING_GRANTS:-0}"
+if [ "$DRY_RUN" = "1" ]; then
+  ADMIN_KEY_HASH_ENV="<redacted>"
+else
+  ADMIN_KEY_HASH_ENV="${HIVEMIND_ROUTER_ADMIN_KEY_HASH}"
+fi
+ENV_VARS="HIVEMIND_ROUTER_DB=/data/router.db,HIVEMIND_ROUTER_REPLICA_URL=gcs://${LEDGER_BUCKET}/router,HIVEMIND_ROUTER_ADMIN_KEY_HASH=${ADMIN_KEY_HASH_ENV},HIVEMIND_BUILD_SHA=${BUILD_SHA},HIVEMIND_STARTER_GRANT_HMT=${STARTER_GRANT_HMT},HIVEMIND_STARTER_GRANTS_PER_IP_24H=${STARTER_GRANTS_PER_IP_24H},HIVEMIND_REGISTRATION_BONUS_HMT=${REGISTRATION_BONUS_HMT},HIVEMIND_ALLOW_BONUSES=${ALLOW_BONUSES},HIVEMIND_PARTNER_TESTING_GRANTS=${PARTNER_TESTING_GRANTS}"
+[ -n "${HIVEMIND_GOOGLE_CLIENT_ID:-}" ] && ENV_VARS="${ENV_VARS},HIVEMIND_GOOGLE_CLIENT_ID=${HIVEMIND_GOOGLE_CLIENT_ID}"
+[ -n "${HIVEMIND_OPEN_REGISTRATION:-}" ] && ENV_VARS="${ENV_VARS},HIVEMIND_OPEN_REGISTRATION=${HIVEMIND_OPEN_REGISTRATION}"
+
+CPU="${CPU:-1}"
+MEMORY="${MEMORY:-1Gi}"
+
+if [ "$DRY_RUN" = "1" ]; then
+  echo "HIVEMIND_CLOUD_RUN_DEPLOY_DRY_RUN=1"
+  echo "service=hivemind-openrouter region=${REGION} project=${GCP_PROJECT} service_account=${SERVICE_ACCOUNT}"
+  echo "build_sha=${BUILD_SHA}"
+  echo "finops_flags=--min-instances 0 --max-instances 1 --no-cpu-throttling --cpu-boost --cpu ${CPU} --concurrency 80 --memory ${MEMORY} --timeout 600"
+  echo "replica_url=gcs://${LEDGER_BUCKET}/router"
+  echo "secrets=HIVEMIND_ROUTER_SECRET=${SECRET_NAME}:latest"
+  echo "update_env_vars=${ENV_VARS}"
+  echo "gcloud_invoked=0"
+  exit 0
+fi
 
 # Assemble a clean build context: Dockerfile, server.py, entrypoint.sh, requirements.txt and the src/ tree.
 stage="$(mktemp -d)"
@@ -44,18 +128,6 @@ cp -f "$repo/docs/MVP_SCORECARD.md" "$repo/docs/MVP_OWNER_DECISIONS.md" "$stage/
 find "$stage/src" -name __pycache__ -type d -prune -exec rm -rf {} +
 cp "$here/Dockerfile" "$here/server.py" "$here/entrypoint.sh" "$here/requirements.txt" "$stage/"
 chmod +x "$stage/entrypoint.sh"
-
-STARTER_GRANT_HMT="${HIVEMIND_STARTER_GRANT_HMT:-0}"
-STARTER_GRANTS_PER_IP_24H="${HIVEMIND_STARTER_GRANTS_PER_IP_24H:-5}"
-REGISTRATION_BONUS_HMT="${HIVEMIND_REGISTRATION_BONUS_HMT:-0}"
-ALLOW_BONUSES="${HIVEMIND_ALLOW_BONUSES:-0}"
-PARTNER_TESTING_GRANTS="${HIVEMIND_PARTNER_TESTING_GRANTS:-0}"
-ENV_VARS="HIVEMIND_ROUTER_DB=/data/router.db,HIVEMIND_ROUTER_REPLICA_URL=gcs://${LEDGER_BUCKET}/router,HIVEMIND_ROUTER_ADMIN_KEY_HASH=${HIVEMIND_ROUTER_ADMIN_KEY_HASH},HIVEMIND_STARTER_GRANT_HMT=${STARTER_GRANT_HMT},HIVEMIND_STARTER_GRANTS_PER_IP_24H=${STARTER_GRANTS_PER_IP_24H},HIVEMIND_REGISTRATION_BONUS_HMT=${REGISTRATION_BONUS_HMT},HIVEMIND_ALLOW_BONUSES=${ALLOW_BONUSES},HIVEMIND_PARTNER_TESTING_GRANTS=${PARTNER_TESTING_GRANTS}"
-[ -n "${HIVEMIND_GOOGLE_CLIENT_ID:-}" ] && ENV_VARS="${ENV_VARS},HIVEMIND_GOOGLE_CLIENT_ID=${HIVEMIND_GOOGLE_CLIENT_ID}"
-[ -n "${HIVEMIND_OPEN_REGISTRATION:-}" ] && ENV_VARS="${ENV_VARS},HIVEMIND_OPEN_REGISTRATION=${HIVEMIND_OPEN_REGISTRATION}"
-
-CPU="${CPU:-1}"
-MEMORY="${MEMORY:-1Gi}"
 
 cd "$stage"
 gcloud run deploy hivemind-openrouter \

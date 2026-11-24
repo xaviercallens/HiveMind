@@ -124,3 +124,22 @@ decision.
 - the T4 free-VRAM minimum;
 - per-domain % against the base, grouped by trained and untrained experts;
 - the receipts in `artifacts/experiments/E_MOE_C3_*`.
+
+## Deviation 1: worker interpreter (24 Nov 2026, 16:35 Paris, before any round)
+
+**What happened.** The first launch of arm D (16:25) stopped at import: `ImportError: cannot import name 'UTC' from
+'datetime'`. The launcher ran the worker with `boinc/venv`, which is Python 3.10 with torch 2.7.1+cu118, and current
+main needs Python 3.11. Both segments stopped before any round, the driver stopped as designed, and the producer was
+restarted. No checkpoint was written and nothing was scored.
+
+**Change.** The launcher gains `PY=${PY:-…/boinc/venv/bin/python}`; its sha256 is now `c3ef8eb6…`. The driver sets `PY`
+to `venv311`, which is Python 3.11 with torch 2.6.0+cu124, for every arm.
+
+**Effect.**
+- All four arms use the same interpreter, and the judge still runs on CPU from `e5f6faf4`, so the comparisons inside
+  this campaign are unaffected.
+- Training numerics may differ slightly from campaigns 1 and 2 (different torch and CUDA builds). This is one more
+  reason the keep rule compares against `e50_r00` with a noise floor, not against earlier training runs.
+
+**Unchanged:** the worker code, the arms, the judge, the splits and the rules. Only this section and the driver's
+interpreter line are new in the commit that adds it, and the driver is relaunched pinned to that commit.

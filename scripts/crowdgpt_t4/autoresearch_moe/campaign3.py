@@ -48,7 +48,7 @@ _orig_flags = ar.flags
 def flags(cfg: dict, offset: int):
     env, extra, seq = _orig_flags(cfg, offset)
     extra += f" --router-lr-scale {cfg['router']}"
-    env.update({"EXTRA_ARGS": extra, "REPO": str(REPO_C3), "RUN_TAG": f"c3{cfg['arm']}",
+    env.update({"EXTRA_ARGS": extra, "REPO": str(REPO_C3), "PY": str(ar.PY_EVAL), "RUN_TAG": f"c3{cfg['arm']}",
                 "CAMPAIGN_ID": "CROWDGPT-MOE-C3-2026-11"})
     return env, extra, seq
 

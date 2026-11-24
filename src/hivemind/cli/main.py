@@ -33,6 +33,7 @@ from hivemind.core.quantization import (
 
 console = Console()
 _VSCODE_QUICK_PRESET_SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "noel_vscode_quick_preset.py"
+_IDLE_RESUME_SERVICE_SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "noel_idle_resume_service.py"
 _DEFAULT_VSCODE_GATEWAY = "https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app"
 
 
@@ -241,24 +242,57 @@ def cmd_serve_coordinator(host: str, port: int, public_url: str | None = None, i
     return 0
 
 
-def _load_vscode_quick_preset_module(script_path: Path | str | None = None) -> Any:
-    """Load `scripts/noel_vscode_quick_preset.py` cleanly without touching torch/CUDA."""
-    target = Path(script_path) if script_path is not None else _VSCODE_QUICK_PRESET_SCRIPT
+def _load_script_helper(
+    target: Path,
+    *,
+    primary_mod_name: str,
+    cache_keys: tuple[str, ...],
+    label: str,
+) -> Any:
+    """Load a standalone helper script by path cleanly without touching torch/CUDA."""
     if not target.is_file():
-        raise FileNotFoundError(f"VS Code quick preset helper script not found: {target}")
+        raise FileNotFoundError(f"{label} helper script not found: {target}")
     resolved_target = target.resolve()
-    for mod_name in ("scripts.noel_vscode_quick_preset", "noel_vscode_quick_preset"):
+    for mod_name in cache_keys:
         existing = sys.modules.get(mod_name)
         existing_file = getattr(existing, "__file__", None)
         if existing is not None and existing_file and Path(existing_file).resolve() == resolved_target:
             return existing
-    spec = importlib.util.spec_from_file_location("noel_vscode_quick_preset", resolved_target)
+    spec = importlib.util.spec_from_file_location(primary_mod_name, resolved_target)
     if spec is None or spec.loader is None:
-        raise ImportError(f"Unable to load VS Code quick preset helper from {resolved_target}")
+        raise ImportError(f"Unable to load {label} helper from {resolved_target}")
     module = importlib.util.module_from_spec(spec)
-    sys.modules["noel_vscode_quick_preset"] = module
+    sys.modules[primary_mod_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _append_forwarded_flags(
+    forwarded: list[str],
+    args: argparse.Namespace,
+    value_flags: Sequence[tuple[str, str]],
+    bool_flags: Sequence[tuple[str, str]],
+) -> list[str]:
+    """Append CLI `--flag value` and boolean `--flag` pairs from a parsed Namespace."""
+    for attr_name, flag_name in value_flags:
+        val = getattr(args, attr_name, None)
+        if val is not None:
+            forwarded.extend([flag_name, str(val)])
+    for attr_name, flag_name in bool_flags:
+        if bool(getattr(args, attr_name, False)):
+            forwarded.append(flag_name)
+    return forwarded
+
+
+def _load_vscode_quick_preset_module(script_path: Path | str | None = None) -> Any:
+    """Load `scripts/noel_vscode_quick_preset.py` cleanly without touching torch/CUDA."""
+    target = Path(script_path) if script_path is not None else _VSCODE_QUICK_PRESET_SCRIPT
+    return _load_script_helper(
+        target,
+        primary_mod_name="noel_vscode_quick_preset",
+        cache_keys=("scripts.noel_vscode_quick_preset", "noel_vscode_quick_preset"),
+        label="VS Code quick preset",
+    )
 
 
 def _build_vscode_setup_argv(args: argparse.Namespace) -> list[str]:
@@ -283,11 +317,6 @@ def _build_vscode_setup_argv(args: argparse.Namespace) -> list[str]:
         ("max_temp_c", "--max-temp-c"),
         ("lang", "--lang"),
     )
-    for attr_name, flag_name in value_flags:
-        val = getattr(args, attr_name, None)
-        if val is not None:
-            forwarded.extend([flag_name, str(val)])
-
     bool_flags: tuple[tuple[str, str], ...] = (
         ("write_continue_config", "--write-continue-config"),
         ("skip_preflight", "--skip-preflight"),
@@ -301,11 +330,7 @@ def _build_vscode_setup_argv(args: argparse.Namespace) -> list[str]:
         ("uninstall", "--uninstall"),
         ("json_output", "--json"),
     )
-    for attr_name, flag_name in bool_flags:
-        if bool(getattr(args, attr_name, False)):
-            forwarded.append(flag_name)
-
-    return forwarded
+    return _append_forwarded_flags(forwarded, args, value_flags, bool_flags)
 
 
 def cmd_vscode_setup(
@@ -359,6 +384,115 @@ def cmd_vscode_setup(
         call_kwargs["yield_drill_fn"] = helper_mod.default_worker_yield_drill
     if "process_probe_fn" in sig.parameters and hasattr(helper_mod, "default_process_probe"):
         call_kwargs["process_probe_fn"] = helper_mod.default_process_probe
+    return int(main_fn(forwarded_argv, **call_kwargs))
+
+
+def _load_idle_resume_service_module(script_path: Path | str | None = None) -> Any:
+    """Load `scripts/noel_idle_resume_service.py` cleanly without touching torch/CUDA."""
+    target = Path(script_path) if script_path is not None else _IDLE_RESUME_SERVICE_SCRIPT
+    return _load_script_helper(
+        target,
+        primary_mod_name="noel_idle_resume_service",
+        cache_keys=("scripts.noel_idle_resume_service", "noel_idle_resume_service"),
+        label="Idle-resume service",
+    )
+
+
+def _build_gamer_service_argv(args: argparse.Namespace) -> list[str]:
+    """Translate parsed `hivemind gamer-service` options into helper CLI arguments."""
+    value_flags: tuple[tuple[str, str], ...] = (
+        ("platform", "--platform"),
+        ("gateway", "--gateway"),
+        ("service_dir", "--service-dir"),
+        ("credentials_path", "--credentials-path"),
+        ("state_file", "--state-file"),
+        ("ces_queue_file", "--ces-queue-file"),
+        ("workspace", "--workspace"),
+        ("handle", "--handle"),
+        ("role", "--role"),
+        ("host_label", "--host-label"),
+        ("expected_sha", "--expected-sha"),
+        ("target_online_producers", "--target-online-producers"),
+        ("max_temp_c", "--max-temp-c"),
+        ("min_free_vram_mib", "--min-free-vram-mib"),
+        ("idle_threshold_s", "--idle-threshold-s"),
+        ("cooldown_s", "--cooldown-s"),
+        ("interval_s", "--interval-s"),
+        ("yield_budget_ms", "--yield-budget-ms"),
+        ("transfer_mode", "--transfer-mode"),
+        ("profile", "--profile"),
+        ("ease_rating", "--ease-rating"),
+        ("lang", "--lang"),
+    )
+    bool_flags: tuple[tuple[str, str], ...] = (
+        ("install", "--install"),
+        ("activate_scheduler", "--activate-scheduler"),
+        ("uninstall", "--uninstall"),
+        ("tick", "--tick"),
+        ("yield_drill", "--yield-drill"),
+        ("send_heartbeat", "--send-heartbeat"),
+        ("check_fleet", "--check-fleet"),
+        ("register_if_missing", "--register-if-missing"),
+        ("require_holiday_routes", "--require-holiday-routes"),
+        ("submit_ces", "--submit-ces"),
+        ("prompt_ces", "--prompt-ces"),
+        ("flush_ces_queue", "--flush-ces-queue"),
+        ("had_game_lag", "--had-game-lag"),
+        ("markdown", "--markdown"),
+        ("json_output", "--json"),
+    )
+    return _append_forwarded_flags([], args, value_flags, bool_flags)
+
+
+def cmd_gamer_service(
+    args: argparse.Namespace | Sequence[str] | None = None,
+    *,
+    script_path: Path | str | None = None,
+) -> int:
+    """Execute opt-in user-space idle-resume GPU service via `noel_idle_resume_service.py` without CUDA init."""
+    if isinstance(args, argparse.Namespace):
+        forwarded_argv = _build_gamer_service_argv(args)
+        want_json = bool(getattr(args, "json_output", False))
+    else:
+        forwarded_argv = [str(item) for item in args] if args is not None else []
+        want_json = "--json" in forwarded_argv
+
+    try:
+        helper_mod = _load_idle_resume_service_module(script_path=script_path)
+    except (FileNotFoundError, ImportError, OSError) as exc:
+        err_msg = f"Gamer idle-resume service helper unavailable: {exc}"
+        if want_json:
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "ready": False,
+                        "exit_code": 2,
+                        "mode": "gamer_service_helper_missing",
+                        "error": err_msg,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+        else:
+            print(err_msg, file=sys.stderr)
+        return 2
+
+    main_fn = helper_mod.main
+    sig = inspect.signature(main_fn)
+    call_kwargs: dict[str, Any] = {}
+    injectables: tuple[tuple[str, str], ...] = (
+        ("http_fn", "default_http_request"),
+        ("gpu_probe_fn", "default_gpu_probe"),
+        ("process_probe_fn", "default_process_probe"),
+        ("idle_probe_fn", "default_idle_probe"),
+        ("worker_yield_fn", "default_worker_yield_drill"),
+    )
+    for kw_name, attr_name in injectables:
+        if kw_name in sig.parameters and hasattr(helper_mod, attr_name):
+            call_kwargs[kw_name] = getattr(helper_mod, attr_name)
     return int(main_fn(forwarded_argv, **call_kwargs))
 
 
@@ -571,9 +705,53 @@ def main(argv: list[str] | None = None) -> int:
     p_vscode.add_argument("--lang", default="en", choices=["en", "fr"], help="Output language (en|fr).")
     p_vscode.add_argument("--json", action="store_true", dest="json_output", help="Emit JSON report.")
 
+    p_gamer = sub.add_parser(
+        "gamer-service",
+        help="Opt-in user-space idle-resume GPU service, < 1.5 s Steam yield / <= 70 C state machine & 0600 CES spool (0.00 EUR / 0.00 USD, AGPL-3.0)",
+    )
+    p_gamer.add_argument("--platform", default="auto", choices=["auto", "windows", "linux", "macos"], help="Target OS platform.")
+    p_gamer.add_argument("--gateway", default=_DEFAULT_VSCODE_GATEWAY, help="HiveMind gateway URL.")
+    p_gamer.add_argument("--service-dir", default=None, help="Override service manifest target directory.")
+    p_gamer.add_argument("--credentials-path", default=None, help="Override ~/.hivemind/credentials.json path.")
+    p_gamer.add_argument("--state-file", default=None, help="Override ~/.hivemind/idle_resume_state.json path.")
+    p_gamer.add_argument("--ces-queue-file", default=None, help="Override ~/.hivemind/idle_service_ces_queue.json path.")
+    p_gamer.add_argument("--workspace", default=None, help="Target personal workspace directory.")
+    p_gamer.add_argument("--handle", default="noel-gamer", help="Personal handle for registration.")
+    p_gamer.add_argument("--role", default="prosumer", choices=["consumer", "producer", "prosumer", "trainer"], help="Account role.")
+    p_gamer.add_argument("--host-label", default=None, help="Sanitized personal host label for OpenTrainer.")
+    p_gamer.add_argument("--expected-sha", default=None, help="Expected Cloud Run manifest build_sha.")
+    p_gamer.add_argument("--target-online-producers", type=_positive_int, default=8, help="ONLINE fleet badge target.")
+    p_gamer.add_argument("--max-temp-c", type=float, default=70.0, help="Quiet-fan ceiling in C.")
+    p_gamer.add_argument("--min-free-vram-mib", type=_positive_int, default=2048, help="Minimum free VRAM MiB.")
+    p_gamer.add_argument("--idle-threshold-s", type=float, default=180.0, help="Idle threshold seconds.")
+    p_gamer.add_argument("--cooldown-s", type=float, default=300.0, help="Post-game cooldown seconds (>= 300).")
+    p_gamer.add_argument("--interval-s", type=_positive_int, default=60, help="Scheduler polling interval seconds.")
+    p_gamer.add_argument("--yield-budget-ms", type=float, default=1500.0, help="Steam yield budget (1500.0 milliseconds).")
+    p_gamer.add_argument("--transfer-mode", default="lora_delta_only", choices=["lora_delta_only", "full_checkpoint"], help="Transfer mode.")
+    p_gamer.add_argument("--install", action="store_true", help="Install opt-in user-space idle-resume manifests.")
+    p_gamer.add_argument("--activate-scheduler", action="store_true", help="Register/enable installed scheduler units.")
+    p_gamer.add_argument("--uninstall", action="store_true", help="Remove HiveMind service/state/spool artifacts cleanly.")
+    p_gamer.add_argument("--tick", action="store_true", help="Run one idle-resume state machine tick.")
+    p_gamer.add_argument("--yield-drill", action="store_true", help="Run local Python subprocess < 1.5 s preemption drill.")
+    p_gamer.add_argument("--send-heartbeat", action="store_true", help="Send outbound OpenTrainer heartbeat on active ticks.")
+    p_gamer.add_argument("--check-fleet", action="store_true", help="Probe /health, /manifest, /fleet, /raid/status.")
+    p_gamer.add_argument("--register-if-missing", action="store_true", help="Register account if credentials are missing.")
+    p_gamer.add_argument("--require-holiday-routes", action="store_true", help="Fail closed (exit code 2) if Cloud Run holiday routes are stale.")
+    p_gamer.add_argument("--submit-ces", action="store_true", help="Submit non-blocking zero-PII CES feedback.")
+    p_gamer.add_argument("--prompt-ces", action="store_true", help="Ask a 1-line zero-PII CES question interactively.")
+    p_gamer.add_argument("--flush-ces-queue", action="store_true", help="Flush pending 0600 CES retry spool entries.")
+    p_gamer.add_argument("--profile", default="gamer", choices=["dev", "gamer"], help="CES profile (dev|gamer).")
+    p_gamer.add_argument("--ease-rating", type=int, default=5, help="CES ease rating (1..5).")
+    p_gamer.add_argument("--had-game-lag", action="store_true", help="Report whether any game lag occurred.")
+    p_gamer.add_argument("--lang", default="en", choices=["en", "fr"], help="Output language (en|fr).")
+    p_gamer.add_argument("--markdown", action="store_true", help="Emit Markdown summary.")
+    p_gamer.add_argument("--json", action="store_true", dest="json_output", help="Emit JSON report.")
+
     args = parser.parse_args(argv)
     if args.command == "vscode-setup":
         return cmd_vscode_setup(args)
+    if args.command == "gamer-service":
+        return cmd_gamer_service(args)
     if args.command == "swarm-lab":
         from hivemind.lab.swarm_lab import main as swarm_lab_main
 

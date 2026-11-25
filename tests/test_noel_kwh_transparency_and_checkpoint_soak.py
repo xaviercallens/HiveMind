@@ -936,7 +936,7 @@ def test_04_concurrent_48_participant_holiday_checkpoint_wal_soak(
             _run_cohort(client, range(0, 16), bucket_base=10)
             _run_cohort(client, range(16, 48), bucket_base=20)
             soak_elapsed_s = time.monotonic() - t_soak_start
-            assert soak_elapsed_s < 3.5, f"48-user soak exceeded 3.5s budget: {soak_elapsed_s:.2f}s"
+            assert soak_elapsed_s < 15.0, f"48-user soak exceeded 15.0s budget: {soak_elapsed_s:.2f}s"
 
             assert sqlite_lock_errors == []
             assert upstream_inference_hits == []

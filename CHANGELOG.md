@@ -1,5 +1,58 @@
 # Changelog
 
+## v3.5.0 — 2026-11-25 — MoE add-on: correction, CPU-only serving, campaign 3, and the zero-router tie-break
+
+### MoE add-on on Crowd-v1
+
+**Frozen judge and correction** (PRs #944, #948, #946)
+- A pre-registered mid-row judge scores never-used rows. It is paired against the frozen base, with a +1 % guard per domain.
+- Campaign 2 improved the judged NLL by −0.553 nat but made general text 2.2 % worse, so it failed the guard.
+- A weight-interpolation correction, `e50_r00`, passes the guard on three disjoint splits: −0.087 nat on the frozen 240 chunks, general text +0.30 %.
+
+**Serving the corrected add-on** (PR #1006; nothing deployed, the owner runs the canary)
+- `scripts/hivemind_crowd_v1_moe_producer.py` serves `hivemind/crowd-v1-moe` on the base pinned at revision `b63212a8`.
+- It refuses to start on a hash mismatch for the base, the tokenizer or the add-on.
+- It advertises only its own model IDs and returns 404 for any other.
+- `--check-only` runs a forward-pass smoke test.
+- On CPU it reproduces the judge's NLLs within 4.8e-7 nat.
+
+**Campaign 3** (PR #1027; pre-registered before any run)
+- A 2×2 screen: gentle interleave or concatenated data, crossed with a learned or frozen router.
+- **No arm was kept.** Both learned-router arms failed the guard on general text: +13.8 % and +1.2 %.
+- The frozen-router arms are invalid. Their scores were exactly equal to the starting add-on, which revealed the tie-break problem below.
+- New worker flag: `--router-lr-scale`. At 1 the result is bit-identical to before; at 0 the router is frozen and the bucket layout is unchanged.
+
+**Correction note: the zero-router tie-break** (PR #1027)
+- The upcycle starts every router at zero, so all experts tie and top-2 depends on the device's tie-break.
+- On CPU, where `e50_r00` was judged, every token goes through experts 6 (stars) and 5 (exoplanets) at gate 0.5: two fixed adapters, not a routed mixture.
+- On CUDA it would use experts 0 and 1, a configuration nobody has measured.
+- The producer therefore **refuses to serve unless the device's tie-break matches the judged one, which means CPU only**.
+- Correction notes are in `docs/E_B3_MOE_CORRECTION_PREREGISTRATION.md` (addendum E1) and in the foundation paper. LL.md lesson 18.
+
+**Paper** (PR #963, updated in #1027)
+- November field results: STP verdicts, MoE campaigns, frozen judge, autoresearch, the bi-layer section with figures, campaign 3, and the correction note.
+
+### Also on main since v3.4.2 (summarised from PR titles; see each PR)
+
+- **Holiday onboarding and scale (Noel), about 40 PRs:**
+  - quick-connect for Windows 11, Linux/macOS and VS Code;
+  - `/noel`, `/raid-noel` and `/arena-noel` pages with their verifiers;
+  - doctor and preflight tools;
+  - Cloud Run holiday route parity, smoke and canary gates;
+  - Steam GPU-yield and thermal self-tests;
+  - zero-PII feedback widgets;
+  - soak, burst and fuzz suites.
+- **Open-weight MoE "weight-space programming" (WSP) toolkit, about 40 PRs:** library modules and tests for null-space editing, steering and repair of open-weight models. They are tools, not trained HiveMind models.
+- **T4 and GPU safety:** cross-project GPU lease (#930), hard CUDA memory cap (#926), floor refusals (#876).
+- **Other:**
+  - CrowdGPT fixes: #928, #941 (from radialmonster), #946;
+  - OpenTrainer: #927, #932;
+  - gateway billing cap (#933), ExpertRegistry routing (#936), turnkey volunteer onboarding (#937);
+  - JEPA results: #931, #940, #942;
+  - receipt labelling (#880);
+  - dependency bumps: #911, #934, #935.
+- **Still open:** #945 (from radialmonster) is blocked by the owner-only gate OWN-01.
+
 ## v3.4.2 — 2026-11-15 — CrowdGPT weekend: honest pages, measured receipts, Multi-Krum (PRs #903, #912–#919, #923)
 
 - **Visitors land on the right page and read true statements (PR #917):** links pasted with trailing punctuation (`/signup)`, `/signup](…`) now redirect (307, allow-listed pages only) instead of returning 404; the `/raid` page shows the configured sign-up grant instead of a hard-coded "500 HMT", describes training the dense Crowd-v1 with CrowdGPT's official client instead of the stopped MoE split, and points to discussion #909; the agent-readable `/v1/hivemind/community/v34-outreach` JSON marks the MoE concept stopped. **Needs a gateway deploy to take effect.**

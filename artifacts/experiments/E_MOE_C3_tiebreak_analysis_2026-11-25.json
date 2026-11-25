@@ -1,0 +1,44 @@
+{
+ "schema": "hivemind.analysis.v1",
+ "experiment_id": "E-MOE-C3",
+ "title": "Why arms D and C score exactly like e50_r00: a zero router makes top-2 routing depend on device tie-breaking",
+ "written_after": "the pre-registered decision (decision.json); this analysis changes no decision",
+ "facts": {
+  "router_of_e50_r00": "router_frag_0..2 all zero; router_frag_3 zero except its final-LayerNorm slice (3,072 values), which equals the base ln.weight/ln.bias exactly. The upcycle initialises every router to zeros (nn.init.zeros_), and lambda_router = 0 keeps that.",
+  "consequence": "all 8 router logits are 0, sigmoid gives 0.5 for every expert, and top-2 is a pure tie.",
+  "cpu_tie_break": "torch 2.6.0 CPU topk over equal scores returns experts (6, 5) for every token: checked at 1x8, 128x8 and 4096x8, with 1 and 4 threads.",
+  "cuda_tie_break_inferred": "arms D and C trained on the T4 (CUDA) with the router frozen at zero; afterwards only the expert_0 and expert_1 buckets differ from e50_r00 (about 2.35 M of 2.36 M values each; experts 2-7 and all router buckets are bit-identical). So CUDA's tie-break picked (0, 1). Inferred from the weights, not from a GPU test.",
+  "direct_check": "with the judge's CPU path, logits of e50_r00 and of D on the same input differ by exactly 0.0.",
+  "per_bucket_max_abs_change_vs_e50": {
+   "D": {
+    "expert_0": 4.47,
+    "expert_1": "changed",
+    "expert_2..7": 0.0,
+    "router_frag_0..3": 0.0
+   },
+   "C": {
+    "expert_0": 8.17,
+    "expert_2..7": 0.0,
+    "router_frag_0..3": 0.0
+   },
+   "B": {
+    "expert_0": 7.2,
+    "expert_5": 4.51,
+    "router_frag_0": 0.55,
+    "router_frag_3": 25.4
+   },
+   "A": {
+    "expert_0": 2.74,
+    "expert_5": 2.45,
+    "router_frag_0": 0.54,
+    "router_frag_3": 22.4
+   }
+  }
+ },
+ "verdicts": {
+  "D_and_C": "INVALID BY DESIGN, not 'no effect': with a frozen zero router the training device (CUDA) and the judging device (CPU) route every token to different experts, so the judge never sees what was trained. The router contrasts in decision.json (router_mean +0.130, router_general_pct -7.39) are meaningless.",
+  "A_and_B": "valid: their routers moved away from zero, so there is no tie. Both fail the +1 % guard (general text +1.21 % and +13.77 %).",
+  "e50_r00_and_A2_A4": "the numbers stand as measurements, but of a different model than described: on CPU every lambda_router=0 candidate is 'base + experts 5 (exoplanets) and 6 (stars) at gate 0.5 on every token', with those experts at lambda_expert times their campaign-2 deltas. It is not a routed mixture of experts, and on a GPU the same file would use experts 0 and 1 instead (unmeasured)."
+ },
+ "rule_now": "a zero-initialised or zero-reset router is a top-k tie; any candidate with lambda_router = 0 or a frozen zero router is device-dependent. Break the symmetry (small random router init, or a deterministic tie-break) before router experiments, and serve such an add-on only on the device class it was judged on."
+}

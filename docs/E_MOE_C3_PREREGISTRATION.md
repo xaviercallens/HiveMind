@@ -143,3 +143,43 @@ to `venv311`, which is Python 3.11 with torch 2.6.0+cu124, for every arm.
 
 **Unchanged:** the worker code, the arms, the judge, the splits and the rules. Only this section and the driver's
 interpreter line are new in the commit that adds it, and the driver is relaunched pinned to that commit.
+
+## Results (25 Nov 2026, 04:31 Paris)
+
+Receipts: `artifacts/experiments/E_MOE_C3_decision_2026-11-25.json` (as the driver wrote it), `E_MOE_C3_training_2026-11-25.json`,
+`E_MOE_C3_skip40_{A,B,C,D}_2026-11-25.json`, and the analysis `E_MOE_C3_tiebreak_analysis_2026-11-25.json`.
+
+All four arms ran 30 rounds: D 16:34 to 18:04, B 18:04 to 21:19, C 21:19 to 22:38, A 22:38 to 00:54. Rounds accepted:
+D 22, B 21, C 24 and A 12, each in a single segment. The T4 stayed above its floor, and the producer was
+restarted after each segment.
+
+Selection split, skip 40, 240 chunks, against `e50_r00`:
+
+| arm | mean vs e50_r00 (nat) | 95 % CI | general | code | maths | exoplanets | stars | security | guard | kept |
+|---|---|---|---|---|---|---|---|---|---|---|
+| D (interleave, frozen router) | 0.000 | [0, 0] | +0.10 % | -1.69 % | -1.98 % | -2.27 % | -6.06 % | -2.11 % | yes | no |
+| B (interleave, learned router) | -0.188 | [-0.262, -0.113] | **+13.77 %** | +0.08 % | -6.50 % | -7.17 % | -43.16 % | -5.44 % | **no** | no |
+| C (concatenated, frozen router) | 0.000 | [0, 0] | +0.10 % | -1.69 % | -1.98 % | -2.27 % | -6.06 % | -2.11 % | yes | no |
+| A (concatenated, learned router) | -0.072 | [-0.095, -0.050] | **+1.21 %** | -5.21 % | -0.51 % | -3.53 % | -11.63 % | -4.53 % | **no** | no |
+
+**By the pre-registered rule, no arm is kept.** `e50_r00` stays the recommended add-on, and the skip-120 split was not
+used. It stays fresh.
+
+**Arms D and C are invalid by design. Their 0.000 is not "no effect".**
+- `e50_r00`'s router is zero in every layer. The upcycle initialises routers to zeros, and λ_router = 0 keeps that.
+- So all 8 router logits tie at sigmoid(0) = 0.5.
+- On CPU, where the judge runs, torch's top-2 breaks the tie as experts (6, 5) for every token.
+- On CUDA, where the T4 trains, it picked (0, 1). This is inferred from the weights: after D and C only `expert_0` and
+  `expert_1` changed, while experts 2–7 and the router buckets are bit-identical.
+- The judge therefore never saw what D and C trained: their logits equal `e50_r00`'s to 0.0.
+- The router contrasts in `decision.json` are meaningless as a result: `router_mean` +0.130, `router_general_pct` −7.39.
+- **The router question is still unanswered.**
+
+**A and B are valid**, since their routers moved away from zero. Both fail the guard on general text:
+- B repeats the T3 pattern: large gains on the science domains (stars −43 %) and general text worse (+13.8 %).
+- A trained only on general-text and code data in 30 rounds (the layout confound stated above). It still made general
+  text worse (+1.21 %) while improving stars (−11.6 %) and code (−5.2 %).
+
+**What this changes outside the campaign** (erratum, see `docs/E_B3_MOE_CORRECTION_PREREGISTRATION.md` addendum E1):
+- On CPU, `e50_r00` is "base plus experts 5 and 6 at gate 0.5 on every token". It is not a routed mixture.
+- On a GPU the same file would use experts 0 and 1, which is unmeasured.

@@ -2057,15 +2057,29 @@ test of the first choice.
     selection split (general $+0.10\,\%$) and the third split (general $+0.63\,\%$, mean $-0.086$\,nat, 95\,\% CI
     $[-0.097,-0.075]$), with every other domain better. Scored once on the frozen 240 chunks after the choice, it
     confirms: $-0.087$\,nat (CI $[-0.098,-0.076]$, lower on 197 of 240 chunks), general text $+0.30\,\%$, every other
-    domain better, so it passes the guard on three disjoint sets of rows. The effect is conditional: with full-strength
-    experts, resetting the router is harmful (general $+14.9\,\%$), because the experts were trained jointly with their
-    router.
+    domain better, so it passes the guard on three disjoint sets of rows. With full-strength experts the same reset is
+    harmful (general $+14.9\,\%$).
+    \textbf{Erratum (25 November).} The upcycle initialises every router to zero, so ``reset to its start'' means a
+    zero router: all eight experts tie, and top-2 becomes a device tie-break. On CPU, where every one of these scores was
+    computed, every token goes to the exoplanet and stars experts at gate 0.5; on a GPU the same file uses experts 0 and 1
+    (inferred from campaign~3, below). The numbers stand, but they measure a fixed two-adapter path, not a routed mixture
+    of experts, and only on CPU.
   \item \textbf{More training does not undo it.} Continuing campaign~2 on the T4 for 15 rounds at a four times lower
     learning rate left general text at $+3.45\,\%$.
   \item \textbf{The price is most of the gain:} about 16\,\% of campaign~2's improvement is kept. Promotion to serving
     remains the owner's decision. The margins of the 1\,\% guard are thin: general-text figures moved by several tenths of
     a point between splits.
 \end{itemize}
+
+\paragraph{Campaign 3 (24--25 November).} A pre-registered $2\times2$ screen started from the corrected add-on:
+gentle interleave (8{,}192-token blocks) or concatenated data, crossed with a learned or frozen router. Each arm ran
+30 rounds and was judged on the selection split against the corrected add-on, with a 0.025\,nat noise floor and the 1\,\%
+guard. \textbf{No arm was kept.} Both arms with a learned router failed the guard on general text: $+13.8\,\%$ with
+interleave (stars $-43\,\%$) and $+1.2\,\%$ concatenated. The two frozen-router arms scored \emph{exactly} like their start
+(difference $0.0$), which exposed the tie-break described in the erratum above. Trained on CUDA, they updated experts 0
+and 1 only; judged on CPU, the model used experts 5 and 6. These arms are therefore invalid as a test of router
+freezing, and the router question stays open. Lesson: break the zero-router symmetry before any router experiment
+(\texttt{LL.md}, lesson 18).
 
 \subsection{Returns from the field}
 \begin{itemize}[leftmargin=*,itemsep=2pt]

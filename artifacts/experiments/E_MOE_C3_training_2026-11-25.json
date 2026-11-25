@@ -1,0 +1,104 @@
+{
+ "done": {
+  "D": {
+   "config": {
+    "arm": "D",
+    "ilv": 8192,
+    "seq": 128,
+    "lr": 0.0004,
+    "init": "/mnt/disks/disk-socrateai-local-1/hivemind_work/autoresearch_moe/correction_a2/interp_e50_r00.safetensors",
+    "off": 0,
+    "router": 0.0
+   },
+   "train": {
+    "checkpoint": "/mnt/disks/disk-socrateai-local-1/gcpcrowd_moe/run_20261124T153351Z_c3D_full/crowd_moe_opendiloco_round_30.safetensors",
+    "rounds": 30,
+    "accepted": 22,
+    "segments": [
+     {
+      "run": "run_20261124T153351Z_c3D_full",
+      "rounds": 30,
+      "train_best": 4.926781095564365
+     }
+    ]
+   },
+   "checkpoint": "/mnt/disks/disk-socrateai-local-1/hivemind_work/autoresearch_moe/c3/D.safetensors",
+   "checkpoint_sha256": "d5cc17ac618eea89a6c993edd0fa60d28e8c1258cef1fe72c8468ca70583b417"
+  },
+  "B": {
+   "config": {
+    "arm": "B",
+    "ilv": 8192,
+    "seq": 128,
+    "lr": 0.0004,
+    "init": "/mnt/disks/disk-socrateai-local-1/hivemind_work/autoresearch_moe/correction_a2/interp_e50_r00.safetensors",
+    "off": 0,
+    "router": 1.0
+   },
+   "train": {
+    "checkpoint": "/mnt/disks/disk-socrateai-local-1/gcpcrowd_moe/run_20261124T170359Z_c3B_full/crowd_moe_opendiloco_round_30.safetensors",
+    "rounds": 30,
+    "accepted": 21,
+    "segments": [
+     {
+      "run": "run_20261124T170359Z_c3B_full",
+      "rounds": 30,
+      "train_best": 4.60433420751776
+     }
+    ]
+   },
+   "checkpoint": "/mnt/disks/disk-socrateai-local-1/hivemind_work/autoresearch_moe/c3/B.safetensors",
+   "checkpoint_sha256": "8ecec276347eff0b13e3764c7a5f9a7ba5e324e0bf027d64a0bb735dc18186ad"
+  },
+  "C": {
+   "config": {
+    "arm": "C",
+    "ilv": 0,
+    "seq": 128,
+    "lr": 0.0004,
+    "init": "/mnt/disks/disk-socrateai-local-1/hivemind_work/autoresearch_moe/correction_a2/interp_e50_r00.safetensors",
+    "off": 0,
+    "router": 0.0
+   },
+   "train": {
+    "checkpoint": "/mnt/disks/disk-socrateai-local-1/gcpcrowd_moe/run_20261124T201909Z_c3C_full/crowd_moe_opendiloco_round_30.safetensors",
+    "rounds": 30,
+    "accepted": 24,
+    "segments": [
+     {
+      "run": "run_20261124T201909Z_c3C_full",
+      "rounds": 30,
+      "train_best": 5.522249947701182
+     }
+    ]
+   },
+   "checkpoint": "/mnt/disks/disk-socrateai-local-1/hivemind_work/autoresearch_moe/c3/C.safetensors",
+   "checkpoint_sha256": "fbf9343660d1cc9ef99e47a730ee37f7561a63d9a06532382fa8a5167ee06802"
+  },
+  "A": {
+   "config": {
+    "arm": "A",
+    "ilv": 0,
+    "seq": 128,
+    "lr": 0.0004,
+    "init": "/mnt/disks/disk-socrateai-local-1/hivemind_work/autoresearch_moe/correction_a2/interp_e50_r00.safetensors",
+    "off": 0,
+    "router": 1.0
+   },
+   "train": {
+    "checkpoint": "/mnt/disks/disk-socrateai-local-1/gcpcrowd_moe/run_20261124T213816Z_c3A_full/crowd_moe_opendiloco_round_30.safetensors",
+    "rounds": 30,
+    "accepted": 12,
+    "segments": [
+     {
+      "run": "run_20261124T213816Z_c3A_full",
+      "rounds": 30,
+      "train_best": 5.037400099847998
+     }
+    ]
+   },
+   "checkpoint": "/mnt/disks/disk-socrateai-local-1/hivemind_work/autoresearch_moe/c3/A.safetensors",
+   "checkpoint_sha256": "c64acb2ce866db36188ea39c53175213c4b4684c995198d1d6a843a6ef114e62"
+  }
+ }
+}

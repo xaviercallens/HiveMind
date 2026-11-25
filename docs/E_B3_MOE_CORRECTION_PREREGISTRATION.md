@@ -262,3 +262,18 @@ Receipt: `artifacts/experiments/E_B3_MOE_CORRECTION_e50_r00_frozen_2026-11-23.js
 Every domain is within +1 % of the base and the CI is below 0, so by the rule of A4 the result is **confirmed on the frozen chunks**. Together with the
 selection split (general +0.10 %) and the third split (general +0.63 %), `e50_r00` passes the guard on three disjoint sets of rows.
 Nothing is promoted to serving.
+
+## Addendum E1: erratum on what the λ_router = 0 candidates are (25 Nov 2026, found by E-MOE-C3)
+
+The upcycle initialises every router to zeros. With λ_router = 0, the routers of `e50_r00`, `e75_r00` and `e100_r00`
+are therefore exactly zero in all 24 layers. The final LayerNorm stays equal to the base's. All 8 logits tie, and top-2
+becomes a device tie-break:
+- on CPU (torch 2.6.0, every judge run here), every token goes to **experts 6 (stars) and 5 (exoplanets) at gate 0.5**;
+- on CUDA it goes to experts 0 and 1. This is inferred from E-MOE-C3 arms D and C:
+  `artifacts/experiments/E_MOE_C3_tiebreak_analysis_2026-11-25.json`.
+
+**The numbers in A2 and A4 stand as measurements**, but of a fixed two-adapter model, not of a routed mixture of
+experts. "The router reset to its start corrects the regression" should read: *sending every token through the
+campaign-2 exoplanet and stars adapters at half strength, and bypassing the learned router, keeps every domain within
++1 % of the base on three splits*. With full-strength adapters the same fixed path is harmful (`e100_r00`: general
++14.9 %). The result is valid only on CPU. Nothing is rerun.

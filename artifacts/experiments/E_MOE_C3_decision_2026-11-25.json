@@ -1,0 +1,91 @@
+{
+ "selection_skip40": {
+  "D": {
+   "J": 4.2312444422394035,
+   "mean_diff_vs_e50": 0.0,
+   "ci95_vs_e50": [
+    0.0,
+    0.0
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 0.098,
+    "E1_python_systems_code": -1.685,
+    "E2_math_reasoning": -1.979,
+    "E5_exoplanet_transit": -2.268,
+    "E6_stellar_spectroscopy": -6.063,
+    "E7_defensive_cyber": -2.112
+   },
+   "guard_ok": true,
+   "keep": false
+  },
+  "B": {
+   "J": 4.043109641969204,
+   "mean_diff_vs_e50": -0.18813480027019977,
+   "ci95_vs_e50": [
+    -0.2621669952260951,
+    -0.11293950287004313
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 13.773,
+    "E1_python_systems_code": 0.083,
+    "E2_math_reasoning": -6.499,
+    "E5_exoplanet_transit": -7.168,
+    "E6_stellar_spectroscopy": -43.162,
+    "E7_defensive_cyber": -5.44
+   },
+   "guard_ok": false,
+   "keep": false
+  },
+  "C": {
+   "J": 4.2312444422394035,
+   "mean_diff_vs_e50": 0.0,
+   "ci95_vs_e50": [
+    0.0,
+    0.0
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 0.098,
+    "E1_python_systems_code": -1.685,
+    "E2_math_reasoning": -1.979,
+    "E5_exoplanet_transit": -2.268,
+    "E6_stellar_spectroscopy": -6.063,
+    "E7_defensive_cyber": -2.112
+   },
+   "guard_ok": true,
+   "keep": false
+  },
+  "A": {
+   "J": 4.159117678801219,
+   "mean_diff_vs_e50": -0.07212676343818505,
+   "ci95_vs_e50": [
+    -0.0951684803981334,
+    -0.04988539025497934
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 1.208,
+    "E1_python_systems_code": -5.212,
+    "E2_math_reasoning": -0.514,
+    "E5_exoplanet_transit": -3.534,
+    "E6_stellar_spectroscopy": -11.631,
+    "E7_defensive_cyber": -4.53
+   },
+   "guard_ok": false,
+   "keep": false
+  }
+ },
+ "contrasts": {
+  "layout_mean": -0.05800401841600736,
+  "router_mean": 0.1301307818541924,
+  "layout_general_pct": 6.282500000000001,
+  "router_general_pct": -7.3925
+ },
+ "kept": [],
+ "winner": null,
+ "min_effect_nats": 0.025,
+ "worker_commit": "59d6ab75ac15ca32c855524944ec633ed22e3e36",
+ "judge_commit": "e5f6faf4"
+}

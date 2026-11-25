@@ -142,6 +142,28 @@ Context: a joint training weekend with CrowdGPT (Vxtzq) on the dense 1 B model C
   - Don't re-run CI before the failure is understood.
   - A safety test that flags new egress is a policy question for the owner. Don't hide the URL from the scanner.
 
+### 18. A zero router is a tie, and ties are broken differently on CPU and GPU (25 November)
+
+- **What happened.**
+  - The MoE upcycle initialises every router to zeros.
+  - The correction candidate `e50_r00` kept the router at that start (λ_router = 0). Campaign E-MOE-C3 then froze it
+    there in two arms.
+  - Zero logits tie all 8 experts. torch's top-2 picked experts (6, 5) on CPU, where every judge run happened, and
+    (0, 1) on CUDA, where the T4 trained.
+  - The frozen-router arms therefore trained experts the judge never used: their logits equal `e50_r00`'s to 0.0.
+  - `e50_r00` itself turned out to be "base + two fixed adapters", not a routed mixture, and only on CPU.
+- **Evidence.**
+  - `artifacts/experiments/E_MOE_C3_tiebreak_analysis_2026-11-25.json`: after the frozen-router arms, only
+    `expert_0` and `expert_1` changed.
+  - CPU top-k gives (6, 5) at every size and thread count tested.
+- **Rules.**
+  - Before any router experiment, break the symmetry: a small random router init, or a deterministic tie-break.
+  - Treat any candidate with a zero router (reset or frozen) as device-dependent. Serve it only on the device class it
+    was judged on, and say so.
+  - When an arm scores *exactly* like its reference (difference 0.0, CI [0, 0]), suspect the instrument before reading
+    it as "no effect".
+  - Check which experts a router actually selects before describing an add-on as a mixture of experts.
+
 ### 15. A red `main` makes every PR red; a CI re-run tests the old merge (17 November)
 
 - **What happened.** After #937 made criterion E1 pass, nobody regenerated `docs/MVP_SCORECARD.md`. The scorecard

@@ -1,0 +1,186 @@
+{
+ "schema": "hivemind.crowd_v1_moe_serving_acceptance.v1",
+ "addon_id": "crowd-v1-moe-e50-r00",
+ "addon_sha256": "80dccfa8246058ea71d56f924b679cad7376d99790f36816cbe998c80fcb22d3",
+ "base_weights_sha256": "1f8214ca6856280b48817402f9f8f0a3affd938d39718ade8f528f0102c2209f",
+ "receipt": "e50_r00_final.json",
+ "judge_spec_sha256": "b4d90d54a9899f7bd665c0b85ac43624f34116dcb202e2842e1ed13df774b03f",
+ "device": "cpu",
+ "dtype": "float32",
+ "n_chunks": 12,
+ "tolerance_nats": 0.002,
+ "checks": {
+  "dense_judge_forward_max_abs_diff_nats": 0.0,
+  "dense_serving_forward_max_abs_diff_nats": 4.76837158203125e-07,
+  "addon_judge_forward_max_abs_diff_nats": 0.0,
+  "addon_serving_forward_max_abs_diff_nats": 4.76837158203125e-07
+ },
+ "passed": true,
+ "generation_smoke": {
+  "dense": {
+   "n_tokens": 12,
+   "text": " a massive star, with its outer layers resembling the starry"
+  },
+  "addon": {
+   "n_tokens": 12,
+   "text": " a small, starless object located in the constellation Pto"
+  },
+  "addon_load_report": {
+   "addon_id": "crowd-v1-moe-e50-r00",
+   "addon_sha256": "80dccfa8246058ea71d56f924b679cad7376d99790f36816cbe998c80fcb22d3",
+   "num_layers_upcycled": 24,
+   "addon_parameters": 19172352,
+   "buckets": [
+    "expert_0",
+    "expert_1",
+    "expert_2",
+    "expert_3",
+    "expert_4",
+    "expert_5",
+    "expert_6",
+    "expert_7",
+    "router_frag_0",
+    "router_frag_1",
+    "router_frag_2",
+    "router_frag_3"
+   ],
+   "readback_max_abs_diff": 0.0
+  }
+ },
+ "chunks": [
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 440,
+   "dense_judge_forward": 4.7496337890625,
+   "dense_serving_forward": 4.7496337890625,
+   "dense_receipt": 4.7496337890625,
+   "addon_judge_forward": 4.696612358093262,
+   "addon_serving_forward": 4.696612358093262,
+   "addon_receipt": 4.696612358093262
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 441,
+   "dense_judge_forward": 4.4034342765808105,
+   "dense_serving_forward": 4.4034342765808105,
+   "dense_receipt": 4.4034342765808105,
+   "addon_judge_forward": 4.447060585021973,
+   "addon_serving_forward": 4.4470601081848145,
+   "addon_receipt": 4.447060585021973
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3246,
+   "dense_judge_forward": 4.837285041809082,
+   "dense_serving_forward": 4.83728551864624,
+   "dense_receipt": 4.837285041809082,
+   "addon_judge_forward": 4.7672319412231445,
+   "addon_serving_forward": 4.7672319412231445,
+   "addon_receipt": 4.7672319412231445
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3248,
+   "dense_judge_forward": 4.684995174407959,
+   "dense_serving_forward": 4.684995174407959,
+   "dense_receipt": 4.684995174407959,
+   "addon_judge_forward": 4.619179725646973,
+   "addon_serving_forward": 4.619179725646973,
+   "addon_receipt": 4.619179725646973
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 340,
+   "dense_judge_forward": 4.602169036865234,
+   "dense_serving_forward": 4.602168560028076,
+   "dense_receipt": 4.602169036865234,
+   "addon_judge_forward": 4.51146125793457,
+   "addon_serving_forward": 4.51146125793457,
+   "addon_receipt": 4.51146125793457
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 341,
+   "dense_judge_forward": 4.152559757232666,
+   "dense_serving_forward": 4.152559757232666,
+   "dense_receipt": 4.152559757232666,
+   "addon_judge_forward": 4.120438098907471,
+   "addon_serving_forward": 4.120438098907471,
+   "addon_receipt": 4.120438098907471
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 140,
+   "dense_judge_forward": 4.114972114562988,
+   "dense_serving_forward": 4.114972114562988,
+   "dense_receipt": 4.114972114562988,
+   "addon_judge_forward": 4.133356094360352,
+   "addon_serving_forward": 4.133356094360352,
+   "addon_receipt": 4.133356094360352
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 141,
+   "dense_judge_forward": 4.451699733734131,
+   "dense_serving_forward": 4.451699733734131,
+   "dense_receipt": 4.451699733734131,
+   "addon_judge_forward": 4.391323089599609,
+   "addon_serving_forward": 4.391322612762451,
+   "addon_receipt": 4.391323089599609
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 540,
+   "dense_judge_forward": 3.3340046405792236,
+   "dense_serving_forward": 3.3340046405792236,
+   "dense_receipt": 3.3340046405792236,
+   "addon_judge_forward": 3.1377878189086914,
+   "addon_serving_forward": 3.1377878189086914,
+   "addon_receipt": 3.1377878189086914
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 541,
+   "dense_judge_forward": 3.325129270553589,
+   "dense_serving_forward": 3.325129508972168,
+   "dense_receipt": 3.325129270553589,
+   "addon_judge_forward": 3.12528133392334,
+   "addon_serving_forward": 3.1252810955047607,
+   "addon_receipt": 3.12528133392334
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 940,
+   "dense_judge_forward": 6.541590213775635,
+   "dense_serving_forward": 6.541590213775635,
+   "dense_receipt": 6.541590213775635,
+   "addon_judge_forward": 6.438228607177734,
+   "addon_serving_forward": 6.438228607177734,
+   "addon_receipt": 6.438228607177734
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 941,
+   "dense_judge_forward": 5.524129390716553,
+   "dense_serving_forward": 5.524129867553711,
+   "dense_receipt": 5.524129390716553,
+   "addon_judge_forward": 5.448207855224609,
+   "addon_serving_forward": 5.448207855224609,
+   "addon_receipt": 5.448207855224609
+  }
+ ],
+ "wall_seconds": 197.5,
+ "not_checked": "GPU half-precision serving; the producer HTTP layer (covered by unit tests)"
+}

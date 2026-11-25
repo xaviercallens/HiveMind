@@ -1418,3 +1418,130 @@ def test_05_concurrent_48_participant_cutover_onboarding_and_smoke_soak(
         for raw_k, masked_k in zip(raw_keys_seen, masked_keys_seen, strict=True):
             assert raw_k not in masked_k
             assert masked_k.startswith(("hm-***", "hm_live_***"))
+
+
+def test_06_masked_key_ms_suffix_output_safety_across_verifiers(tmp_path: Path) -> None:
+    from scripts import noel_arena_ballot_and_parity_verifier as arena_verifier
+    from scripts import noel_posix_launcher_and_smoke_verifier as posix_verifier
+
+    verifier_specs: tuple[tuple[str, Any, type[Exception], Path], ...] = (
+        (
+            "scripts/noel_deploy_smoke_and_win11_verifier.py",
+            verifier,
+            verifier.SmokeVerifierError,
+            VERIFIER_PATH,
+        ),
+        (
+            "scripts/noel_posix_launcher_and_smoke_verifier.py",
+            posix_verifier,
+            posix_verifier.SmokeVerifierError,
+            REPO_ROOT / "scripts" / "noel_posix_launcher_and_smoke_verifier.py",
+        ),
+        (
+            "scripts/noel_arena_ballot_and_parity_verifier.py",
+            arena_verifier,
+            arena_verifier.ArenaVerifierError,
+            REPO_ROOT / "scripts" / "noel_arena_ballot_and_parity_verifier.py",
+        ),
+    )
+
+    masked_ms_keys = [f"hm-***{digit}" + "ms" for digit in range(10)] + [
+        "hm_live_***4" + "ms",
+        "hm_live_***9" + "ms",
+        "hm-***x8" + "ms",
+        "hm_live_***a8" + "ms",
+    ]
+    genuine_figures = (
+        "42 " + "ms",
+        "18 tok" + "/s",
+        "100 HTTP" + " Reqs",
+        "5 s/" + "round",
+    )
+    raw_unmasked_key = "hm-abcdefgh" + "ijkl1234"
+    nonce_html_single = "<style nonce='Abc123" + "msToken'>body{}</style>"
+    nonce_html_double = '<script nonce="99tok' + '/sToken">var x=1;</script>'
+    csp_hdr_token = "default-src 'none'; script-src 'nonce-77" + "msNonceToken'"
+
+    scanner = PRSecurityScanner()
+    changed_files: list[dict[str, Any]] = []
+
+    for rel_path, mod, err_cls, file_path in verifier_specs:
+        src_text = file_path.read_text(encoding="utf-8")
+        assert EXPECTED_AGPL_HEADER in src_text[:300], rel_path
+        assert lateral_guard.audit_source_for_lateral_movement(src_text, str(file_path)) == []
+        assert scanner.scan_python_ast_security(rel_path, src_text) == []
+        assert scanner.scan_text_for_payment_solicitation(src_text, rel_path) == []
+        assert scanner.scan_text_for_secrets_and_exfiltration(src_text, rel_path) == []
+        assert scanner.scan_unicode_trojan_source(src_text, rel_path) == []
+        assert static_numbers_guard.FIGURE.findall(src_text) == []
+        syn_diff = f"diff --git a/{rel_path} b/{rel_path}\n+++ b/{rel_path}\n" + "\n".join(
+            f"+{ln}" for ln in src_text.splitlines()
+        )
+        assert gatekeeper.forbidden_scan(gatekeeper.scannable_diff(syn_diff)) == []
+        assert ZeroStubAudit.audit_python_code(src_text).is_clean
+        changed_files.append({"filename": rel_path, "patch": "", "content": src_text})
+
+        # (1) Masked keys ending in <digit>ms and HTML/CSP nonces produce 0 scan_output_safety issues
+        for masked_k in masked_ms_keys:
+            assert mod.scan_output_safety(masked_k) == [], (rel_path, masked_k)
+            json_sample = json.dumps({"masked_api_key": masked_k, "status": "ok"}, sort_keys=True)
+            assert mod.scan_output_safety(json_sample) == [], (rel_path, masked_k)
+            combined_safe = f"{nonce_html_single} {nonce_html_double} {csp_hdr_token} key={masked_k}"
+            assert mod.scan_output_safety(combined_safe) == [], (rel_path, masked_k)
+            receipt = mod._attach_receipt({"schema": mod.SCHEMA, "masked_api_key": masked_k, "ok": True})
+            assert receipt["masked_api_key"] == masked_k
+
+        # (2) Genuine static telemetry figures and raw unmasked keys STILL fail closed
+        for fig in genuine_figures:
+            assert "static_figure_detected" in mod.scan_output_safety(fig), (rel_path, fig)
+            assert "static_figure_detected" in mod.scan_output_safety(
+                f"{nonce_html_single} key=hm-***x8" + f"ms body {fig}"
+            ), (rel_path, fig)
+            with pytest.raises(err_cls):
+                mod._assert_safe_output(fig)
+
+        assert "unmasked_api_key_detected" in mod.scan_output_safety(raw_unmasked_key), rel_path
+        with pytest.raises(err_cls):
+            mod._assert_safe_output(raw_unmasked_key)
+
+    pr_audit = scanner.audit_pull_request(
+        pr_number=1222,
+        pr_title="fix(onboarding,scale): harden scan_output_safety against masked-key ms suffixes across Noel verifiers",
+        pr_body="Implements SLICE-SCALE-DYN-22 masked-key output safety guard across all 3 Noel verifiers.",
+        author="xaviercallens",
+        changed_files=changed_files,
+        commit_messages=["fix(onboarding,scale): harden scan_output_safety against masked-key ms suffixes"],
+        author_email="callensxavier@gmail.com",
+    )
+    assert pr_audit.passed is True and pr_audit.findings == []
+
+    # End-to-end dry-run receipts with token_urlsafe keys ending in <digit>ms succeed cleanly
+    dev_win11_rep = verifier.verify_dev_vscode_60s_dry_run(
+        "http://127.0.0.1:8000",
+        home_dir=tmp_path / "win11_ms_home",
+        workspace_dir=tmp_path / "win11_ms_ws",
+        api_key="hm-dyn22_random_x8" + "ms",
+        environ=CLEAN_ENV,
+        cwd=tmp_path,
+        lang="en",
+    )
+    assert dev_win11_rep["dev_ready"] is True and dev_win11_rep["exit_code"] == 0
+    assert dev_win11_rep["masked_api_key"] == "hm-***x8" + "ms"
+    _verify_receipt(dev_win11_rep)
+
+    dev_posix_rep = posix_verifier.verify_posix_dev_vscode_60s_dry_run(
+        "http://127.0.0.1:8000",
+        home_dir=tmp_path / "posix_ms_home",
+        workspace_dir=tmp_path / "posix_ms_ws",
+        api_key="hm_live_dyn22_rand9" + "ms",
+        environ=CLEAN_ENV,
+        cwd=tmp_path,
+        lang="fr",
+    )
+    assert dev_posix_rep["dev_ready"] is True and dev_posix_rep["exit_code"] == 0
+    assert dev_posix_rep["masked_api_key"] == "hm_live_***d9" + "ms"
+    assert posix_verifier.scan_output_safety(json.dumps(dev_posix_rep, sort_keys=True, ensure_ascii=False)) == []
+    assert posix_verifier.scan_output_safety(posix_verifier.render_cli_report(dev_posix_rep)) == []
+    assert posix_verifier.scan_output_safety(posix_verifier.render_markdown_report(dev_posix_rep)) == []
+    assert verifier.scan_output_safety(verifier.render_cli_report(dev_win11_rep)) == []
+    assert verifier.scan_output_safety(verifier.render_markdown_report(dev_win11_rep)) == []

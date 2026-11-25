@@ -353,8 +353,10 @@ _GIT_REMOTE_URL_RE = re.compile(
 )
 
 _CSP_HEADER_NONCE_RE = re.compile(r"'nonce-([A-Za-z0-9_+=/=-]{8,128})'")
+_CSP_INLINE_NONCE_RE = re.compile(r"'nonce-[A-Za-z0-9_+=/=-]{4,128}'")
 _HTML_ATTR_NONCE_RE = re.compile(r"""\bnonce=(["'])([A-Za-z0-9_+=/=-]{1,256})\1""")
-_HTML_ANY_NONCE_ATTR_RE = re.compile(r"""\bnonce=(["'])[^"']*\1""")
+_HTML_ANY_NONCE_ATTR_RE = re.compile(r"""\bnonce=(?:"[^"]*"|'[^']*')""")
+_MASKED_API_KEY_RE = re.compile(r"(hm(?:_live_|-))\*\*\*(?:[A-Za-z0-9_-]{4,}|[0-9]ms\b)")
 _FORBIDDEN_DOM_SINK_RE = re.compile(
     r"\b(?:" + "inner" + "HTML|" + "outer" + "HTML|" + "insertAdjacent" + r"HTML|document\.write)\b"
 )
@@ -474,6 +476,13 @@ def sanitize_text_for_display(text: str, *, home: Path | None = None) -> str:
     return scrubbed
 
 
+def _strip_masked_keys_and_nonces(text: str) -> str:
+    """Strip HTML ``nonce="..."`` / ``nonce='...'`` attributes, CSP nonces, and masked API keys."""
+    cleaned = strip_html_csp_nonce_attributes(text)
+    cleaned = _CSP_INLINE_NONCE_RE.sub("'nonce-CSP_NONCE'", cleaned)
+    return _MASKED_API_KEY_RE.sub(r"\1***XXXX", cleaned)
+
+
 def scan_output_safety(text: str) -> list[str]:
     """Verify JSON, CLI, or Markdown text has 0 emails, raw keys, home paths, or score digits."""
     issues: list[str] = []
@@ -487,7 +496,7 @@ def scan_output_safety(text: str) -> list[str]:
         issues.append("unredacted_home_path_detected")
     if _FORBIDDEN_SCORE_KEY_RE.search(text):
         issues.append("forbidden_score_key_detected")
-    if _STATIC_FIG_UNIT_RE.search(text):
+    if _STATIC_FIG_UNIT_RE.search(_strip_masked_keys_and_nonces(text)):
         issues.append("static_figure_detected")
     for ip_hit in _IPV4_RE.findall(text):
         if not ip_hit.startswith("127."):

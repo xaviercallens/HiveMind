@@ -1,0 +1,20 @@
+{
+ "J": 3.766907091314594,
+ "mean_diff_vs_base": -0.558650811885794,
+ "ci95": [
+  -0.6409458002944787,
+  -0.4771963632293046
+ ],
+ "n": 240,
+ "per_expert_pct_vs_base": {
+  "E0_general_fineweb": 3.453,
+  "E1_python_systems_code": -7.394,
+  "E2_math_reasoning": -4.396,
+  "E5_exoplanet_transit": -10.877,
+  "E6_stellar_spectroscopy": -49.911,
+  "E7_defensive_cyber": -15.768
+ },
+ "excluded_lt_20": [],
+ "guard_ok": false,
+ "corrects": false
+}

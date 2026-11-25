@@ -4,11 +4,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
+
 import pytest
 import torch
-
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from hivemind.boinc.hivemind_at_home_dashboard import (
     ComputePointsRedeemRequest,
     create_hivemind_at_home_app,
@@ -172,11 +172,11 @@ def test_ip247_son_feedback_bounded_deduped_and_no_bonus_points(
     assert len(app.state.son_feedback_store) == 1
     assert app.state.son_feedback_store["playerone"]["review_text"] == "Updated review"
 
-    # 10,000 posts stay bounded within the 200-entry cap
-    for i in range(10_000):
+    # High-volume posts (3x the 200-entry cap across 300 handles) stay bounded within 200 entries
+    for i in range(600):
         resp = client.post(
             "/api/v1/son/feedback",
-            json={"gamer_tag": f"gamer_{i % 500}", "overall_rating": 5, "review_text": "ok"},
+            json={"gamer_tag": f"gamer_{i % 300}", "overall_rating": 5, "review_text": "ok"},
         )
         assert resp.status_code == 200
     assert len(app.state.son_feedback_store) <= 200

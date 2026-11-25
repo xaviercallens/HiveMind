@@ -1,0 +1,37 @@
+{
+ "J": 4.199497082829476,
+ "mean_diff_vs_base": -0.08688773214817047,
+ "ci95": [
+  -0.09793895485500495,
+  -0.07576547672351201
+ ],
+ "n": 240,
+ "per_expert_pct_vs_base": {
+  "E0_general_fineweb": 0.304,
+  "E1_python_systems_code": -1.817,
+  "E2_math_reasoning": -1.707,
+  "E5_exoplanet_transit": -1.568,
+  "E6_stellar_spectroscopy": -6.005,
+  "E7_defensive_cyber": -2.184
+ },
+ "excluded_lt_20": [],
+ "guard_ok": true,
+ "corrects": true,
+ "frozen_judge": {
+  "verdict": "PASS",
+  "mean_paired_diff": -0.08688773214817047,
+  "bootstrap95": [
+   -0.09789699914554754,
+   -0.07573923965295155
+  ],
+  "domain_guard_ok": true,
+  "sign_test": {
+   "moe_lower": 197,
+   "moe_higher": 43,
+   "ties": 0,
+   "p_two_sided": 9.707922646065307e-25
+  },
+  "row_order_ok": true,
+  "base_equivalence_passed": true
+ }
+}

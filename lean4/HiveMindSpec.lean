@@ -2522,6 +2522,355 @@ theorem pause_implies_no_new_work_within_one_heartbeat
 
 end Season30_VolunteerConsentAndPauseInvariants
 
+-- ============================================================================
+-- SEASON 35 (`HM-S35-08`): AUTO OPEN-WEIGHT & WEIGHT-SPACE PROGRAMMING (WSP)
+-- (AlphaEdit Nullspace Idempotence, Preserved-Key Zero Drift, Orthogonal
+--  Multi-Gate Invariance, ANSE Stage Ratchet & Single-Shot Vault Lock)
+-- ============================================================================
+namespace Season35_AutoOpenWeightAndWeightSpaceProgramming
+
+/-- Cleared-denominator rank-1 AlphaEdit nullspace projector
+    `P_d(x) = (u1^2 + u2^2) * x - <u, x> * u` over `Int × Int`.
+    For unit vectors (`u1^2 + u2^2 = 1`), `P_1(x) = x - <u, x> * u`. -/
+def nullspaceProj2 (u1 u2 x1 x2 : Int) : Int × Int :=
+  let d := u1 * u1 + u2 * u2
+  let dot := u1 * x1 + u2 * x2
+  (d * x1 - dot * u1, d * x2 - dot * u2)
+
+/-- Scalar projection eigenvalue predicate: `p ∈ {0, 1}`. -/
+def isScalarProjector (p : Int) : Bool :=
+  decide (p = 0 ∨ p = 1)
+
+/-- Theorem 164 (`HM-S35-08` — AlphaEdit Null-Space Projector Idempotence):
+    (a) Any scalar projection eigenvalue `p ∈ {0, 1}` satisfies `p^2 = p` and `(1 - p)^2 = 1 - p`.
+    (b) The rank-1 cleared-denominator AlphaEdit projector `nullspaceProj2` annihilates `u`,
+        satisfies `P_d(P_d(x)) = d * P_d(x)`, and is strictly idempotent when `d = 1`. -/
+theorem nullspace_projector_idempotent_scalar
+    (p u1 u2 x1 x2 : Int)
+    (hp : isScalarProjector p = true) :
+    p * p = p ∧
+    (1 - p) * (1 - p) = 1 - p ∧
+    let d := u1 * u1 + u2 * u2
+    let proj := nullspaceProj2 u1 u2 x1 x2
+    u1 * proj.1 + u2 * proj.2 = 0 ∧
+    nullspaceProj2 u1 u2 proj.1 proj.2 = (d * proj.1, d * proj.2) ∧
+    (d = 1 → nullspaceProj2 u1 u2 proj.1 proj.2 = proj) := by
+  have hp_cases : p = 0 ∨ p = 1 := by
+    unfold isScalarProjector at hp
+    simpa [decide_eq_true_eq] using hp
+  have hp_sq : p * p = p := by
+    rcases hp_cases with rfl | rfl <;> rfl
+  have h1p_sq : (1 - p) * (1 - p) = 1 - p := by
+    rcases hp_cases with rfl | rfl <;> rfl
+  have h_orth : u1 * (nullspaceProj2 u1 u2 x1 x2).1 + u2 * (nullspaceProj2 u1 u2 x1 x2).2 = 0 := by
+    unfold nullspaceProj2
+    dsimp only
+    simp only [Int.mul_sub, Int.mul_add, Int.add_mul]
+    have ha : u1 * (u1 * u1 * x1) = u1 * (u1 * x1 * u1) := by ac_rfl
+    have hb : u1 * (u2 * u2 * x1) = u2 * (u1 * x1 * u2) := by ac_rfl
+    have hc : u2 * (u1 * u1 * x2) = u1 * (u2 * x2 * u1) := by ac_rfl
+    have hd : u2 * (u2 * u2 * x2) = u2 * (u2 * x2 * u2) := by ac_rfl
+    omega
+  have h_idem :
+      nullspaceProj2 u1 u2 (nullspaceProj2 u1 u2 x1 x2).1 (nullspaceProj2 u1 u2 x1 x2).2 =
+        ((u1 * u1 + u2 * u2) * (nullspaceProj2 u1 u2 x1 x2).1,
+         (u1 * u1 + u2 * u2) * (nullspaceProj2 u1 u2 x1 x2).2) := by
+    change
+      ((u1 * u1 + u2 * u2) * (nullspaceProj2 u1 u2 x1 x2).1 -
+         (u1 * (nullspaceProj2 u1 u2 x1 x2).1 + u2 * (nullspaceProj2 u1 u2 x1 x2).2) * u1,
+       (u1 * u1 + u2 * u2) * (nullspaceProj2 u1 u2 x1 x2).2 -
+         (u1 * (nullspaceProj2 u1 u2 x1 x2).1 + u2 * (nullspaceProj2 u1 u2 x1 x2).2) * u2) =
+        ((u1 * u1 + u2 * u2) * (nullspaceProj2 u1 u2 x1 x2).1,
+         (u1 * u1 + u2 * u2) * (nullspaceProj2 u1 u2 x1 x2).2)
+    rw [h_orth]
+    simp [Int.zero_mul, Int.sub_zero]
+  refine ⟨hp_sq, h1p_sq, h_orth, h_idem, ?_⟩
+  intro hd
+  rw [h_idem, hd]
+  simp [Int.one_mul]
+
+/-- Theorem 165 (`HM-S35-08` — Preserved-Key Zero Drift Under Null-Space Weight Edit):
+    For any base weights `(w1, w2)`, raw edit delta `(dw1, dw2)`, prose subspace direction `(u1, u2)`,
+    and preserved key `k = (alpha * u1, alpha * u2)` in `span(u)`, projecting the delta via
+    `dw_proj := nullspaceProj2 u1 u2 dw1 dw2` produces zero perturbation on `k` and leaves
+    the post-edit dot product `(w + dw_proj) · k` identically equal to `w · k`. -/
+theorem preserved_key_zero_drift_under_nullspace_edit
+    (w1 w2 dw1 dw2 u1 u2 alpha : Int) :
+    let dw_proj := nullspaceProj2 u1 u2 dw1 dw2
+    let k1 := alpha * u1
+    let k2 := alpha * u2
+    dw_proj.1 * k1 + dw_proj.2 * k2 = 0 ∧
+    (w1 + dw_proj.1) * k1 + (w2 + dw_proj.2) * k2 = w1 * k1 + w2 * k2 := by
+  dsimp only
+  have h_orth : u1 * (nullspaceProj2 u1 u2 dw1 dw2).1 + u2 * (nullspaceProj2 u1 u2 dw1 dw2).2 = 0 := by
+    unfold nullspaceProj2
+    dsimp only
+    simp only [Int.mul_sub, Int.mul_add, Int.add_mul]
+    have ha : u1 * (u1 * u1 * dw1) = u1 * (u1 * dw1 * u1) := by ac_rfl
+    have hb : u1 * (u2 * u2 * dw1) = u2 * (u1 * dw1 * u2) := by ac_rfl
+    have hc : u2 * (u1 * u1 * dw2) = u1 * (u2 * dw2 * u1) := by ac_rfl
+    have hd : u2 * (u2 * u2 * dw2) = u2 * (u2 * dw2 * u2) := by ac_rfl
+    omega
+  have h_zero :
+      (nullspaceProj2 u1 u2 dw1 dw2).1 * (alpha * u1) +
+        (nullspaceProj2 u1 u2 dw1 dw2).2 * (alpha * u2) = 0 := by
+    have h1 : (nullspaceProj2 u1 u2 dw1 dw2).1 * (alpha * u1) =
+        alpha * (u1 * (nullspaceProj2 u1 u2 dw1 dw2).1) := by ac_rfl
+    have h2 : (nullspaceProj2 u1 u2 dw1 dw2).2 * (alpha * u2) =
+        alpha * (u2 * (nullspaceProj2 u1 u2 dw1 dw2).2) := by ac_rfl
+    rw [h1, h2, ← Int.mul_add, h_orth, Int.mul_zero]
+  refine ⟨h_zero, ?_⟩
+  rw [Int.add_mul, Int.add_mul]
+  omega
+
+/-- Orthogonalized S4/S5.2 multi-gate direction `u_{0 ⊥ μ}` removing any component collinear
+    with specialist domain centroid `μ = (mu1, mu2)` from raw prose direction `v = (v1, v2)`. -/
+def orthogonalMultigateDir (mu1 mu2 v1 v2 : Int) : Int × Int :=
+  nullspaceProj2 mu1 mu2 v1 v2
+
+/-- Theorem 166 (`HM-S35-08` — Orthogonal Multi-Gate Specialist Centroid Logit Invariance):
+    Shifting a preserved dual-active expert's router row `(r1, r2)` by `-beta * u_{0 ⊥ μ}`:
+    (a) satisfies exact orthogonality `u · μ = 0`, leaving specialist centroid logits
+        `(r - beta * u) · μ = r · μ` invariant for every `beta : Int`;
+    (b) satisfies the Lagrange identity `u · v = (mu1 * v2 - mu2 * v1)^2`, strictly reducing
+        the prose logit whenever `beta > 0` and `mu1 * v2 ≠ mu2 * v1`. -/
+theorem orthogonal_multigate_specialist_dot_invariant
+    (r1 r2 mu1 mu2 v1 v2 beta : Int) :
+    let u := orthogonalMultigateDir mu1 mu2 v1 v2
+    u.1 * mu1 + u.2 * mu2 = 0 ∧
+    (r1 - beta * u.1) * mu1 + (r2 - beta * u.2) * mu2 = r1 * mu1 + r2 * mu2 ∧
+    u.1 * v1 + u.2 * v2 = (mu1 * v2 - mu2 * v1) * (mu1 * v2 - mu2 * v1) ∧
+    (0 < beta → mu1 * v2 ≠ mu2 * v1 →
+      (r1 - beta * u.1) * v1 + (r2 - beta * u.2) * v2 < r1 * v1 + r2 * v2) := by
+  dsimp only
+  have h_orth :
+      (orthogonalMultigateDir mu1 mu2 v1 v2).1 * mu1 +
+        (orthogonalMultigateDir mu1 mu2 v1 v2).2 * mu2 = 0 := by
+    unfold orthogonalMultigateDir nullspaceProj2
+    dsimp only
+    simp only [Int.sub_mul, Int.add_mul]
+    have ha : mu1 * mu1 * v1 * mu1 = mu1 * v1 * mu1 * mu1 := by ac_rfl
+    have hb : mu2 * mu2 * v1 * mu1 = mu1 * v1 * mu2 * mu2 := by ac_rfl
+    have hc : mu1 * mu1 * v2 * mu2 = mu2 * v2 * mu1 * mu1 := by ac_rfl
+    have hd : mu2 * mu2 * v2 * mu2 = mu2 * v2 * mu2 * mu2 := by ac_rfl
+    omega
+  have h_spec_inv :
+      (r1 - beta * (orthogonalMultigateDir mu1 mu2 v1 v2).1) * mu1 +
+        (r2 - beta * (orthogonalMultigateDir mu1 mu2 v1 v2).2) * mu2 =
+      r1 * mu1 + r2 * mu2 := by
+    rw [Int.sub_mul, Int.sub_mul]
+    have hb1 : beta * (orthogonalMultigateDir mu1 mu2 v1 v2).1 * mu1 =
+        beta * ((orthogonalMultigateDir mu1 mu2 v1 v2).1 * mu1) := Int.mul_assoc _ _ _
+    have hb2 : beta * (orthogonalMultigateDir mu1 mu2 v1 v2).2 * mu2 =
+        beta * ((orthogonalMultigateDir mu1 mu2 v1 v2).2 * mu2) := Int.mul_assoc _ _ _
+    have h_zero_shift :
+        beta * (orthogonalMultigateDir mu1 mu2 v1 v2).1 * mu1 +
+          beta * (orthogonalMultigateDir mu1 mu2 v1 v2).2 * mu2 = 0 := by
+      rw [hb1, hb2, ← Int.mul_add, h_orth, Int.mul_zero]
+    omega
+  have h_lag :
+      (orthogonalMultigateDir mu1 mu2 v1 v2).1 * v1 +
+        (orthogonalMultigateDir mu1 mu2 v1 v2).2 * v2 =
+      (mu1 * v2 - mu2 * v1) * (mu1 * v2 - mu2 * v1) := by
+    unfold orthogonalMultigateDir nullspaceProj2
+    dsimp only
+    simp only [Int.sub_mul, Int.mul_sub, Int.add_mul]
+    have ha : mu1 * mu1 * v1 * v1 = mu1 * v1 * mu1 * v1 := by ac_rfl
+    have hb : mu2 * mu2 * v2 * v2 = mu2 * v2 * mu2 * v2 := by ac_rfl
+    have hc : mu2 * mu2 * v1 * v1 = mu2 * v1 * (mu2 * v1) := by ac_rfl
+    have hd : mu1 * mu1 * v2 * v2 = mu1 * v2 * (mu1 * v2) := by ac_rfl
+    have he : mu2 * v2 * mu1 * v1 = mu2 * v1 * (mu1 * v2) := by ac_rfl
+    have hf : mu1 * v1 * mu2 * v2 = mu1 * v2 * (mu2 * v1) := by ac_rfl
+    omega
+  refine ⟨h_orth, h_spec_inv, h_lag, ?_⟩
+  intro h_beta h_noncollinear
+  have h_delta_ne : mu1 * v2 - mu2 * v1 ≠ 0 := by omega
+  have h_sq_pos : 0 < (mu1 * v2 - mu2 * v1) * (mu1 * v2 - mu2 * v1) := by
+    rcases Int.lt_trichotomy (mu1 * v2 - mu2 * v1) 0 with h_neg | h_z | h_pos
+    · exact Int.mul_pos_of_neg_of_neg h_neg h_neg
+    · exact absurd h_z h_delta_ne
+    · exact Int.mul_pos h_pos h_pos
+  have h_dot_pos :
+      0 < (orthogonalMultigateDir mu1 mu2 v1 v2).1 * v1 +
+            (orthogonalMultigateDir mu1 mu2 v1 v2).2 * v2 := by
+    rw [h_lag]
+    exact h_sq_pos
+  have h_shift_pos :
+      0 < beta * ((orthogonalMultigateDir mu1 mu2 v1 v2).1 * v1 +
+                    (orthogonalMultigateDir mu1 mu2 v1 v2).2 * v2) :=
+    Int.mul_pos h_beta h_dot_pos
+  rw [Int.sub_mul, Int.sub_mul]
+  have hb1 : beta * (orthogonalMultigateDir mu1 mu2 v1 v2).1 * v1 =
+      beta * ((orthogonalMultigateDir mu1 mu2 v1 v2).1 * v1) := Int.mul_assoc _ _ _
+  have hb2 : beta * (orthogonalMultigateDir mu1 mu2 v1 v2).2 * v2 =
+      beta * ((orthogonalMultigateDir mu1 mu2 v1 v2).2 * v2) := Int.mul_assoc _ _ _
+  rw [Int.mul_add] at h_shift_pos
+  omega
+
+/-- ANSE stage ratchet acceptance predicate: commits candidate energy `e_cand` iff `guard_ok = true`
+    and `e_cand < e_cur - min_gain`. -/
+def anseStageAccepts (e_cur e_cand min_gain : Int) (guard_ok : Bool) : Bool :=
+  guard_ok && decide (e_cand < e_cur - min_gain)
+
+/-- Single-stage ANSE thermodynamic ratchet transition with atomic rollback on rejection. -/
+def anseStageRatchetStep (e_cur e_cand min_gain : Int) (guard_ok : Bool) : Int :=
+  if anseStageAccepts e_cur e_cand min_gain guard_ok then e_cand else e_cur
+
+/-- Multi-stage ANSE ratchet fold across a sequence of `(e_cand, guard_ok)` stage proposals. -/
+def anseMultiStageRatchet (e_init min_gain : Int) (stages : List (Int × Bool)) : Int :=
+  stages.foldl (fun e_acc st => anseStageRatchetStep e_acc st.1 min_gain st.2) e_init
+
+/-- True iff at least one stage proposal in `stages` is accepted along the ANSE ratchet trajectory. -/
+def anseAnyStageAccepted : Int → Int → List (Int × Bool) → Bool
+  | _, _, [] => false
+  | e_acc, min_gain, (e_cand, guard_ok) :: rest =>
+      anseStageAccepts e_acc e_cand min_gain guard_ok ||
+        anseAnyStageAccepted (anseStageRatchetStep e_acc e_cand min_gain guard_ok) min_gain rest
+
+/-- Theorem 167 (`HM-S35-08` — Monotone ANSE Stage Ratchet Strict Descent & Guard Safety):
+    For any `min_gain ≥ 0`:
+    (a) A single stage never increases energy, rejects guard failures without changing energy,
+        and strictly lowers energy whenever accepted;
+    (b) Any multi-stage pipeline never increases energy, and strictly descends (`E_final < E_init`)
+        whenever at least one stage in the pipeline commits. -/
+theorem monotone_anse_stage_ratchet_strictly_descends
+    (e_init e_cand min_gain : Int)
+    (guard_ok : Bool)
+    (stages : List (Int × Bool))
+    (h_gain : 0 ≤ min_gain) :
+    anseStageRatchetStep e_init e_cand min_gain guard_ok ≤ e_init ∧
+    (guard_ok = false → anseStageRatchetStep e_init e_cand min_gain guard_ok = e_init) ∧
+    (anseStageAccepts e_init e_cand min_gain guard_ok = true →
+      anseStageRatchetStep e_init e_cand min_gain guard_ok < e_init) ∧
+    anseMultiStageRatchet e_init min_gain stages ≤ e_init ∧
+    (anseAnyStageAccepted e_init min_gain stages = true →
+      anseMultiStageRatchet e_init min_gain stages < e_init) := by
+  have h_multi :
+      ∀ (xs : List (Int × Bool)) (e0 : Int),
+        anseMultiStageRatchet e0 min_gain xs ≤ e0 ∧
+        (anseAnyStageAccepted e0 min_gain xs = true →
+          anseMultiStageRatchet e0 min_gain xs < e0) := by
+    intro xs
+    induction xs with
+    | nil =>
+        intro e0
+        simp [anseMultiStageRatchet, anseAnyStageAccepted]
+    | cons head rest ih =>
+        intro e0
+        rcases head with ⟨ec, gok⟩
+        have ih_step := ih (anseStageRatchetStep e0 ec min_gain gok)
+        have h_step_le : anseStageRatchetStep e0 ec min_gain gok ≤ e0 := by
+          unfold anseStageRatchetStep anseStageAccepts
+          cases gok <;> simp only [Bool.false_and, Bool.true_and, Bool.false_eq_true, ↓reduceIte]
+          · exact Int.le_refl _
+          · split
+            · rename_i h_lt
+              simp only [decide_eq_true_eq] at h_lt
+              omega
+            · exact Int.le_refl _
+        constructor
+        · unfold anseMultiStageRatchet at ih_step ⊢
+          simp only [List.foldl_cons]
+          exact Int.le_trans ih_step.1 h_step_le
+        · intro h_any
+          unfold anseAnyStageAccepted at h_any
+          unfold anseMultiStageRatchet at ih_step ⊢
+          simp only [List.foldl_cons]
+          cases h_acc : anseStageAccepts e0 ec min_gain gok
+          · simp only [h_acc, Bool.false_or] at h_any
+            exact Int.lt_of_lt_of_le (ih_step.2 h_any) h_step_le
+          · have h_step_lt : anseStageRatchetStep e0 ec min_gain gok < e0 := by
+              unfold anseStageRatchetStep
+              rw [h_acc]
+              simp only [↓reduceIte]
+              unfold anseStageAccepts at h_acc
+              cases gok <;> simp_all [decide_eq_true_eq]
+              omega
+            exact Int.lt_of_le_of_lt ih_step.1 h_step_lt
+  have hm := h_multi stages e_init
+  refine ⟨?_, ?_, ?_, hm.1, hm.2⟩
+  · unfold anseStageRatchetStep anseStageAccepts
+    cases guard_ok <;> simp only [Bool.false_and, Bool.true_and, Bool.false_eq_true, ↓reduceIte]
+    · exact Int.le_refl _
+    · split
+      · rename_i h_lt
+        simp only [decide_eq_true_eq] at h_lt
+        omega
+      · exact Int.le_refl _
+  · intro h_false
+    unfold anseStageRatchetStep anseStageAccepts
+    simp [h_false]
+  · intro h_acc
+    unfold anseStageRatchetStep
+    rw [h_acc]
+    simp only [↓reduceIte]
+    unfold anseStageAccepts at h_acc
+    cases guard_ok <;> simp_all [decide_eq_true_eq]
+    omega
+
+/-- State of `SingleShotVaultLock` enforcing single-use scoring on a virgin holdout split. -/
+structure VaultLockState where
+  consumed : Bool
+  evalCount : Nat
+deriving DecidableEq
+
+/-- Attempt one holdout vault evaluation: succeeds once and flips `consumed := true`; any
+    subsequent call returns `false` and leaves `st` unchanged. -/
+def tryVaultEval (st : VaultLockState) : Bool × VaultLockState :=
+  if st.consumed then (false, st)
+  else (true, { consumed := true, evalCount := st.evalCount + 1 })
+
+/-- Execute `n` sequential vault evaluation attempts starting from `st`. -/
+def repeatVaultEvals : Nat → VaultLockState → VaultLockState
+  | 0, st => st
+  | n + 1, st => repeatVaultEvals n (tryVaultEval st).2
+
+/-- Theorem 168 (`HM-S35-08` — Single-Shot Virgin Holdout Vault Lock Blocks Second Evaluation):
+    Starting from an unconsumed vault `s0 = { consumed := false, evalCount := 0 }`:
+    (a) The first evaluation succeeds (`true`), locks `consumed := true`, and sets `evalCount = 1`;
+    (b) The second evaluation is rejected (`false`) and preserves `evalCount = 1`;
+    (c) Any already-consumed state returns `(false, st)` and any `n` repeated evaluations
+        from `s0` satisfy `evalCount ≤ 1`. -/
+theorem single_shot_vault_lock_blocks_second_eval
+    (st : VaultLockState)
+    (n : Nat) :
+    let s0 : VaultLockState := { consumed := false, evalCount := 0 }
+    let r1 := tryVaultEval s0
+    let r2 := tryVaultEval r1.2
+    r1.1 = true ∧ r1.2.consumed = true ∧ r1.2.evalCount = 1 ∧
+    r2.1 = false ∧ r2.2.evalCount = 1 ∧
+    (st.consumed = true → tryVaultEval st = (false, st)) ∧
+    (repeatVaultEvals n s0).evalCount ≤ 1 := by
+  have h_bound :
+      ∀ (m : Nat) (s : VaultLockState),
+        s.evalCount ≤ 1 →
+        (s.consumed = false → s.evalCount = 0) →
+        (repeatVaultEvals m s).evalCount ≤ 1 := by
+    intro m
+    induction m with
+    | zero =>
+        intro s h_le _
+        simpa [repeatVaultEvals] using h_le
+    | succ k ih =>
+        intro s h_le h_fresh
+        unfold repeatVaultEvals
+        apply ih (tryVaultEval s).2
+        · unfold tryVaultEval
+          cases hc : s.consumed <;> simp only [Bool.false_eq_true, ↓reduceIte]
+          · have h0 := h_fresh hc
+            omega
+          · exact h_le
+        · intro h_next_fresh
+          unfold tryVaultEval at h_next_fresh
+          cases hc : s.consumed <;> simp_all
+  refine ⟨rfl, rfl, rfl, rfl, rfl, ?_, ?_⟩
+  · intro h_cons
+    unfold tryVaultEval
+    simp [h_cons]
+  · exact h_bound n { consumed := false, evalCount := 0 } (by decide) (fun _ => rfl)
+
+end Season35_AutoOpenWeightAndWeightSpaceProgramming
+
 end HiveMindSpec
 
 -- Verify that all theorems depend on zero user axioms (`#print axioms` check)
@@ -2695,3 +3044,8 @@ end HiveMindSpec
 #print axioms HiveMindSpec.Season29_InternationalLaunchAndEvolutionMonitor.nocturnal_vlm_moe_pareto_ratchet_monotone
 #print axioms HiveMindSpec.Season30_VolunteerConsentAndPauseInvariants.no_node_starts_without_stored_owner_enrolment
 #print axioms HiveMindSpec.Season30_VolunteerConsentAndPauseInvariants.pause_implies_no_new_work_within_one_heartbeat
+#print axioms HiveMindSpec.Season35_AutoOpenWeightAndWeightSpaceProgramming.nullspace_projector_idempotent_scalar
+#print axioms HiveMindSpec.Season35_AutoOpenWeightAndWeightSpaceProgramming.preserved_key_zero_drift_under_nullspace_edit
+#print axioms HiveMindSpec.Season35_AutoOpenWeightAndWeightSpaceProgramming.orthogonal_multigate_specialist_dot_invariant
+#print axioms HiveMindSpec.Season35_AutoOpenWeightAndWeightSpaceProgramming.monotone_anse_stage_ratchet_strictly_descends
+#print axioms HiveMindSpec.Season35_AutoOpenWeightAndWeightSpaceProgramming.single_shot_vault_lock_blocks_second_eval

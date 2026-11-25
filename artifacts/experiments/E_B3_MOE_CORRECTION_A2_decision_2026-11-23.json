@@ -1,0 +1,288 @@
+{
+ "chosen_on_selection": "e50_r00",
+ "recommended": "e50_r00",
+ "selection": {
+  "e45_r45": {
+   "J": 4.184545225650072,
+   "mean_diff_vs_base": -0.14101267755031585,
+   "ci95": [
+    -0.1791841793805361,
+    -0.09968123170236748
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 8.372,
+    "E1_python_systems_code": -3.461,
+    "E2_math_reasoning": -2.675,
+    "E5_exoplanet_transit": -4.447,
+    "E6_stellar_spectroscopy": -14.822,
+    "E7_defensive_cyber": -4.531
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "e50_r00": {
+   "J": 4.2312444422394035,
+   "mean_diff_vs_base": -0.09431346096098422,
+   "ci95": [
+    -0.10538035226675371,
+    -0.0832677496255686
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 0.098,
+    "E1_python_systems_code": -1.685,
+    "E2_math_reasoning": -1.979,
+    "E5_exoplanet_transit": -2.268,
+    "E6_stellar_spectroscopy": -6.063,
+    "E7_defensive_cyber": -2.112
+   },
+   "excluded_lt_20": [],
+   "guard_ok": true,
+   "corrects": true
+  },
+  "e75_r00": {
+   "J": 4.236941450958451,
+   "mean_diff_vs_base": -0.08861645224193732,
+   "ci95": [
+    -0.11229953469087679,
+    -0.06443821195823451
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 3.138,
+    "E1_python_systems_code": -0.657,
+    "E2_math_reasoning": -0.516,
+    "E5_exoplanet_transit": -2.947,
+    "E6_stellar_spectroscopy": -10.766,
+    "E7_defensive_cyber": -2.433
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "e100_r00": {
+   "J": 4.553182219217221,
+   "mean_diff_vs_base": 0.227624316016833,
+   "ci95": [
+    0.18090742086370784,
+    0.27805124825487537
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 14.886,
+    "E1_python_systems_code": 8.013,
+    "E2_math_reasoning": 11.718,
+    "E5_exoplanet_transit": 1.008,
+    "E6_stellar_spectroscopy": -6.904,
+    "E7_defensive_cyber": 1.435
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "e50_r25": {
+   "J": 4.177008931835492,
+   "mean_diff_vs_base": -0.1485489713648955,
+   "ci95": [
+    -0.18981952302157878,
+    -0.10419096340735755
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 9.376,
+    "E1_python_systems_code": -3.464,
+    "E2_math_reasoning": -2.575,
+    "E5_exoplanet_transit": -5.053,
+    "E6_stellar_spectroscopy": -16.416,
+    "E7_defensive_cyber": -4.778
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "e75_r25": {
+   "J": 4.0320868693292145,
+   "mean_diff_vs_base": -0.29347103387117385,
+   "ci95": [
+    -0.3573084993163745,
+    -0.2275833360850811
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 11.206,
+    "E1_python_systems_code": -4.483,
+    "E2_math_reasoning": -3.027,
+    "E5_exoplanet_transit": -8.91,
+    "E6_stellar_spectroscopy": -31.436,
+    "E7_defensive_cyber": -8.844
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "e100_r25": {
+   "J": 3.8985953581829866,
+   "mean_diff_vs_base": -0.4269625450174014,
+   "ci95": [
+    -0.5066262316455443,
+    -0.34618561734755837
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 6.936,
+    "E1_python_systems_code": -3.386,
+    "E2_math_reasoning": -1.55,
+    "E5_exoplanet_transit": -10.826,
+    "E6_stellar_spectroscopy": -44.91,
+    "E7_defensive_cyber": -12.654
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "e75_r50": {
+   "J": 3.9723658452431363,
+   "mean_diff_vs_base": -0.3531920579572519,
+   "ci95": [
+    -0.41774847359086076,
+    -0.28589303489774465
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 9.561,
+    "E1_python_systems_code": -5.674,
+    "E2_math_reasoning": -4.19,
+    "E5_exoplanet_transit": -9.438,
+    "E6_stellar_spectroscopy": -34.236,
+    "E7_defensive_cyber": -10.148
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "e100_r50": {
+   "J": 3.8181018707652887,
+   "mean_diff_vs_base": -0.5074560324350993,
+   "ci95": [
+    -0.5872714730600516,
+    -0.42737794714669386
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 5.041,
+    "E1_python_systems_code": -5.556,
+    "E2_math_reasoning": -3.688,
+    "E5_exoplanet_transit": -11.195,
+    "E6_stellar_spectroscopy": -47.304,
+    "E7_defensive_cyber": -14.815
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "e25_r100": {
+   "J": 4.225482286264499,
+   "mean_diff_vs_base": -0.10007561693588893,
+   "ci95": [
+    -0.11469725000361601,
+    -0.08440000082055728
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 1.534,
+    "E1_python_systems_code": -2.668,
+    "E2_math_reasoning": -2.486,
+    "E5_exoplanet_transit": -1.42,
+    "E6_stellar_spectroscopy": -6.826,
+    "E7_defensive_cyber": -2.778
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "e50_r100": {
+   "J": 4.133578559756279,
+   "mean_diff_vs_base": -0.19197934344410897,
+   "ci95": [
+    -0.24224329220131038,
+    -0.13841746463750804
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 11.156,
+    "E1_python_systems_code": -4.573,
+    "E2_math_reasoning": -3.348,
+    "E5_exoplanet_transit": -5.498,
+    "E6_stellar_spectroscopy": -20.89,
+    "E7_defensive_cyber": -6.313
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "W25": {
+   "J": 4.242761724069714,
+   "mean_diff_vs_base": -0.08279617913067341,
+   "ci95": [
+    -0.09302390612972279,
+    -0.07175718687474729
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 0.644,
+    "E1_python_systems_code": -1.791,
+    "E2_math_reasoning": -1.846,
+    "E5_exoplanet_transit": -1.812,
+    "E6_stellar_spectroscopy": -5.328,
+    "E7_defensive_cyber": -2.055
+   },
+   "excluded_lt_20": [],
+   "guard_ok": true,
+   "corrects": true
+  }
+ },
+ "third_split": {
+  "W25": {
+   "J": 4.2323850852747755,
+   "mean_diff_vs_base": -0.07851433356602987,
+   "ci95": [
+    -0.08867124110460281,
+    -0.06798378961781662
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 1.042,
+    "E1_python_systems_code": -1.884,
+    "E2_math_reasoning": -1.74,
+    "E5_exoplanet_transit": -1.779,
+    "E6_stellar_spectroscopy": -5.199,
+    "E7_defensive_cyber": -2.022
+   },
+   "excluded_lt_20": [],
+   "guard_ok": false,
+   "corrects": false
+  },
+  "e50_r00": {
+   "J": 4.22515605861942,
+   "mean_diff_vs_base": -0.08574336022138596,
+   "ci95": [
+    -0.09678287496169408,
+    -0.07483059883117676
+   ],
+   "n": 240,
+   "per_expert_pct_vs_base": {
+    "E0_general_fineweb": 0.634,
+    "E1_python_systems_code": -1.522,
+    "E2_math_reasoning": -1.896,
+    "E5_exoplanet_transit": -1.919,
+    "E6_stellar_spectroscopy": -6.029,
+    "E7_defensive_cyber": -2.082
+   },
+   "excluded_lt_20": [],
+   "guard_ok": true,
+   "corrects": true
+  }
+ }
+}

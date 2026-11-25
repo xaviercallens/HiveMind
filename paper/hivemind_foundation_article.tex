@@ -69,7 +69,7 @@
   Project HiveMind Open-Source Contributors
 }
 
-\date{November 10, 2026 --- Version 4.3.0 (adds Section~\ref{sec:v430_live_e8_a1_and_planetary_readiness}: live two-host \texttt{E8} Stage~1 RDA verification across \texttt{socreateai-agora-hermes-node1} T4 and \texttt{XAVGAMSRV} RTX~2070 [3 seeds, $K=2$, paired diff $+4.8\times 10^{-7} \pm 8.3\times 10^{-7}$, post-join $p_{50}=1.20$\,s, $p_{95}=3.79$\,s], Stage~2 two-host AMCP Kafka QLoRA MoE [\texttt{crossA.json}: $4.1709 \to 1.4808$, \texttt{night-002.json}: 211 rounds to $1.4525$, \texttt{chaos-1.json}: 70 rounds to $1.4649$] and live RTX~2070 CUDA NF4 QLoRA MoE [$4.1721 \to 1.3395$ at $27.75$\,MiB peak VRAM vs.\ shuffled-label control $4.1563$]; live \texttt{A1} production Cloud Run gateway verification over WireGuard [$48/48$ HTTP~200 on \texttt{hivemind/granite-moe} at $p_{50}=0.41$\,s / $0.39$\,s and WRR $12+12 \to 24/24$ failover with exact HMT conservation]; negative \texttt{B3} train-to-serve gate result on \texttt{hmq\_00147} [$-0.00403$\,nats] and \texttt{E24} $2\times 2$ factorial attribution + 20-round remediated window \texttt{hmq\_00216..hmq\_00235} [median $-0.01275$\,nats, share worse $0.2667 \le 0.30$]; planetary-scale verification suite \texttt{PS-01..PS-11} [\texttt{E21} canary $0.0977$ FLOP ratio, \texttt{E22} \texttt{did:key} discovery $p_{95}=4.18$\,s, \texttt{E23} AMCP NAT mobility $p_{95}=1.48$\,s, \texttt{E26} $186.18\times$ residential compression, \texttt{E27} $1{,}000$-node Byzantine testbed, $\$120.62/\text{mo} \le \$150/\text{mo}$ GCP cost receipt]; and reconciled \textbf{166} Lean~4 lemmas + 3 Mathlib theorems; v4.2.0: adds Section~\ref{sec:international_launch_forecast}: pre-registered Experiment \texttt{E20} validating the $\le 1{,}536$\,MiB Adaptive Multi-Split ML background guard at $680.0$\,MiB [$94.34\%$--$98.29\%$ latency reduction], Top-$1\%$ 2D-DCT + EF21 outer-gradient compression at $225.4\times$ with $3\times 10^{-8}$ drift, and 6-region Super-Peer fan-out cutting $10{,}000$-node coordinator ingress by $31.45\times$ plus $62.5\%$ SQLite write-IOPS coalescing; 3-plan-class BOINC workunit assimilation and nocturnal Pareto-ratchet V-MoE evolution; and the literature-grounded $>200$-node [$265$-node active swarm + $2{,}400$ visitors] International Launch Traffic, Throughput \& Balancing Forecast combining Kleinrock/Halfin-Whitt $M/M/c(t)$ Erlang-C, Kingman $G/G/c$, Mitzenmacher P2C, Kelly shadow pricing, and Bass prosumer conversion across 6 global Super-Peer hubs and a 5-wave roadmap to $10{,}000+$ nodes; v4.1.0: adds Section~\ref{sec:vision_moe_and_research_roadmap}: ``La Ruche'' sub-1.5\,GB Vision-MoE across 4 visual backbones at 972.0--1{,}490.0\,MiB, Exoplanet \& Astrophysics CWT/Focal-Loss Vision-MoE PoC at 910.0--1{,}410.0\,MiB, 7-Division 15-dataset 42{,}870{,}000-sample Swarm Image-MoE Orchestrator across 104 Bees, and the 18-Month, 4-Phase Research Roadmap for Overcoming Scale and Security Bottlenecks in Decentralized MoE Architectures via Top-1\% Quantized Split Learning, \texttt{zk-SNARK} Verifiable Computation, and Geo-Cryptographic Mesh Routing across Seasons 29--32; v4.0.0: adds Section~\ref{sec:bee_agent_mesh_and_diurnal_scaling}: the Bi-Layer Honeybee Agent Mesh architecture with Kafka AMCP Quorum Sensing and ABC MoE loop, 20 nocturnal Hugging Face domain MoE adapters (+277.06\,TFLOPs compute contribution, 35 models total), 4 Macro-Cluster Super-MoEs, Timezone-Aware Diurnal Scheduling with Long-Tail Resident Intent Scoring, Bring Your Own Bee formal lifecycle with 3 live exemplars, 4 edge models, Swarm Nectar Cache P2P bus with HMT royalties, and S20--S24 Bio-Inspired Swarm Roadmap; v3.9.0: live 47-node heterogeneous WAN swarm validation, 100 assimilated BOINC 6-domain MoE workunits + 24 nocturnal multi-producer MoE workunits, 5{,}632.11 Cobblestones / 2.433\,PFLOPs attested compute, 3{,}409--4{,}838\,MiB QLoRA MoE VRAM footprint, 0.0\% execution-class-matched false rejection rate, and 51.24\,GFLOPS custom Turing kernels at 196.8\,ms mean p50 latency; v3.8.0: withdraws the invalid E11 Qwen2.5-Coder-7B row and adds a likely-cause note to E10b; v3.7.2: adds pre-registered E10b, E11, E12 results; 141 Lean 4 lemmas + 3 Mathlib theorems)}
+\date{November 10, 2026 --- Version 4.3.0; field-results addendum of 22~November 2026 in Section~\ref{sec:nov2026_field_results} (adds Section~\ref{sec:v430_live_e8_a1_and_planetary_readiness}: live two-host \texttt{E8} Stage~1 RDA verification across \texttt{socreateai-agora-hermes-node1} T4 and \texttt{XAVGAMSRV} RTX~2070 [3 seeds, $K=2$, paired diff $+4.8\times 10^{-7} \pm 8.3\times 10^{-7}$, post-join $p_{50}=1.20$\,s, $p_{95}=3.79$\,s], Stage~2 two-host AMCP Kafka QLoRA MoE [\texttt{crossA.json}: $4.1709 \to 1.4808$, \texttt{night-002.json}: 211 rounds to $1.4525$, \texttt{chaos-1.json}: 70 rounds to $1.4649$] and live RTX~2070 CUDA NF4 QLoRA MoE [$4.1721 \to 1.3395$ at $27.75$\,MiB peak VRAM vs.\ shuffled-label control $4.1563$]; live \texttt{A1} production Cloud Run gateway verification over WireGuard [$48/48$ HTTP~200 on \texttt{hivemind/granite-moe} at $p_{50}=0.41$\,s / $0.39$\,s and WRR $12+12 \to 24/24$ failover with exact HMT conservation]; negative \texttt{B3} train-to-serve gate result on \texttt{hmq\_00147} [$-0.00403$\,nats] and \texttt{E24} $2\times 2$ factorial attribution + 20-round remediated window \texttt{hmq\_00216..hmq\_00235} [median $-0.01275$\,nats, share worse $0.2667 \le 0.30$]; planetary-scale verification suite \texttt{PS-01..PS-11} [\texttt{E21} canary $0.0977$ FLOP ratio, \texttt{E22} \texttt{did:key} discovery $p_{95}=4.18$\,s, \texttt{E23} AMCP NAT mobility $p_{95}=1.48$\,s, \texttt{E26} $186.18\times$ residential compression, \texttt{E27} $1{,}000$-node Byzantine testbed, $\$120.62/\text{mo} \le \$150/\text{mo}$ GCP cost receipt]; and reconciled \textbf{166} Lean~4 lemmas + 3 Mathlib theorems; v4.2.0: adds Section~\ref{sec:international_launch_forecast}: pre-registered Experiment \texttt{E20} validating the $\le 1{,}536$\,MiB Adaptive Multi-Split ML background guard at $680.0$\,MiB [$94.34\%$--$98.29\%$ latency reduction], Top-$1\%$ 2D-DCT + EF21 outer-gradient compression at $225.4\times$ with $3\times 10^{-8}$ drift, and 6-region Super-Peer fan-out cutting $10{,}000$-node coordinator ingress by $31.45\times$ plus $62.5\%$ SQLite write-IOPS coalescing; 3-plan-class BOINC workunit assimilation and nocturnal Pareto-ratchet V-MoE evolution; and the literature-grounded $>200$-node [$265$-node active swarm + $2{,}400$ visitors] International Launch Traffic, Throughput \& Balancing Forecast combining Kleinrock/Halfin-Whitt $M/M/c(t)$ Erlang-C, Kingman $G/G/c$, Mitzenmacher P2C, Kelly shadow pricing, and Bass prosumer conversion across 6 global Super-Peer hubs and a 5-wave roadmap to $10{,}000+$ nodes; v4.1.0: adds Section~\ref{sec:vision_moe_and_research_roadmap}: ``La Ruche'' sub-1.5\,GB Vision-MoE across 4 visual backbones at 972.0--1{,}490.0\,MiB, Exoplanet \& Astrophysics CWT/Focal-Loss Vision-MoE PoC at 910.0--1{,}410.0\,MiB, 7-Division 15-dataset 42{,}870{,}000-sample Swarm Image-MoE Orchestrator across 104 Bees, and the 18-Month, 4-Phase Research Roadmap for Overcoming Scale and Security Bottlenecks in Decentralized MoE Architectures via Top-1\% Quantized Split Learning, \texttt{zk-SNARK} Verifiable Computation, and Geo-Cryptographic Mesh Routing across Seasons 29--32; v4.0.0: adds Section~\ref{sec:bee_agent_mesh_and_diurnal_scaling}: the Bi-Layer Honeybee Agent Mesh architecture with Kafka AMCP Quorum Sensing and ABC MoE loop, 20 nocturnal Hugging Face domain MoE adapters (+277.06\,TFLOPs compute contribution, 35 models total), 4 Macro-Cluster Super-MoEs, Timezone-Aware Diurnal Scheduling with Long-Tail Resident Intent Scoring, Bring Your Own Bee formal lifecycle with 3 live exemplars, 4 edge models, Swarm Nectar Cache P2P bus with HMT royalties, and S20--S24 Bio-Inspired Swarm Roadmap; v3.9.0: live 47-node heterogeneous WAN swarm validation, 100 assimilated BOINC 6-domain MoE workunits + 24 nocturnal multi-producer MoE workunits, 5{,}632.11 Cobblestones / 2.433\,PFLOPs attested compute, 3{,}409--4{,}838\,MiB QLoRA MoE VRAM footprint, 0.0\% execution-class-matched false rejection rate, and 51.24\,GFLOPS custom Turing kernels at 196.8\,ms mean p50 latency; v3.8.0: withdraws the invalid E11 Qwen2.5-Coder-7B row and adds a likely-cause note to E10b; v3.7.2: adds pre-registered E10b, E11, E12 results; 141 Lean 4 lemmas + 3 Mathlib theorems)}
 
 \begin{document}
 
@@ -1238,6 +1238,22 @@ To resolve this limitation, Project HiveMind formalizes the \textbf{Bi-Layer Hon
 }
 \end{table}
 
+\begin{figure}[ht!]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_bilayer_architecture.pdf}
+\caption{The two self-optimising layers. \textbf{Layer~1} decides \emph{who} works on a task, as a swarm decides where
+to nest: scouts score the fit $Q$, advertise it with a dance whose length grows with $Q$, recruit compatible peers, and
+lock the task once a quorum agrees. \textbf{Layer~2} decides \emph{how} the task is solved, as a colony forages: employed
+bees exploit the resident experts, observers score the result, and after $L$ failed cycles a scout fetches fresh,
+verified information from outside tools. The outcome feeds back into the reputation that weights the next quorum.}
+\label{fig:bilayer_architecture}
+\end{figure}
+
+\noindent\textbf{In plain terms.} A honeybee swarm has no leader, yet it reliably picks a good nest site: scouts that
+found better sites dance longer, so more bees go and look, and the colony commits once enough of them agree. Foragers
+then exploit a flower patch until it stops paying, and only then send scouts elsewhere. HiveMind reuses both habits:
+the first to share work across volunteer machines, the second to solve each task (Figure~\ref{fig:bilayer_architecture}).
+
 \subsection{Layer 1: Nesting Scrutiny \& Waggle Dance Quorum Sensing on Kafka (AMCP)}
 \label{sec:layer1_waggle_dance}
 
@@ -1267,6 +1283,18 @@ HiveMind transposes this mechanism to distributed agent coordination via the \te
     \end{equation}
     Upon reaching $\theta_{\text{quorum}}$, an ephemeral Kafka Consumer Group (\texttt{cg-hivemind-<domain>-<task\_id>}) is dynamically provisioned. The Consumer Group locks the partition leases, ensuring that execution proceeds with atomic responsibility and eliminating split-brain misrouting.
 \end{enumerate}
+
+\begin{figure}[ht!]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/fig_bilayer_recruitment.pdf}
+\caption{Illustrative mean-field simulation of Eqs.~\eqref{eq:waggle_duration}--\eqref{eq:quorum_condition} for two
+competing tasks (not a measurement). Each step, uncommitted weight is recruited in proportion to the softmax of
+Eq.~\eqref{eq:mcl_recruitment}, scaled by how long each task is danced ($\tau_0 Q$). Because recruited bees dance in
+turn, the better task (A, $Q{=}0.9$) wins by positive feedback and reaches the quorum first. The paper does not fix
+$\beta$; this figure assumes $\beta{=}5$ and an affinity of 0.8. The script is
+\texttt{paper/scripts\_figures/make\_bilayer\_figures.py}.}
+\label{fig:bilayer_recruitment}
+\end{figure}
 
 \textbf{Lean 4 Formal Soundness.} The stability of this recruitment protocol is backed by machine-checked lemmas in the \texttt{ALIX\_QueenBee} namespace of \texttt{lean4/HiveMindSpec.lean}:
 \begin{itemize}[leftmargin=1.8em]
@@ -1315,12 +1343,83 @@ C_{t-1} + 1, & \text{if } f(x_t) < \theta_{\text{abandon}}.
 The state transition condition to Scout mode is defined by the predicate $\text{State}_t = \text{Scout} \iff C_t \ge L_{\text{limit}}$. If $f(x_t) < \theta_{\text{abandon}}$ holds for all $t \ge 1$, then by mathematical induction $C_t = t$. Setting $t = L_{\text{limit}}$ yields $C_{L_{\text{limit}}} = L_{\text{limit}}$, which satisfies the condition $C_t \ge L_{\text{limit}}$ and triggers the deterministic transition $\text{State}_{L_{\text{limit}}} = \text{Scout}$. Since $L_{\text{limit}}$ is strictly finite ($L_{\text{limit}} = 2$), the number of unassisted internal iterations is bounded by $L_{\text{limit}}$, preventing unbounded token loops and guaranteeing tool dispatch.
 \end{proof}
 
+\begin{figure}[ht!]
+\centering
+\includegraphics[width=0.98\textwidth]{figures/fig_bilayer_abc_loop.pdf}
+\caption{Layer~2's loop. \textbf{(a)}~Illustration of Theorem~\ref{thm:abc_scout_transition}: once the observer's
+fitness stays below $\theta_{\text{abandon}}$ for $L{=}2$ cycles, the agent turns scout, and the fresh tool result lifts
+fitness again. \textbf{(b)}~Measured: the recipe screen of 21~November 2026
+(Section~\ref{sec:nov2026_field_results}) ran the same exploit, judge and abandon cycle on training recipes. A frozen,
+independent judge played the observer (lower is better); a change was kept only if it beat the current best, and
+discarded otherwise (T3).}
+\label{fig:bilayer_abc_loop}
+\end{figure}
+
+
 \textbf{Swarm Nectar Cache P2P Knowledge Bus.} To prevent redundant compute and duplicate web queries across the global swarm, HiveMind introduces the \textbf{Swarm Nectar Cache} (\texttt{src/\allowbreak hivemind/\allowbreak swarm/\allowbreak swarm\_nectar\_cache.py}, \texttt{tests/\allowbreak test\_swarm\_nectar\_cache.py}):
 \begin{itemize}[leftmargin=1.8em]
     \item \textbf{Canonical SHA-256 Deduplication:} Every verified external tool response, solver certificate, or structured JSON extraction is hashed and published to the Kafka topic \texttt{hivemind.mesh.food\_sources.v1}.
     \item \textbf{Sliding TTL Eviction:} Cache entries carry a 24-hour Time-To-Live ($\text{TTL} = 86{,}400$\,s) with LRU memory eviction.
     \item \textbf{Decentralized PoUW Royalties:} Whenever a peer agent reuses a cached nectar entry instead of repeating an external tool call, the discovering bee is automatically credited with a micro-royalty of \textbf{0.005\,HMT}. In production unit testing, the Nectar Cache achieves a \textbf{60\% reduction} in redundant web queries and halves token expenditure on repetitive analytical tasks.
 \end{itemize}
+
+\subsection{What Is New in the Two Self-Optimising Layers, Implementation Status, and Planned Improvements}
+\label{sec:bilayer_status_improvements}
+
+\paragraph{What is new.} Each mechanism exists on its own: quorum sensing in swarm robotics, ABC in optimisation
+\cite{karaboga2005abc}, and expert routing in mixture-of-experts models. The design choice here is to \emph{stack} two
+self-optimising loops with different time scales and to couple them through one quantity, reputation.
+\begin{itemize}[leftmargin=1.8em,itemsep=2pt]
+  \item \textbf{Layer~1 optimises the allocation of work across machines.} It needs no central scheduler: better fits
+    recruit faster by positive feedback, and a weighted quorum bounds the damage a weak or malicious node can do (the
+    \texttt{ALIX\_QueenBee} lemmas cited above).
+  \item \textbf{Layer~2 optimises each solution inside a machine.} It exploits what the local experts know, and it
+    explores outside only when exploitation stalls, a bounded rule proved by Theorem~\ref{thm:abc_scout_transition}.
+  \item \textbf{The coupling makes the system improve with use.} Outcomes judged in Layer~2 update the reputation that
+    weights Layer~1's next quorum, so the swarm gradually routes work to the machines and experts that succeed.
+\end{itemize}
+
+\paragraph{Implementation status (checked against the code on 22 November 2026).} The reference implementation,
+\texttt{src/hivemind/swarm/abc\_moe\_agent\_mesh.py}, follows this section only in part:
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{6.4cm}@{}}
+\toprule
+Element & This section & Code\\
+\midrule
+Base dance window $\tau_0$ & 1.20\,s & 1{,}000\,ms\\
+Recruitment & softmax with temperature $\beta$ (value not given) & deterministic gate $\text{Affinity}\cdot Q \ge 0.35$\\
+Quorum & reputation-weighted sum $\ge \theta_{\text{quorum}}$ & count of recruits $\ge 2$; reputation weights exist in \texttt{queenbee/dance.py} but are not wired in\\
+Abandonment threshold & $\theta_{\text{abandon}} = 0.50$ & 0.75\\
+Fitness weights; $L_{\text{limit}}$ & 0.60 / 0.40; 2 & identical\\
+\bottomrule
+\end{tabular}
+\end{center}
+The Nectar-Cache figure of ``60\,\% fewer redundant calls'' comes from unit tests, not from production traffic.
+
+\paragraph{Planned improvements.}
+\begin{enumerate}[leftmargin=1.8em,itemsep=2pt]
+  \item \textbf{Make the paper and the code agree.} Wire the reputation weights of \texttt{queenbee/dance.py} into the
+    quorum, either implement the softmax with an explicit $\beta$ or describe the deterministic gate, align $\tau_0$ and
+    $\theta_{\text{abandon}}$, and add a test that fails when the constants in this section and in the code differ.
+  \item \textbf{Borrow two more mechanisms from the bees.}
+    \begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+      \item \emph{Dance attrition:} a scout's dance shortens on each return, which keeps the swarm from locking onto an
+        early but mediocre option \cite{seeley2010honeybee}.
+      \item \emph{Stop signals:} scouts committed to one site inhibit dancers for a competing site, which breaks ties
+        between equally good options \cite{seeley2012stop}.
+    \end{itemize}
+    A quorum defined as a fraction of the reputation weight currently online would also scale better than the absolute
+    threshold of 2.
+  \item \textbf{Give the observer an independent judge.} The observer currently scores its own output. The November
+    campaigns showed that a self-referential score can reward format rather than content. The frozen mid-row judge of
+    Section~\ref{sec:nov2026_field_results}, which scores never-used data, is the pattern to reuse wherever the fitness
+    $f(x)$ drives a decision that matters.
+  \item \textbf{Run the training-side loop continuously.} The recipe screen is Layer~2 applied to training
+    (Figure~\ref{fig:bilayer_abc_loop}b). Running it as a standing loop, with the per-domain guard, would let every new
+    hypothesis (template stripping, gentle interleaving, looped expert layers) be judged the same way.
+  \item \textbf{Measure before claiming.} Replace the unit-test cache figure with a field measurement, and report
+    quorum time and recruitment accuracy on the live mesh.
+\end{enumerate}
 
 \subsection{Autonomous Diurnal Scheduling \& Long-Tail Intent Scanner}
 \label{sec:diurnal_moe_engine}
@@ -1808,6 +1907,204 @@ Criterion \texttt{A1} (\texttt{scripts/a1\_multi\_gpu\_run.py}) requires serving
 \end{table}
 
 % ============================================================================
+\section{Field Results of the November 2026 Training Campaigns: What the Loss Hid, an Independent Judge, and a Selected Recipe}
+\label{sec:nov2026_field_results}
+% ============================================================================
+
+This section reports what three weeks of real training on one shared Tesla~T4 taught us (14--22~November 2026). It is
+an addendum to v4.3.0. Every number comes from a committed receipt or run log, and each paragraph names its source.
+Nothing here changes the claims of the earlier sections.
+
+\subsection{Weekend of 14--15 November: first community weekend}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{CrowdGPT co-training.} The T4 submitted 5 full rounds to the public CrowdGPT run of Crowd-v1 (895--949\,MB
+    each). It was then withdrawn by owner decision. During that weekend, HiveMind's own jobs crossed the 4{,}300\,MiB
+    free-VRAM floor 4 times (2 CrowdGPT runs, 2 in the MoE sweep), and the watchdog stopped each one
+    (\texttt{LL.md}, ``Weekend numbers'').
+  \item \textbf{No outside trainer joined} during the weekend. The onboarding path was rewritten afterwards as a turnkey
+    \texttt{--train} mode and a three-command quickstart.
+  \item \textbf{LLM-JEPA pilot P1} (Crowd-v1, LoRA $r{=}64$, 3 seeds): 16.90\,\% exact match against 17.07\,\% for plain
+    fine-tuning, with far-token loss $+0.90$\,nat. The JEPA term collapsed ($1-\cos$ fell from 0.68 to 0.0005)
+    (\texttt{docs/CROWDGPT\_LLM\_JEPA\_RESULTS.md}).
+\end{itemize}
+
+\subsection{16--19 November: pre-registered STP experiments and a 596-round MoE campaign}
+\paragraph{Semantic Tube Prediction (STP).} Three pre-registered experiments tested the STP auxiliary loss
+\cite{huang2026stp}, a successor of LLM-JEPA \cite{huang2025llmjepa}. Their verdicts are reported exactly as the frozen
+analysis produced them (\texttt{docs/E\_STP\_RESULTS.md}).
+\begin{center}\small
+\begin{tabular}{@{}llp{7.2cm}@{}}
+\toprule
+Experiment & Model & Verdict\\
+\midrule
+E-STP-1 & Crowd-v1, lr $2{\times}10^{-5}$ & \textbf{uninformative}: 0\,\% exact match in all 18 runs (underfit)\\
+E-STP-2 & Qwen3-0.6B & \textbf{no gain}: STP$-$SFT $=-0.30$, $+0.17$ and $-0.47$ points at fractions 1, 1/4 and 1/16\\
+E-STP-1b & Crowd-v1, lr $10^{-3}$ & \textbf{guard rail failed}: far-token loss $+0.46$ and $+1.37$\,nat (limit $+0.05$)\\
+\bottomrule
+\end{tabular}
+\end{center}
+As pre-registered, the gate for shipping an STP training mode stays closed.
+
+\paragraph{MoE campaign 1.} Eight LoRA experts on frozen Crowd-v1 (19.2\,M trainable parameters) were trained with
+decoupled DiLoCo rounds and a loss ratchet. Over 596 rounds (179 accepted) the ratchet's held-out loss fell from
+5.385145 to 4.723302 ($-12.29\,\%$), with at least 6{,}981\,MiB of VRAM free throughout (Figure~\ref{fig:nov_traj}).
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.92\textwidth]{figures/fig_nov2026_moe_trajectory.pdf}
+\caption{Campaign 1: the best held-out loss of the training ratchet. Dashed lines mark the rounds where the data cursor
+first reached a new expert's data. Every large drop starts at one of them.}
+\label{fig:nov_traj}
+\end{figure}
+
+\paragraph{What the loss hid.} Two findings changed how we read that curve.
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Mostly format.} A pre-registered paired test on rows that training never read gave $-0.331$\,nat when
+    each chunk starts at the beginning of a row. It gave only $-0.062$\,nat (95\,\% CI $[-0.090,-0.035]$) when the same
+    rows are scored from token 64 onwards. About 81\,\% of the apparent gain was the add-on learning each dataset's
+    opening template (PR~\#944).
+  \item \textbf{One expert at a time.} Each learner's shard stored its experts' data one after another, and the cursor
+    reads it in order. For 256 rounds only general text and code were trained. When maths data arrived, maths improved
+    (mid-row $+1.9\,\%\to-4.7\,\%$ against the base model), while stars, which shares that learner, got worse ($+3.0\,\%$)
+    (Figure~\ref{fig:nov_midrow}).
+\end{enumerate}
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.92\textwidth]{figures/fig_nov2026_midrow_per_expert.pdf}
+\caption{Mid-row change per expert against base Crowd-v1 on never-used rows (negative is better), before and after the
+maths data was first read.}
+\label{fig:nov_midrow}
+\end{figure}
+
+\subsection{21--22 November: an autoresearch screen with a frozen judge, and campaign 2}
+We adapted the autoresearch loop of Karpathy \cite{karpathy2026autoresearch} to a shared volunteer GPU. One metric
+stays out of the search's reach, every trial has the same budget, each trial changes one thing, and each is kept or
+discarded. Four things differ:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item trials change configuration, not code;
+  \item the budget is tokens (30{,}720 per learner), not minutes;
+  \item the judge is the mid-row test above, on 240 never-used chunks, with a per-domain guard;
+  \item a trial is kept only if its paired 95\,\% interval against the current best excludes zero.
+\end{itemize}
+The plan and its amendment were committed before any comparison trial ran (PR~\#948).
+
+\begin{center}\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}llrll@{}}
+\toprule
+Trial & Change & Mid-row NLL & Against reference (95\,\% CI) & Outcome\\
+\midrule
+T1 & baseline & 4.3019 & n/a & start\\
+T2 & same seed and data & n/a & n/a & bit-identical final state\\
+T2b & baseline, second data slice & 4.2783 & $-0.024$ $[-0.031,-0.017]$ & noise control\\
+T3 & interleaved expert shards & 4.3016 & $-0.000$ $[-0.068,+0.069]$ & discarded (guard)\\
+T4 & sequences of 128 tokens & 4.2810 & $-0.021$ $[-0.026,-0.015]$ & kept\\
+T5 & T4, continued from an earlier state & 4.2309 & $-0.050$ $[-0.064,-0.037]$ & kept\\
+T6 & T5, inner learning rate $4{\times}10^{-4}$ & 4.2064 & $-0.025$ $[-0.030,-0.019]$ & kept\\
+T7 & T6 on the second slice, against T2b & 4.2260 & $-0.052$ $[-0.065,-0.040]$ & \textbf{confirmed}\\
+\bottomrule
+\end{tabular}}
+\end{center}
+
+\noindent Base Crowd-v1 scores 4.2864 on the same chunks. Campaign~1 already showed a small content gain mid-row
+($-0.062$\,nat), but with some domains worse than the base model. The selected recipe (T6) is the first whose content
+gain on an independent test, $-0.080$\,nat against the base model (CI $[-0.101,-0.059]$), \emph{also} keeps every
+domain within 1\,\% of the base. Five caveats apply:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item the trials are short;
+  \item two data slices of one recipe differ by 0.024\,nat, which is as much as T4's step;
+  \item T5's step includes the extra training of its starting state;
+  \item interleaving (T3) was not neutral: stars improved by 20\,\% while general text got 17.5\,\% worse;
+  \item on the second data slice (T7), maths is 1.43\,\% worse than the base model, so the per-domain guard against the
+    base holds on one slice but not on the other.
+\end{itemize}
+
+\paragraph{Campaign 2.} The driver started the confirmed recipe automatically on 21~November and stopped it on
+23~November at 02:40 Paris: 428 rounds over 5 runs, 122 accepted, with at least 5{,}523\,MiB of VRAM free. The same
+frozen judge then scored the final state on the 240 never-used chunks:
+\begin{center}\small
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+ & mean & general & code & maths & exoplanets & stars & security\\
+\midrule
+vs base & $-0.553$\,nat & $+2.21\,\%$ & $-7.19\,\%$ & $-3.33\,\%$ & $-9.55\,\%$ & $-49.42\,\%$ & $-16.86\,\%$\\
+\bottomrule
+\end{tabular}
+\end{center}
+The mean mid-row NLL fell from 4.2864 to 3.7337 (95\,\% CI of the difference $[-0.633,-0.473]$), and the add-on is
+lower on 190 of 240 chunks. The data manifest's row ranges are identical to those registered for the judge, and the
+judge's row-order and base-equivalence checks pass, so no test row was trained on. Three readings temper this result:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item the large gains are on domains whose training data was read, and the test rows come from the same datasets,
+    so they measure learning of each dataset's distribution rather than general ability (stars rows are numeric spectra);
+  \item format still accounts for part of it: scored from the start of rows, the difference is $-0.98$\,nat;
+  \item general text got 2.21\,\% worse while the other domains were trained, so the per-domain guard against the base
+    fails and, by our own rule, this add-on is \textbf{not promoted} to serving.
+\end{itemize}
+
+\paragraph{Correction (23 November).} A pre-registered follow-up tried to remove the general-text regression without
+retraining much. Re-reading general text was not the cure: campaign 2 had already re-read about 150{,}000 general-text
+tokens at its end. Candidates were chosen on a \emph{separate} selection split, the next 40 never-used rows of each
+source. A third split of 40 further rows confirmed the choice. The frozen 240 chunks were not reused after their single
+test of the first choice.
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Interpolation toward the start.} Mixing campaign~2's trainable weights with the zero-delta start,
+    $\theta(\lambda)=\theta_0+\lambda(\theta_{C2}-\theta_0)$, kept every domain within 1\,\% of the base only at
+    $\lambda=0.25$. General text is not monotone in $\lambda$: $+3.3\,\%$ at 1, $+8.3\,\%$ at 0.75, $+10.5\,\%$ at 0.5,
+    $+6.0\,\%$ at 0.4, $+1.9\,\%$ at 0.3, $+0.6\,\%$ at 0.25. On the frozen chunks $\lambda=0.25$ scored $-0.079$\,nat
+    (general $+0.77\,\%$), but on the third split its general-text change was $+1.04\,\%$, just over the limit.
+  \item \textbf{Router versus experts.} The router holds 1.6\,\% of the trainable weights. Interpolating it separately
+    gave the best candidate: experts at half way and the \emph{router reset to its start}, which corrects on both the
+    selection split (general $+0.10\,\%$) and the third split (general $+0.63\,\%$, mean $-0.086$\,nat, 95\,\% CI
+    $[-0.097,-0.075]$), with every other domain better. Scored once on the frozen 240 chunks after the choice, it
+    confirms: $-0.087$\,nat (CI $[-0.098,-0.076]$, lower on 197 of 240 chunks), general text $+0.30\,\%$, every other
+    domain better, so it passes the guard on three disjoint sets of rows. The effect is conditional: with full-strength
+    experts, resetting the router is harmful (general $+14.9\,\%$), because the experts were trained jointly with their
+    router.
+  \item \textbf{More training does not undo it.} Continuing campaign~2 on the T4 for 15 rounds at a four times lower
+    learning rate left general text at $+3.45\,\%$.
+  \item \textbf{The price is most of the gain:} about 16\,\% of campaign~2's improvement is kept. Promotion to serving
+    remains the owner's decision. The margins of the 1\,\% guard are thin: general-text figures moved by several tenths of
+    a point between splits.
+\end{itemize}
+
+\subsection{Returns from the field}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{The training loss is not the product metric.} A ratchet that scores from the start of a row rewards
+    format and data order. Selection now uses a frozen mid-row judge on never-used rows (\texttt{LL.md}, lessons 16--17).
+  \item \textbf{Training is bit-reproducible.} Repeating a run with the same seed and data gave an identical final
+    state, so a repeat run is no noise control; a second data slice is.
+  \item \textbf{Automation needs its own guards.} Four defects of the unattended pipeline were found and fixed in the
+    field: a stale resume point, a stall detector that never fired, an end time not enforced on a running job, and a
+    launch race.
+  \item \textbf{A shared GPU needs a contract, not courtesy.} The 4{,}300\,MiB floor was crossed 4 times on
+    14~November by HiveMind's own jobs, each stopped by the watchdog; a hard per-process CUDA cap was added afterwards.
+    Since 16~November, HiveMind's runs kept at least 5{,}523\,MiB free. Two later breaches came from other projects'
+    jobs on the same card: a nightly cron job (15--16~November, 365\,MiB free) and an experiment on 22~November that
+    checked free memory only before starting. Both now go through a shared lease or a corrected guard.
+  \item \textbf{Outside contributions arrive when tasks are small and testable.} The first external code contributions
+    since launch addressed two items of the published improvement plan. PR~\#941 (stop a run after repeated rejected
+    rounds) is merged. PR~\#945 (audit real pull-request diffs) touches a protected governance path and awaits the
+    owner's merge.
+\end{itemize}
+
+\subsection{Perspectives}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{JEPA for language models: parked, with one owner-gated re-test.} Four tests are negative or
+    uninformative on our models. The remaining pre-registered candidate is LLM-JEPA on a code fine-tuning task (PR~\#899),
+    where the original papers report their largest gains.
+  \item \textbf{Data before objectives.} Next screens will test template stripping and a gentler interleave, which
+    keeps the 20\,\% stars gain without the loss on general text.
+  \item \textbf{Looped expert layers.} Section~\ref{sec:missing_moe} proposed looped recurrence. The open-weights
+    Inkling~2~Mini is reported by its authors as a 26.4\,B looped mixture-of-experts with 3.4\,B active parameters; we
+    have not measured it \cite{inkling2mini2026}. It is too large to train on volunteer GPUs with 8--16\,GB. Its idea,
+    re-running shared middle layers, is a low-memory hypothesis that the same screen can test on Crowd-v1.
+  \item \textbf{New expert models as served tiers.} Volunteers with 32\,GB unified-memory machines could host such
+    open models in the catalog. This needs a compatible local runtime and a measured throughput before any public claim.
+  \item \textbf{Promotion gate.} An adapter is served only after it passes the mid-row test with every domain within
+    1\,\% of the base model. No adapter has been promoted yet.
+\end{itemize}
+
+% ============================================================================
 \section{Limitations, Threats to Validity, and Future Multi-Host Benchmarks}
 \label{sec:limitations}
 % ============================================================================
@@ -1932,6 +2229,11 @@ To prevent conflating machine-checked discrete arithmetic with empirical single-
 \bibitem{kelly1998rate} F.~P.~Kelly, A.~K.~Maulloo, and D.~K.~H.~Tan, ``Rate control for communication networks: shadow prices, proportional fairness and stability,'' \textit{Journal of the Operational Research Society}, vol.~49, no.~3, pp.~237--252, 1998.
 \bibitem{bass1969new} F.~M.~Bass, ``A new product growth for model consumer durables,'' \textit{Management Science}, vol.~15, no.~5, pp.~215--227, 1969.
 \bibitem{hwang2025hnet} S.~Hwang, B.~Wang, and A.~Gu, ``Dynamic Chunking for End-to-End Hierarchical Sequence Modeling,'' \textit{arXiv:2507.07955}, 2025.
+\bibitem{huang2025llmjepa} H.~Huang, Y.~LeCun, and R.~Balestriero, ``LLM-JEPA: Large Language Models Meet Joint Embedding Predictive Architectures,'' arXiv:2509.14252, 2025.
+\bibitem{huang2026stp} H.~Huang, Y.~LeCun, and R.~Balestriero, ``Semantic Tube Prediction,'' arXiv:2602.22617, 2026.
+\bibitem{karpathy2026autoresearch} A.~Karpathy, ``autoresearch,'' software repository, \url{https://github.com/karpathy/autoresearch}, 2026.
+\bibitem{inkling2mini2026} Thinking Machines Lab, ``Inkling 2 Mini,'' open-weights model release, 20~November 2026; figures as reported in press coverage, e.g.\ \href{https://the-decoder.com/new-open-model-inkling-2-mini-thinks-in-loops-to-solve-problems-with-fewer-words-and-still-runs-on-a-laptop/}{The Decoder, 21~November 2026}.
+\bibitem{seeley2012stop} T.~D.~Seeley, P.~K.~Visscher, T.~Schlegel, P.~M.~Hogan, N.~R.~Franks, and J.~A.~R.~Marshall, ``Stop signals provide cross inhibition in collective decision-making by honeybee swarms,'' \textit{Science}, 335(6064):108--111, 2012.
 \end{thebibliography}
 
 \end{document}

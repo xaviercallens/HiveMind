@@ -1,0 +1,2264 @@
+{
+ "schema": "hivemind.e_b3_moe_paired.v1",
+ "evidence": "measured",
+ "experiment_id": "E-B3-MOE-PAIRED",
+ "roadmap_item": "IP-300",
+ "preregistration": {
+  "spec_path": "docs/E_B3_MOE_PAIRED_PREREGISTRATION.json",
+  "spec_sha256": "0a22082e56e1c2bee222a1dbd610614d4892376263f07a29861fc8d3a9c57c14",
+  "commit": "ef51535300f3187c04c22adcdf3a206fb29e33bc"
+ },
+ "script_commit": "b76570fcd5cb3e485278cd13ae739d8e72030de7",
+ "started_utc": "2026-11-18T12:49:19Z",
+ "finished_utc": "2026-11-18T12:59:40Z",
+ "cpu_seconds_wall": 621.0,
+ "compute": {
+  "device": "cpu",
+  "cuda_visible_devices": "",
+  "threads": 4,
+  "torch": "2.6.0+cu124",
+  "numpy": "2.4.6",
+  "python": "3.11.16",
+  "trunk_dtype": "float32"
+ },
+ "base": {
+  "model": "Vxtzq/Crowd-v1 (dense, frozen)",
+  "hf_revision": "b63212a843d662dadbec35f8544b6e0dafa6e72b",
+  "weights_file": "/mnt/disks/disk-socrateai-local-1/crowd_v1_cache/model_b63212a843d6.safetensors",
+  "weights_sha256": "1f8214ca6856280b48817402f9f8f0a3affd938d39718ade8f528f0102c2209f",
+  "tokenizer_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+  "loaded": {
+   "source": "/mnt/disks/disk-socrateai-local-1/crowd_v1_cache/model_b63212a843d6.safetensors",
+   "hf_revision": "b63212a843d6",
+   "weights_matched_keys": 268,
+   "weights_total_keys": 268
+  }
+ },
+ "moe": {
+  "checkpoint_sha256": "0778b9ee4279ee6a70f88e5fdbd02237f620499b1daee5ef8b927d2c3af781f8",
+  "split": {
+   "split_mode": "lora_domain_experts",
+   "num_experts": 8,
+   "top_k": 2,
+   "routing_mode": "sigma_topk",
+   "lora_rank": 8,
+   "resident_expert_indices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ],
+   "num_layers_upcycled": 24,
+   "num_router_fragments": 4
+  }
+ },
+ "row_order_check": [
+  {
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "rows_checked": [
+    340,
+    440
+   ],
+   "match": true,
+   "block_at_train_end_cached": false
+  },
+  {
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "rows_checked": [
+    3140,
+    3240
+   ],
+   "match": true,
+   "block_at_train_end_cached": false
+  },
+  {
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "rows_checked": [
+    240,
+    340
+   ],
+   "match": true,
+   "block_at_train_end_cached": false
+  },
+  {
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "rows_checked": [
+    840,
+    940
+   ],
+   "match": true,
+   "block_at_train_end_cached": false
+  }
+ ],
+ "selection": [
+  {
+   "expert_id": "E0_general_fineweb",
+   "sources": [
+    {
+     "dataset_id": "HuggingFaceFW/fineweb-edu",
+     "origin": "local_hf_cache",
+     "first_row": 440,
+     "rows_scanned": 40,
+     "rows_used": [
+      440,
+      441,
+      442,
+      443,
+      444,
+      445,
+      446,
+      447,
+      448,
+      449,
+      450,
+      451,
+      452,
+      453,
+      454,
+      455,
+      456,
+      457,
+      458,
+      459,
+      460,
+      461,
+      462,
+      463,
+      464,
+      465,
+      466,
+      467,
+      468,
+      469,
+      470,
+      471,
+      472,
+      473,
+      474,
+      475,
+      476,
+      477,
+      478,
+      479
+     ],
+     "rows_too_short": 0,
+     "exhausted": false
+    }
+   ],
+   "chunks": 40,
+   "skipped_reason": null
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "sources": [
+    {
+     "dataset_id": "sahil2801/CodeAlpaca-20k",
+     "origin": "local_hf_cache",
+     "first_row": 3240,
+     "rows_scanned": 75,
+     "rows_used": [
+      3244,
+      3245,
+      3246,
+      3247,
+      3248,
+      3249,
+      3251,
+      3252,
+      3253,
+      3254,
+      3258,
+      3259,
+      3260,
+      3261,
+      3262,
+      3263,
+      3268,
+      3270,
+      3272,
+      3276,
+      3277,
+      3281,
+      3289,
+      3293,
+      3297,
+      3298,
+      3299,
+      3300,
+      3301,
+      3302,
+      3303,
+      3304,
+      3305,
+      3307,
+      3308,
+      3309,
+      3310,
+      3311,
+      3313,
+      3314
+     ],
+     "rows_too_short": 35,
+     "exhausted": false
+    }
+   ],
+   "chunks": 40,
+   "skipped_reason": null
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "sources": [
+    {
+     "dataset_id": "AI-MO/NuminaMath-CoT",
+     "origin": "local_hf_cache",
+     "first_row": 340,
+     "rows_scanned": 40,
+     "rows_used": [
+      340,
+      341,
+      342,
+      343,
+      344,
+      345,
+      346,
+      347,
+      348,
+      349,
+      350,
+      351,
+      352,
+      353,
+      354,
+      355,
+      356,
+      357,
+      358,
+      359,
+      360,
+      361,
+      362,
+      363,
+      364,
+      365,
+      366,
+      367,
+      368,
+      369,
+      370,
+      371,
+      372,
+      373,
+      374,
+      375,
+      376,
+      377,
+      378,
+      379
+     ],
+     "rows_too_short": 0,
+     "exhausted": false
+    }
+   ],
+   "chunks": 40,
+   "skipped_reason": null
+  },
+  {
+   "expert_id": "E3_formal_logic_arc",
+   "sources": [],
+   "chunks": 0,
+   "skipped_reason": "not trained (every source is on the decontamination benchmark list)"
+  },
+  {
+   "expert_id": "E4_physics_stem",
+   "sources": [
+    {
+     "dataset_id": "maximus-21/PhysicsQA",
+     "origin": "datasets_server",
+     "first_row": 370,
+     "rows_scanned": 0,
+     "rows_used": [],
+     "rows_too_short": 0,
+     "exhausted": true
+    }
+   ],
+   "chunks": 0,
+   "skipped_reason": "no unseen rows after the training range"
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "sources": [
+    {
+     "dataset_id": "bingbangboom/exoplanet-transit-detection",
+     "origin": "datasets_server",
+     "first_row": 140,
+     "rows_scanned": 40,
+     "rows_used": [
+      140,
+      141,
+      142,
+      143,
+      144,
+      145,
+      146,
+      147,
+      148,
+      149,
+      150,
+      151,
+      152,
+      153,
+      154,
+      155,
+      156,
+      157,
+      158,
+      159,
+      160,
+      161,
+      162,
+      163,
+      164,
+      165,
+      166,
+      167,
+      168,
+      169,
+      170,
+      171,
+      172,
+      173,
+      174,
+      175,
+      176,
+      177,
+      178,
+      179
+     ],
+     "rows_too_short": 0,
+     "exhausted": false
+    }
+   ],
+   "chunks": 40,
+   "skipped_reason": null
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "sources": [
+    {
+     "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+     "origin": "datasets_server",
+     "first_row": 540,
+     "rows_scanned": 40,
+     "rows_used": [
+      540,
+      541,
+      542,
+      543,
+      544,
+      545,
+      546,
+      547,
+      548,
+      549,
+      550,
+      551,
+      552,
+      553,
+      554,
+      555,
+      556,
+      557,
+      558,
+      559,
+      560,
+      561,
+      562,
+      563,
+      564,
+      565,
+      566,
+      567,
+      568,
+      569,
+      570,
+      571,
+      572,
+      573,
+      574,
+      575,
+      576,
+      577,
+      578,
+      579
+     ],
+     "rows_too_short": 0,
+     "exhausted": false
+    }
+   ],
+   "chunks": 40,
+   "skipped_reason": null
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "sources": [
+    {
+     "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+     "origin": "local_hf_cache",
+     "first_row": 940,
+     "rows_scanned": 40,
+     "rows_used": [
+      940,
+      941,
+      942,
+      943,
+      944,
+      945,
+      946,
+      947,
+      948,
+      949,
+      950,
+      951,
+      952,
+      953,
+      954,
+      955,
+      956,
+      957,
+      958,
+      959,
+      960,
+      961,
+      962,
+      963,
+      964,
+      965,
+      966,
+      967,
+      968,
+      969,
+      970,
+      971,
+      972,
+      973,
+      974,
+      975,
+      976,
+      977,
+      978,
+      979
+     ],
+     "rows_too_short": 0,
+     "exhausted": false
+    }
+   ],
+   "chunks": 40,
+   "skipped_reason": null
+  }
+ ],
+ "n_chunks": 240,
+ "chunk_tokens": 64,
+ "chunk_ids_sha256": "8eabd3377419b7572088980784825fe7ad1941aca5f078388484a0f90f2a9b92",
+ "base_equivalence_gate": {
+  "tolerance_nats": 0.001,
+  "zero_delta_chunk0_nll": 4.715309143066406,
+  "dense_chunk0_nll": 4.715309143066406,
+  "passed": true,
+  "moe_trainable_parameters": 19172352
+ },
+ "mean_base_nll": 4.919488245248795,
+ "mean_moe_nll": 4.588909802337487,
+ "mean_paired_diff": -0.330578442911307,
+ "bootstrap95": [
+  -0.38650951678554213,
+  -0.27697272013872865
+ ],
+ "bootstrap": {
+  "resamples": 10000,
+  "seed": 20261118,
+  "method": "iid paired, percentile"
+ },
+ "sign_test": {
+  "moe_lower": 215,
+  "moe_higher": 25,
+  "ties": 0,
+  "p_two_sided": 7.231291744250526e-39
+ },
+ "per_expert": [
+  {
+   "expert_id": "E0_general_fineweb",
+   "n": 40,
+   "base_nll": 4.628980511426926,
+   "moe_nll": 4.5870343267917635,
+   "mean_diff": -0.04194618463516253,
+   "relative_change_pct": -0.9061646410395501,
+   "sign_test": {
+    "moe_lower": 27,
+    "moe_higher": 13,
+    "ties": 0,
+    "p_two_sided": 0.03847730828420026
+   }
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "n": 40,
+   "base_nll": 5.197436040639877,
+   "moe_nll": 4.03549237549305,
+   "mean_diff": -1.1619436651468273,
+   "relative_change_pct": -22.356093582707675,
+   "sign_test": {
+    "moe_lower": 40,
+    "moe_higher": 0,
+    "ties": 0,
+    "p_two_sided": 1.8189894035458565e-12
+   }
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "n": 40,
+   "base_nll": 4.841055130958557,
+   "moe_nll": 4.703408449888229,
+   "mean_diff": -0.1376466810703274,
+   "relative_change_pct": -2.843319841372527,
+   "sign_test": {
+    "moe_lower": 35,
+    "moe_higher": 5,
+    "ties": 0,
+    "p_two_sided": 1.382612026645802e-06
+   }
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "n": 40,
+   "base_nll": 6.147580349445343,
+   "moe_nll": 5.989515328407288,
+   "mean_diff": -0.15806502103805542,
+   "relative_change_pct": -2.5711745443443714,
+   "sign_test": {
+    "moe_lower": 33,
+    "moe_higher": 7,
+    "ties": 0,
+    "p_two_sided": 4.2277022657799534e-05
+   }
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "n": 40,
+   "base_nll": 3.5217733860015867,
+   "moe_nll": 3.3213769614696504,
+   "mean_diff": -0.2003964245319363,
+   "relative_change_pct": -5.690213496656994,
+   "sign_test": {
+    "moe_lower": 40,
+    "moe_higher": 0,
+    "ties": 0,
+    "p_two_sided": 1.8189894035458565e-12
+   }
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "n": 40,
+   "base_nll": 5.180104053020477,
+   "moe_nll": 4.896631371974945,
+   "mean_diff": -0.2834726810455317,
+   "relative_change_pct": -5.472335654729581,
+   "sign_test": {
+    "moe_lower": 40,
+    "moe_higher": 0,
+    "ties": 0,
+    "p_two_sided": 1.8189894035458565e-12
+   }
+  }
+ ],
+ "verdict": "PASS",
+ "domain_guard_ok": true,
+ "b3_supported": true,
+ "b3_note": "B3 counts this as passing only if verdict == PASS and the +1% domain guard holds; otherwise B3 stays failing",
+ "chunks": [
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 440,
+   "base_nll": 4.715309143066406,
+   "moe_nll": 4.523256301879883
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 441,
+   "base_nll": 5.20323371887207,
+   "moe_nll": 5.184278964996338
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 442,
+   "base_nll": 6.138030529022217,
+   "moe_nll": 6.172905921936035
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 443,
+   "base_nll": 5.8015642166137695,
+   "moe_nll": 6.010891437530518
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 444,
+   "base_nll": 3.9828951358795166,
+   "moe_nll": 4.0068817138671875
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 445,
+   "base_nll": 3.9890081882476807,
+   "moe_nll": 3.890058755874634
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 446,
+   "base_nll": 5.050493240356445,
+   "moe_nll": 5.0142292976379395
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 447,
+   "base_nll": 4.163132667541504,
+   "moe_nll": 4.339875221252441
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 448,
+   "base_nll": 4.585752010345459,
+   "moe_nll": 4.681153297424316
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 449,
+   "base_nll": 3.827341079711914,
+   "moe_nll": 3.8118860721588135
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 450,
+   "base_nll": 3.9710984230041504,
+   "moe_nll": 3.9808361530303955
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 451,
+   "base_nll": 4.435482978820801,
+   "moe_nll": 4.568077087402344
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 452,
+   "base_nll": 4.798558712005615,
+   "moe_nll": 4.593508243560791
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 453,
+   "base_nll": 4.692367076873779,
+   "moe_nll": 4.608377933502197
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 454,
+   "base_nll": 4.824640274047852,
+   "moe_nll": 4.595059871673584
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 455,
+   "base_nll": 4.207340240478516,
+   "moe_nll": 4.0931806564331055
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 456,
+   "base_nll": 3.8603901863098145,
+   "moe_nll": 3.7395682334899902
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 457,
+   "base_nll": 4.372923851013184,
+   "moe_nll": 4.256422519683838
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 458,
+   "base_nll": 5.993907451629639,
+   "moe_nll": 5.892922878265381
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 459,
+   "base_nll": 5.202208042144775,
+   "moe_nll": 5.05796480178833
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 460,
+   "base_nll": 4.920360088348389,
+   "moe_nll": 4.862554550170898
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 461,
+   "base_nll": 4.321314334869385,
+   "moe_nll": 4.3184590339660645
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 462,
+   "base_nll": 3.309206962585449,
+   "moe_nll": 3.3516900539398193
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 463,
+   "base_nll": 4.474935531616211,
+   "moe_nll": 4.456110000610352
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 464,
+   "base_nll": 3.914456367492676,
+   "moe_nll": 3.905580759048462
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 465,
+   "base_nll": 4.157210350036621,
+   "moe_nll": 4.221685409545898
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 466,
+   "base_nll": 4.163867950439453,
+   "moe_nll": 4.3090500831604
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 467,
+   "base_nll": 5.747223377227783,
+   "moe_nll": 5.750545501708984
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 468,
+   "base_nll": 5.023062229156494,
+   "moe_nll": 4.960752964019775
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 469,
+   "base_nll": 4.047763347625732,
+   "moe_nll": 3.8327457904815674
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 470,
+   "base_nll": 5.974208354949951,
+   "moe_nll": 5.733302116394043
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 471,
+   "base_nll": 3.187011480331421,
+   "moe_nll": 3.162554979324341
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 472,
+   "base_nll": 5.114492893218994,
+   "moe_nll": 4.864189147949219
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 473,
+   "base_nll": 5.762334823608398,
+   "moe_nll": 5.498331069946289
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 474,
+   "base_nll": 4.213973045349121,
+   "moe_nll": 4.420482635498047
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 475,
+   "base_nll": 2.6874847412109375,
+   "moe_nll": 2.619107246398926
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 476,
+   "base_nll": 6.045957565307617,
+   "moe_nll": 6.06561803817749
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 477,
+   "base_nll": 4.198753833770752,
+   "moe_nll": 4.130795955657959
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 478,
+   "base_nll": 4.607262134552002,
+   "moe_nll": 4.533789157867432
+  },
+  {
+   "expert_id": "E0_general_fineweb",
+   "dataset_id": "HuggingFaceFW/fineweb-edu",
+   "row": 479,
+   "base_nll": 5.472663879394531,
+   "moe_nll": 5.462693214416504
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3244,
+   "base_nll": 6.986568450927734,
+   "moe_nll": 5.677419662475586
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3245,
+   "base_nll": 6.235961437225342,
+   "moe_nll": 4.880196571350098
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3246,
+   "base_nll": 5.5019731521606445,
+   "moe_nll": 4.102055072784424
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3247,
+   "base_nll": 3.62294864654541,
+   "moe_nll": 2.441740036010742
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3248,
+   "base_nll": 5.142045021057129,
+   "moe_nll": 3.660367965698242
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3249,
+   "base_nll": 6.060808181762695,
+   "moe_nll": 4.77963924407959
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3251,
+   "base_nll": 6.117586612701416,
+   "moe_nll": 4.245537757873535
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3252,
+   "base_nll": 6.934350967407227,
+   "moe_nll": 5.28712797164917
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3253,
+   "base_nll": 6.683896541595459,
+   "moe_nll": 4.840672969818115
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3254,
+   "base_nll": 5.186728000640869,
+   "moe_nll": 4.095652103424072
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3258,
+   "base_nll": 3.810364246368408,
+   "moe_nll": 3.3410911560058594
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3259,
+   "base_nll": 4.939905166625977,
+   "moe_nll": 3.705044746398926
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3260,
+   "base_nll": 4.729239463806152,
+   "moe_nll": 4.101006507873535
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3261,
+   "base_nll": 3.0134236812591553,
+   "moe_nll": 2.5453531742095947
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3262,
+   "base_nll": 3.4370248317718506,
+   "moe_nll": 2.7182157039642334
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3263,
+   "base_nll": 4.120388031005859,
+   "moe_nll": 3.9384756088256836
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3268,
+   "base_nll": 4.8744635581970215,
+   "moe_nll": 3.7249135971069336
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3270,
+   "base_nll": 6.291548728942871,
+   "moe_nll": 5.204994201660156
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3272,
+   "base_nll": 3.845268487930298,
+   "moe_nll": 2.5900635719299316
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3276,
+   "base_nll": 4.9605607986450195,
+   "moe_nll": 3.3224897384643555
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3277,
+   "base_nll": 4.4492387771606445,
+   "moe_nll": 2.7430124282836914
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3281,
+   "base_nll": 2.2399964332580566,
+   "moe_nll": 1.5935975313186646
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3289,
+   "base_nll": 4.673669338226318,
+   "moe_nll": 3.521165370941162
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3293,
+   "base_nll": 5.437772750854492,
+   "moe_nll": 3.876655101776123
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3297,
+   "base_nll": 4.4367876052856445,
+   "moe_nll": 4.063132286071777
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3298,
+   "base_nll": 5.488717079162598,
+   "moe_nll": 4.375357627868652
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3299,
+   "base_nll": 6.74497127532959,
+   "moe_nll": 5.2582621574401855
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3300,
+   "base_nll": 6.389659404754639,
+   "moe_nll": 4.71160888671875
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3301,
+   "base_nll": 8.796842575073242,
+   "moe_nll": 8.307315826416016
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3302,
+   "base_nll": 6.142812252044678,
+   "moe_nll": 4.447938442230225
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3303,
+   "base_nll": 6.551389217376709,
+   "moe_nll": 5.202051639556885
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3304,
+   "base_nll": 4.972762107849121,
+   "moe_nll": 3.8877830505371094
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3305,
+   "base_nll": 5.880164623260498,
+   "moe_nll": 4.368565559387207
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3307,
+   "base_nll": 4.824345588684082,
+   "moe_nll": 3.5469303131103516
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3308,
+   "base_nll": 4.9287614822387695,
+   "moe_nll": 3.779815196990967
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3309,
+   "base_nll": 4.947575092315674,
+   "moe_nll": 3.7131948471069336
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3310,
+   "base_nll": 5.12523889541626,
+   "moe_nll": 3.7257821559906006
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3311,
+   "base_nll": 4.59708309173584,
+   "moe_nll": 4.299468040466309
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3313,
+   "base_nll": 4.61428165435791,
+   "moe_nll": 3.540501594543457
+  },
+  {
+   "expert_id": "E1_python_systems_code",
+   "dataset_id": "sahil2801/CodeAlpaca-20k",
+   "row": 3314,
+   "base_nll": 4.160318374633789,
+   "moe_nll": 3.2554996013641357
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 340,
+   "base_nll": 5.462539196014404,
+   "moe_nll": 5.418684482574463
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 341,
+   "base_nll": 5.460744380950928,
+   "moe_nll": 5.250120162963867
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 342,
+   "base_nll": 4.923001766204834,
+   "moe_nll": 4.772927284240723
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 343,
+   "base_nll": 3.3616631031036377,
+   "moe_nll": 3.091841220855713
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 344,
+   "base_nll": 5.478944301605225,
+   "moe_nll": 5.329708099365234
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 345,
+   "base_nll": 3.9438464641571045,
+   "moe_nll": 3.923947334289551
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 346,
+   "base_nll": 5.811093807220459,
+   "moe_nll": 5.746297836303711
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 347,
+   "base_nll": 3.831272602081299,
+   "moe_nll": 3.6831536293029785
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 348,
+   "base_nll": 4.292642116546631,
+   "moe_nll": 4.077572345733643
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 349,
+   "base_nll": 5.857377529144287,
+   "moe_nll": 5.7595319747924805
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 350,
+   "base_nll": 4.40172004699707,
+   "moe_nll": 4.607302665710449
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 351,
+   "base_nll": 3.643784284591675,
+   "moe_nll": 3.5173354148864746
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 352,
+   "base_nll": 5.404933929443359,
+   "moe_nll": 5.154548168182373
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 353,
+   "base_nll": 3.2117598056793213,
+   "moe_nll": 3.387648344039917
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 354,
+   "base_nll": 3.276923179626465,
+   "moe_nll": 3.119729995727539
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 355,
+   "base_nll": 4.46856689453125,
+   "moe_nll": 4.207726001739502
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 356,
+   "base_nll": 4.169024467468262,
+   "moe_nll": 4.141026496887207
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 357,
+   "base_nll": 5.844809055328369,
+   "moe_nll": 5.701274871826172
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 358,
+   "base_nll": 4.466671466827393,
+   "moe_nll": 4.282330513000488
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 359,
+   "base_nll": 5.854246616363525,
+   "moe_nll": 5.608113765716553
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 360,
+   "base_nll": 3.9824271202087402,
+   "moe_nll": 3.892369031906128
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 361,
+   "base_nll": 3.866976261138916,
+   "moe_nll": 3.4936015605926514
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 362,
+   "base_nll": 4.292174339294434,
+   "moe_nll": 4.13778018951416
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 363,
+   "base_nll": 5.673262119293213,
+   "moe_nll": 5.419686317443848
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 364,
+   "base_nll": 5.553684711456299,
+   "moe_nll": 5.356878280639648
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 365,
+   "base_nll": 4.646430969238281,
+   "moe_nll": 4.688379287719727
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 366,
+   "base_nll": 4.159129619598389,
+   "moe_nll": 4.170563220977783
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 367,
+   "base_nll": 5.100090980529785,
+   "moe_nll": 5.045225620269775
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 368,
+   "base_nll": 6.823678493499756,
+   "moe_nll": 6.365654945373535
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 369,
+   "base_nll": 3.326374053955078,
+   "moe_nll": 3.245805263519287
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 370,
+   "base_nll": 4.8943305015563965,
+   "moe_nll": 4.789562225341797
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 371,
+   "base_nll": 7.136362552642822,
+   "moe_nll": 6.732396125793457
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 372,
+   "base_nll": 5.796907901763916,
+   "moe_nll": 5.6783447265625
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 373,
+   "base_nll": 6.373410701751709,
+   "moe_nll": 6.36295747756958
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 374,
+   "base_nll": 4.171255588531494,
+   "moe_nll": 4.062564373016357
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 375,
+   "base_nll": 5.248137950897217,
+   "moe_nll": 4.976558208465576
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 376,
+   "base_nll": 5.281457901000977,
+   "moe_nll": 4.954892158508301
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 377,
+   "base_nll": 4.240015506744385,
+   "moe_nll": 4.270390033721924
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 378,
+   "base_nll": 5.430680274963379,
+   "moe_nll": 5.317388534545898
+  },
+  {
+   "expert_id": "E2_math_reasoning",
+   "dataset_id": "AI-MO/NuminaMath-CoT",
+   "row": 379,
+   "base_nll": 4.479852676391602,
+   "moe_nll": 4.394519805908203
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 140,
+   "base_nll": 6.186091423034668,
+   "moe_nll": 5.861507892608643
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 141,
+   "base_nll": 6.058219909667969,
+   "moe_nll": 5.793537616729736
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 142,
+   "base_nll": 5.806115627288818,
+   "moe_nll": 5.7241129875183105
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 143,
+   "base_nll": 5.7643656730651855,
+   "moe_nll": 5.681772232055664
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 144,
+   "base_nll": 5.825100421905518,
+   "moe_nll": 5.735766410827637
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 145,
+   "base_nll": 6.262804985046387,
+   "moe_nll": 6.012058734893799
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 146,
+   "base_nll": 6.76118278503418,
+   "moe_nll": 6.723005294799805
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 147,
+   "base_nll": 5.752269744873047,
+   "moe_nll": 5.593527793884277
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 148,
+   "base_nll": 6.597823619842529,
+   "moe_nll": 6.673742771148682
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 149,
+   "base_nll": 6.646420478820801,
+   "moe_nll": 6.699551582336426
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 150,
+   "base_nll": 6.080838680267334,
+   "moe_nll": 5.8083176612854
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 151,
+   "base_nll": 6.735374927520752,
+   "moe_nll": 6.710904598236084
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 152,
+   "base_nll": 6.456274509429932,
+   "moe_nll": 6.371450424194336
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 153,
+   "base_nll": 5.653933525085449,
+   "moe_nll": 5.565497875213623
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 154,
+   "base_nll": 6.230926036834717,
+   "moe_nll": 5.983146667480469
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 155,
+   "base_nll": 6.0491557121276855,
+   "moe_nll": 5.779762268066406
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 156,
+   "base_nll": 6.127799034118652,
+   "moe_nll": 5.8416242599487305
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 157,
+   "base_nll": 6.284125328063965,
+   "moe_nll": 6.032035827636719
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 158,
+   "base_nll": 6.690068244934082,
+   "moe_nll": 6.7058916091918945
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 159,
+   "base_nll": 6.218037128448486,
+   "moe_nll": 6.321507930755615
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 160,
+   "base_nll": 6.628350257873535,
+   "moe_nll": 6.665011882781982
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 161,
+   "base_nll": 6.201333522796631,
+   "moe_nll": 5.987517356872559
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 162,
+   "base_nll": 6.134556293487549,
+   "moe_nll": 5.850367069244385
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 163,
+   "base_nll": 6.171604633331299,
+   "moe_nll": 5.846574306488037
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 164,
+   "base_nll": 5.825899600982666,
+   "moe_nll": 5.72575569152832
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 165,
+   "base_nll": 6.541323661804199,
+   "moe_nll": 6.660643100738525
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 166,
+   "base_nll": 5.614399433135986,
+   "moe_nll": 5.26381254196167
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 167,
+   "base_nll": 6.145712375640869,
+   "moe_nll": 6.149328231811523
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 168,
+   "base_nll": 6.103168964385986,
+   "moe_nll": 5.777514934539795
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 169,
+   "base_nll": 6.089517116546631,
+   "moe_nll": 5.816059112548828
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 170,
+   "base_nll": 6.4388251304626465,
+   "moe_nll": 6.334205150604248
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 171,
+   "base_nll": 5.822978496551514,
+   "moe_nll": 5.7372846603393555
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 172,
+   "base_nll": 6.028204917907715,
+   "moe_nll": 5.758584499359131
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 173,
+   "base_nll": 5.830986022949219,
+   "moe_nll": 5.726189613342285
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 174,
+   "base_nll": 6.1352763175964355,
+   "moe_nll": 5.8283209800720215
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 175,
+   "base_nll": 6.0500168800354,
+   "moe_nll": 5.874271392822266
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 176,
+   "base_nll": 5.877429962158203,
+   "moe_nll": 5.774893283843994
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 177,
+   "base_nll": 5.746286392211914,
+   "moe_nll": 5.392989635467529
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 178,
+   "base_nll": 6.1759138107299805,
+   "moe_nll": 5.902743816375732
+  },
+  {
+   "expert_id": "E5_exoplanet_transit",
+   "dataset_id": "bingbangboom/exoplanet-transit-detection",
+   "row": 179,
+   "base_nll": 6.1545023918151855,
+   "moe_nll": 5.8898234367370605
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 540,
+   "base_nll": 3.55419921875,
+   "moe_nll": 3.4040191173553467
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 541,
+   "base_nll": 3.6328697204589844,
+   "moe_nll": 3.4135541915893555
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 542,
+   "base_nll": 3.6520302295684814,
+   "moe_nll": 3.408402681350708
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 543,
+   "base_nll": 3.587294340133667,
+   "moe_nll": 3.3474085330963135
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 544,
+   "base_nll": 3.6158673763275146,
+   "moe_nll": 3.3936755657196045
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 545,
+   "base_nll": 3.550933837890625,
+   "moe_nll": 3.3251993656158447
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 546,
+   "base_nll": 3.60044264793396,
+   "moe_nll": 3.376251220703125
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 547,
+   "base_nll": 3.4726614952087402,
+   "moe_nll": 3.285672426223755
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 548,
+   "base_nll": 3.6103463172912598,
+   "moe_nll": 3.386249542236328
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 549,
+   "base_nll": 3.5097646713256836,
+   "moe_nll": 3.267179489135742
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 550,
+   "base_nll": 3.282435894012451,
+   "moe_nll": 3.1261353492736816
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 551,
+   "base_nll": 3.3842570781707764,
+   "moe_nll": 3.207988739013672
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 552,
+   "base_nll": 3.449821949005127,
+   "moe_nll": 3.2665932178497314
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 553,
+   "base_nll": 3.394627571105957,
+   "moe_nll": 3.2776973247528076
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 554,
+   "base_nll": 3.7203731536865234,
+   "moe_nll": 3.5406596660614014
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 555,
+   "base_nll": 3.505735397338867,
+   "moe_nll": 3.3189210891723633
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 556,
+   "base_nll": 3.5084640979766846,
+   "moe_nll": 3.2869157791137695
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 557,
+   "base_nll": 3.677109956741333,
+   "moe_nll": 3.4437475204467773
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 558,
+   "base_nll": 3.515556812286377,
+   "moe_nll": 3.30324387550354
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 559,
+   "base_nll": 3.372469425201416,
+   "moe_nll": 3.1841583251953125
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 560,
+   "base_nll": 3.5422465801239014,
+   "moe_nll": 3.3918251991271973
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 561,
+   "base_nll": 3.56793212890625,
+   "moe_nll": 3.3386735916137695
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 562,
+   "base_nll": 3.389251232147217,
+   "moe_nll": 3.2091963291168213
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 563,
+   "base_nll": 3.5305588245391846,
+   "moe_nll": 3.3015708923339844
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 564,
+   "base_nll": 3.466325044631958,
+   "moe_nll": 3.2771408557891846
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 565,
+   "base_nll": 3.3998935222625732,
+   "moe_nll": 3.257369041442871
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 566,
+   "base_nll": 3.585172176361084,
+   "moe_nll": 3.377274513244629
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 567,
+   "base_nll": 3.6860013008117676,
+   "moe_nll": 3.4520070552825928
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 568,
+   "base_nll": 3.53641414642334,
+   "moe_nll": 3.3186943531036377
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 569,
+   "base_nll": 3.534595251083374,
+   "moe_nll": 3.310309648513794
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 570,
+   "base_nll": 3.5930519104003906,
+   "moe_nll": 3.3568034172058105
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 571,
+   "base_nll": 3.3651888370513916,
+   "moe_nll": 3.239008665084839
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 572,
+   "base_nll": 3.6176912784576416,
+   "moe_nll": 3.370033025741577
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 573,
+   "base_nll": 3.5135765075683594,
+   "moe_nll": 3.296987771987915
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 574,
+   "base_nll": 3.416476249694824,
+   "moe_nll": 3.2052083015441895
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 575,
+   "base_nll": 3.5715739727020264,
+   "moe_nll": 3.380631923675537
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 576,
+   "base_nll": 3.563201904296875,
+   "moe_nll": 3.3968729972839355
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 577,
+   "base_nll": 3.5318045616149902,
+   "moe_nll": 3.3131895065307617
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 578,
+   "base_nll": 3.4874534606933594,
+   "moe_nll": 3.2846739292144775
+  },
+  {
+   "expert_id": "E6_stellar_spectroscopy",
+   "dataset_id": "OneAstronomy/sspp-dr9-stellar-spectra",
+   "row": 579,
+   "base_nll": 3.37526535987854,
+   "moe_nll": 3.2139344215393066
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 940,
+   "base_nll": 4.86659574508667,
+   "moe_nll": 4.660734176635742
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 941,
+   "base_nll": 5.68845796585083,
+   "moe_nll": 5.319819927215576
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 942,
+   "base_nll": 5.038236618041992,
+   "moe_nll": 4.697096347808838
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 943,
+   "base_nll": 5.171247482299805,
+   "moe_nll": 5.072631359100342
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 944,
+   "base_nll": 6.367800235748291,
+   "moe_nll": 5.882782459259033
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 945,
+   "base_nll": 4.807886123657227,
+   "moe_nll": 4.495759963989258
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 946,
+   "base_nll": 4.758402347564697,
+   "moe_nll": 4.517855167388916
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 947,
+   "base_nll": 4.622965335845947,
+   "moe_nll": 4.539126873016357
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 948,
+   "base_nll": 5.749939441680908,
+   "moe_nll": 5.3655104637146
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 949,
+   "base_nll": 5.550515651702881,
+   "moe_nll": 5.289398193359375
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 950,
+   "base_nll": 4.294607639312744,
+   "moe_nll": 4.028349876403809
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 951,
+   "base_nll": 4.733222484588623,
+   "moe_nll": 4.316530227661133
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 952,
+   "base_nll": 5.280807018280029,
+   "moe_nll": 4.985091209411621
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 953,
+   "base_nll": 5.0909743309021,
+   "moe_nll": 4.828449726104736
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 954,
+   "base_nll": 5.0424699783325195,
+   "moe_nll": 4.884316444396973
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 955,
+   "base_nll": 5.644335746765137,
+   "moe_nll": 5.431225776672363
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 956,
+   "base_nll": 5.57043981552124,
+   "moe_nll": 5.282721519470215
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 957,
+   "base_nll": 5.185159683227539,
+   "moe_nll": 4.894349575042725
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 958,
+   "base_nll": 5.443312644958496,
+   "moe_nll": 5.218342304229736
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 959,
+   "base_nll": 4.484246253967285,
+   "moe_nll": 4.236415386199951
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 960,
+   "base_nll": 4.508457183837891,
+   "moe_nll": 4.0700297355651855
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 961,
+   "base_nll": 4.9735426902771,
+   "moe_nll": 4.587047576904297
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 962,
+   "base_nll": 5.360262393951416,
+   "moe_nll": 5.1837239265441895
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 963,
+   "base_nll": 5.4883036613464355,
+   "moe_nll": 5.090543270111084
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 964,
+   "base_nll": 4.321739196777344,
+   "moe_nll": 4.033865928649902
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 965,
+   "base_nll": 4.620744228363037,
+   "moe_nll": 4.3773932456970215
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 966,
+   "base_nll": 6.950477123260498,
+   "moe_nll": 6.472692489624023
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 967,
+   "base_nll": 5.678837299346924,
+   "moe_nll": 5.355401515960693
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 968,
+   "base_nll": 4.652942657470703,
+   "moe_nll": 4.365692138671875
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 969,
+   "base_nll": 6.021466255187988,
+   "moe_nll": 5.7413330078125
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 970,
+   "base_nll": 5.032488822937012,
+   "moe_nll": 4.598884582519531
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 971,
+   "base_nll": 4.859992027282715,
+   "moe_nll": 4.530473232269287
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 972,
+   "base_nll": 5.541347980499268,
+   "moe_nll": 5.119632720947266
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 973,
+   "base_nll": 5.523835182189941,
+   "moe_nll": 5.374330520629883
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 974,
+   "base_nll": 5.000107765197754,
+   "moe_nll": 4.710638999938965
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 975,
+   "base_nll": 4.900337219238281,
+   "moe_nll": 4.706392288208008
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 976,
+   "base_nll": 4.904416084289551,
+   "moe_nll": 4.8202385902404785
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 977,
+   "base_nll": 5.335960865020752,
+   "moe_nll": 5.177999019622803
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 978,
+   "base_nll": 4.617800235748291,
+   "moe_nll": 4.36774206161499
+  },
+  {
+   "expert_id": "E7_defensive_cyber",
+   "dataset_id": "CyberNative/Code_Vulnerability_Security_DPO",
+   "row": 979,
+   "base_nll": 5.5194807052612305,
+   "moe_nll": 5.2346930503845215
+  }
+ ],
+ "deviations": []
+}

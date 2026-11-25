@@ -7,7 +7,16 @@ The owner deploys, canary first.
 
 - 12 buckets, 19.17 M parameters, 38 MB:
   - `expert_0..7`: 8 LoRA domain experts, rank 8, on all 24 layers;
-  - `router_frag_0..3`: the top-2 sigma router gates plus the final LayerNorm.
+  - `router_frag_0..3`: the router gates plus the final LayerNorm.
+- **In practice it is not a routed mixture of experts.** The router is exactly zero (λ_router = 0 keeps the upcycle's
+  zero init), so all 8 experts tie and top-2 is the device's tie-break.
+  - On CPU, where it was judged, every token goes through **experts 6 (stars) and 5 (exoplanets) at gate 0.5**, on top
+    of the base.
+  - On CUDA the tie-break picks experts 0 and 1. That is a different model, never measured.
+  - See the erratum in `docs/E_B3_MOE_CORRECTION_PREREGISTRATION.md` (addendum E1) and
+    `artifacts/experiments/E_MOE_C3_tiebreak_analysis_2026-11-25.json`.
+- **CPU only.** At startup the producer computes the tie-break on its own device and dtype. It refuses to serve unless
+  the result matches the pair recorded in `evidence.judged_runtime`, which is (6, 5) on CPU.
 - It sits on top of the frozen `Vxtzq/Crowd-v1` base, **pinned to revision `b63212a8`**. It means nothing on another
   revision, so the producer never follows `status.json`.
 - It is the weight interpolation chosen in amendment A2 of `docs/E_B3_MOE_CORRECTION_PREREGISTRATION.md`, and confirmed
@@ -25,9 +34,10 @@ The owner deploys, canary first.
 - chat or instruction-following quality;
 - safety behaviour;
 - long context;
-- GPU half-precision equivalence.
+- any GPU: the producer refuses to serve there.
 
-It is a 1 B base model with domain adapters. Describe it as that, not as an assistant.
+It is a 1 B base model with two fixed adapters. Describe it as that: not as an assistant, and not as an 8-expert
+mixture.
 
 ## Files the producer needs
 
@@ -48,13 +58,15 @@ The producer checks all three and refuses to start on any mismatch.
        --addon /path/crowd_v1_moe_e50_r00.safetensors --check-only
    ```
 
-   Expect `"event": "crowd_v1_moe_loaded"` and `"readback_max_abs_diff": 0.0`.
+   Add `--cpu-only`. Expect `"event": "crowd_v1_moe_loaded"`, `"readback_max_abs_diff": 0.0` and
+   `"zero_router_tie": {"ok": true, ...}`. Without `--cpu-only` on a GPU host, it refuses with `crowd_v1_moe_refused`,
+   and that is intended.
 
-2. Serve on loopback, on one producer only. The RTX 2070 is preferred: the T4 keeps its 4,300 MiB floor and the device
-   guard applies either way.
+2. Serve on loopback, on one producer only, **on CPU**. A 1 B model in float32 needs about 10 GB of RAM, and CPU
+   generation is slow, so keep `max_tokens` small for the canary.
 
    ```bash
-   python scripts/hivemind_crowd_v1_moe_producer.py --manifest ... --addon ... --port 8792
+   python scripts/hivemind_crowd_v1_moe_producer.py --manifest ... --addon ... --cpu-only --port 8792
    ```
 
    The producer advertises only `hivemind/crowd-v1-moe` and `crowd-v1-moe`. A request naming any other model gets a 404.

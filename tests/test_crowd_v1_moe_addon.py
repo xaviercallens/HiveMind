@@ -262,3 +262,35 @@ def test_forward_smoke_passes_and_refuses_non_finite(tmp_path: Path) -> None:
         model.wte.weight.fill_(float("inf"))
     bad = prod.forward_smoke(model, _Tok(), new_tokens=3)
     assert bad["ok"] is False
+
+
+def test_zero_router_tie_guard(tmp_path: Path) -> None:
+    from hivemind.swarm.crowd_v1_moe_addon import check_zero_router_tie, device_tie_pair, zero_router_layers
+
+    dense = _dense()
+    addon = _write_addon(tmp_path, dense, perturb=False)  # zero-delta start: zero router in every layer
+    here = device_tie_pair("cpu", torch.float32, 8, 2)
+    other = [0, 1] if sorted(here) != [0, 1] else [6, 7]
+    for judged, ok in ((here, True), (other, False), (None, False)):
+        d = _manifest_dict(addon_sha=sha256_file(addon))
+        if judged is not None:
+            d["evidence"] = {"judged_runtime": {"zero_router_tie_pair": judged}}
+        man = parse_addon_manifest(d)
+        model = copy.deepcopy(dense)
+        apply_moe_addon(model, man, addon)
+        assert zero_router_layers(model) == N_LAYERS
+        rep = check_zero_router_tie(model, man)
+        assert rep["ok"] is ok and rep["tie_pair_here"] == here
+    routed = _write_addon(tmp_path, dense, perturb=True)  # perturbed router: no tie, no device dependence
+    model = copy.deepcopy(dense)
+    man = parse_addon_manifest(_manifest_dict(addon_sha=sha256_file(routed)))
+    apply_moe_addon(model, man, routed)
+    assert check_zero_router_tie(model, man) == {"ok": True, "zero_router_layers": 0}
+
+
+def test_repo_manifest_records_the_cpu_tie_pair() -> None:
+    from hivemind.swarm.crowd_v1_moe_addon import device_tie_pair
+
+    jr = load_addon_manifest(REPO_MANIFEST).evidence["judged_runtime"]
+    assert jr["device"] == "cpu" and sorted(jr["zero_router_tie_pair"]) == [5, 6]
+    assert sorted(device_tie_pair("cpu", torch.float32, 8, 2)) == [5, 6]

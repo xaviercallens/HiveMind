@@ -211,6 +211,41 @@ def apply_moe_addon(
     }
 
 
+def zero_router_layers(model: torch.nn.Module) -> int:
+    """Number of MoE layers whose router weight is exactly zero (every expert ties; top-k is a device tie-break)."""
+    from hivemind.swarm.crowdgpt_moe_opendiloco import CrowdLoRAMoEMLP
+
+    return sum(1 for blk in model.blocks
+               if isinstance(blk.mlp, CrowdLoRAMoEMLP) and not bool(blk.mlp.router.weight.detach().any()))
+
+
+def device_tie_pair(device: torch.device | str, dtype: torch.dtype, num_experts: int, top_k: int) -> list[int]:
+    """The experts top-k picks on ``device``/``dtype`` when every router logit is zero (the routing's own expression)."""
+    scores = torch.sigmoid(torch.zeros((4, int(num_experts)), device=device, dtype=dtype))
+    idx = torch.topk(scores, k=int(top_k), dim=-1).indices
+    rows = {tuple(int(i) for i in r) for r in idx.tolist()}
+    if len(rows) != 1:
+        raise AddonIntegrityError(f"top-k tie-break is not stable on {device}: {sorted(rows)}")
+    return list(next(iter(rows)))
+
+
+def check_zero_router_tie(model: torch.nn.Module, manifest: MoEAddonManifest) -> dict[str, Any]:
+    """A zero router routes every token by the device's tie-break, so the served experts depend on the device.
+
+    Passes when no router is zero, or when this device and dtype pick the pair recorded in the manifest
+    (``evidence.judged_runtime.zero_router_tie_pair``, measured where the add-on was judged). Fails closed otherwise.
+    """
+    n_zero = zero_router_layers(model)
+    if n_zero == 0:
+        return {"ok": True, "zero_router_layers": 0}
+    ref = model.blocks[0].mlp.router.weight
+    pair = device_tie_pair(ref.device, ref.dtype, int(manifest.split["num_experts"]), int(manifest.split["top_k"]))
+    judged = (manifest.evidence.get("judged_runtime") or {}).get("zero_router_tie_pair")
+    ok = judged is not None and sorted(int(i) for i in judged) == sorted(pair)
+    return {"ok": ok, "zero_router_layers": n_zero, "tie_pair_here": pair, "judged_tie_pair": judged,
+            "device": str(ref.device), "dtype": str(ref.dtype)}
+
+
 def pinned_base_urls(manifest: MoEAddonManifest) -> dict[str, str]:
     """Hugging Face URLs of the exact base revision the add-on was judged on (never ``main``)."""
     root = f"https://huggingface.co/{manifest.base_hf_repo}/resolve/{manifest.base_hf_revision}"

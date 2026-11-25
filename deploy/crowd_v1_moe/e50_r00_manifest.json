@@ -16,26 +16,59 @@
     "routing_mode": "sigma_topk",
     "lora_rank": 8,
     "lora_alpha": 16.0,
-    "resident_expert_indices": [0, 1, 2, 3, 4, 5, 6, 7],
+    "resident_expert_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
     "num_router_fragments": 4,
     "num_layers_upcycled": 24
   },
-  "advertised_model_ids": ["hivemind/crowd-v1-moe", "crowd-v1-moe"],
+  "advertised_model_ids": [
+    "hivemind/crowd-v1-moe",
+    "crowd-v1-moe"
+  ],
   "evidence": {
-    "what_it_is": "weight interpolation of the campaign-2 MoE add-on: theta = start + lambda * (C2 - start), where start is the freshly upcycled zero-delta model and C2 the campaign-2 final state (run_20261122T200945Z_c2_full round 84); experts at lambda 0.5, router fragments (router gates and final LayerNorm) at lambda 0, i.e. their upcycle initial values",
+    "what_it_is": "theta = start + lambda * (C2 - start): experts at lambda 0.5 of the campaign-2 final state (run_20261122T200945Z_c2_full round 84), router fragments at lambda 0, i.e. the upcycle's zero router and the base final LayerNorm. A zero router ties all 8 experts, so top-2 is the device's tie-break: on CPU (where it was judged) every token goes to experts 6 (stars) and 5 (exoplanets) at gate 0.5. It is a fixed two-adapter path, not a routed mixture of experts. On CUDA the tie-break picks experts 0 and 1 (inferred, E-MOE-C3), an unmeasured model; the producer refuses to serve there.",
     "preregistration": "docs/E_B3_MOE_CORRECTION_PREREGISTRATION.md (amendments A2 and A4)",
     "receipts": [
       "artifacts/experiments/E_B3_MOE_CORRECTION_A2_decision_2026-11-23.json",
-      "artifacts/experiments/E_B3_MOE_CORRECTION_e50_r00_frozen_2026-11-23.json"
+      "artifacts/experiments/E_B3_MOE_CORRECTION_e50_r00_frozen_2026-11-23.json",
+      "docs/E_B3_MOE_CORRECTION_PREREGISTRATION.md addendum E1 (erratum)"
     ],
     "metric": "mean next-token NLL in nats on tokens 64..127 of never-used rows, paired against the same frozen base (frozen mid-row judge, spec sha256 dce3b43e...)",
     "frozen_240_chunks": {
       "mean_diff_vs_base_nats": -0.0869,
-      "ci95": [-0.0979, -0.0758],
+      "ci95": [
+        -0.0979,
+        -0.0758
+      ],
       "lower_than_base": "197 of 240",
-      "relative_change_pct": {"general": 0.30, "code": -1.82, "maths": -1.71, "exoplanets": -1.57, "stars": -6.00, "security": -2.18}
+      "relative_change_pct": {
+        "general": 0.3,
+        "code": -1.82,
+        "maths": -1.71,
+        "exoplanets": -1.57,
+        "stars": -6.0,
+        "security": -2.18
+      }
     },
     "guard": "every scored domain within +1 % of the base on the selection split, the third split and the frozen 240 chunks",
-    "not_measured": "chat or instruction quality, safety behaviour, long-context behaviour, GPU half-precision equivalence"
+    "not_measured": "chat or instruction quality, safety behaviour, long-context behaviour, GPU half-precision equivalence; any GPU (the zero-router tie-break differs there)",
+    "judged_runtime": {
+      "device": "cpu",
+      "dtype": "float32",
+      "torch": "2.6.0+cu124",
+      "zero_router_tie_pair": [
+        6,
+        5
+      ],
+      "receipt": "artifacts/experiments/E_MOE_C3_tiebreak_analysis_2026-11-25.json"
+    }
   }
 }

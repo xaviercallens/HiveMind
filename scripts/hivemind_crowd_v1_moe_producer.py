@@ -33,6 +33,7 @@ if str(REPO_ROOT / "src") not in sys.path:
 
 from hivemind.swarm.crowd_v1_moe_addon import (  # noqa: E402
     build_crowd_v1_moe_model,
+    check_zero_router_tie,
     fetch_pinned_base,
     load_addon_manifest,
     verify_file_sha256,
@@ -111,10 +112,18 @@ def main(argv: list[str] | None = None) -> int:
     from tokenizers import Tokenizer
 
     tokenizer = Tokenizer.from_file(str(tokenizer_json))
+    tie = check_zero_router_tie(model, manifest)
     smoke = forward_smoke(model, tokenizer)
     report = {"event": "crowd_v1_moe_loaded", **revision_info, "addon": info["addon"], "smoke": smoke,
-              "advertised_model_ids": list(manifest.advertised_model_ids), "device_decision": decision.__dict__}
+              "zero_router_tie": tie, "advertised_model_ids": list(manifest.advertised_model_ids),
+              "device_decision": decision.__dict__}
     print(json.dumps(report), flush=True)
+    if not tie["ok"]:
+        print(json.dumps({"event": "crowd_v1_moe_refused",
+                          "reason": "zero router: this device routes every token to different experts than the judged "
+                                    "runtime (see evidence.judged_runtime); serve it where it was judged (e.g. --cpu-only)"}),
+              flush=True)
+        return 1
     if not smoke["ok"]:
         print(json.dumps({"event": "crowd_v1_moe_refused", "reason": smoke.get("error", "non-finite logits")}), flush=True)
         return 1

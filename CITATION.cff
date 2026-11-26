@@ -10,9 +10,9 @@ authors:
 repository-code: "https://github.com/xaviercallens/HiveMind"
 url: "https://github.com/xaviercallens/HiveMind"
 license: AGPL-3.0-or-later
-version: 2.3.1
-doi: 10.5281/zenodo.23607597
-date-released: "2026-10-23"
+version: 4.4.0
+doi: 10.5281/zenodo.24553269
+date-released: "2026-11-26"
 keywords:
   - decentralized-training
   - diloco
@@ -21,6 +21,11 @@ keywords:
   - consumer-gpu
   - byzantine-resilience
   - lean4-verification
+  - neurocontroller
+  - reine-cortex
+  - pheromones-royales
+  - weight-space-programming
+  - llm-jepa
 references:
   - type: software
     title: "rusty-SUNDIALS: Formally Verified Scientific Machine Learning Engine for Exascale Physics and Planetary Carbon Capture"
@@ -606,3 +611,52 @@ references:
         given-names: Paul
     url: "https://github.com/pmerolla/fomoe"
     license: MIT
+  - type: article
+    title: "Reine-Cortex (QueenCortex): Zero-Gradient Weight-Space Programming, Riemannian Null-Space Projection, and Closed-Loop Phéromones Royales Governance for Consumer-GPU Sparse MoE Swarms"
+    authors:
+      - family-names: Callens
+        given-names: Xavier
+    year: 2026
+    doi: 10.5281/zenodo.24542441
+    url: "https://doi.org/10.5281/zenodo.24542441"
+    notes: "Zenodo, v1.0.0 (concept DOI 10.5281/zenodo.24542440); companion formal & empirical Reine-Cortex NeuroController monograph integrated into Project HiveMind v4.4.0"
+  - type: article
+    title: "LLM-JEPA: Large Language Models Meet Joint Embedding Predictive Architectures"
+    authors:
+      - family-names: Huang
+        given-names: Hai
+      - family-names: LeCun
+        given-names: Yann
+      - family-names: Balestriero
+        given-names: Randall
+    year: 2025
+    url: "https://arxiv.org/abs/2509.14252"
+  - type: article
+    title: "Semantic Tube Prediction: Beating the Data Efficiency Barrier with Self-Supervised Latent Trajectory Alignment"
+    authors:
+      - family-names: Huang
+        given-names: Hai
+      - family-names: Balestriero
+        given-names: Randall
+    year: 2026
+    url: "https://arxiv.org/abs/2603.05241"
+  - type: article
+    title: "AlphaEdit: Null-Space Constrained Knowledge Editing for Language Models"
+    authors:
+      - family-names: Fang
+        given-names: Junfeng
+      - family-names: Jiang
+        given-names: Houcheng
+      - family-names: Wang
+        given-names: Kun
+      - family-names: Ma
+        given-names: Yunshan
+      - family-names: Wang
+        given-names: Xiang
+      - family-names: He
+        given-names: Xiangnan
+      - family-names: Chua
+        given-names: Tat-Seng
+    year: 2024
+    url: "https://arxiv.org/abs/2410.02355"
+    notes: "ICLR 2025"

@@ -239,8 +239,8 @@ def factorized_associative_nullspace_delta(
             f"Rank mismatch between b_scaled {tuple(b_t.shape)} and a_mat {tuple(a_t.shape)}"
         )
     proj = _validate_square_projector(p_null, int(a_t.shape[1]), "p_null")
-    a_projected = a_t @ proj
-    return b_t @ a_projected
+    a_projected = a_t.to(dtype=torch.float64) @ proj.to(dtype=torch.float64)
+    return (b_t.to(dtype=torch.float64) @ a_projected).to(dtype=torch.float32)
 
 
 def _normalize_chain_step(item: Any, idx: int) -> LoRAChainStep:

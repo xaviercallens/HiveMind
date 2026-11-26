@@ -80,8 +80,13 @@ Each NeuroController improvement slice progresses through five deterministic loc
 
 ---
 
-## 3. Delivered Status of `NEURAL-CTRL-DYN-43` (`D1`, `#1056`) & `NEURAL-CTRL-DYN-44` (`D2`, `#1059`)
+## 3. Delivered Status of Prior Merged Slices (`NEURAL-CTRL-DYN-38`..`44`)
 
+- **`NEURAL-CTRL-DYN-38` (`#1040`):** `prefix_cached_causal_attribution.py` (`99%` standalone coverage).
+- **`NEURAL-CTRL-DYN-39` (`#1043`):** `domain_matched_moe_arm_composer.py` (`99%` standalone coverage).
+- **`NEURAL-CTRL-DYN-40` (`#1049`):** `rank_preserving_nullspace_input_injector.py` (`97.93%` standalone coverage).
+- **`NEURAL-CTRL-DYN-41` (`#1051`):** [`src/hivemind/swarm/queen_cortex_moe_campaign_governor.py`](../src/hivemind/swarm/queen_cortex_moe_campaign_governor.py) (`99.28%` standalone coverage).
+- **`NEURAL-CTRL-DYN-42` (`#1052`):** [`src/hivemind/swarm/sequential_chain_ties_nullspace_rescuer.py`](../src/hivemind/swarm/sequential_chain_ties_nullspace_rescuer.py) (`100.0%` standalone coverage).
 - **`NEURAL-CTRL-DYN-43` (Gen-3 Direction `D1`, Merged `#1056`):** [`src/hivemind/swarm/inter_round_royal_jelly_trophallaxis.py`](../src/hivemind/swarm/inter_round_royal_jelly_trophallaxis.py) + [`tests/test_inter_round_royal_jelly_trophallaxis_scenarios.py`](../tests/test_inter_round_royal_jelly_trophallaxis_scenarios.py) (`97%` standalone coverage).
 - **`NEURAL-CTRL-DYN-44` (Gen-3 Direction `D2`, Merged `#1059`):** [`src/hivemind/swarm/kronecker_riemannian_nullspace_transport.py`](../src/hivemind/swarm/kronecker_riemannian_nullspace_transport.py) + [`tests/test_kronecker_riemannian_nullspace_transport_scenarios.py`](../tests/test_kronecker_riemannian_nullspace_transport_scenarios.py) (`99%` standalone coverage).
 

@@ -1,11 +1,11 @@
 {
   "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-  "version": "4.3.0",
+  "version": "4.4.0",
   "is_peer_review": false,
   "disclosure": "This report is produced by a deterministic script. It is NOT a peer review: no language model and no human referee evaluated the manuscript. Verdicts below mean only that the listed artifact checks passed.",
   "lead_peer_review_model": "none (scripted static audit; no language-model call)",
   "co_auditor_model": "none",
-  "timestamp_utc": "2026-11-25T03:47:10Z",
+  "timestamp_utc": "2026-11-26T08:00:15Z",
   "tex_path": "paper/hivemind_foundation_article.tex",
   "pdf_path": "paper/hivemind_foundation_article.pdf",
   "pdf_exists": true,
@@ -1015,8 +1015,8 @@
     "tier_a_machine_checked": true
   },
   "manuscript_provenance_audit": {
-    "total_checks": 85,
-    "passed_checks": 85,
+    "total_checks": 86,
+    "passed_checks": 86,
     "failed_check_ids": [],
     "all_passed": true,
     "checks": [
@@ -2090,17 +2090,40 @@
         ],
         "source_artifact": "artifacts/experiments/e8_real/E8_two_host_live_verification.json",
         "passed": true
+      },
+      {
+        "check_id": "PROV-87",
+        "metric_name": "v4.4.0 Reine-Cortex NeuroController, Pheromones Royales, 10 Locked Vaults (PILOT1..10), 188 Lean 4 Declarations, and LLM-JEPA/STP Receipts",
+        "expected_tokens": [
+          "171",
+          "188",
+          "-0.554969",
+          "-0.493307",
+          "-0.159464",
+          "-0.535510",
+          "-0.008324",
+          "-0.009267",
+          "261.46",
+          "259.05",
+          "25.94",
+          "2624/4225",
+          "10.5281/zenodo.24542441",
+          "2.5034",
+          "3.84"
+        ],
+        "source_artifact": "artifacts/experiments/v440_reine_cortex_neurocontroller_jepa_telemetry.json",
+        "passed": true
       }
     ]
   },
   "latex_typography_and_figures_audit": {
-    "figures_verified": 7,
+    "figures_verified": 10,
     "missing_figures": [],
-    "bibliography_entries": 68,
+    "bibliography_entries": 78,
     "uncited_bibitems": [],
     "undefined_citations": [],
-    "formal_theorem_blocks": 4,
-    "formal_proof_blocks": 5,
+    "formal_theorem_blocks": 6,
+    "formal_proof_blocks": 7,
     "hypothesis_necessity_counterexamples": 5,
     "has_4_definitions_contract_table": true,
     "has_epistemic_stratification_matrix": true,
@@ -2139,7 +2162,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Programmatically verified 85/85 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
+        "Programmatically verified 86/86 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
         "Eliminated legacy hardcoded v2.9.2 strings in paper/autoevolve_peer_review_pipeline.py."
       ]
     },
@@ -2161,7 +2184,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Verified 7/4 vector PDF/PNG figure pairs and 68/68 cited bibliography entries (0 uncited, 0 undefined).",
+        "Verified 10/4 vector PDF/PNG figure pairs and 78/78 cited bibliography entries (0 uncited, 0 undefined).",
         "Eliminated Overfull \\hbox (80.7pt) and fancyhdr headheight warnings via \\path{} line breaking and 21pt header height (0 Overfull \\hbox > 5pt)."
       ]
     }

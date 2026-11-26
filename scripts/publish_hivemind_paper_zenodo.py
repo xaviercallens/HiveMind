@@ -142,23 +142,31 @@ def get_deposition(dep_id: int, token: str) -> Dict[str, Any]:
 
 def metadata(version: str, doi_note: str) -> Dict[str, Any]:
     desc = (
-        "<p>Preprint and evidence bundle of <b>Project HiveMind</b>: a system design for decentralized sparse "
-        "Mixture-of-Experts training with DiLoCo-style outer optimization on 8 GB consumer GPUs, integrating "
+        "<p>Preprint and evidence bundle of <b>Project HiveMind (Version 4.4.0)</b>: a system design for decentralized sparse "
+        "Mixture-of-Experts training and closed-loop neuro-symbolic weight control on 8 GB consumer GPUs, integrating "
         "Decoupled DiLoCo quorum aggregation (Google DeepMind), PA-CGAD staleness gating, FoMoE partial expert "
         "replication, DeMo/SparseLoCo 2-bit compression, MuLoCo inner preconditioning, a looped MoE backbone, "
         "the biomimetic <b>Bi-Layer Honeybee Agent Mesh (AMCP-Kafka &amp; ABC MoE)</b>, multi-division <b>Vision-MoE (V-MoE)</b>, "
-        "the <b>18-Month Research Roadmap for Overcoming Scale and Security Bottlenecks in Decentralized MoE Architectures</b>, "
-        "and 141 Lean 4 theorems compiling without sorry.</p>"
-        "<p><b>Version 4.1.0 Highlights (Multi-Division Vision-MoE &amp; 18-Month ZK-SNARK / Geo-Mesh Research Roadmap):</b><br/>"
-        "1. <i>18-Month, 4-Phase Decentralization Research Roadmap (Seasons 29&ndash;32):</i> Structured methodology to eliminate datacenter dependency across 1,000+ untrusted domestic nodes by fusing "
-        "(i) <b>Top-K (1%) 4-bit/2-bit Quantized Split Learning</b> (&divide;100 bandwidth reduction with EF21 error feedback for 70B&ndash;405B pipeline models across 8&ndash;16 GB nodes), "
-        "(ii) <b>Cryptographic Verifiable Computation via zk-SNARKs</b> (succinct &le;32 KB proofs of honest backpropagation verified in O(1) / &lt;10 ms CPU time, replacing O(N^2 d) Multi-Krum distance matrices and anchoring Proof-of-Useful-Compute tokenomics), and "
-        "(iii) <b>Geo-Cryptographic P2P DHT Mesh Routing</b> (mapping MoE Bees by RTT and reputation into <b>15&ndash;20 node localized sub-swarms</b> with fuzzy consensus, Multi-Bee Debate, and Sovereign Edge Queen Bees).<br/>"
-        "2. <i>Sub-1.5 GB 'La Ruche' Vision-MoE &amp; Culturally-Grounded Reddit-Vision VLM MoE:</i> 972.0&ndash;1,490.0 MiB background VRAM across 4 visual backbones (SigLIP-Base, ViT-Base, DINOv2-B/14, DINOv2-L/14 in 4-bit NF4 with local Muon Newton-Schulz-5 + 8-bit AdamW) and 99.92% BTM Top-2 MoE loss reduction.<br/>"
-        "3. <i>Exoplanet &amp; Astrophysics Vision-MoE PoC (&lt;1.5 GB VRAM):</i> Transforms 1D Kepler/TESS/JWST/DECaLS signals into 2D Morlet CWT scalograms and trains 4 specialized experts within 910.0&ndash;1,410.0 MiB VRAM under Focal Loss (gamma=2.0), achieving 99.95% mean focal loss reduction and 99.97% V-MoE gain.<br/>"
-        "4. <i>Massive 7-Division, 15-Dataset, 42.87M-Sample Swarm Image-MoE Orchestrator:</i> Shards 42,870,000 visual/scientific samples into 8,574 streaming shards across 104 Bees (64 Tier-1 &lt;1.5 GB, 28 Tier-2 8 GB, 12 Tier-3 12&ndash;24 GB), achieving 99.84% upcycled FoMoE Top-2 focal loss gain.<br/>"
-        "5. <i>Version 4.0.0 &amp; 3.9.0 Foundations Retained:</i> Bi-Layer Honeybee Agent Mesh (AMCP-Kafka Quorum Sensing + ABC MoE Loop + Swarm Nectar Cache), 20 nocturnal MoE adapters (+277.06 TFLOPs, 35 models total), and Live 47-Node WAN Swarm validation (5,632.11 Cobblestones / 2.433 PFLOPs, 0.0% execution-class-matched false rejection rate).</p>"
-        "<p>The JSON artifacts in this bundle are the sole source of every number in the PDF (provenance lock PROV-01..PROV-85 in paper/autoevolve_peer_review_pipeline.py). Source commit: "
+        "live two-host E8/A1 &amp; planetary-scale readiness (PS-01..PS-11), the <b>Reine-Cortex (QueenCortex) zero-gradient NeuroController</b> "
+        "with <b>Ph&eacute;romones Royales</b> closed-loop governance, real-life <b>LLM-JEPA / Semantic Tube Prediction (STP)</b> diagnostics and opportunities, "
+        "and <b>188 zero-sorry Lean 4 declarations</b> (171 in HiveMindSpec.lean + 14 arbitrary-dimension real-valued theorems in ReineCortexNeuroController.lean + 3 Mathlib RDA theorems).</p>"
+        "<p><b>Version 4.4.0 Highlights (Reine-Cortex NeuroController, Ph&eacute;romones Royales Architecture, Real-Life Multi-Model Vaults &amp; LLM-JEPA Opportunities):</b><br/>"
+        "1. <i>Four-Tier Eusocial Governance Architecture (La Ruche / Gel&eacute;e Royale / Ph&eacute;romones Royales):</i> "
+        "Unifies <b>La Ruche</b> (8-Alv&eacute;ole MoE content vault), <b>Les Abeilles Butineuses</b> (volunteer consumer-GPU DiLoCo/QLoRA foragers), "
+        "<b>Les Abeilles Nourrices</b> (0 MiB GPU VRAM CPU weight-space surgeons running Trophallaxie incremental TIES differencing, associative low-RSS (sB)(AP_0) AlphaEdit prose-nullspace projection, "
+        "prefix-cached Leave-One-Alv&eacute;ole-Out causal knockout, and Riemannian Fisher-whitened ker(G_D0) + safe-&tau;&ge;1 folded RMSNorm calibration), and "
+        "<b>La Reine (Reine-Cortex / QueenCortex)</b> enforcing monotone ANSE Operculation (&Delta;E &lt; 0, D_0 &le; +1.0%, 10^6 Maximum Pain atomic rollback, SingleShotVaultLock) "
+        "and broadcasting signed <b>QueenPheromoneDirective</b> packets governing anchor freezing, Ghost Sink mitosis, router mode, and normalized Boltzmann/UCB next-round foraging weights p_d.<br/>"
+        "2. <i>Real-Life Multi-Model Results Across 6 Open-Weight Model Families &amp; 10 Locked Holdout Vaults (0 MiB GPU VRAM, 0 Gradient Steps):</i> "
+        "Resolves Campaign 2's B3 general-prose gate on CrowdGPT-MoE-8x-3B (<b>PILOT1</b> vault_skip160: <b>-0.554969 nats</b> at E_0=+0.119%, 6.35&times; deeper than uniform interpolation; "
+        "21-way disjoint <b>PILOT6</b> vault_skip800: <b>-0.535510 nats</b>), rescues discarded Campaign 3 C3 Arm A (<b>PILOT5</b>: <b>-0.159464 nats</b>, 6/6&lt;0% across all splits), "
+        "rescues failing sequentially chained IBM Granite-3.1-1B 32-expert MoE (+0.17297 &rarr; <b>-0.008324 nats</b>, ECE -20.59%) and Granite-3.1-3B 40-expert MoE (+0.06116 &rarr; <b>-0.01287 nats</b> while cutting host RSS <b>-65.5%</b> from 20.6 to 7.1 GiB), "
+        "reduces dense Qwen2.5-1.5B ECE by <b>-46.8%</b> at 0.0000995% parameter DOF and Qwen3.5-0.8B 4-gram reasoning loops by <b>-15.4%</b>, and improves live 8-Alv&eacute;ole La Ruche v2.6.0 (<b>PILOT10</b>: <b>-0.009267 nats</b>, PPL 261.46 &rarr; 259.05, ||G_D0 &delta;w||_2 = 1.16e-9) while emitting real Ph&eacute;romones Royales (anchoring code_python/math_reasoning, flagging physics_sim/systems_rust Ghost Sinks, prioritizing formal_lean4 at 25.94%).<br/>"
+        "3. <i>Expanded Lean 4 Formal Verification (188 Zero-sorry Declarations):</i> Expands lean4/HiveMindSpec.lean from 166 to <b>171</b> theorems (Season 35 WSP invariants), paired with <b>14</b> arbitrary-dimension real-valued theorems and exact obstructions (+2624/4225 &gt; 0 unwhitened Fisher ascent; L=8 &gt; 0 cross-arm graft collapse) in ReineCortexNeuroController.lean (companion monograph DOI 10.5281/zenodo.24542441) plus 3 Mathlib RDA theorems.<br/>"
+        "4. <i>Real-Life LLM-JEPA &amp; STP Diagnostics + Four Falsifiable Reine-Cortex &times; JEPA Opportunities (J1&ndash;J4):</i> "
+        "Consolidates measured Tesla T4 receipts (P1 cosine collapse +0.90 nat prose drift, 600s autoresearch H1&ndash;H6 anti-collapse screen restoring safety &le;3.446 nat, E-STP-1/1b/2 keeping gate M4 closed, P0 domain deficits led by Python code +3.84 nat and math +2.44 nat) and formulates four falsifiable opportunities: (J1) P_0-nullspace post-JEPA Gel&eacute;e Royale rescue, (J2) pre-registered E15-J/P2 paired-view docstring&harr;code and theorem&harr;Lean 4 proof fine-tuning, (J3) frozen latent JEPA world-model critic E_JEPA inside ANSE Operculation and Ph&eacute;romones Royales, and (J4) hash-deterministic BOINC JepaSpec replay, JEPA-encoded MoE routing, and Gen-3 D1&ndash;D5 research slices.<br/>"
+        "5. <i>Version 4.3.0 &amp; Earlier Foundations Retained:</i> Live two-host E8/A1 verification, November 2026 field campaigns (Section 14), E20 &amp; &gt;200-node international launch forecast, Vision-MoE &amp; 18-month roadmap, Bi-Layer Honeybee Agent Mesh, and 47-node WAN swarm validation.</p>"
+        "<p>The JSON artifacts in this record (including <code>v4.4.0_reine_cortex_neurocontroller_jepa_bundle.zip</code>) are the sole source of every number in the PDF (scripted provenance lock PROV-01..PROV-87 in paper/autoevolve_peer_review_pipeline.py; <code>is_peer_review: false</code>). Source commit: "
         + SOURCE_COMMIT + " of the HiveMind repository on GitHub (xaviercallens/HiveMind).</p>"
         f"<p>{doi_note}</p>"
     )
@@ -172,14 +180,17 @@ def metadata(version: str, doi_note: str) -> Dict[str, Any]:
             "keywords": [
                 "decentralized training", "DiLoCo", "Decoupled DiLoCo", "mixture-of-experts", "FoMoE",
                 "consumer GPU", "Byzantine fault tolerance", "Lean 4", "agent mesh", "honeybee swarm",
-                "ABC algorithm", "Kafka AMCP", "Vision-MoE", "Split Learning", "zk-SNARK", "Geo-Cryptographic Mesh Routing",
+                "Reine-Cortex", "NeuroController", "Weight-Space Programming", "Pheromones Royales",
+                "LLM-JEPA", "Semantic Tube Prediction", "AlphaEdit", "Vision-MoE", "Split Learning",
             ],
             "license": "cc-by-4.0",
             "related_identifiers": [
                 {"identifier": "https://github.com/xaviercallens/HiveMind", "relation": "isSupplementTo", "scheme": "url"},
+                {"identifier": "10.5281/zenodo.24542441", "relation": "isSupplementedBy", "scheme": "doi"},
+                {"identifier": "10.5281/zenodo.24542440", "relation": "isSupplementedBy", "scheme": "doi"},
             ],
             "version": version,
-            "notes": "Preprint v4.1.0. Adds Section 12: Multi-Division Vision-MoE (<1.5 GB La Ruche V-MoE, Exoplanet CWT/Focal-Loss PoC, 42.87M-sample 104-Bee Swarm Orchestrator) and the 18-Month, 4-Phase Research Roadmap (Top-1% Quantized Split Learning, zk-SNARK Verifiable Computation, and Geo-Cryptographic Mesh Routing).",
+            "notes": "Preprint v4.4.0. Adds Section 15: full integration of the Reine-Cortex (QueenCortex) zero-gradient NeuroController, La Ruche / Gelee Royale / Pheromones Royales four-tier architecture, 10 single-shot certified holdout vaults across 6 model families at 0 MiB GPU VRAM, 188 zero-sorry Lean 4 declarations (171 HiveMindSpec + 14 ReineCortexNeuroController + 3 Mathlib RDA), companion Zenodo monograph 10.5281/zenodo.24542441, and real-life LLM-JEPA / STP diagnostics paired with four falsifiable Reine-Cortex x LLM-JEPA opportunities (J1-J4).",
         }
     }
 
@@ -233,7 +244,7 @@ def main() -> int:
     ap.add_argument("--stage", choices=["draft", "upload", "publish"], required=True)
     ap.add_argument("--deposition-id", type=int, default=None)
     ap.add_argument("--new-version-of", type=int, default=None, help="existing record id to create a new version of")
-    ap.add_argument("--version", default="4.1.0")
+    ap.add_argument("--version", default="4.4.0")
     args = ap.parse_args()
     token = load_token()
 

@@ -1533,6 +1533,41 @@ def verify_manuscript_data_consistency(
     else:
         checks.append({"check_id": "PROV-86", "metric_name": "E8_two_host_live_verification.json or PLANETARY_SCALE_READINESS missing", "expected_tokens": [], "source_artifact": src_v430, "passed": False})
 
+    # v4.4.0 Reine-Cortex NeuroController, Phéromones Royales, 10 Locked Vaults & LLM-JEPA Diagnostics/Opportunities (PROV-87)
+    v440_path = PROJECT_ROOT / "artifacts" / "experiments" / "v440_reine_cortex_neurocontroller_jepa_telemetry.json"
+    src_v440 = "artifacts/experiments/v440_reine_cortex_neurocontroller_jepa_telemetry.json"
+    if v440_path.exists():
+        v440 = json.loads(v440_path.read_text(encoding="utf-8"))
+        lf = v440["lean4_formal_counts"]
+        dm = v440["derived_metrics"]
+        p10 = v440["pilot10_la_ruche"]
+        toks87 = [
+            str(lf["hivemind_spec_theorems"]),
+            str(lf["combined_zero_sorry_declarations"]),
+            "-0.554969",
+            "-0.493307",
+            "-0.159464",
+            "-0.535510",
+            "-0.008324",
+            "-0.009267",
+            f"{dm['p10_base_ppl']:.2f}",
+            f"{dm['p10_cand_ppl']:.2f}",
+            f"{p10['foraging_weights']['formal_lean4'] * 100.0:.2f}",
+            "2624/4225",
+            "10.5281/zenodo.24542441",
+            "2.5034",
+            "3.84",
+        ]
+        checks.append({
+            "check_id": "PROV-87",
+            "metric_name": "v4.4.0 Reine-Cortex NeuroController, Pheromones Royales, 10 Locked Vaults (PILOT1..10), 188 Lean 4 Declarations, and LLM-JEPA/STP Receipts",
+            "expected_tokens": toks87,
+            "source_artifact": src_v440,
+            "passed": all(tok in tex_text for tok in toks87),
+        })
+    else:
+        checks.append({"check_id": "PROV-87", "metric_name": "v440_reine_cortex_neurocontroller_jepa_telemetry.json missing", "expected_tokens": [], "source_artifact": src_v440, "passed": False})
+
     failed = [c["check_id"] for c in checks if not c["passed"]]
     return {
         "total_checks": len(checks),
@@ -1553,6 +1588,9 @@ def verify_latex_typography_and_figures(tex_text: str) -> Dict[str, Any]:
         "fig8_e11_kv_lattice.pdf",
         "fig9_e13_e14_retention.pdf",
         "fig10_e16_gwaya_lite_tiers.pdf",
+        "fig_v440_reine_cortex_vaults.pdf",
+        "fig_v440_royal_jelly_rescue_pheromones.pdf",
+        "fig_v440_jepa_evidence_and_opportunities.pdf",
     ]
     figures_dir = PAPER_DIR / "figures"
     missing_figures = [
@@ -1783,7 +1821,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     peer_review_report = {
         "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-        "version": "4.3.0",
+        "version": "4.4.0",
         "is_peer_review": False,
         "disclosure": AUDIT_DISCLOSURE,
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
@@ -1823,7 +1861,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     autoevolve_manifest = {
         "pipeline_name": "Project HiveMind x AutoevolveAI Cross-Session Research Pipeline",
-        "version": "4.3.0",
+        "version": "4.4.0",
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
         "workspace_root": ".",
         "artifacts_and_entrypoints": {

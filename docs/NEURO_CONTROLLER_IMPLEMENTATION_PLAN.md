@@ -37,7 +37,7 @@
      - Sequential Wald SPRT canary routing with instant bitwise rollback
 ```
 
-### Operator Mapping to Cleanroom Modules
+### Operator Mapping to Cleanroom Modules (Gen-2 Delivered & Gen-3 Planned)
 
 | Campaign Stage | Primary Module(s) | Algebraic / Thermodynamic Invariant |
 | :--- | :--- | :--- |
@@ -51,7 +51,7 @@
 
 ---
 
-## 2. Periodic 4-Hour NeuroController Workflow Stages
+## 2. Gated NeuroController Verification & Evolution Stages
 
 The 4-hour periodic NeuroController workflow advances through five gated stages in deterministic sequence:
 
@@ -66,9 +66,9 @@ The 4-hour periodic NeuroController workflow advances through five gated stages 
    - Runs scenario tests alongside repository compliance suites (`test_agpl3_ip_protection.py`, `test_static_numbers_have_artifacts.py`, `test_no_lateral_movement.py`).
    - Measures standalone line coverage (`python -m coverage run` without `COVERAGE_CORE=ctrace`), runs `ruff check`, runs `ZeroStubAudit`, verifies `pr_gatekeeper.forbidden_scan`, checks `OwnerOrderGuardrail`, and validates `PRSecurityScanner` with `0` findings.
 4. **Stage 4 — Review-Ready Slice Packaging & Telemetry Receipt Logging:**
-   - Stages verified slice files cleanly with owner identity and logs JSONL telemetry receipts (leaving final publication and release actions exclusively to the Phase 4 owner workflow).
-5. **Stage 5 — Plan & Roadmap Progress Sync:**
-   - Records latest empirical T4 / CPU verdicts, standalone coverage, and slice completion status in tracking documents.
+   - Stages verified slice files cleanly with owner identity and logs JSONL telemetry receipts.
+5. **Stage 5 — Roadmap & Implementation Progress Sync:**
+   - Records latest verified coverage, empirical holdout verdicts, and Gen-3 `D1`–`D5` progression across tracking documents.
 
 ---
 

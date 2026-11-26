@@ -18,7 +18,7 @@ Project HiveMind's decentralized Sparse MoE and DiLoCo ecosystem operates as a c
 
 ---
 
-## 2. Empirical Multi-Model Results (T4 CPU & Local CPU)
+## 2. Empirical Multi-Model Results (`10` Certified Locked Vaults Across `6` Model Families)
 
 ### 2.1 Verbatim Empirical Ledger & Active Process Status
 

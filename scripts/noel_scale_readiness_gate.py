@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
-"""Unified 5-gate Noël-at-Scale Go/No-Go readiness runner and scorecard (`SLICE-SCALE-05`).
+"""Unified 5-gate Noël-at-Scale Go/No-Go readiness runner and scorecard (`SLICE-SCALE-05` & `SLICE-SCALE-DYN-39`).
 
-Aggregates all 5 objective Noël-at-Scale launch readiness gates using ONLY the Python 3.10-3.13
-standard library and allowlisted HiveMind gateway hosts (`*.run.app`, `*.googleapis.com`,
+Aggregates all 5 objective Noël-at-Scale launch readiness gates plus Zero-Inference Cloud Run
+PR #949 live parity, 8+ friend-producer quorum, and CES alias verification using ONLY the Python
+3.10-3.13 standard library and allowlisted HiveMind gateway hosts (`*.run.app`, `*.googleapis.com`,
 `datasets-server.huggingface.co`, or loopback `127.0.0.1` / `localhost` / `::1`) without ever
-invoking `POST /v1/chat/completions` or touching live GPU inference:
+invoking chat completions or touching live GPU inference:
 
   - (G1) Cloud Run route & script parity:
          verifies all 8 holiday/core routes, `/v1/hivemind/onboarding/manifest`, all 17
@@ -30,11 +31,12 @@ invoking `POST /v1/chat/completions` or touching live GPU inference:
          verifies 1-command VS Code + Continue autoconfig, POSIX `0600` secret hygiene, chained
          post-setup probe, clean `--uninstall` round-trip, and zero-PII `onboarding_funnel_report`
          health (`mean_ease_rating >= 4.2 / 5`, `zero_game_lag_ratio == 1.0`, PII scrubbing).
+  - (PR #949 Gate) Live route parity, 8+ producer quorum & CES alias readiness (`--pr949-gate`).
 
 Supports deterministic offline rehearsal mode (`< 10.0 s` wall-clock budget, zero external network
-egress) and optional `--live-url <origin>` read-only zero-inference gateway drift verification,
-emitting FR/EN/bilingual Markdown, compact CLI, or `--json` with cryptographic `receipt_sha256`
-(`gates_passed_count`, `gates_total_count`, `go_for_launch`).
+egress), optional `--live-url <origin>` read-only zero-inference gateway drift verification, and
+`--enforce-personal-pc` worktree/TLS compliance blocking, emitting FR/EN/bilingual Markdown,
+compact CLI, or `--json` with cryptographic `receipt_sha256`.
 
 Personal Home Use & Non-Monetary Compliance Rule (Amadeus / Personal-PC Rule):
   - 100% personal home PCs & personal hobby/open-source projects only (never corporate hardware).
@@ -61,13 +63,15 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 SCHEMA = "hivemind.noel_scale_readiness_gate/1"
 RECEIPT_OBJECT = "hivemind.noel_scale_readiness_receipt"
@@ -106,6 +110,17 @@ DEFAULT_MIN_FREE_VRAM_MIB = 2048
 
 HTTP_TIMEOUT_S = 5.0
 SUBPROCESS_TIMEOUT_S = 3.0
+MAX_HTTP_BODY_BYTES = 4 * 1024 * 1024
+
+MANIFEST_OBJECT = "hivemind.onboarding.manifest"
+FLEET_OBJECT = "hivemind.producer_fleet"
+RAID_STATUS_OBJECT = "hivemind.raid_noel.status"
+ARENA_SUMMARY_OBJECT = "hivemind.blind_ab_arena.summary"
+FEEDBACK_SUMMARY_OBJECT = "hivemind.onboarding_feedback_summary"
+
+DEFAULT_TARGET_ONLINE_PRODUCERS = 8
+DEFAULT_MIN_EASE_RATING = 4.2
+DEFAULT_MIN_ZERO_LAG_RATIO = 0.95
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -117,11 +132,60 @@ SUPPORTED_LANGS: tuple[str, ...] = ("en", "fr", "bilingual")
 ALLOWED_LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1"})
 ALLOWED_READ_ONLY_DATA_HOSTS: frozenset[str] = frozenset({"datasets-server.huggingface.co"})
 HOBBY_DISPLAY_GIT_URL = "https://github.com/Vxtzq/CrowdGPT"
+LIVE_PRODUCER_STATUSES: frozenset[str] = frozenset({"live", "online", "connected", "ready"})
+INSPECTED_ENV_KEYS: tuple[str, ...] = (
+    "USERDOMAIN",
+    "COMPUTERNAME",
+    "HOSTNAME",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "SSL_CERT_FILE",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+    "NODE_EXTRA_CA_CERTS",
+)
 
 LIVE_HTML_PATHS: tuple[str, ...] = ("/noel", "/quick", "/raid-noel", "/arena-noel")
 LIVE_EXTRA_SUMMARY_PATHS: tuple[tuple[str, str], ...] = (
     ("/v1/hivemind/raid/status", "hivemind.raid_noel.status"),
     ("/v1/hivemind/arena/summary", "hivemind.blind_ab_arena.summary"),
+)
+PR949_REQUIRED_ROUTES: tuple[tuple[str, str], ...] = (
+    ("/health", "json"),
+    ("/v1/models", "json"),
+    ("/noel", "html"),
+    ("/quick", "html"),
+    ("/raid-noel", "html"),
+    ("/arena-noel", "html"),
+    ("/v1/hivemind/onboarding/manifest", "json"),
+    ("/v1/hivemind/onboarding/feedback/summary", "json"),
+    ("/v1/hivemind/producers/fleet", "json"),
+    ("/v1/hivemind/raid/status", "json"),
+    ("/v1/hivemind/arena/summary", "json"),
+)
+PR949_MANIFEST_ROUTES: tuple[str, ...] = (
+    "/arena-noel",
+    "/noel",
+    "/quick",
+    "/raid-noel",
+    "/v1/hivemind/arena/summary",
+    "/v1/hivemind/arena/vote",
+    "/v1/hivemind/onboarding/feedback",
+    "/v1/hivemind/onboarding/feedback/summary",
+    "/v1/hivemind/onboarding/manifest",
+    "/v1/hivemind/raid/status",
+)
+PR949_MANIFEST_CORE_SCRIPTS: tuple[str, ...] = ("hivemind_quickstart.py", "hivemind_doctor.py")
+EXPECTED_FEEDBACK_SUMMARY_KEYS: frozenset[str] = frozenset(
+    {
+        "object",
+        "total_responses",
+        "mean_ease_rating",
+        "zero_game_lag_ratio",
+        "by_profile",
+    }
 )
 CURATED_ARENA_TASK_IDS: tuple[str, ...] = (
     "python-sliding-median",
@@ -140,12 +204,23 @@ COMPLIANCE_NOTICE_FR = (
 )
 COMPLIANCE_NOTICE_BILINGUAL = f"{COMPLIANCE_NOTICE_EN} | {COMPLIANCE_NOTICE_FR}"
 
+_DNS_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _RUN_APP_HOST_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+run\.app$")
 _GOOGLEAPIS_HOST_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+googleapis\.com$")
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_BUILD_SHA_RE = re.compile(r"^[A-Za-z0-9]{6,64}$")
+_HEX_SHA_RE = re.compile(r"^[0-9a-f]{7,64}$")
+_IDEM_KEY_MAX_CHARS = 128
 
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _API_KEY_RE = re.compile(r"\bhm(?:_live_|-)[A-Za-z0-9_-]{6,}\b")
+_MASKED_HM_KEY_RE = re.compile(
+    r"(hm(?:_live_|-))\*\*\*(?!redacted\*\*\*)(?:[A-Za-z0-9_-]{4,}|[0-9]{1,4}(?:m" + r"s\b|tok" + r"/s))"
+)
+_CSP_HEADER_NONCE_RE = re.compile(r"'nonce-([A-Za-z0-9_+=/=-]{8,128})'")
+_CSP_INLINE_NONCE_RE = re.compile(r"'nonce-[A-Za-z0-9_+=/=-]{4,128}'")
+_HTML_ATTR_NONCE_RE = re.compile(r"""\bnonce=(["'])([A-Za-z0-9_+=/=-]{8,128})\1""")
+_HTML_ANY_NONCE_ATTR_RE = re.compile(r"""\bnonce=(?:"[^"]*"|'[^']*')""")
 _BEARER_RE = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{6,}\b", re.IGNORECASE)
 _HOME_PATH_RE = re.compile(
     r"(?:/home/[A-Za-z0-9._-]+|/Users/[A-Za-z0-9._-]+|[A-Za-z]:\\Users\\[A-Za-z0-9._-]+)"
@@ -157,6 +232,22 @@ _FORBIDDEN_DOM_SINK_RE = re.compile(
     r"\b(?:" + "inner" + "HTML|" + "outer" + "HTML|" + "insertAdjacent" + r"HTML|document\.write)\b"
 )
 _STATIC_MS_UNIT_RE = re.compile(r"(\d[\d.,]*)\s?m" + r"s\b")
+_STATIC_FIG_UNIT_RE = re.compile(
+    r"\d[\d.,]*\s?(?:m" + r"s\b|tok" + r"/s|HTTP" + r" Reqs|Comple" + r"tions|\bs/" + r"round)"
+)
+_GIT_REMOTE_URL_RE = re.compile(
+    r'^\s*(?:push)?(?:url|insteadof|pushinsteadof)\s*=\s*(\S.*?)\s*$|^\s*\[url\s+"([^"]+)"\]',
+    re.IGNORECASE | re.MULTILINE,
+)
+_SECRET_VALUE_MARKERS: tuple[str, ...] = (
+    "secret",
+    "token",
+    "password",
+    "passwd",
+    "apikey",
+    "bearer",
+    "aiza",
+)
 
 _CORP_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("amadeus", re.compile(r"amadeus", re.IGNORECASE)),
@@ -169,15 +260,19 @@ _CORP_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     ("enterprise", re.compile(r"enterprise", re.IGNORECASE)),
     ("intranet", re.compile(r"intranet", re.IGNORECASE)),
-    ("internal", re.compile(r"(?:^|[^a-z])internal(?:$|[^a-z])", re.IGNORECASE)),
+    (
+        "internal",
+        re.compile(r"(?:^|[^a-z])internal(?:$|[^a-z])|[a-z0-9]internal(?:$|[^a-z])", re.IGNORECASE),
+    ),
     ("zscaler", re.compile(r"zscaler", re.IGNORECASE)),
     ("netskope", re.compile(r"netskope", re.IGNORECASE)),
     ("bluecoat", re.compile(r"bluecoat", re.IGNORECASE)),
     ("fortinet", re.compile(r"fortinet", re.IGNORECASE)),
-    ("paloalto", re.compile(r"paloalto", re.IGNORECASE)),
+    ("paloalto", re.compile(r"paloalto|palo[-_.]?alto", re.IGNORECASE)),
 )
 
 LiveHttpFn = Callable[..., Any]
+RawHttpFn = Callable[..., tuple[int, str, dict[str, str]]]
 RunnerFn = Callable[[Sequence[str], float], tuple[int, str]]
 ClockFn = Callable[[], float]
 GateCallable = Callable[[], dict[str, Any]]
@@ -221,14 +316,20 @@ def _single_script_lang(lang_code: str) -> str:
 
 def is_allowed_gateway_host(host: str) -> bool:
     """Return True iff `host` matches the strict HiveMind lateral-movement allowlist."""
-    h = (host or "").strip().lower().strip("[]")
-    if not h:
+    if not isinstance(host, str):
         return False
+    raw = host.strip().lower()
+    if not raw or len(raw) > 253 or any(ch.isspace() or ch in "\\/@" for ch in raw):
+        return False
+    h = raw[1:-1] if (raw.startswith("[") and raw.endswith("]")) else raw
     if h in ALLOWED_LOOPBACK_HOSTS or h in ALLOWED_READ_ONLY_DATA_HOSTS:
         return True
-    if h == "storage.googleapis.com" or _GOOGLEAPIS_HOST_RE.fullmatch(h):
+    if h == "storage.googleapis.com":
         return True
-    return bool(_RUN_APP_HOST_RE.fullmatch(h))
+    labels = h.split(".")
+    if any(not _DNS_LABEL_RE.fullmatch(lbl) for lbl in labels):
+        return False
+    return bool(_GOOGLEAPIS_HOST_RE.fullmatch(h) or _RUN_APP_HOST_RE.fullmatch(h))
 
 
 def validate_gateway_url(url: str) -> str:
@@ -240,18 +341,22 @@ def validate_gateway_url(url: str) -> str:
     cleaned = url.strip().rstrip("/")
     if any(ch.isspace() for ch in cleaned):
         raise ReadinessGateError("Gateway URL must not contain whitespace.")
-    parts = urlsplit(cleaned)
-    if parts.username is not None or parts.password is not None:
+    if "\\" in cleaned or "\\" in unquote(cleaned):
+        raise ReadinessGateError("Gateway URL must not contain backslashes.")
+    if "@" in cleaned or "@" in unquote(cleaned):
+        raise ReadinessGateError("Gateway URL must not embed credentials or '@'.")
+    try:
+        parts = urlsplit(cleaned)
+        port = parts.port
+        host = (parts.hostname or "").lower()
+    except ValueError as exc:
+        raise ReadinessGateError("Gateway URL is malformed.") from exc
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
         raise ReadinessGateError("Gateway URL must not embed credentials.")
     if parts.query or parts.fragment or parts.path not in ("", "/"):
         raise ReadinessGateError("Gateway URL must be a bare origin without path, query, or fragment.")
-    try:
-        port = parts.port
-    except ValueError as exc:
-        raise ReadinessGateError("Gateway URL contains an invalid port.") from exc
     if port is not None and not (1 <= port <= 65535):
         raise ReadinessGateError("Gateway URL port out of range.")
-    host = (parts.hostname or "").lower()
     if not is_allowed_gateway_host(host):
         raise ReadinessGateError(
             f"Untrusted gateway host {host!r}; allowed hosts are *.run.app, *.googleapis.com, or loopback."
@@ -295,6 +400,24 @@ def _validate_positive_float(value: object, name: str) -> float:
     return fval
 
 
+def _validate_float_range(value: object, name: str, lo: float, hi: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ReadinessGateError(f"{name} must be a finite number between {lo} and {hi}.")
+    fval = float(value)
+    if not math.isfinite(fval) or not (lo <= fval <= hi):
+        raise ReadinessGateError(f"{name} must be a finite number between {lo} and {hi}.")
+    return fval
+
+
+def strip_masked_keys_and_nonces(text: str) -> str:
+    """Strip HTML `nonce=...` attributes, CSP `'nonce-...'` tokens, and `hm-...***XXXX` masked suffixes."""
+    if not isinstance(text, str):
+        raise ReadinessGateError("strip_masked_keys_and_nonces requires a string.")
+    cleaned = _HTML_ANY_NONCE_ATTR_RE.sub('nonce=""', text)
+    cleaned = _CSP_INLINE_NONCE_RE.sub("'nonce-CSP_NONCE'", cleaned)
+    return _MASKED_HM_KEY_RE.sub(r"\1***XXXX", cleaned)
+
+
 def redact_home_path(target: Path | str, home: Path | None = None) -> str:
     """Redact local user home directories to `'~'` or repo-relative paths so usernames never leak."""
     raw = str(target)
@@ -320,8 +443,9 @@ def redact_home_path(target: Path | str, home: Path | None = None) -> str:
 
 
 def sanitize_text_for_display(text: str, *, home: Path | None = None) -> str:
-    """Scrub emails, raw `hm-...` keys, Bearer tokens, home paths, non-loopback IPs, and unit figures."""
+    """Scrub emails, raw `hm-...` keys, Bearer tokens, home paths, non-loopback IPs, nonces, and unit figures."""
     cleaned = redact_home_path(str(text), home=home)
+    cleaned = strip_masked_keys_and_nonces(cleaned)
     cleaned = _API_KEY_RE.sub("hm-***redacted***", cleaned)
     cleaned = _BEARER_RE.sub("Bearer ***redacted***", cleaned)
     cleaned = _EMAIL_RE.sub("[redacted-email]", cleaned)
@@ -337,7 +461,7 @@ def sanitize_text_for_display(text: str, *, home: Path | None = None) -> str:
 
 
 def scan_output_safety(text: str) -> list[str]:
-    """Scan JSON, Markdown, or CLI output for PII, raw secrets, home paths, non-loopback IPs, or `'score':`."""
+    """Scan JSON, Markdown, or CLI output for PII, raw secrets, home paths, static figures, or `'score':`."""
     if not isinstance(text, str):
         raise ReadinessGateError("scan_output_safety requires a string.")
     issues: list[str] = []
@@ -353,6 +477,8 @@ def scan_output_safety(text: str) -> list[str]:
         issues.append("unredacted_home_path_detected")
     if _DISCORD_PING_RE.search(text):
         issues.append("discord_mass_ping_detected")
+    if _STATIC_FIG_UNIT_RE.search(strip_masked_keys_and_nonces(text)):
+        issues.append("static_figure_detected")
     for ip_hit in _IPV4_RE.findall(text):
         if ip_hit != "127.0.0.1":
             issues.append(f"non_loopback_ipv4_detected:{ip_hit}")
@@ -364,6 +490,38 @@ def _assert_safe_output(text: str) -> str:
     if issues:
         raise ReadinessGateError(f"Output safety guard failed: {', '.join(issues)}")
     return text
+
+
+def _atomic_write_text(target: Path, content: str, *, mode: int = 0o600) -> Path:
+    """Atomically write UTF-8 text via a sibling temporary file, chmod 0600 on POSIX, and `os.replace`."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=str(target.parent),
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+            handle.write(content)
+            handle.flush()
+            with suppress(OSError):
+                os.fsync(handle.fileno())
+        if os.name != "nt":
+            os.chmod(tmp_path, mode)
+        os.replace(tmp_path, target)
+        if os.name != "nt":
+            with suppress(OSError):
+                os.chmod(target, mode)
+        tmp_path = None
+        return target
+    finally:
+        if tmp_path is not None:
+            with suppress(OSError):
+                tmp_path.unlink()
 
 
 def _attach_receipt(core: Mapping[str, Any]) -> dict[str, Any]:
@@ -387,6 +545,58 @@ def verify_receipt_sha256(report: Mapping[str, Any]) -> bool:
     return hashlib.sha256(compact_json.encode("utf-8")).hexdigest() == digest
 
 
+def _extract_git_remote_urls(cfg_text: str) -> list[str]:
+    if not cfg_text:
+        return []
+    urls: list[str] = []
+    for m_kv, m_sec in _GIT_REMOTE_URL_RE.findall(cfg_text):
+        candidate = (m_kv or m_sec).strip().strip('"').strip("'")
+        if candidate:
+            urls.append(candidate)
+    return urls
+
+
+def _resolve_git_config_files(workspace: Path) -> list[Path]:
+    """Locate `.git/config` from `workspace`, walking parents and resolving worktree `gitdir:`/`commondir`."""
+    candidates: list[Path] = []
+    for root in (workspace, *workspace.parents):
+        git_entry = root / ".git"
+        if git_entry.is_dir():
+            cfg = git_entry / "config"
+            if cfg.is_file():
+                candidates.append(cfg)
+            break
+        if git_entry.is_file():
+            try:
+                lines = git_entry.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                break
+            gitdir_line = next((ln.strip() for ln in lines if ln.strip()), "")
+            if gitdir_line.lower().startswith("gitdir:"):
+                raw_gitdir = gitdir_line.split(":", 1)[1].strip()
+                gitdir = Path(raw_gitdir) if Path(raw_gitdir).is_absolute() else (root / raw_gitdir).resolve()
+                direct_cfg = gitdir / "config"
+                if direct_cfg.is_file():
+                    candidates.append(direct_cfg)
+                commondir_file = gitdir / "commondir"
+                if commondir_file.is_file():
+                    try:
+                        common_rel = commondir_file.read_text(encoding="utf-8", errors="replace").strip()
+                    except OSError:
+                        common_rel = ""
+                    if common_rel:
+                        common_dir = (
+                            Path(common_rel)
+                            if Path(common_rel).is_absolute()
+                            else (gitdir / common_rel).resolve()
+                        )
+                        common_cfg = common_dir / "config"
+                        if common_cfg.is_file() and common_cfg not in candidates:
+                            candidates.append(common_cfg)
+            break
+    return candidates
+
+
 def evaluate_personal_pc_compliance(
     *,
     environ: Mapping[str, str] | None = None,
@@ -398,26 +608,31 @@ def evaluate_personal_pc_compliance(
     norm_lang = normalize_lang(lang)
     is_fr = norm_lang == "fr"
     env_map = environ if environ is not None else os.environ
-    upper_env = {str(k).upper(): str(v).strip() for k, v in env_map.items() if str(v).strip()}
+    upper_env = {str(k).strip().upper(): str(v).strip() for k, v in env_map.items() if str(v).strip()}
 
     indicators: list[str] = []
     matched_markers: set[str] = set()
 
-    if any(k.startswith("AMADEUS") for k in upper_env):
-        indicators.append("env:AMADEUS_ENV")
-        matched_markers.add("amadeus")
-    if upper_env.get("USERDNSDOMAIN"):
-        indicators.append("env:USERDNSDOMAIN")
-        for marker_name, pat in _CORP_PATTERNS:
-            if pat.search(upper_env["USERDNSDOMAIN"]):
-                matched_markers.add(marker_name)
-        if not matched_markers:
-            matched_markers.add("domain")
-    if upper_env.get("ZSCALER_CERT_PATH"):
-        indicators.append("env:ZSCALER_CERT_PATH")
-        matched_markers.add("zscaler")
+    def _record_indicator(tag: str, marker: str | None = None) -> None:
+        if tag not in indicators:
+            indicators.append(tag)
+        if marker:
+            matched_markers.add(marker)
 
-    for env_key in ("USERDOMAIN", "COMPUTERNAME", "HOSTNAME", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+    if any(k.startswith("AMADEUS") for k in upper_env):
+        _record_indicator("env:AMADEUS_ENV", "amadeus")
+    if upper_env.get("USERDNSDOMAIN"):
+        dns_hits = [name for name, pat in _CORP_PATTERNS if pat.search(upper_env["USERDNSDOMAIN"])]
+        if dns_hits:
+            _record_indicator("env:USERDNSDOMAIN", dns_hits[0])
+            for hit in dns_hits:
+                matched_markers.add(hit)
+        else:
+            _record_indicator("env:USERDNSDOMAIN", "domain")
+    if upper_env.get("ZSCALER_CERT_PATH"):
+        _record_indicator("env:ZSCALER_CERT_PATH", "zscaler")
+
+    for env_key in INSPECTED_ENV_KEYS:
         val = upper_env.get(env_key, "")
         if not val:
             continue
@@ -425,34 +640,33 @@ def evaluate_personal_pc_compliance(
             continue
         for marker_name, pat in _CORP_PATTERNS:
             if pat.search(val):
-                indicators.append(f"env:{env_key}:{marker_name}")
-                matched_markers.add(marker_name)
+                _record_indicator(f"env:{env_key}:{marker_name}", marker_name)
                 break
 
     if cwd is not None:
-        cwd_text = str(cwd)
-        for marker_name, pat in _CORP_PATTERNS:
-            if pat.search(cwd_text):
-                indicators.append(f"cwd:{marker_name}")
-                matched_markers.add(marker_name)
-                break
+        cwd_path = Path(cwd)
+        cwd_texts = [str(cwd_path)]
+        with suppress(OSError):
+            resolved_cwd = str(cwd_path.resolve())
+            if resolved_cwd not in cwd_texts:
+                cwd_texts.append(resolved_cwd)
+        for cwd_text in cwd_texts:
+            for marker_name, pat in _CORP_PATTERNS:
+                if pat.search(cwd_text):
+                    _record_indicator(f"cwd:{marker_name}", marker_name)
+                    break
 
         if check_git_remote:
-            git_cfg = cwd / ".git" / "config"
-            if git_cfg.is_file():
+            for git_cfg in _resolve_git_config_files(cwd_path):
                 try:
                     raw_git = git_cfg.read_text(encoding="utf-8", errors="replace")
                 except OSError:
-                    raw_git = ""
-                for line in raw_git.splitlines():
-                    stripped = line.strip()
-                    if stripped.lower().startswith("url") and "=" in stripped:
-                        remote_val = stripped.split("=", 1)[1].strip()
-                        for marker_name, pat in _CORP_PATTERNS:
-                            if pat.search(remote_val):
-                                indicators.append(f"git_remote:{marker_name}")
-                                matched_markers.add(marker_name)
-                                break
+                    continue
+                for remote_val in _extract_git_remote_urls(raw_git):
+                    for marker_name, pat in _CORP_PATTERNS:
+                        if pat.search(remote_val):
+                            _record_indicator(f"git_remote:{marker_name}", marker_name)
+                            break
 
     compliance_ok = len(indicators) == 0
     if compliance_ok:
@@ -465,10 +679,10 @@ def evaluate_personal_pc_compliance(
         joined = ", ".join(indicators)
         summary = (
             f"NO-GO CONFORMITÉ ({joined}) : exécution refusée sur environnement d'entreprise "
-            f"(règle Amadeus / PC perso uniquement). {COMPLIANCE_NOTICE_FR}"
+            f"(0 appel réseau, 0 écriture fichier ; règle Amadeus / PC perso). {COMPLIANCE_NOTICE_BILINGUAL}"
             if is_fr
             else f"COMPLIANCE NO-GO ({joined}): execution refused on corporate environment "
-            f"(Amadeus / Personal-PC rule). {COMPLIANCE_NOTICE_EN}"
+            f"(0 network calls, 0 file writes; Amadeus / Personal-PC rule). {COMPLIANCE_NOTICE_BILINGUAL}"
         )
 
     return {
@@ -479,6 +693,10 @@ def evaluate_personal_pc_compliance(
         "personal_pc_only": True,
         "amadeus_corporate_prohibition": True,
         "network_transmitted": False,
+        "network_calls": 0,
+        "file_writes": 0,
+        "subprocess_calls": 0,
+        "exit_code": 0 if compliance_ok else 2,
         "financial_promise": FINANCIAL_PROMISE,
         "monetary_cost": FINANCIAL_PROMISE,
         "license": "AGPL-3.0",
@@ -579,9 +797,14 @@ class LocalScaleGatewaySimulator:
         self.requests_total = 0
         self.inference_calls_count = 0
         self.arena_votes_count = 0
+        self.deduplicated_feedback_replays = 0
         self.accounts_by_key: dict[str, dict[str, str]] = {}
         self.activated_account_ids: set[str] = set()
         self.feedback_items: list[dict[str, Any]] = []
+        self._max_idempotency_keys = 2048
+        self._idempotency_keys: OrderedDict[str, None] | None = None
+        self.producers: dict[str, dict[str, Any]] = {}
+        self.opentrainer_nodes: dict[str, dict[str, Any]] = {}
 
     def _sign_ballot(self, task_id: str, swap_bit: int) -> str:
         prefix = hashlib.sha256(f"scale05:{task_id}".encode()).hexdigest()[:12]
@@ -603,13 +826,17 @@ class LocalScaleGatewaySimulator:
         ).hexdigest()[:24]
         return hmac.compare_digest(parts[2], expected_mac)
 
+    def _authenticate_bearer_unlocked(self, hdrs: Mapping[str, str]) -> dict[str, str] | None:
+        auth = hdrs.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        return self.accounts_by_key.get(token)
+
     def _feedback_summary_unlocked(self) -> dict[str, Any]:
         total = len(self.feedback_items)
         by_prof = {"dev": 0, "gamer": 0}
         if total == 0:
             return {
-                "object": "hivemind.onboarding_feedback_summary",
-                "campaign_id": CAMPAIGN_ID,
+                "object": FEEDBACK_SUMMARY_OBJECT,
                 "total_responses": 0,
                 "mean_ease_rating": None,
                 "zero_game_lag_ratio": None,
@@ -625,12 +852,52 @@ class LocalScaleGatewaySimulator:
             if prof in by_prof:
                 by_prof[prof] += 1
         return {
-            "object": "hivemind.onboarding_feedback_summary",
-            "campaign_id": CAMPAIGN_ID,
+            "object": FEEDBACK_SUMMARY_OBJECT,
             "total_responses": total,
             "mean_ease_rating": round(float(ease_sum / Fraction(total, 1)), 2),
             "zero_game_lag_ratio": round(float(Fraction(lag_ok, total)), 4),
             "by_profile": by_prof,
+        }
+
+    def _fleet_snapshot_unlocked(self) -> dict[str, Any]:
+        distinct_roots = {str(p["host_root"]) for p in self.producers.values() if p.get("host_root")}
+        live_models = sorted(
+            {
+                m_id
+                for p in self.producers.values()
+                for m_id in (p.get("model_ids") or ())
+            }
+        )
+        registered_producers = max(
+            len(self.producers),
+            sum(1 for a in self.accounts_by_key.values() if a.get("role") in ("producer", "prosumer")),
+        )
+        public_rows = [
+            {
+                "handle": p["handle"],
+                "role": p["role"],
+                "status": "live",
+                "live_endpoints": 1,
+                "shared_host": bool(p.get("shared_host", False)),
+                "execution_class": p["execution_class"],
+                "capacity_1k": p["capacity_1k"],
+                "models_count": len(p.get("models") or ()),
+                "models": list(p.get("models") or ()),
+                "last_heartbeat_utc": p["last_heartbeat_utc"],
+            }
+            for p in self.producers.values()
+        ]
+        return {
+            "object": FLEET_OBJECT,
+            "ttl_s": 120.0,
+            "total_hiveminders": registered_producers,
+            "live_hiveminders": len(self.producers),
+            "distinct_physical_gpus": len(distinct_roots),
+            "live_endpoints": len(self.producers),
+            "shared_host_endpoints": max(0, len(self.producers) - len(distinct_roots)),
+            "total_capacity_1k": round(sum(float(p["capacity_1k"]) for p in self.producers.values()), 2),
+            "live_models": live_models,
+            "hiveminders": public_rows,
         }
 
     def request_full(
@@ -680,9 +947,9 @@ class LocalScaleGatewaySimulator:
                     {
                         "object": "list",
                         "data": [
-                            {"id": "hivemind/coder"},
-                            {"id": "hivemind/bee-stars"},
-                            {"id": "hivemind/auto"},
+                            {"id": "hivemind/coder", "object": "model", "owned_by": "hivemind"},
+                            {"id": "hivemind/bee-stars", "object": "model", "owned_by": "hivemind"},
+                            {"id": "hivemind/auto", "object": "model", "owned_by": "hivemind"},
                         ],
                     },
                     {"content-type": "application/json"},
@@ -692,7 +959,7 @@ class LocalScaleGatewaySimulator:
                 return (
                     200,
                     {
-                        "object": "hivemind.onboarding.manifest",
+                        "object": MANIFEST_OBJECT,
                         "campaign_id": CAMPAIGN_ID,
                         "status": "ok",
                         "build_sha": self.build_sha,
@@ -722,7 +989,9 @@ class LocalScaleGatewaySimulator:
                 html_doc = (
                     f'<!DOCTYPE html><html lang="en"><head>'
                     f'<style nonce="{nonce}">body{{font-family:sans-serif}}</style></head>'
-                    f'<body><main data-campaign="{CAMPAIGN_ID}">{extra_cards}</main>'
+                    f'<body><main data-campaign="{CAMPAIGN_ID}">'
+                    f'<p role="note">{COMPLIANCE_NOTICE_EN}</p>'
+                    f"{extra_cards}</main>"
                     f'<script nonce="{nonce}">document.documentElement.dataset.ready="1";</script>'
                     f"</body></html>"
                 )
@@ -778,9 +1047,7 @@ class LocalScaleGatewaySimulator:
                 )
 
             if verb == "GET" and path == "/v1/hivemind/me":
-                auth = hdrs.get("authorization", "")
-                token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
-                acct = self.accounts_by_key.get(token)
+                acct = self._authenticate_bearer_unlocked(hdrs)
                 if acct is None:
                     return 401, {"error": "invalid_api_key"}, {"content-type": "application/json"}
                 self.activated_account_ids.add(acct["account_id"])
@@ -794,6 +1061,82 @@ class LocalScaleGatewaySimulator:
                     },
                     {"content-type": "application/json"},
                 )
+
+            if verb == "POST" and path == "/v1/hivemind/producer/heartbeat":
+                acct = self._authenticate_bearer_unlocked(hdrs)
+                if acct is None:
+                    return 401, {"error": "invalid_api_key"}, {"content-type": "application/json"}
+                hb_in = dict(payload or {})
+                raw_ep = hb_in.get("endpoint_url")
+                if not isinstance(raw_ep, str) or not raw_ep.strip():
+                    return 422, {"error": "invalid_endpoint_url"}, {"content-type": "application/json"}
+                ep_parts = urlsplit(raw_ep.strip())
+                host_root = ep_parts.netloc.lower() or raw_ep.strip().lower()
+                raw_models = hb_in.get("models")
+                if raw_models is None:
+                    raw_models = [{"id": "hivemind/coder", "loaded": True}]
+                if not isinstance(raw_models, list):
+                    return 422, {"error": "invalid_models"}, {"content-type": "application/json"}
+                models_norm: list[dict[str, Any]] = []
+                model_ids: list[str] = []
+                for entry in raw_models:
+                    if isinstance(entry, Mapping) and isinstance(entry.get("id"), str) and entry["id"].strip():
+                        m_id = entry["id"].strip()
+                        models_norm.append(dict(entry))
+                        model_ids.append(m_id)
+                self.activated_account_ids.add(acct["account_id"])
+                self.producers[acct["account_id"]] = {
+                    "account_id": acct["account_id"],
+                    "handle": acct["handle"],
+                    "role": acct["role"],
+                    "host_root": host_root,
+                    "execution_class": str(hb_in.get("execution_class") or "ollama"),
+                    "capacity_1k": float(hb_in.get("capacity_1k") or 0.0),
+                    "models": models_norm,
+                    "model_ids": model_ids,
+                    "last_heartbeat_utc": round(time.time(), 3),
+                }
+                return (
+                    200,
+                    {
+                        "object": "hivemind.producer.heartbeat",
+                        "status": "ok",
+                        "account_id": acct["account_id"],
+                        "live_endpoints": 1,
+                    },
+                    {"content-type": "application/json"},
+                )
+
+            if verb == "POST" and path == "/v1/hivemind/opentrainer/heartbeat":
+                acct = self._authenticate_bearer_unlocked(hdrs)
+                if acct is None:
+                    return 401, {"error": "invalid_api_key"}, {"content-type": "application/json"}
+                ot_in = dict(payload or {})
+                host_label = str(ot_in.get("host_label") or "trainer-node").strip()[:128]
+                if not host_label:
+                    return 422, {"error": "invalid_host_label"}, {"content-type": "application/json"}
+                self.activated_account_ids.add(acct["account_id"])
+                node_key = f"{acct['account_id']}:{host_label}"
+                self.opentrainer_nodes[node_key] = {
+                    "account_id": acct["account_id"],
+                    "host_label": host_label,
+                    "gpu_name": str(ot_in.get("gpu_name") or "not reported"),
+                    "vram_total_mib": int(ot_in.get("vram_total_mib") or 0),
+                    "vram_free_mib": int(ot_in.get("vram_free_mib") or 0),
+                    "network_mode": str(ot_in.get("network_mode") or "outbound-https-relay"),
+                }
+                return (
+                    200,
+                    {
+                        "object": "hivemind.opentrainer.heartbeat",
+                        "status": "accepted",
+                        "registered_nodes": len(self.opentrainer_nodes),
+                    },
+                    {"content-type": "application/json"},
+                )
+
+            if verb == "GET" and path == "/v1/hivemind/producers/fleet":
+                return 200, self._fleet_snapshot_unlocked(), {"content-type": "application/json"}
 
             if verb == "POST" and path == "/v1/hivemind/arena/vote":
                 vote_in = dict(payload or {})
@@ -810,7 +1153,7 @@ class LocalScaleGatewaySimulator:
                 return (
                     200,
                     {
-                        "object": "hivemind.blind_ab_arena.summary",
+                        "object": ARENA_SUMMARY_OBJECT,
                         "recorded": True,
                         "total_votes": self.arena_votes_count,
                     },
@@ -821,7 +1164,7 @@ class LocalScaleGatewaySimulator:
                 return (
                     200,
                     {
-                        "object": "hivemind.blind_ab_arena.summary",
+                        "object": ARENA_SUMMARY_OBJECT,
                         "campaign_id": CAMPAIGN_ID,
                         "total_votes": self.arena_votes_count,
                     },
@@ -830,9 +1173,22 @@ class LocalScaleGatewaySimulator:
 
             if verb == "POST" and path == "/v1/hivemind/onboarding/feedback":
                 fb_in = dict(payload or {})
-                allowed_fb_keys = {"profile", "ease_rating", "zero_game_lag", "platform"}
+                allowed_fb_keys = {"profile", "ease_rating", "zero_game_lag", "platform", "note"}
                 if set(fb_in.keys()) - allowed_fb_keys:
                     return 422, {"error": "unexpected_pii_field"}, {"content-type": "application/json"}
+                note_raw = fb_in.get("note", "")
+                if not isinstance(note_raw, str) or len(note_raw) > 240 or scan_output_safety(note_raw):
+                    return 422, {"error": "invalid_note"}, {"content-type": "application/json"}
+                raw_idem = hdrs.get("idempotency-key")
+                norm_idem: str | None = None
+                if raw_idem is not None and raw_idem.strip(" \t") != "":
+                    if (
+                        len(raw_idem) > _IDEM_KEY_MAX_CHARS
+                        or not raw_idem.isascii()
+                        or any(ord(ch) < 32 or ord(ch) == 127 for ch in raw_idem)
+                    ):
+                        return 400, {"error": "invalid_idempotency_key"}, {"content-type": "application/json"}
+                    norm_idem = raw_idem.strip()
                 prof = str(fb_in.get("profile") or "dev").strip().lower()
                 raw_ease = fb_in.get("ease_rating")
                 if (
@@ -842,6 +1198,14 @@ class LocalScaleGatewaySimulator:
                     or not (1 <= raw_ease <= 5)
                 ):
                     return 422, {"error": "invalid_feedback"}, {"content-type": "application/json"}
+                if (
+                    norm_idem is not None
+                    and self._idempotency_keys is not None
+                    and norm_idem in self._idempotency_keys
+                ):
+                    self._idempotency_keys.move_to_end(norm_idem)
+                    self.deduplicated_feedback_replays += 1
+                    return 200, self._feedback_summary_unlocked(), {"content-type": "application/json"}
                 self.feedback_items.append(
                     {
                         "profile": prof,
@@ -850,31 +1214,52 @@ class LocalScaleGatewaySimulator:
                         "platform": str(fb_in.get("platform") or "linux"),
                     }
                 )
+                if norm_idem is not None:
+                    if self._idempotency_keys is None:
+                        self._idempotency_keys = OrderedDict()
+                    elif len(self._idempotency_keys) >= self._max_idempotency_keys:
+                        self._idempotency_keys.popitem(last=False)
+                    self._idempotency_keys[norm_idem] = None
                 return 200, self._feedback_summary_unlocked(), {"content-type": "application/json"}
 
             if verb == "GET" and path == "/v1/hivemind/onboarding/feedback/summary":
                 return 200, self._feedback_summary_unlocked(), {"content-type": "application/json"}
 
             if verb == "GET" and path == "/v1/hivemind/raid/status":
+                trainer_accts = len({n["account_id"] for n in self.opentrainer_nodes.values()})
                 return (
                     200,
                     {
-                        "object": "hivemind.raid_noel.status",
+                        "object": RAID_STATUS_OBJECT,
                         "campaign_id": CAMPAIGN_ID,
+                        "compliance": {
+                            "personal_pc_only": True,
+                            "corporate_hardware_or_code_forbidden": True,
+                            "monetary_cost_eur": "0.00 EUR",
+                            "monetary_cost_usd": "0.00 USD",
+                            "license": "AGPL-3.0",
+                        },
                         "swarm": {
                             "registered_accounts": len(self.accounts_by_key),
                             "active_accounts_24h": len(self.activated_account_ids),
-                            "registered_trainer_accounts": 0,
-                            "registered_trainer_nodes": 0,
-                            "active_trainers": 0,
+                            "live_producers": len(self.producers),
+                            "registered_producers": len(self.producers),
+                            "registered_trainer_accounts": trainer_accts,
+                            "registered_trainer_nodes": len(self.opentrainer_nodes),
+                            "active_trainers": len(self.opentrainer_nodes),
                             "accepted_opentrainer_rounds": 0,
                         },
+                        "friendly_guilds": [
+                            {"id": "team-python", "label": "Team Python", "symbolic_fee": "0.00 EUR"}
+                        ],
+                        "electricity_estimator": {"formula_wh": "gpu_watts * hours"},
                         "onboarding_feedback": self._feedback_summary_unlocked(),
                     },
                     {"content-type": "application/json"},
                 )
 
             if verb == "GET" and path == "/v1/hivemind/live-telemetry":
+                trainer_accts = len({n["account_id"] for n in self.opentrainer_nodes.values()})
                 return (
                     200,
                     {
@@ -884,8 +1269,8 @@ class LocalScaleGatewaySimulator:
                             "active_accounts_24h": len(self.activated_account_ids),
                         },
                         "opentrainer": {
-                            "registered_trainer_accounts_count": 0,
-                            "total_registered_nodes": 0,
+                            "registered_trainer_accounts_count": trainer_accts,
+                            "total_registered_nodes": len(self.opentrainer_nodes),
                         },
                     },
                     {"content-type": "application/json"},
@@ -920,15 +1305,108 @@ def _assert_read_only_zero_inference(method: str, url: str, payload: Any = None)
             f"Live gateway check is strictly read-only: HTTP method {verb!r} is forbidden."
         )
     if payload is not None:
+        if isinstance(payload, Mapping):
+            serialized = json.dumps(dict(payload), sort_keys=True, ensure_ascii=False).lower()
+            if "messages" in payload or "prompt" in payload or "hivemind/coder" in serialized:
+                raise ReadinessGateError(
+                    "Zero-inference invariant violated: messages/prompt/hivemind/coder payload is strictly forbidden."
+                )
         raise ReadinessGateError("Live gateway check never sends request body payloads.")
-    parts = urlsplit(url)
+    if isinstance(url, bool) or not isinstance(url, str) or not url.strip():
+        raise ReadinessGateError("Gateway URL must be a non-empty string.")
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in url.strip()):
+        raise ReadinessGateError("Request URL contains whitespace or control characters.")
+    if "\\" in url or "\\" in unquote(url):
+        raise ReadinessGateError("Request URL must not contain backslashes.")
+    try:
+        parts = urlsplit(url.strip())
+    except ValueError as exc:
+        raise ReadinessGateError("Request URL is malformed.") from exc
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
+        raise ReadinessGateError("Request URL must not embed credentials.")
     origin = f"{parts.scheme}://{parts.netloc}"
     validate_gateway_url(origin)
-    if "completions" in (parts.path or "").lower():
+    low_path = unquote(parts.path or "").lower()
+    if "completions" in low_path or "/chat/" in low_path:
         raise ReadinessGateError(
             f"Zero-inference invariant violated: {verb} {parts.path} is strictly forbidden."
         )
     return origin
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Fail-closed redirect guard blocking untrusted hosts, backslashes, credentials, and inference paths."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        _ = (fp, code, msg, headers)
+        if not isinstance(newurl, str) or not newurl.strip():
+            raise ReadinessGateError("Untrusted redirect: empty target URL.")
+        _assert_read_only_zero_inference(req.get_method(), newurl, None)
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is not None:
+            _assert_read_only_zero_inference(new_req.get_method(), new_req.full_url, None)
+        return new_req
+
+
+def _prepare_http_headers(headers: Mapping[str, str] | None, *, user_agent: str) -> dict[str, str]:
+    req_headers: dict[str, str] = {
+        "Accept": "application/json, text/html;q=0.9, text/plain;q=0.8",
+        "User-Agent": user_agent,
+    }
+    if headers:
+        for hk, hv in headers.items():
+            k_str = str(hk)
+            v_str = str(hv)
+            if any(ch in k_str or ch in v_str for ch in ("\r", "\n", "\x00")):
+                raise ReadinessGateError("HTTP headers must not contain CR/LF or NUL characters.")
+            req_headers[k_str] = v_str
+    return req_headers
+
+
+def _build_safe_http_opener() -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), _SafeRedirectHandler())
+
+
+def default_http_raw(
+    method: str,
+    url: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+    timeout_s: float = HTTP_TIMEOUT_S,
+) -> tuple[int, str, dict[str, str]]:
+    """Perform a proxy-free, read-only GET/HEAD returning `(status_code, body_text, lower_headers)`."""
+    _assert_read_only_zero_inference(method, url, None)
+    bounded_timeout = min(max(0.2, _validate_positive_float(timeout_s, "timeout_s")), 15.0)
+    req_headers = _prepare_http_headers(headers, user_agent="hivemind-noel-scale-readiness-gate/1.0")
+    opener = _build_safe_http_opener()
+    req = urllib.request.Request(url.strip(), data=None, headers=req_headers, method=method.strip().upper())
+    try:
+        with opener.open(req, timeout=bounded_timeout) as resp:
+            raw_bytes = resp.read(MAX_HTTP_BODY_BYTES + 1)
+            if len(raw_bytes) > MAX_HTTP_BODY_BYTES:
+                raise ReadinessGateError(f"HTTP response exceeded {MAX_HTTP_BODY_BYTES} byte limit.")
+            status_code = int(getattr(resp, "status", 200))
+            lower_headers = {str(k).strip().lower(): str(v) for k, v in resp.headers.items()}
+            return status_code, raw_bytes.decode("utf-8", errors="replace"), lower_headers
+    except urllib.error.HTTPError as exc:
+        err_bytes = exc.read(131_072) if exc.fp is not None else b""
+        err_headers = {str(k).strip().lower(): str(v) for k, v in exc.headers.items()} if exc.headers else {}
+        return int(exc.code), err_bytes.decode("utf-8", errors="replace"), err_headers
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        reason = getattr(exc, "reason", exc)
+        return (
+            0,
+            json.dumps({"network_error": type(exc).__name__, "detail": str(reason)[:200]}),
+            {},
+        )
 
 
 def default_live_http_request(
@@ -939,23 +1417,20 @@ def default_live_http_request(
 ) -> tuple[int, dict[str, Any] | str, dict[str, str]]:
     """Perform a proxy-free, read-only GET request to an allowlisted live HiveMind gateway."""
     _assert_read_only_zero_inference(method, url, payload)
-    req_headers: dict[str, str] = {
-        "Accept": "application/json, text/html;q=0.9, text/plain;q=0.8",
-        "User-Agent": "hivemind-noel-scale-readiness-gate/1.0",
-    }
-    if headers:
-        req_headers.update(headers)
-
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    req = urllib.request.Request(url, data=None, headers=req_headers, method=method.upper())
+    req_headers = _prepare_http_headers(headers, user_agent="hivemind-noel-scale-readiness-gate/1.0")
+    opener = _build_safe_http_opener()
+    req = urllib.request.Request(url.strip(), data=None, headers=req_headers, method=method.strip().upper())
     try:
         with opener.open(req, timeout=HTTP_TIMEOUT_S) as resp:
-            raw_text = resp.read(524_288).decode("utf-8", errors="replace")
+            raw_bytes = resp.read(MAX_HTTP_BODY_BYTES + 1)
+            if len(raw_bytes) > MAX_HTTP_BODY_BYTES:
+                raise ReadinessGateError(f"HTTP response exceeded {MAX_HTTP_BODY_BYTES} byte limit.")
+            raw_text = raw_bytes.decode("utf-8", errors="replace")
             status_code = int(getattr(resp, "status", 200))
-            lower_headers = {str(k).lower(): str(v) for k, v in resp.headers.items()}
+            lower_headers = {str(k).strip().lower(): str(v) for k, v in resp.headers.items()}
     except urllib.error.HTTPError as exc:
-        raw_err = exc.read(65_536).decode("utf-8", errors="replace")
-        err_headers = {str(k).lower(): str(v) for k, v in exc.headers.items()} if exc.headers else {}
+        raw_err = exc.read(65_536).decode("utf-8", errors="replace") if exc.fp is not None else ""
+        err_headers = {str(k).strip().lower(): str(v) for k, v in exc.headers.items()} if exc.headers else {}
         try:
             parsed_err = json.loads(raw_err) if raw_err.strip() else {}
         except json.JSONDecodeError:
@@ -980,6 +1455,818 @@ def default_live_http_request(
     except json.JSONDecodeError:
         pass
     return status_code, raw_text, lower_headers
+
+
+def _is_nonneg_int(val: object) -> bool:
+    return not isinstance(val, bool) and isinstance(val, int) and val >= 0
+
+
+def _has_forbidden_score_key(obj: Any) -> bool:
+    if isinstance(obj, Mapping):
+        for key, value in obj.items():
+            if str(key) == ("sco" + "re") or _has_forbidden_score_key(value):
+                return True
+    elif isinstance(obj, (list, tuple)):
+        return any(_has_forbidden_score_key(item) for item in obj)
+    return False
+
+
+def _sanitize_build_sha(raw: object) -> str:
+    if not isinstance(raw, str):
+        return "unknown"
+    cleaned = raw.strip()
+    low = cleaned.lower()
+    if (
+        not cleaned
+        or low == "unknown"
+        or not _BUILD_SHA_RE.fullmatch(cleaned)
+        or low.startswith(("hm-", "hm_live_", "sk-", "ghp_"))
+        or any(marker in low for marker in _SECRET_VALUE_MARKERS)
+    ):
+        return "unknown"
+    return low
+
+
+def _validate_expected_sha(raw: str) -> str:
+    sanitized = _sanitize_build_sha(raw)
+    if sanitized == "unknown":
+        raise ReadinessGateError(
+            "expected_sha must be a 6..64 character alphanumeric/hex SHA (never 'unknown' or a secret)."
+        )
+    return sanitized
+
+
+def _shas_match(live_sha: str, expected_sha: str) -> bool:
+    clean_live = _sanitize_build_sha(live_sha)
+    clean_exp = _sanitize_build_sha(expected_sha)
+    if clean_live == "unknown" or clean_exp == "unknown":
+        return False
+    if clean_live == clean_exp:
+        return True
+    if _HEX_SHA_RE.fullmatch(clean_live) and _HEX_SHA_RE.fullmatch(clean_exp):
+        return clean_live.startswith(clean_exp) or clean_exp.startswith(clean_live)
+    return False
+
+
+def _build_finops_redeploy_guidance(gateway: str, expected_sha: str | None) -> dict[str, Any]:
+    sha_token = expected_sha if expected_sha else "${GITHUB_SHA:?set_GITHUB_SHA}"
+    redeploy_cmd = (
+        f'HIVEMIND_BUILD_SHA="{sha_token}" bash deploy/gcp_openrouter/deploy.sh '
+        "--min-instances 0 --max-instances 1 --no-cpu-throttling"
+    )
+    verify_cmd = f"python3 scripts/noel_scale_readiness_gate.py --pr949-gate --live-url {gateway}"
+    if expected_sha:
+        verify_cmd += f" --expected-sha {expected_sha}"
+    return {
+        "script": "deploy/gcp_openrouter/deploy.sh",
+        "finops_invariants": [
+            "--min-instances 0",
+            "--max-instances 1",
+            "--no-cpu-throttling",
+            "Litestream GCS",
+            "Secret Manager",
+        ],
+        "redeploy_command": redeploy_cmd,
+        "verify_command": verify_cmd,
+    }
+
+
+def _call_pr949_probe(
+    url: str,
+    *,
+    raw_http_fn: RawHttpFn,
+    http_fn: LiveHttpFn,
+) -> tuple[int, dict[str, Any] | None, str, dict[str, str]]:
+    _assert_read_only_zero_inference("GET", url, None)
+    use_raw = raw_http_fn is not default_http_raw or http_fn is default_live_http_request
+    if use_raw:
+        try:
+            raw_ret = raw_http_fn("GET", url)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            return 0, {"network_error": type(exc).__name__}, "", {}
+        if not isinstance(raw_ret, tuple) or len(raw_ret) != 3:
+            raise ReadinessGateError("raw_http_fn must return `(status_code, body_text, headers)`.")
+        code_raw, body_raw, hdrs_raw = raw_ret
+        code = int(code_raw)
+        hdrs = {str(k).strip().lower(): str(v) for k, v in (hdrs_raw or {}).items()}
+        if isinstance(body_raw, Mapping):
+            json_doc = dict(body_raw)
+            return code, json_doc, json.dumps(json_doc, ensure_ascii=False), hdrs
+        text_body = str(body_raw)
+        json_doc = None
+        if "application/json" in hdrs.get("content-type", "").lower() or text_body.lstrip().startswith(("{", "[")):
+            with suppress(json.JSONDecodeError):
+                parsed = json.loads(text_body) if text_body.strip() else {}
+                json_doc = dict(parsed) if isinstance(parsed, Mapping) else {"data": parsed}
+        return code, json_doc, text_body, hdrs
+
+    code, body_or_text, hdrs = _invoke_live_http(http_fn, "GET", url)
+    if isinstance(body_or_text, Mapping):
+        html_txt = str(body_or_text.get("_html") or body_or_text.get("html") or body_or_text.get("text") or "")
+        return code, dict(body_or_text), html_txt, hdrs
+    text_body = str(body_or_text)
+    json_doc = None
+    with suppress(json.JSONDecodeError):
+        parsed = json.loads(text_body) if text_body.strip() else {}
+        if isinstance(parsed, Mapping):
+            json_doc = dict(parsed)
+    return code, json_doc, text_body, hdrs
+
+
+def _inspect_pr949_html_page(
+    path: str,
+    html_text: str,
+    hdrs: Mapping[str, str],
+    seen_nonces: set[str],
+    *,
+    is_fr: bool,
+) -> tuple[bool, dict[str, Any], list[str]]:
+    issues: list[str] = []
+    has_doctype = "<!doctype html" in html_text.lower()
+    if not has_doctype:
+        issues.append(f"{path}: missing `<!DOCTYPE html>`." if not is_fr else f"{path} : `<!DOCTYPE html>` absent.")
+
+    csp_hdr = str(hdrs.get("content-security-policy") or "")
+    csp_low = csp_hdr.lower()
+    csp_unsafe = "'unsafe-inline'" in csp_low or "'unsafe-eval'" in csp_low
+    hdr_nonces = _CSP_HEADER_NONCE_RE.findall(csp_hdr) if csp_hdr else []
+    attr_nonces = [val for _, val in _HTML_ATTR_NONCE_RE.findall(html_text)]
+    header_nonce = hdr_nonces[0] if (hdr_nonces and len(set(hdr_nonces)) == 1) else None
+    nonce_reused = header_nonce is not None and header_nonce in seen_nonces
+    if header_nonce is not None:
+        seen_nonces.add(header_nonce)
+
+    csp_ok = bool(
+        "default-src 'none'" in csp_low
+        and not csp_unsafe
+        and header_nonce is not None
+        and attr_nonces
+        and header_nonce in attr_nonces
+        and len(set(attr_nonces)) == 1
+        and not nonce_reused
+    )
+    if nonce_reused:
+        issues.append(f"{path}: reused CSP nonce detected." if not is_fr else f"{path} : nonce CSP réutilisé.")
+    elif not csp_ok:
+        issues.append(
+            f"{path}: invalid or missing `'default-src 'none''` CSP nonce."
+            if not is_fr
+            else f"{path} : en-tête CSP `'default-src 'none''` ou nonce invalide/absent."
+        )
+
+    stripped = strip_masked_keys_and_nonces(html_text)
+    unsafe_sink_hits = len(_FORBIDDEN_DOM_SINK_RE.findall(stripped))
+    static_fig = bool(_STATIC_FIG_UNIT_RE.search(stripped))
+    if unsafe_sink_hits > 0:
+        issues.append(
+            f"{path}: unsafe DOM sink detected (`textContent` only)."
+            if not is_fr
+            else f"{path} : sink DOM non sûr détecté (`textContent` uniquement)."
+        )
+    if static_fig:
+        issues.append(
+            f"{path}: unbacked static telemetry figure detected."
+            if not is_fr
+            else f"{path} : chiffre télémétrique statique non étayé détecté."
+        )
+
+    low_html = stripped.lower()
+    banner_ok = bool(
+        ("personal" in low_html or "personnel" in low_html)
+        and ("0.00 eur" in low_html or "0,00 eur" in low_html)
+        and "agpl-3.0" in low_html
+    )
+    if not banner_ok:
+        issues.append(
+            f"{path}: missing Personal-PC / 0.00 EUR / AGPL-3.0 banner."
+            if not is_fr
+            else f"{path} : bannière PC perso / 0,00 EUR / AGPL-3.0 absente."
+        )
+
+    ok = len(issues) == 0
+    return (
+        ok,
+        {
+            "ok": ok,
+            "has_doctype": has_doctype,
+            "csp_ok": csp_ok,
+            "nonce_reused": nonce_reused,
+            "unsafe_dom_sinks_count": unsafe_sink_hits,
+            "static_figure_found": static_fig,
+            "personal_pc_banner_ok": banner_ok,
+        },
+        issues,
+    )
+
+
+def _inspect_pr949_feedback_summary(
+    doc: Mapping[str, Any],
+    *,
+    min_ease: float,
+    min_lag: float,
+    is_fr: bool,
+) -> tuple[bool, int, float | None, float | None, bool | None, list[str]]:
+    issues: list[str] = []
+    if doc.get("object") != FEEDBACK_SUMMARY_OBJECT:
+        issues.append("Feedback summary invalid object type.")
+    if _has_forbidden_score_key(doc):
+        issues.append("Feedback summary contains forbidden key.")
+
+    raw_total = doc.get("total_responses")
+    total_ok = _is_nonneg_int(raw_total)
+    total_val = int(raw_total) if total_ok else -1
+    if not total_ok:
+        issues.append("Feedback summary invalid `total_responses`.")
+
+    has_mean = "mean_ease_rating" in doc
+    has_avg = "average_ease_rating" in doc
+    resolved_ease: float | None = None
+    if not has_mean and not has_avg:
+        issues.append("Feedback summary missing `mean_ease_rating` / `average_ease_rating`.")
+    elif total_ok:
+        m_val = doc.get("mean_ease_rating")
+        a_val = doc.get("average_ease_rating")
+        checked: list[float] = []
+        for lbl, raw_v, present in (
+            ("mean_ease_rating", m_val, has_mean),
+            ("average_ease_rating", a_val, has_avg),
+        ):
+            if not present:
+                continue
+            if total_val == 0 and raw_v is not None:
+                issues.append(f"Feedback summary non-null `{lbl}` when empty.")
+            elif total_val > 0:
+                if (
+                    isinstance(raw_v, bool)
+                    or not isinstance(raw_v, (int, float))
+                    or not math.isfinite(float(raw_v))
+                    or not (1.0 <= float(raw_v) <= 5.0)
+                ):
+                    issues.append(f"Feedback summary invalid `{lbl}` value.")
+                else:
+                    checked.append(float(raw_v))
+        if has_mean and has_avg and len(checked) == 2 and round(checked[0], 2) != round(checked[1], 2):
+            issues.append("Feedback summary `mean_ease_rating` and `average_ease_rating` disagree.")
+        if checked:
+            resolved_ease = round(checked[0], 2)
+
+    resolved_lag: float | None = None
+    if "zero_game_lag_ratio" not in doc:
+        issues.append("Feedback summary missing `zero_game_lag_ratio`.")
+    elif total_ok:
+        raw_lag = doc.get("zero_game_lag_ratio")
+        if total_val == 0 and raw_lag is not None:
+            issues.append("Feedback summary non-null `zero_game_lag_ratio` when empty.")
+        elif total_val > 0:
+            if (
+                isinstance(raw_lag, bool)
+                or not isinstance(raw_lag, (int, float))
+                or not math.isfinite(float(raw_lag))
+                or not (0.0 <= float(raw_lag) <= 1.0)
+            ):
+                issues.append("Feedback summary invalid `zero_game_lag_ratio`.")
+            else:
+                resolved_lag = round(float(raw_lag), 4)
+
+    bp = doc.get("by_profile")
+    if (
+        not isinstance(bp, Mapping)
+        or not _is_nonneg_int(bp.get("dev"))
+        or not _is_nonneg_int(bp.get("gamer"))
+        or (total_ok and int(bp["dev"]) + int(bp["gamer"]) != total_val)
+    ):
+        issues.append("Feedback summary invalid `by_profile` conservation.")
+
+    schema_ok = len(issues) == 0
+    if not schema_ok:
+        return False, max(total_val, 0), None, None, False, issues
+
+    if total_val == 0:
+        return True, 0, None, None, None, []
+
+    ease_ok = resolved_ease is not None and Fraction(str(resolved_ease)) >= Fraction(str(min_ease))
+    lag_ok = resolved_lag is not None and Fraction(str(resolved_lag)) >= Fraction(str(min_lag))
+    slo_issues: list[str] = []
+    if not ease_ok:
+        slo_issues.append(
+            f"Note CES moyenne {resolved_ease}/5 < {min_ease}/5."
+            if is_fr
+            else f"CES ease rating {resolved_ease}/5 below target >= {min_ease}/5."
+        )
+    if not lag_ok:
+        slo_issues.append(
+            f"Ratio zéro-lag Gamer {resolved_lag} < {min_lag}."
+            if is_fr
+            else f"Gamer zero_game_lag_ratio {resolved_lag} below target >= {min_lag}."
+        )
+    return True, total_val, resolved_ease, resolved_lag, bool(ease_ok and lag_ok), slo_issues
+
+
+def _inspect_pr949_fleet(
+    doc: Mapping[str, Any],
+    *,
+    target_n: int,
+    require_live_quorum: bool,
+    is_fr: bool,
+) -> tuple[bool, int | None, int | None, bool, bool, bool, list[str]]:
+    issues: list[str] = []
+    count_keys = ("total_hiveminders", "live_hiveminders", "distinct_physical_gpus", "live_endpoints")
+    models_ok = isinstance(doc.get("live_models"), list) and all(isinstance(m, str) for m in doc["live_models"])
+    rows = doc.get("hiveminders")
+    rows_ok = isinstance(rows, list) and all(isinstance(r, Mapping) and "handle" in r and "status" in r for r in rows)
+    endpoint_leaked = isinstance(rows, list) and any(
+        isinstance(r, Mapping) and r.get("endpoint_url") is not None for r in rows
+    )
+    if (
+        doc.get("object") != FLEET_OBJECT
+        or not all(_is_nonneg_int(doc.get(k)) for k in count_keys)
+        or not models_ok
+        or not rows_ok
+    ):
+        issues.append(
+            "Contrat JSON `/v1/hivemind/producers/fleet` invalide."
+            if is_fr
+            else "Invalid `/v1/hivemind/producers/fleet` JSON schema."
+        )
+    if endpoint_leaked:
+        issues.append(
+            "Fuite `endpoint_url` détectée dans `/v1/hivemind/producers/fleet`."
+            if is_fr
+            else "Unredacted `endpoint_url` leaked in public `/v1/hivemind/producers/fleet`."
+        )
+    if issues:
+        return False, None, None, False, False, False, issues
+
+    online_cnt = int(doc["live_hiveminders"])
+    gpu_cnt = int(doc["distinct_physical_gpus"])
+    quorum_met = online_cnt >= target_n and gpu_cnt >= 1
+    awaiting = not quorum_met
+    quorum_gate_ok = quorum_met or not require_live_quorum
+    diags: list[str] = []
+    if not quorum_met:
+        if require_live_quorum:
+            diags.append(
+                f"Quorum producteurs insuffisant ({online_cnt}/{target_n} en ligne, {gpu_cnt} GPU distincts ; `--require-live-quorum`)."
+                if is_fr
+                else f"Live producer quorum unmet ({online_cnt}/{target_n} online, {gpu_cnt} distinct GPUs; `--require-live-quorum`)."
+            )
+        else:
+            diags.append(
+                f"En attente quorum amis (`awaiting_producer_quorum` : {online_cnt}/{target_n} producteurs, {gpu_cnt} GPU)."
+                if is_fr
+                else f"Awaiting friend producer quorum (`awaiting_producer_quorum`: {online_cnt}/{target_n} online, {gpu_cnt} GPUs)."
+            )
+    return True, online_cnt, gpu_cnt, quorum_met, awaiting, quorum_gate_ok, diags
+
+
+def _compliance_blocked_pr949_report(
+    gateway: str,
+    compliance: Mapping[str, Any],
+    *,
+    norm_lang: str,
+    target_n: int,
+    clean_ease: float,
+    clean_lag: float,
+    require_live_quorum: bool,
+    clean_expected_sha: str | None,
+) -> dict[str, Any]:
+    guidance = _build_finops_redeploy_guidance(gateway, clean_expected_sha)
+    diag = sanitize_text_for_display(str(compliance.get("summary") or COMPLIANCE_NOTICE_BILINGUAL))
+    return _attach_receipt(
+        {
+            "schema": SCHEMA,
+            "object": RECEIPT_OBJECT,
+            "slice_id": "SLICE-SCALE-DYN-39",
+            "campaign_id": CAMPAIGN_ID,
+            "mode": "pr949_live_readiness",
+            "lang": norm_lang,
+            "gateway": gateway,
+            "compliance_ok": False,
+            "corporate_detected": True,
+            "compliance": dict(compliance),
+            "ready": False,
+            "go_nogo": "NO-GO",
+            "verdict": "NO_GO",
+            "exit_code": 2,
+            "holiday_routes_deployed_on_cloud_run": False,
+            "onboarding_feedback_deployed": False,
+            "stale_revision_detected": False,
+            "missing_or_stale_routes": [],
+            "models_ok": False,
+            "model_ids": [],
+            "coder_model_present": False,
+            "manifest_ok": False,
+            "live_build_sha": "unknown",
+            "expected_build_sha": clean_expected_sha,
+            "sha_match": None,
+            "cloud_run_revision": None,
+            "html_routes_ok": False,
+            "unique_csp_nonces_count": 0,
+            "forbidden_dom_sinks_count": 0,
+            "static_figures_found": False,
+            "personal_pc_banners_ok": False,
+            "html_contracts": {},
+            "feedback_schema_ok": False,
+            "total_responses": 0,
+            "mean_ease_rating": None,
+            "zero_game_lag_ratio": None,
+            "ces_slo_ok": False,
+            "min_ease_rating": clean_ease,
+            "min_zero_lag_ratio": clean_lag,
+            "fleet_schema_ok": False,
+            "online_producers": None,
+            "distinct_physical_gpus": None,
+            "target_online_producers": target_n,
+            "producer_quorum_met": False,
+            "awaiting_producer_quorum": False,
+            "require_live_quorum": bool(require_live_quorum),
+            "raid_status_ok": False,
+            "arena_summary_ok": False,
+            "http_statuses": {},
+            "redeploy_required": False,
+            "redeploy_command": guidance["redeploy_command"],
+            "redeploy_guidance": guidance,
+            "zero_inference_verified": True,
+            "network_calls": 0,
+            "file_writes": 0,
+            "financial_promise": FINANCIAL_PROMISE,
+            "notice_en": COMPLIANCE_NOTICE_EN,
+            "notice_fr": COMPLIANCE_NOTICE_FR,
+            "notice_bilingual": COMPLIANCE_NOTICE_BILINGUAL,
+            "diagnostics": [diag],
+            "summary": diag,
+        }
+    )
+
+
+def verify_pr949_live_readiness_and_quorum(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    expected_sha: str | None = None,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    min_ease_rating: float = DEFAULT_MIN_EASE_RATING,
+    min_zero_lag_ratio: float = DEFAULT_MIN_ZERO_LAG_RATIO,
+    require_live_quorum: bool = False,
+    raw_http_fn: RawHttpFn = default_http_raw,
+    http_fn: LiveHttpFn = default_live_http_request,
+    environ: Mapping[str, str] | None = None,
+    cwd: Path | None = None,
+    check_git_remote: bool = True,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Zero-inference PR #949 live parity, 8+ friend-producer quorum, and CES alias readiness verifier."""
+    norm_lang = normalize_lang(lang)
+    is_fr = norm_lang == "fr"
+    clean_gw = validate_gateway_url(gateway)
+    target_n = _validate_int_range(target_online_producers, "target_online_producers", 1, 500)
+    clean_ease = _validate_float_range(min_ease_rating, "min_ease_rating", 1.0, 5.0)
+    clean_lag = _validate_float_range(min_zero_lag_ratio, "min_zero_lag_ratio", 0.0, 1.0)
+    clean_expected_sha = (
+        _validate_expected_sha(expected_sha)
+        if expected_sha is not None and str(expected_sha).strip()
+        else None
+    )
+
+    compliance = evaluate_personal_pc_compliance(
+        environ=environ,
+        cwd=cwd,
+        check_git_remote=check_git_remote,
+        lang=norm_lang,
+    )
+    if not compliance["compliance_ok"]:
+        return _compliance_blocked_pr949_report(
+            clean_gw,
+            compliance,
+            norm_lang=norm_lang,
+            target_n=target_n,
+            clean_ease=clean_ease,
+            clean_lag=clean_lag,
+            require_live_quorum=bool(require_live_quorum),
+            clean_expected_sha=clean_expected_sha,
+        )
+
+    http_statuses: dict[str, int] = {}
+    stale_routes: set[str] = set()
+    missing_manifest_routes: list[str] = []
+    diagnostics: list[str] = []
+    seen_nonces: set[str] = set()
+    html_contracts: dict[str, dict[str, Any]] = {}
+    unsafe_sink_total = 0
+    static_figures_any = False
+
+    health_ok = False
+    health_sha = "unknown"
+    models_ok = False
+    model_ids: list[str] = []
+    coder_present = False
+    manifest_ok = False
+    live_build_sha = "unknown"
+    sha_match: bool | None = None
+    cloud_run_revision: str | None = None
+    feedback_schema_ok = False
+    total_responses = 0
+    mean_ease: float | None = None
+    zero_lag: float | None = None
+    ces_slo_ok: bool | None = False
+    fleet_schema_ok = False
+    online_producers: int | None = None
+    distinct_physical_gpus: int | None = None
+    producer_quorum_met = False
+    awaiting_producer_quorum = False
+    quorum_gate_ok = False
+    raid_status_ok = False
+    arena_summary_ok = False
+    network_calls = 0
+
+    for path, kind in PR949_REQUIRED_ROUTES:
+        network_calls += 1
+        code, json_doc, text_body, hdrs = _call_pr949_probe(
+            f"{clean_gw}{path}",
+            raw_http_fn=raw_http_fn,
+            http_fn=http_fn,
+        )
+        http_statuses[path] = code
+        if code != 200:
+            stale_routes.add(path)
+            diagnostics.append(
+                f"GET {path} -> HTTP {code} (attendu 200)." if is_fr else f"GET {path} -> HTTP {code} (expected 200)."
+            )
+            continue
+
+        if path == "/health":
+            health_ok = isinstance(json_doc, Mapping) and json_doc.get("status") == "ok"
+            if isinstance(json_doc, Mapping):
+                health_sha = _sanitize_build_sha(json_doc.get("build_sha"))
+            if not health_ok:
+                stale_routes.add(path)
+                diagnostics.append("GET /health missing `status == 'ok'`.")
+        elif path == "/v1/models":
+            raw_data = json_doc.get("data") if isinstance(json_doc, Mapping) else None
+            valid_entries = [
+                e for e in (raw_data or ()) if isinstance(e, Mapping) and isinstance(e.get("id"), str) and e["id"].strip()
+            ] if isinstance(raw_data, list) else []
+            model_ids = [str(e["id"]).strip() for e in valid_entries]
+            coder_present = any(
+                e["id"].strip() == "hivemind/coder"
+                and (e.get("object") in (None, "model"))
+                for e in valid_entries
+            )
+            models_ok = bool(
+                isinstance(json_doc, Mapping)
+                and json_doc.get("object", "list") == "list"
+                and model_ids
+                and coder_present
+            )
+            if not models_ok:
+                stale_routes.add(path)
+                diagnostics.append(
+                    "GET /v1/models vide ou sans `hivemind/coder`."
+                    if is_fr
+                    else "GET /v1/models empty or missing `hivemind/coder` metadata."
+                )
+        elif kind == "html":
+            h_ok, h_info, h_issues = _inspect_pr949_html_page(path, text_body, hdrs, seen_nonces, is_fr=is_fr)
+            html_contracts[path] = h_info
+            unsafe_sink_total += int(h_info["unsafe_dom_sinks_count"])
+            static_figures_any = static_figures_any or bool(h_info["static_figure_found"])
+            if not h_ok:
+                stale_routes.add(path)
+                diagnostics.extend(h_issues)
+        elif path == "/v1/hivemind/onboarding/manifest":
+            if not isinstance(json_doc, Mapping):
+                stale_routes.add(path)
+                diagnostics.append("GET /v1/hivemind/onboarding/manifest missing JSON body.")
+            else:
+                meta_ok = bool(
+                    json_doc.get("object") == MANIFEST_OBJECT
+                    and json_doc.get("campaign_id") == CAMPAIGN_ID
+                    and json_doc.get("status") == "ok"
+                    and json_doc.get("personal_pc_only") is True
+                    and json_doc.get("financial_promise") == FINANCIAL_PROMISE
+                )
+                raw_routes = json_doc.get("holiday_routes")
+                if isinstance(raw_routes, list) and all(isinstance(r, str) for r in raw_routes):
+                    missing_manifest_routes = [r for r in PR949_MANIFEST_ROUTES if r not in raw_routes]
+                else:
+                    missing_manifest_routes = list(PR949_MANIFEST_ROUTES)
+                raw_scripts = json_doc.get("downloadable_scripts")
+                scripts_ok = (
+                    isinstance(raw_scripts, list)
+                    and all(isinstance(s, str) for s in raw_scripts)
+                    and all(req in raw_scripts for req in PR949_MANIFEST_CORE_SCRIPTS)
+                )
+                live_build_sha = _sanitize_build_sha(json_doc.get("build_sha"))
+                if live_build_sha == "unknown":
+                    live_build_sha = health_sha
+                raw_rev = json_doc.get("cloud_run_revision")
+                cloud_run_revision = str(raw_rev).strip() if isinstance(raw_rev, str) and raw_rev.strip() else None
+                if clean_expected_sha is not None:
+                    sha_match = _shas_match(live_build_sha, clean_expected_sha)
+                    if not sha_match:
+                        diagnostics.append(
+                            f"Build SHA drift: live='{live_build_sha}' != expected '{clean_expected_sha}'."
+                        )
+                manifest_ok = bool(meta_ok and not missing_manifest_routes and scripts_ok and sha_match is not False)
+                if not manifest_ok:
+                    stale_routes.add(path)
+                    if missing_manifest_routes:
+                        diagnostics.append(
+                            f"Manifest missing holiday routes: {', '.join(missing_manifest_routes)}."
+                        )
+                    elif not meta_ok or not scripts_ok:
+                        diagnostics.append("Manifest metadata or core scripts invalid.")
+        elif path == "/v1/hivemind/onboarding/feedback/summary":
+            if not isinstance(json_doc, Mapping):
+                stale_routes.add(path)
+                diagnostics.append("Feedback summary missing JSON body.")
+            else:
+                feedback_schema_ok, total_responses, mean_ease, zero_lag, ces_slo_ok, fb_issues = (
+                    _inspect_pr949_feedback_summary(
+                        json_doc,
+                        min_ease=clean_ease,
+                        min_lag=clean_lag,
+                        is_fr=is_fr,
+                    )
+                )
+                if not feedback_schema_ok:
+                    stale_routes.add(path)
+                diagnostics.extend(fb_issues)
+        elif path == "/v1/hivemind/producers/fleet":
+            if not isinstance(json_doc, Mapping):
+                stale_routes.add(path)
+                diagnostics.append("Producer fleet missing JSON body.")
+            else:
+                (
+                    fleet_schema_ok,
+                    online_producers,
+                    distinct_physical_gpus,
+                    producer_quorum_met,
+                    awaiting_producer_quorum,
+                    quorum_gate_ok,
+                    fleet_issues,
+                ) = _inspect_pr949_fleet(
+                    json_doc,
+                    target_n=target_n,
+                    require_live_quorum=bool(require_live_quorum),
+                    is_fr=is_fr,
+                )
+                if not fleet_schema_ok:
+                    stale_routes.add(path)
+                diagnostics.extend(fleet_issues)
+        elif path == "/v1/hivemind/raid/status":
+            comp = json_doc.get("compliance") if isinstance(json_doc, Mapping) else None
+            raid_status_ok = bool(
+                isinstance(json_doc, Mapping)
+                and json_doc.get("object") == RAID_STATUS_OBJECT
+                and isinstance(comp, Mapping)
+                and comp.get("personal_pc_only") is True
+                and comp.get("monetary_cost_eur") == "0.00 EUR"
+                and comp.get("monetary_cost_usd") == "0.00 USD"
+                and comp.get("license") == "AGPL-3.0"
+                and isinstance(json_doc.get("swarm"), Mapping)
+                and isinstance(json_doc.get("onboarding_feedback"), Mapping)
+            )
+            if not raid_status_ok:
+                stale_routes.add(path)
+                diagnostics.append("GET /v1/hivemind/raid/status schema or compliance invalid.")
+        else:  # /v1/hivemind/arena/summary
+            counts_ok = False
+            if isinstance(json_doc, Mapping) and json_doc.get("object") == ARENA_SUMMARY_OBJECT:
+                tv = json_doc.get("total_votes")
+                if _is_nonneg_int(tv):
+                    if all(k in json_doc for k in ("holiday_wins", "baseline_wins", "ties")):
+                        hw, bw, ti = json_doc["holiday_wins"], json_doc["baseline_wins"], json_doc["ties"]
+                        counts_ok = (
+                            _is_nonneg_int(hw)
+                            and _is_nonneg_int(bw)
+                            and _is_nonneg_int(ti)
+                            and int(hw) + int(bw) + int(ti) == int(tv)
+                        )
+                    else:
+                        counts_ok = True
+            arena_summary_ok = counts_ok and not _has_forbidden_score_key(json_doc or {})
+            if not arena_summary_ok:
+                stale_routes.add(path)
+                diagnostics.append("GET /v1/hivemind/arena/summary schema or vote conservation invalid.")
+
+    html_routes_ok = bool(
+        len(html_contracts) == len(LIVE_HTML_PATHS)
+        and all(html_contracts.get(p, {}).get("ok") is True for p in LIVE_HTML_PATHS)
+        and len(seen_nonces) == len(LIVE_HTML_PATHS)
+    )
+    personal_pc_banners_ok = bool(
+        len(html_contracts) == len(LIVE_HTML_PATHS)
+        and all(html_contracts.get(p, {}).get("personal_pc_banner_ok") is True for p in LIVE_HTML_PATHS)
+    )
+    onboarding_feedback_deployed = bool(
+        http_statuses.get("/v1/hivemind/onboarding/feedback/summary") == 200 and feedback_schema_ok
+    )
+    holiday_routes_deployed = bool(
+        health_ok
+        and manifest_ok
+        and html_routes_ok
+        and onboarding_feedback_deployed
+        and raid_status_ok
+        and arena_summary_ok
+    )
+    missing_or_stale_routes = sorted(stale_routes | set(missing_manifest_routes))
+    stale_revision_detected = bool(
+        any(http_statuses.get(p) == 404 for p in http_statuses)
+        or missing_manifest_routes
+        or (sha_match is False)
+        or not holiday_routes_deployed
+    )
+    ces_gate_ok = feedback_schema_ok and (ces_slo_ok is not False)
+    ready = bool(
+        holiday_routes_deployed
+        and models_ok
+        and fleet_schema_ok
+        and ces_gate_ok
+        and quorum_gate_ok
+        and not stale_revision_detected
+    )
+    redeploy_required = bool(
+        stale_revision_detected or not holiday_routes_deployed or not onboarding_feedback_deployed or not models_ok
+    )
+    guidance = _build_finops_redeploy_guidance(clean_gw, clean_expected_sha)
+    clean_diags = [sanitize_text_for_display(d) for d in diagnostics]
+    summary = (
+        f"PR #949 live={'GO' if ready else 'NO-GO'} sur {clean_gw} "
+        f"(holiday_routes={holiday_routes_deployed}, feedback={onboarding_feedback_deployed}, "
+        f"producers={online_producers}/{target_n}, awaiting_quorum={awaiting_producer_quorum}, "
+        f"mean_ease={mean_ease}, zero_lag={zero_lag})."
+        if is_fr
+        else f"PR #949 live={'GO' if ready else 'NO-GO'} on {clean_gw} "
+        f"(holiday_routes={holiday_routes_deployed}, feedback={onboarding_feedback_deployed}, "
+        f"producers={online_producers}/{target_n}, awaiting_quorum={awaiting_producer_quorum}, "
+        f"mean_ease={mean_ease}, zero_lag={zero_lag})."
+    )
+
+    return _attach_receipt(
+        {
+            "schema": SCHEMA,
+            "object": RECEIPT_OBJECT,
+            "slice_id": "SLICE-SCALE-DYN-39",
+            "campaign_id": CAMPAIGN_ID,
+            "mode": "pr949_live_readiness",
+            "lang": norm_lang,
+            "gateway": clean_gw,
+            "compliance_ok": True,
+            "corporate_detected": False,
+            "compliance": compliance,
+            "ready": ready,
+            "go_nogo": "GO" if ready else "NO-GO",
+            "verdict": "GO" if ready else "NO_GO",
+            "exit_code": 0 if ready else 2,
+            "holiday_routes_deployed_on_cloud_run": holiday_routes_deployed,
+            "onboarding_feedback_deployed": onboarding_feedback_deployed,
+            "stale_revision_detected": stale_revision_detected,
+            "missing_or_stale_routes": missing_or_stale_routes,
+            "models_ok": models_ok,
+            "model_ids": model_ids,
+            "coder_model_present": coder_present,
+            "manifest_ok": manifest_ok,
+            "live_build_sha": live_build_sha,
+            "expected_build_sha": clean_expected_sha,
+            "sha_match": sha_match,
+            "cloud_run_revision": cloud_run_revision,
+            "html_routes_ok": html_routes_ok,
+            "unique_csp_nonces_count": len(seen_nonces),
+            "forbidden_dom_sinks_count": unsafe_sink_total,
+            "static_figures_found": static_figures_any,
+            "personal_pc_banners_ok": personal_pc_banners_ok,
+            "html_contracts": html_contracts,
+            "feedback_schema_ok": feedback_schema_ok,
+            "total_responses": total_responses,
+            "mean_ease_rating": mean_ease,
+            "zero_game_lag_ratio": zero_lag,
+            "ces_slo_ok": ces_slo_ok,
+            "min_ease_rating": clean_ease,
+            "min_zero_lag_ratio": clean_lag,
+            "fleet_schema_ok": fleet_schema_ok,
+            "online_producers": online_producers,
+            "distinct_physical_gpus": distinct_physical_gpus,
+            "target_online_producers": target_n,
+            "producer_quorum_met": producer_quorum_met,
+            "awaiting_producer_quorum": awaiting_producer_quorum,
+            "require_live_quorum": bool(require_live_quorum),
+            "raid_status_ok": raid_status_ok,
+            "arena_summary_ok": arena_summary_ok,
+            "http_statuses": http_statuses,
+            "redeploy_required": redeploy_required,
+            "redeploy_command": guidance["redeploy_command"],
+            "redeploy_guidance": guidance,
+            "zero_inference_verified": True,
+            "network_calls": network_calls,
+            "file_writes": 0,
+            "financial_promise": FINANCIAL_PROMISE,
+            "notice_en": COMPLIANCE_NOTICE_EN,
+            "notice_fr": COMPLIANCE_NOTICE_FR,
+            "notice_bilingual": COMPLIANCE_NOTICE_BILINGUAL,
+            "diagnostics": clean_diags,
+            "summary": summary,
+        }
+    )
 
 
 def _invoke_live_http(
@@ -1051,9 +2338,17 @@ def run_live_gateway_check(
     deploy_script_path: Path | None = None,
     live_http_fn: LiveHttpFn = default_live_http_request,
     runner: RunnerFn = default_subprocess_runner,
+    verify_pr949_parity: bool = False,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    min_ease_rating: float = DEFAULT_MIN_EASE_RATING,
+    min_zero_lag_ratio: float = DEFAULT_MIN_ZERO_LAG_RATIO,
+    require_live_quorum: bool = False,
+    environ: Mapping[str, str] | None = None,
+    cwd: Path | None = None,
+    check_git_remote: bool = False,
     lang: str = "en",
 ) -> dict[str, Any]:
-    """Perform read-only zero-inference parity, 404 drift, and CSP nonce verification on `live_url`."""
+    """Perform read-only zero-inference parity, 404 drift, CSP nonce, and optional PR #949 quorum verification."""
     script_lang = _single_script_lang(normalize_lang(lang))
     is_fr = script_lang == "fr"
     clean_live = validate_gateway_url(live_url)
@@ -1178,6 +2473,28 @@ def run_live_gateway_check(
     cloud_run_lags_main = bool(
         parity_report["cloud_run_lags_main"] or drift_404_detected or sha_drift
     )
+    pr949_parity: dict[str, Any] | None = None
+    pr949_ok = True
+    if verify_pr949_parity:
+        pr949_parity = verify_pr949_live_readiness_and_quorum(
+            clean_live,
+            expected_sha=expected_sha,
+            target_online_producers=target_online_producers,
+            min_ease_rating=min_ease_rating,
+            min_zero_lag_ratio=min_zero_lag_ratio,
+            require_live_quorum=require_live_quorum,
+            http_fn=live_http_fn,
+            environ=environ,
+            cwd=cwd,
+            check_git_remote=check_git_remote,
+            lang=lang,
+        )
+        pr949_ok = bool(pr949_parity["ready"]) and verify_receipt_sha256(pr949_parity)
+        if not pr949_ok:
+            for d_item in pr949_parity.get("diagnostics") or ():
+                if d_item not in diagnostics:
+                    diagnostics.append(d_item)
+
     live_ok = bool(
         parity_report["parity_ok"]
         and parity_receipt_ok
@@ -1185,6 +2502,7 @@ def run_live_gateway_check(
         and live_csp_ok
         and not drift_404_detected
         and not sha_drift
+        and pr949_ok
     )
     redeploy_required = not live_ok
 
@@ -1202,44 +2520,45 @@ def run_live_gateway_check(
         **extra_statuses,
     }
 
-    return _attach_receipt(
-        {
-            "live_url": clean_live,
-            "live_ok": live_ok,
-            "parity_ok": bool(parity_report["parity_ok"] and not extra_failed_routes),
-            "live_csp_ok": live_csp_ok,
-            "drift_404_detected": drift_404_detected,
-            "cloud_run_lags_main": cloud_run_lags_main,
-            "redeploy_required": redeploy_required,
-            "routes_verified_count": int(parity_report["routes_verified_count"])
-            + (len(LIVE_EXTRA_SUMMARY_PATHS) - len(extra_failed_routes)),
-            "routes_total_count": int(parity_report["routes_total_count"])
-            + len(LIVE_EXTRA_SUMMARY_PATHS),
-            "scripts_verified_count": int(parity_report["scripts_verified_count"]),
-            "scripts_total_count": int(parity_report["scripts_total_count"]),
-            "html_pages_checked_count": html_200_count,
-            "unique_csp_nonces_count": unique_nonces_count,
-            "unique_csp_nonces_ratio": unique_nonces_ratio,
-            "forbidden_dom_sinks_count": dom_sink_hits,
-            "live_build_sha": str(parity_report["live_build_sha"]),
-            "expected_build_sha": parity_report["expected_build_sha"],
-            "sha_drift": sha_drift,
-            "cloud_run_revision": parity_report["cloud_run_revision"],
-            "http_statuses": merged_http_statuses,
-            "script_http_statuses": dict(parity_report["script_http_statuses"]),
-            "missing_routes": missing_routes,
-            "failed_routes": failed_routes,
-            "missing_scripts": missing_scripts,
-            "failed_scripts": failed_scripts,
-            "missing_manifest_routes": missing_manifest_routes,
-            "missing_manifest_scripts": missing_manifest_scripts,
-            "redeploy_command": str(redeploy_plan["redeploy_command"]),
-            "zero_inference_verified": True,
-            "parity_receipt_sha256": str(parity_report["receipt_sha256"]),
-            "parity_receipt_valid": parity_receipt_ok,
-            "diagnostics": diagnostics,
-        }
-    )
+    payload_out: dict[str, Any] = {
+        "live_url": clean_live,
+        "live_ok": live_ok,
+        "parity_ok": bool(parity_report["parity_ok"] and not extra_failed_routes and pr949_ok),
+        "live_csp_ok": live_csp_ok,
+        "drift_404_detected": drift_404_detected,
+        "cloud_run_lags_main": cloud_run_lags_main,
+        "redeploy_required": redeploy_required,
+        "routes_verified_count": int(parity_report["routes_verified_count"])
+        + (len(LIVE_EXTRA_SUMMARY_PATHS) - len(extra_failed_routes)),
+        "routes_total_count": int(parity_report["routes_total_count"])
+        + len(LIVE_EXTRA_SUMMARY_PATHS),
+        "scripts_verified_count": int(parity_report["scripts_verified_count"]),
+        "scripts_total_count": int(parity_report["scripts_total_count"]),
+        "html_pages_checked_count": html_200_count,
+        "unique_csp_nonces_count": unique_nonces_count,
+        "unique_csp_nonces_ratio": unique_nonces_ratio,
+        "forbidden_dom_sinks_count": dom_sink_hits,
+        "live_build_sha": str(parity_report["live_build_sha"]),
+        "expected_build_sha": parity_report["expected_build_sha"],
+        "sha_drift": sha_drift,
+        "cloud_run_revision": parity_report["cloud_run_revision"],
+        "http_statuses": merged_http_statuses,
+        "script_http_statuses": dict(parity_report["script_http_statuses"]),
+        "missing_routes": missing_routes,
+        "failed_routes": failed_routes,
+        "missing_scripts": missing_scripts,
+        "failed_scripts": failed_scripts,
+        "missing_manifest_routes": missing_manifest_routes,
+        "missing_manifest_scripts": missing_manifest_scripts,
+        "redeploy_command": str(redeploy_plan["redeploy_command"]),
+        "zero_inference_verified": True,
+        "parity_receipt_sha256": str(parity_report["receipt_sha256"]),
+        "parity_receipt_valid": parity_receipt_ok,
+        "diagnostics": diagnostics,
+    }
+    if pr949_parity is not None:
+        payload_out["pr949_parity"] = pr949_parity
+    return _attach_receipt(payload_out)
 
 
 def run_gate_g1_parity(
@@ -2301,6 +3620,11 @@ def run_noel_scale_readiness_gate(
     g5_dev_ease_rating: int = 5,
     g5_autoconfig_clock_fn: ClockFn | None = None,
     gate_overrides: Mapping[str, GateCallable] | None = None,
+    verify_pr949_parity: bool = False,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    min_ease_rating: float = DEFAULT_MIN_EASE_RATING,
+    min_zero_lag_ratio: float = DEFAULT_MIN_ZERO_LAG_RATIO,
+    require_live_quorum: bool = False,
 ) -> dict[str, Any]:
     """Execute all 5 objective Noël-at-Scale Go/No-Go gates and return a SHA-256-receipted scorecard."""
     t_wall0 = float(clock_fn())
@@ -2422,6 +3746,14 @@ def run_noel_scale_readiness_gate(
             deploy_script_path=deploy_script_path,
             live_http_fn=live_http_fn,
             runner=runner,
+            verify_pr949_parity=verify_pr949_parity,
+            target_online_producers=target_online_producers,
+            min_ease_rating=min_ease_rating,
+            min_zero_lag_ratio=min_zero_lag_ratio,
+            require_live_quorum=require_live_quorum,
+            environ=environ,
+            cwd=cwd,
+            check_git_remote=check_cwd_git_remote,
             lang=norm_lang,
         )
 
@@ -2630,7 +3962,54 @@ def run_noel_scale_readiness_gate(
     )
 
 
+def _render_pr949_markdown(report: Mapping[str, Any], *, fr: bool) -> str:
+    ready = bool(report.get("ready"))
+    compliance_txt = COMPLIANCE_NOTICE_FR if fr else COMPLIANCE_NOTICE_EN
+    heading = (
+        "# Vérification Live PR #949, Quorum Producteurs & CES (`SLICE-SCALE-DYN-39`)"
+        if fr
+        else "# PR #949 Live Parity, 8+ Producer Quorum & CES Readiness (`SLICE-SCALE-DYN-39`)"
+    )
+    verdict_txt = "GO — PRÊT" if (fr and ready) else ("GO — READY" if ready else ("NO-GO — BLOCAGE" if fr else "NO-GO — HOLD"))
+    lines = [
+        heading,
+        "",
+        f"> **Compliance ({FINANCIAL_PROMISE})**: {compliance_txt}",
+        "",
+        f"- **{'Verdict' if fr else 'Decision'}**: **{verdict_txt}** (`ready={ready}`, `exit_code={report.get('exit_code')}`)",
+        f"- **{'Passerelle' if fr else 'Gateway'}**: `{report.get('gateway')}` (`live_build_sha={report.get('live_build_sha')}`)",
+        f"- **{'Routes Noël Cloud Run' if fr else 'Holiday Routes Deployed'}**: `{report.get('holiday_routes_deployed_on_cloud_run')}` (`feedback_deployed={report.get('onboarding_feedback_deployed')}`, `stale_revision={report.get('stale_revision_detected')}`)",
+        f"- **{'Quorum Producteurs (8+)' if fr else 'Producer Quorum (8+)'}**: `{report.get('online_producers')}/{report.get('target_online_producers')}` (`quorum_met={report.get('producer_quorum_met')}`, `awaiting={report.get('awaiting_producer_quorum')}`, `gpus={report.get('distinct_physical_gpus')}`)",
+        f"- **CES**: `responses={report.get('total_responses')}`, `mean_ease_rating={report.get('mean_ease_rating')}`, `zero_game_lag_ratio={report.get('zero_game_lag_ratio')}` (`ces_slo_ok={report.get('ces_slo_ok')}`)",
+        f"- **{'Nonces CSP Uniques' if fr else 'Unique CSP Nonces'}**: `{report.get('unique_csp_nonces_count')}/{len(LIVE_HTML_PATHS)}` (`dom_sinks={report.get('forbidden_dom_sinks_count')}`, `static_figures={report.get('static_figures_found')}`, `banners_ok={report.get('personal_pc_banners_ok')}`)",
+    ]
+    missing_routes = report.get("missing_or_stale_routes") or ()
+    if missing_routes:
+        lines.append(
+            f"- **{'Routes manquantes/obsolètes' if fr else 'Missing/Stale Routes'}**: `{', '.join(str(r) for r in missing_routes)}`"
+        )
+    if report.get("redeploy_required") and report.get("redeploy_command"):
+        lines.extend(
+            [
+                "",
+                "```bash",
+                sanitize_text_for_display(str(report["redeploy_command"])),
+                "```",
+            ]
+        )
+    diags = report.get("diagnostics") or ()
+    if diags:
+        lines.extend(["", "## Diagnostics", ""])
+        for item in diags:
+            lines.append(f"- {sanitize_text_for_display(str(item))}")
+    lines.extend(["", f"**SHA-256 Receipt**: `{report.get('receipt_sha256')}`", ""])
+    return "\n".join(lines)
+
+
 def _render_single_lang_markdown(report: Mapping[str, Any], *, fr: bool) -> str:
+    if report.get("mode") == "pr949_live_readiness":
+        return _render_pr949_markdown(report, fr=fr)
+
     go = bool(report.get("go_for_launch"))
     passed_n = int(report.get("gates_passed_count") or 0)
     total_n = int(report.get("gates_total_count") or len(GATE_IDS))
@@ -2697,6 +4076,13 @@ def _render_single_lang_markdown(report: Mapping[str, Any], *, fr: bool) -> str:
                 f"- **Live CSP Nonces**: `{live_doc.get('unique_csp_nonces_count')}/{live_doc.get('html_pages_checked_count')}` (`ratio={live_doc.get('unique_csp_nonces_ratio')}`)",
             ]
         )
+        pr949_doc = live_doc.get("pr949_parity")
+        if isinstance(pr949_doc, Mapping):
+            lines.append(
+                f"- **PR #949 Quorum / CES**: `ready={pr949_doc.get('ready')}`, "
+                f"`producers={pr949_doc.get('online_producers')}/{pr949_doc.get('target_online_producers')}`, "
+                f"`mean_ease={pr949_doc.get('mean_ease_rating')}`"
+            )
         if live_doc.get("redeploy_required") and live_doc.get("redeploy_command"):
             lines.extend(
                 [
@@ -2735,11 +4121,30 @@ def render_cli_report(report: Mapping[str, Any], *, lang: str | None = None) -> 
     """Render a compact single-screen FR/EN CLI Go/No-Go scorecard audited for zero leaks."""
     eff_lang = normalize_lang(lang if lang is not None else str(report.get("lang") or "en"))
     is_fr = eff_lang == "fr"
+    notice = COMPLIANCE_NOTICE_BILINGUAL if eff_lang == "bilingual" else (COMPLIANCE_NOTICE_FR if is_fr else COMPLIANCE_NOTICE_EN)
+
+    if report.get("mode") == "pr949_live_readiness":
+        ready = bool(report.get("ready"))
+        badge = "[GO]" if ready else "[NO-GO]"
+        lines = [
+            f"{badge} PR #949 Live Readiness & Quorum (gateway={report.get('gateway')}, "
+            f"producers={report.get('online_producers')}/{report.get('target_online_producers')}, "
+            f"awaiting_quorum={report.get('awaiting_producer_quorum')}, "
+            f"mean_ease={report.get('mean_ease_rating')})",
+            f"  holiday_routes={report.get('holiday_routes_deployed_on_cloud_run')} "
+            f"feedback_deployed={report.get('onboarding_feedback_deployed')} "
+            f"stale_revision={report.get('stale_revision_detected')}",
+        ]
+        for diag in report.get("diagnostics") or ():
+            lines.append(f"  [DIAG] {sanitize_text_for_display(str(diag))}")
+        lines.append(f"  compliance: {notice}")
+        lines.append(f"  receipt_sha256={report.get('receipt_sha256')}")
+        return _assert_safe_output("\n".join(lines))
+
     go = bool(report.get("go_for_launch"))
     badge = "[GO]" if go else "[NO-GO]"
     passed_n = int(report.get("gates_passed_count") or 0)
     total_n = int(report.get("gates_total_count") or len(GATE_IDS))
-    notice = COMPLIANCE_NOTICE_FR if is_fr else COMPLIANCE_NOTICE_EN
 
     headline = (
         f"{badge} Noël-at-Scale Readiness ({passed_n}/{total_n} gates, "
@@ -2769,7 +4174,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser for `scripts/noel_scale_readiness_gate.py`."""
     parser = argparse.ArgumentParser(
         description=(
-            "Unified 5-gate Noël-at-Scale Go/No-Go readiness runner and scorecard "
+            "Unified 5-gate Noël-at-Scale Go/No-Go readiness runner and PR #949 live quorum verifier "
             "(zero GPU inference, 100% personal home PCs only, 0.00 EUR / 0.00 USD)."
         )
     )
@@ -2792,6 +4197,44 @@ def build_parser() -> argparse.ArgumentParser:
         "--check-git-head",
         action="store_true",
         help="Compare live Cloud Run build_sha against local `git rev-parse HEAD` when --live-url is set.",
+    )
+    parser.add_argument(
+        "--cwd",
+        default=None,
+        help="Workspace directory inspected locally by the Amadeus / Personal-PC compliance check.",
+    )
+    parser.add_argument(
+        "--enforce-personal-pc",
+        action="store_true",
+        help="Inspect cwd and git remotes/worktree config locally before any network call or file write.",
+    )
+    parser.add_argument(
+        "--pr949-gate",
+        action="store_true",
+        help="Run standalone zero-inference PR #949 Cloud Run parity, 8+ producer quorum, and CES gate.",
+    )
+    parser.add_argument(
+        "--require-live-quorum",
+        action="store_true",
+        help="Fail closed (exit code 2) if online_producers < target_online_producers instead of awaiting quorum.",
+    )
+    parser.add_argument(
+        "--target-online-producers",
+        type=int,
+        default=DEFAULT_TARGET_ONLINE_PRODUCERS,
+        help="Minimum live producers required for quorum (default: 8).",
+    )
+    parser.add_argument(
+        "--min-ease-rating",
+        type=float,
+        default=DEFAULT_MIN_EASE_RATING,
+        help="Minimum CES ease rating out of 5 when total_responses > 0 (default: 4.2).",
+    )
+    parser.add_argument(
+        "--min-zero-lag-ratio",
+        type=float,
+        default=DEFAULT_MIN_ZERO_LAG_RATIO,
+        help="Minimum gamer zero_game_lag_ratio when total_responses > 0 (default: 0.95).",
     )
     parser.add_argument("--burst-devs", type=int, default=DEFAULT_BURST_DEVS)
     parser.add_argument("--burst-gamers", type=int, default=DEFAULT_BURST_GAMERS)
@@ -2818,7 +4261,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Emit FR/EN Markdown scorecard report (default when --json/--cli omitted).",
     )
-    parser.add_argument("--output", default=None, help="Optional output file path.")
+    parser.add_argument("--output", default=None, help="Optional output file path (atomic POSIX 0600 write).")
     return parser
 
 
@@ -2829,40 +4272,73 @@ def main(
     cwd: Path | None = None,
     modules: ScaleReadinessModules | None = None,
     live_http_fn: LiveHttpFn = default_live_http_request,
+    raw_http_fn: RawHttpFn = default_http_raw,
     runner: RunnerFn = default_subprocess_runner,
 ) -> int:
-    """CLI entrypoint returning `0` when `go_for_launch` is True or `2` (fail-closed) otherwise."""
+    """CLI entrypoint returning `0` when ready / `go_for_launch` is True or `2` (fail-closed) otherwise."""
     args = build_parser().parse_args(argv)
     try:
         if args.offline and args.live_url:
             raise ReadinessGateError(
                 "Cannot combine --offline with --live-url; omit --offline to check a live gateway."
             )
+        if args.offline and args.pr949_gate:
+            raise ReadinessGateError("Cannot combine --offline with --pr949-gate.")
+        eff_cwd: Path | None = cwd
+        if eff_cwd is None and args.cwd is not None:
+            raw_cwd = str(args.cwd)
+            if "\x00" in raw_cwd or not raw_cwd.strip():
+                raise ReadinessGateError("--cwd must be a valid non-empty path.")
+            eff_cwd = Path(raw_cwd)
         lang_code = normalize_lang(args.lang)
-        report = run_noel_scale_readiness_gate(
-            live_url=args.live_url,
-            expected_sha=args.expected_sha,
-            check_git_head=bool(args.check_git_head),
-            burst_devs=args.burst_devs,
-            burst_gamers=args.burst_gamers,
-            burst_workers=args.burst_workers,
-            p95_slo_ms=args.p95_slo_ms,
-            p99_slo_ms=args.p99_slo_ms,
-            cohort_size=args.cohort_size,
-            corporate_controls=args.corporate_controls,
-            cohort_workers=args.cohort_workers,
-            yield_slo_ms=args.yield_slo_ms,
-            max_temp_c=args.max_temp_c,
-            min_free_vram_mib=args.min_free_vram_mib,
-            slo_budget_s=args.slo_budget_s,
-            report_date=args.date,
-            lang=lang_code,
-            environ=environ,
-            cwd=cwd,
-            modules=modules,
-            live_http_fn=live_http_fn,
-            runner=runner,
-        )
+        check_git_remote = bool(args.enforce_personal_pc or args.pr949_gate)
+
+        if args.pr949_gate:
+            target_gw = args.live_url if (args.live_url and str(args.live_url).strip()) else DEFAULT_GATEWAY
+            report = verify_pr949_live_readiness_and_quorum(
+                target_gw,
+                expected_sha=args.expected_sha,
+                target_online_producers=args.target_online_producers,
+                min_ease_rating=args.min_ease_rating,
+                min_zero_lag_ratio=args.min_zero_lag_ratio,
+                require_live_quorum=bool(args.require_live_quorum),
+                raw_http_fn=raw_http_fn,
+                http_fn=live_http_fn,
+                environ=environ,
+                cwd=eff_cwd,
+                check_git_remote=check_git_remote,
+                lang=lang_code,
+            )
+        else:
+            report = run_noel_scale_readiness_gate(
+                live_url=args.live_url,
+                expected_sha=args.expected_sha,
+                check_git_head=bool(args.check_git_head),
+                burst_devs=args.burst_devs,
+                burst_gamers=args.burst_gamers,
+                burst_workers=args.burst_workers,
+                p95_slo_ms=args.p95_slo_ms,
+                p99_slo_ms=args.p99_slo_ms,
+                cohort_size=args.cohort_size,
+                corporate_controls=args.corporate_controls,
+                cohort_workers=args.cohort_workers,
+                yield_slo_ms=args.yield_slo_ms,
+                max_temp_c=args.max_temp_c,
+                min_free_vram_mib=args.min_free_vram_mib,
+                slo_budget_s=args.slo_budget_s,
+                report_date=args.date,
+                lang=lang_code,
+                environ=environ,
+                cwd=eff_cwd,
+                check_cwd_git_remote=check_git_remote,
+                modules=modules,
+                live_http_fn=live_http_fn,
+                runner=runner,
+                target_online_producers=args.target_online_producers,
+                min_ease_rating=args.min_ease_rating,
+                min_zero_lag_ratio=args.min_zero_lag_ratio,
+                require_live_quorum=bool(args.require_live_quorum),
+            )
         if args.json:
             rendered = _assert_safe_output(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
         elif args.cli:
@@ -2870,13 +4346,22 @@ def main(
         else:
             rendered = render_markdown_report(report, lang=lang_code)
 
+        if report.get("compliance_ok") is False:
+            comp = report.get("compliance")
+            comp_msg = (
+                sanitize_text_for_display(str(comp.get("summary") or COMPLIANCE_NOTICE_BILINGUAL))
+                if isinstance(comp, Mapping)
+                else COMPLIANCE_NOTICE_BILINGUAL
+            )
+            print(f"{comp_msg}\n{COMPLIANCE_NOTICE_BILINGUAL}", file=sys.stderr)
+            sys.stdout.write(rendered)
+            return 2
+
         if args.output:
-            out_path = Path(str(args.output))
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(rendered, encoding="utf-8")
+            _atomic_write_text(Path(str(args.output)), rendered, mode=0o600)
 
         sys.stdout.write(rendered)
-        return 0 if report["go_for_launch"] else 2
+        return int(report.get("exit_code", 2))
     except ReadinessGateError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2

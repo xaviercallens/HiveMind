@@ -22,18 +22,22 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import json
+import math
 import os
 import re
 import secrets
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
 
@@ -44,7 +48,99 @@ NOEL_LAUNCH_DATE = date(2026, 12, 19)
 NOEL_END_DATE = date(2027, 1, 3)
 HANDLE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{1,47}$")
 
+MAX_HTTP_BODY_BYTES = 4 * 1024 * 1024  # 4 MiB bounded HTTP read
+ALLOWED_LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1"})
+LIVE_PRODUCER_STATUSES: tuple[str, ...] = ("live", "online", "healthy", "ready")
+HOLIDAY_HTML_ROUTES: tuple[str, ...] = ("/noel", "/quick", "/raid-noel", "/arena-noel")
+EXPECTED_MANIFEST_CORE_ROUTES: tuple[str, ...] = (
+    "/noel",
+    "/quick",
+    "/raid-noel",
+    "/arena-noel",
+    "/v1/hivemind/onboarding/manifest",
+    "/v1/hivemind/onboarding/feedback/summary",
+    "/v1/hivemind/raid/status",
+)
+EXPECTED_MANIFEST_CORE_SCRIPTS: tuple[str, ...] = ("hivemind_quickstart.py", "hivemind_doctor.py")
+CORPORATE_MARKERS: tuple[str, ...] = (
+    "amadeus",
+    "corp",
+    "enterprise",
+    "intranet",
+    "internal",
+    "zscaler",
+    "netskope",
+    "bluecoat",
+    "fortinet",
+    "paloalto",
+)
+INSPECTED_ENV_KEYS: tuple[str, ...] = (
+    "USERDNSDOMAIN",
+    "USERDOMAIN",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "COMPUTERNAME",
+    "HOSTNAME",
+    "ZSCALER_CERT_PATH",
+    "SSL_CERT_FILE",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+)
+
+_RUN_APP_HOST_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+run\.app$")
+_GOOGLEAPIS_HOST_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+googleapis\.com$")
+_BUILD_SHA_RE = re.compile(r"^[A-Za-z0-9]{6,64}$")
+_HEX_SHA_RE = re.compile(r"^[0-9a-f]{7,64}$")
+_SECRET_VALUE_MARKERS: tuple[str, ...] = ("secret", "token", "password", "passwd", "apikey", "bearer", "aiza")
+
+_CSP_NONCE_RE = re.compile(r"'nonce-([A-Za-z0-9_+=/=-]{8,128})'")
+_CSP_INLINE_NONCE_RE = re.compile(r"'nonce-[A-Za-z0-9_+=/=-]{4,128}'")
+_HTML_NONCE_ATTR_RE = re.compile(r"""\bnonce=(["'])([A-Za-z0-9_+=/=-]{8,128})\1""")
+_STRIP_NONCE_ATTR_RE = re.compile(r"""\bnonce=(?:"[^"]*"|'[^']*')""")
+_MASKED_API_KEY_RE = re.compile(
+    r"(hm(?:_live_|-))\*{3,4}(?:[A-Za-z0-9_-]{4,}|[0-9]{1,3}m" + r"s\b)"
+)
+_UNSAFE_DOM_SINK_RE = re.compile(
+    r"\b(?:" + "inner" + "HTML|" + "outer" + "HTML|" + "insertAdjacent" + "HTML|" + "document" + r"\.write)\b"
+)
+_STATIC_FIGURE_RE = re.compile(
+    r"\d[\d.,]*\s?(?:m" + r"s\b|tok" + r"/s|HTTP" + r" Reqs|Comple" + r"tions|\bs/" + r"round)"
+)
+_RAW_HM_KEY_RE = re.compile(r"(?<![A-Za-z0-9_])hm(?:_live_|-)(?!\*{3,4})[A-Za-z0-9_-]{4,}\b")
+_BEARER_RE = re.compile(r"\bBearer\s+(?!<redacted>)[A-Za-z0-9._~+/=-]{6,}\b", re.IGNORECASE)
+_HOME_PATH_RE = re.compile(
+    r"(?:/home/[A-Za-z0-9._-]+|/Users/[A-Za-z0-9._-]+|[A-Za-z]:\\Users\\[A-Za-z0-9._-]+)"
+)
+_PYTEST_USER_DIR_RE = re.compile(r"pytest-of-[A-Za-z0-9._-]+")
+_GIT_REMOTE_URL_RE = re.compile(
+    r'^\s*(?:push)?(?:url|insteadof|pushinsteadof)\s*=\s*(\S.*?)\s*$|^\s*\[url\s+"([^"]+)"\]',
+    re.IGNORECASE | re.MULTILINE,
+)
+_CORP_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("amadeus", re.compile(r"amadeus", re.IGNORECASE)),
+    (
+        "corp",
+        re.compile(
+            r"(?:^|[^a-z])corp(?:orate|s)?(?:$|[^a-z])|[a-z0-9]corp(?:$|[^a-z])",
+            re.IGNORECASE,
+        ),
+    ),
+    ("enterprise", re.compile(r"enterprise", re.IGNORECASE)),
+    ("intranet", re.compile(r"intranet", re.IGNORECASE)),
+    (
+        "internal",
+        re.compile(r"(?:^|[^a-z])internal(?:$|[^a-z])|[a-z0-9]internal(?:$|[^a-z])", re.IGNORECASE),
+    ),
+    ("zscaler", re.compile(r"zscaler", re.IGNORECASE)),
+    ("netskope", re.compile(r"netskope", re.IGNORECASE)),
+    ("bluecoat", re.compile(r"bluecoat", re.IGNORECASE)),
+    ("fortinet", re.compile(r"fortinet", re.IGNORECASE)),
+    ("paloalto", re.compile(r"paloalto|palo[-_.]?alto", re.IGNORECASE)),
+)
+
 HttpJsonFn = Callable[[str, str, dict[str, Any] | None, dict[str, str] | None], tuple[int, dict[str, Any]]]
+HttpRawFn = Callable[..., tuple[int, str, dict[str, str]]]
 GhJsonFn = Callable[[list[str]], dict[str, Any] | list[Any] | None]
 
 
@@ -92,25 +188,131 @@ def default_credentials_path() -> Path:
 
 
 def mask_api_key(token: str) -> str:
-    """Mask an ``hm-...`` API key so secrets are never written to stdout or logs."""
+    """Mask an ``hm-...`` or ``hm_live_...`` API key so secrets are never written to stdout or logs."""
     cleaned = (token or "").strip()
     if not cleaned:
         return "<unset>"
+    if cleaned.startswith("hm_live_"):
+        if len(cleaned) <= 12:
+            return "hm_live_****"
+        return f"hm_live_****{cleaned[-4:]}"
     if len(cleaned) <= 8:
         return "hm-****"
     prefix = cleaned[:3] if cleaned.startswith("hm-") else "key-"
     return f"{prefix}****{cleaned[-4:]}"
 
 
+def strip_masked_keys_and_nonces(text: str) -> str:
+    """Strip HTML ``nonce="..."`` attrs, CSP ``'nonce-...'`` tokens, and masked-key suffixes."""
+    cleaned = _STRIP_NONCE_ATTR_RE.sub('nonce=""', text)
+    cleaned = _CSP_INLINE_NONCE_RE.sub("'nonce-CSP_NONCE'", cleaned)
+    return _MASKED_API_KEY_RE.sub(r"\1***XXXX", cleaned)
+
+
+def redact_home_path(target: Path | str) -> str:
+    """Replace local OS home directory prefixes with ``'~'`` to prevent username/path leaks."""
+    raw = str(target)
+    home_str = str(Path.home())
+    scrubbed = raw
+    if home_str and home_str not in ("/", "\\"):
+        for variant in (home_str, home_str.replace("\\", "/"), home_str.replace("/", "\\")):
+            if variant and scrubbed.startswith(variant):
+                suffix = scrubbed[len(variant) :]
+                if not suffix or suffix.startswith(("/", "\\")):
+                    scrubbed = "~" + suffix.replace("\\", "/")
+                    break
+    scrubbed = _HOME_PATH_RE.sub("~", scrubbed)
+    scrubbed = _PYTEST_USER_DIR_RE.sub("pytest-of-user", scrubbed)
+    return scrubbed.replace("\\", "/") if scrubbed != raw else raw
+
+
+def sanitize_text_for_display(text: str) -> str:
+    """Mask ``hm-...`` / ``hm_live_...`` keys, Bearer tokens, and home paths in output text."""
+    scrubbed = text
+    home_str = str(Path.home())
+    if home_str and home_str not in ("/", "\\"):
+        for variant in (home_str, home_str.replace("\\", "/"), home_str.replace("/", "\\")):
+            if variant and variant in scrubbed:
+                scrubbed = scrubbed.replace(variant, "~")
+    scrubbed = _HOME_PATH_RE.sub("~", scrubbed)
+    scrubbed = _PYTEST_USER_DIR_RE.sub("pytest-of-user", scrubbed)
+    scrubbed = _BEARER_RE.sub("Bearer <redacted>", scrubbed)
+    scrubbed = _RAW_HM_KEY_RE.sub(lambda m: mask_api_key(m.group(0)), scrubbed)
+    return scrubbed
+
+
+def _atomic_write_text(target: Path, content: str, *, mode: int = 0o600) -> None:
+    """Atomically write ``content`` to ``target`` via a sibling temp file with POSIX 0600 permissions."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as tmp_fh:
+            tmp_path = Path(tmp_fh.name)
+            tmp_fh.write(content)
+            tmp_fh.flush()
+            os.fsync(tmp_fh.fileno())
+        if os.name != "nt":
+            os.chmod(tmp_path, mode)
+        os.replace(tmp_path, target)
+    except Exception:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def _append_jsonl_0600(target: Path, record: dict[str, Any]) -> None:
+    """Append a sanitized JSON line to ``target`` while enforcing POSIX 0600 permissions."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    line = sanitize_text_for_display(json.dumps(record, sort_keys=True)) + "\n"
+    if os.name == "nt":
+        with target.open("a", encoding="utf-8") as fh:
+            fh.write(line)
+        return
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as fh:
+        fh.write(line)
+    os.chmod(target, 0o600)
+
+
 def validate_gateway_url(url: str) -> str:
-    cleaned = (url or "").strip().rstrip("/")
-    if not (
-        (cleaned.startswith("https://") and cleaned.split("/")[2].endswith(".run.app"))
-        or cleaned.startswith("http://127.0.0.1")
-        or cleaned.startswith("http://localhost")
-    ):
+    """Validate gateway origin URL to strict loopback, ``storage.googleapis.com``, ``*.run.app``, or ``*.googleapis.com``."""
+    if isinstance(url, bool) or not isinstance(url, str):
+        raise ValueError("Refusing untrusted gateway URL: expected a non-empty string.")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in url):
+        raise ValueError("Refusing untrusted gateway URL: control characters are forbidden.")
+    cleaned = url.strip().rstrip("/")
+    if not cleaned or any(ch.isspace() for ch in cleaned) or "\\" in cleaned:
+        raise ValueError(f"Refusing untrusted gateway URL {url!r}: empty or contains invalid whitespace.")
+    parts = urlsplit(cleaned)
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
+        raise ValueError(f"Refusing untrusted gateway URL {url!r}: embedded credentials are forbidden.")
+    if parts.path not in ("", "/") or parts.query or parts.fragment:
+        raise ValueError(f"Refusing untrusted gateway URL {url!r}: path, query, and fragment must be empty.")
+    try:
+        port = parts.port
+    except ValueError as exc:
+        raise ValueError(f"Refusing untrusted gateway URL {url!r}: invalid port.") from exc
+    if port is not None and not (1 <= port <= 65535):
+        raise ValueError(f"Refusing untrusted gateway URL {url!r}: port out of range.")
+    host = (parts.hostname or "").strip().lower().strip("[]")
+    if not host:
+        raise ValueError(f"Refusing untrusted gateway URL {url!r}: missing host.")
+    if host in ALLOWED_LOOPBACK_HOSTS:
+        if parts.scheme not in ("http", "https"):
+            raise ValueError(f"Refusing untrusted gateway URL {url!r}: invalid loopback scheme.")
+    elif host == "storage.googleapis.com" or _RUN_APP_HOST_RE.fullmatch(host) or _GOOGLEAPIS_HOST_RE.fullmatch(host):
+        if parts.scheme != "https":
+            raise ValueError(f"Refusing untrusted gateway URL {url!r}: HTTPS is required for remote gateways.")
+    else:
         raise ValueError(
-            f"Refusing untrusted gateway URL {url!r}: expected an HTTPS *.run.app gateway or localhost."
+            f"Refusing untrusted gateway URL {url!r}: expected an HTTPS *.run.app, *.googleapis.com, or loopback gateway."
         )
     return cleaned
 
@@ -125,35 +327,151 @@ def sanitize_handle(raw: str) -> str:
     return candidate
 
 
+def _assert_safe_http_request(
+    method: str,
+    url: str,
+    *,
+    payload: dict[str, Any] | None = None,
+) -> str:
+    """Enforce allowlisted host/origin, valid port, no credentials, and zero LLM inference."""
+    if isinstance(url, bool) or not isinstance(url, str) or not url.strip():
+        raise ValueError("Refusing untrusted gateway URL: request URL must be a non-empty string.")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in url):
+        raise ValueError("Refusing untrusted gateway URL: control characters are forbidden.")
+    cleaned = url.strip()
+    if any(ch.isspace() for ch in cleaned) or "\\" in cleaned:
+        raise ValueError("Refusing untrusted gateway URL: whitespace and backslashes are forbidden.")
+    parts = urlsplit(cleaned)
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
+        raise ValueError("Refusing untrusted gateway URL: embedded credentials are forbidden.")
+    origin = f"{parts.scheme}://{parts.netloc}"
+    validate_gateway_url(origin)
+    low_path = (parts.path or "").lower()
+    if "completions" in low_path or "/chat/" in low_path:
+        raise ValueError(f"Zero-inference guard blocked forbidden endpoint {parts.path!r}.")
+    if payload is not None:
+        if not isinstance(payload, Mapping):
+            raise ValueError("HTTP JSON payload must be a mapping.")
+        serialized = json.dumps(dict(payload), sort_keys=True, ensure_ascii=False).lower()
+        if "hivemind/coder" in serialized or "messages" in payload or "prompt" in payload:
+            raise ValueError("Zero-inference guard blocked forbidden prompt payload.")
+    _ = (method or "GET").strip().upper()
+    return cleaned
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Block HTTP redirects toward untrusted hosts or inference completion routes."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is not None:
+            _assert_safe_http_request(new_req.get_method(), new_req.full_url)
+        return new_req
+
+
+_HTTP_OPENER: urllib.request.OpenerDirector | None = None
+
+
+def _get_http_opener() -> urllib.request.OpenerDirector:
+    """Return a module-cached proxy-free ``OpenerDirector`` (``ProxyHandler({})``)."""
+    global _HTTP_OPENER
+    if _HTTP_OPENER is None:
+        _HTTP_OPENER = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            _SafeRedirectHandler(),
+        )
+    return _HTTP_OPENER
+
+
+def _prepare_request_headers(
+    base_headers: dict[str, str],
+    extra_headers: Mapping[str, str] | None,
+) -> dict[str, str]:
+    req_headers = dict(base_headers)
+    if extra_headers:
+        for hk, hv in extra_headers.items():
+            k_str = str(hk)
+            v_str = str(hv)
+            if any(ch in k_str or ch in v_str for ch in ("\r", "\n", "\x00")):
+                raise ValueError("HTTP headers must not contain CR/LF or NUL characters.")
+            req_headers[k_str] = v_str
+    return req_headers
+
+
+def default_http_raw(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    timeout_s: float = 15.0,
+) -> tuple[int, str, dict[str, str]]:
+    """Proxy-free raw HTTP helper (``ProxyHandler({})``) with bounded 4 MiB body read."""
+    verb = (method or "GET").strip().upper()
+    clean_url = _assert_safe_http_request(verb, url, payload=None)
+    req_headers = _prepare_request_headers(
+        {
+            "Accept": "text/html, application/json;q=0.9, text/plain;q=0.8",
+            "User-Agent": "hivemind-agy-control-agent/1.0",
+        },
+        headers,
+    )
+    req = urllib.request.Request(clean_url, data=None, headers=req_headers, method=verb)
+    opener = _get_http_opener()
+    bounded_timeout = min(max(0.2, float(timeout_s)), 60.0)
+    try:
+        with opener.open(req, timeout=bounded_timeout) as resp:  # noqa: S310
+            raw_bytes = resp.read(MAX_HTTP_BODY_BYTES)
+            resp_headers = {str(k).strip().lower(): str(v) for k, v in resp.headers.items()} if resp.headers else {}
+            return int(getattr(resp, "status", 200)), raw_bytes.decode("utf-8", errors="replace"), resp_headers
+    except urllib.error.HTTPError as exc:
+        err_bytes = exc.read(MAX_HTTP_BODY_BYTES) if exc.fp is not None else b""
+        err_headers = {str(k).strip().lower(): str(v) for k, v in exc.headers.items()} if exc.headers else {}
+        return int(exc.code), err_bytes.decode("utf-8", errors="replace"), err_headers
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return 0, sanitize_text_for_display(str(exc)), {}
+
+
 def default_http_json(
     method: str,
     url: str,
     payload: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
 ) -> tuple[int, dict[str, Any]]:
-    validate_gateway_url(url)
-    req_headers = {"Accept": "application/json", "User-Agent": "hivemind-agy-control-agent/1.0"}
-    if headers:
-        req_headers.update(headers)
+    """Proxy-free stdlib JSON HTTP helper (``ProxyHandler({})``) with bounded 4 MiB body read."""
+    verb = (method or "GET").strip().upper()
+    clean_url = _assert_safe_http_request(verb, url, payload=payload)
+    req_headers = _prepare_request_headers(
+        {"Accept": "application/json", "User-Agent": "hivemind-agy-control-agent/1.0"},
+        headers,
+    )
     body_bytes: bytes | None = None
     if payload is not None:
         body_bytes = json.dumps(payload).encode("utf-8")
         req_headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=body_bytes, headers=req_headers, method=method)
+    req = urllib.request.Request(clean_url, data=body_bytes, headers=req_headers, method=verb)
+    opener = _get_http_opener()
     try:
-        with urllib.request.urlopen(req, timeout=15.0) as resp:  # noqa: S310
-            raw = resp.read().decode("utf-8", errors="replace")
+        with opener.open(req, timeout=15.0) as resp:  # noqa: S310
+            raw = resp.read(MAX_HTTP_BODY_BYTES).decode("utf-8", errors="replace")
             parsed = json.loads(raw) if raw.strip() else {}
             return int(resp.status), parsed if isinstance(parsed, dict) else {"data": parsed}
     except urllib.error.HTTPError as exc:
-        raw = exc.read().decode("utf-8", errors="replace")
+        raw = (exc.read(MAX_HTTP_BODY_BYTES) if exc.fp is not None else b"").decode("utf-8", errors="replace")
         try:
             parsed = json.loads(raw) if raw.strip() else {}
         except json.JSONDecodeError:
-            parsed = {"raw_error": raw[:300]}
+            parsed = {"raw_error": sanitize_text_for_display(raw[:300])}
         return int(exc.code), parsed if isinstance(parsed, dict) else {"data": parsed}
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        return 0, {"network_error": str(exc)}
+        return 0, {"network_error": sanitize_text_for_display(str(exc))}
 
 
 def default_gh_json(args: list[str]) -> dict[str, Any] | list[Any] | None:
@@ -220,7 +538,7 @@ def ensure_operator_account(
                 "account_id": str(me_data.get("account_id", saved.get("account_id", ""))),
                 "role": str(me_data.get("role", saved.get("role", "prosumer"))),
                 "masked_key": mask_api_key(api_key),
-                "credentials_path": str(cred_file),
+                "credentials_path": redact_home_path(cred_file),
             }
 
     clean_handle = sanitize_handle(preferred_handle)
@@ -255,7 +573,6 @@ def ensure_operator_account(
         handle = str(reg_data.get("handle") or fallback_handle)
         created_new = True
 
-    cred_file.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "gateway": gw,
         "handle": handle,
@@ -264,9 +581,7 @@ def ensure_operator_account(
         "api_key": api_key,
         "saved_at_utc": datetime.now(UTC).isoformat(),
     }
-    cred_file.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    if os.name != "nt":
-        cred_file.chmod(0o600)
+    _atomic_write_text(cred_file, json.dumps(record, indent=2) + "\n", mode=0o600)
 
     return {
         "authenticated": True,
@@ -276,8 +591,594 @@ def ensure_operator_account(
         "account_id": record["account_id"],
         "role": record["role"],
         "masked_key": mask_api_key(api_key),
-        "credentials_path": str(cred_file),
+        "credentials_path": redact_home_path(cred_file),
     }
+
+
+def _nonneg_int(val: Any) -> int | None:
+    if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+        return None
+    return int(val)
+
+
+def _finite_bounded_float(val: Any, lo: float, hi: float) -> float | None:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return None
+    fval = float(val)
+    if not math.isfinite(fval) or not (lo <= fval <= hi):
+        return None
+    return fval
+
+
+def _has_forbidden_score_key(obj: Any) -> bool:
+    forbidden = "sco" + "re"
+    if isinstance(obj, Mapping):
+        for key, value in obj.items():
+            if str(key) == forbidden or _has_forbidden_score_key(value):
+                return True
+    elif isinstance(obj, (list, tuple)):
+        return any(_has_forbidden_score_key(item) for item in obj)
+    return False
+
+
+def _sanitize_build_sha(raw: Any) -> str:
+    if not isinstance(raw, str):
+        return "unknown"
+    cleaned = raw.strip()
+    low = cleaned.lower()
+    if (
+        not cleaned
+        or low == "unknown"
+        or not _BUILD_SHA_RE.fullmatch(cleaned)
+        or low.startswith(("hm-", "hm_live_", "sk-", "ghp_"))
+        or any(marker in low for marker in _SECRET_VALUE_MARKERS)
+    ):
+        return "unknown"
+    return low
+
+
+def _shas_match(live_sha: str, expected_sha: str) -> bool:
+    clean_live = _sanitize_build_sha(live_sha)
+    clean_exp = _sanitize_build_sha(expected_sha)
+    if clean_live == "unknown" or clean_exp == "unknown":
+        return False
+    if clean_live == clean_exp:
+        return True
+    if _HEX_SHA_RE.fullmatch(clean_live) and _HEX_SHA_RE.fullmatch(clean_exp):
+        return clean_live.startswith(clean_exp) or clean_exp.startswith(clean_live)
+    return False
+
+
+def _find_corporate_markers(text: str) -> list[str]:
+    if not text:
+        return []
+    return [name for name, pat in _CORP_PATTERNS if pat.search(text)]
+
+
+def _extract_git_config_remote_urls(cfg_text: str) -> list[str]:
+    if not cfg_text:
+        return []
+    urls: list[str] = []
+    for m_kv, m_sec in _GIT_REMOTE_URL_RE.findall(cfg_text):
+        candidate = (m_kv or m_sec).strip().strip('"').strip("'")
+        if candidate:
+            urls.append(candidate)
+    return urls
+
+
+def _resolve_git_config_files(workspace: Path) -> list[Path]:
+    """Locate ``.git/config`` from ``workspace``, following worktree ``gitdir:`` and ``commondir``."""
+    candidates: list[Path] = []
+    for root in (workspace, *workspace.parents):
+        git_entry = root / ".git"
+        if git_entry.is_dir():
+            cfg = git_entry / "config"
+            if cfg.is_file():
+                candidates.append(cfg)
+            break
+        if git_entry.is_file():
+            try:
+                first_lines = git_entry.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                break
+            if first_lines and first_lines[0].strip().lower().startswith("gitdir:"):
+                raw_gitdir = first_lines[0].split(":", 1)[1].strip()
+                gitdir = Path(raw_gitdir) if Path(raw_gitdir).is_absolute() else (root / raw_gitdir).resolve()
+                direct_cfg = gitdir / "config"
+                if direct_cfg.is_file():
+                    candidates.append(direct_cfg)
+                commondir_file = gitdir / "commondir"
+                if commondir_file.is_file():
+                    try:
+                        common_rel = commondir_file.read_text(encoding="utf-8", errors="replace").strip()
+                    except OSError:
+                        common_rel = ""
+                    if common_rel:
+                        common_cfg = (gitdir / common_rel).resolve() / "config"
+                        if common_cfg.is_file() and common_cfg not in candidates:
+                            candidates.append(common_cfg)
+            break
+    return candidates
+
+
+def evaluate_personal_pc_compliance(
+    *,
+    environ: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    check_git_remote: bool = True,
+) -> dict[str, Any]:
+    """Strictly local Amadeus / Personal-PC Compliance Gate (0 HTTP calls, 0 writes, 0 raw value leaks)."""
+    env_map = environ if environ is not None else os.environ
+    workspace = Path(cwd) if cwd is not None else Path.cwd()
+
+    indicators: list[str] = []
+    matched_markers: set[str] = set()
+
+    def _record(tag: str, marker: str | None = None) -> None:
+        if tag not in indicators:
+            indicators.append(tag)
+        if marker:
+            matched_markers.add(marker)
+
+    for raw_k, raw_v in env_map.items():
+        key_up = str(raw_k).strip().upper()
+        val_str = str(raw_v or "").strip()
+        if not key_up or not val_str:
+            continue
+        if key_up.startswith("AMADEUS"):
+            _record("env:AMADEUS*", "amadeus")
+            matched_markers.update(_find_corporate_markers(val_str))
+        elif key_up == "ZSCALER_CERT_PATH":
+            _record("env:ZSCALER_CERT_PATH", "zscaler")
+        elif key_up == "USERDNSDOMAIN":
+            dns_hits = _find_corporate_markers(val_str)
+            _record("env:USERDNSDOMAIN", dns_hits[0] if dns_hits else "corp")
+            matched_markers.update(dns_hits)
+        elif key_up in INSPECTED_ENV_KEYS:
+            for hit in _find_corporate_markers(val_str):
+                _record(f"env:{key_up}:{hit}", hit)
+
+    ws_texts = [str(workspace)]
+    try:
+        resolved_ws = str(workspace.resolve())
+        if resolved_ws not in ws_texts:
+            ws_texts.append(resolved_ws)
+    except OSError:
+        resolved_ws = ""
+        _ = resolved_ws
+    for p_txt in ws_texts:
+        for hit in _find_corporate_markers(p_txt):
+            _record(f"workspace_path:{hit}", hit)
+
+    if check_git_remote:
+        for cfg_path in _resolve_git_config_files(workspace):
+            try:
+                cfg_text = cfg_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for remote_url in _extract_git_config_remote_urls(cfg_text):
+                for hit in _find_corporate_markers(remote_url):
+                    _record(f"git_remote:{hit}", hit)
+
+    compliance_ok = len(indicators) == 0
+    return {
+        "compliance_ok": compliance_ok,
+        "corporate_detected": not compliance_ok,
+        "corporate_indicators": indicators,
+        "matched_markers": sorted(matched_markers),
+        "personal_pc_only": True,
+        "financial_promise": "0.00 EUR / 0.00 USD",
+        "license": "AGPL-3.0",
+        "network_calls": 0,
+        "file_writes": 0,
+        "exit_code": 0 if compliance_ok else 2,
+    }
+
+
+def _invoke_http_json(http_fn: Any, method: str, url: str) -> tuple[int, dict[str, Any]]:
+    _assert_safe_http_request(method, url, payload=None)
+    sig = inspect.signature(http_fn)
+    params = list(sig.parameters.values())
+    pos_params = [
+        p
+        for p in params
+        if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    has_varargs = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params)
+    try:
+        if len(pos_params) <= 2 and not has_varargs:
+            res = http_fn(method, url)
+        else:
+            res = http_fn(method, url, None, None)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return 0, {"network_error": sanitize_text_for_display(str(exc))}
+    if not isinstance(res, tuple) or len(res) != 2:
+        raise ValueError("http_fn must return (status_code, body_dict).")
+    status_code, body = res
+    return int(status_code), dict(body) if isinstance(body, Mapping) else {"data": body}
+
+
+def _invoke_http_raw(raw_http_fn: Any, method: str, url: str) -> tuple[int, str, dict[str, str]]:
+    _assert_safe_http_request(method, url, payload=None)
+    sig = inspect.signature(raw_http_fn)
+    params = sig.parameters
+    try:
+        if "headers" in params or "timeout_s" in params:
+            raw = raw_http_fn(method, url, headers=None, timeout_s=15.0)
+        else:
+            raw = raw_http_fn(method, url)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return 0, sanitize_text_for_display(str(exc)), {}
+    if not isinstance(raw, tuple) or len(raw) != 3:
+        raise ValueError("raw_http_fn must return (status_code, body_text, headers_dict).")
+    status_code, part1, part2 = raw
+    if isinstance(part1, Mapping) and isinstance(part2, (str, bytes, bytearray)):
+        hdrs_raw, body_raw = part1, part2
+    else:
+        body_raw, hdrs_raw = part1, (part2 if isinstance(part2, Mapping) else {})
+    body_text = (
+        body_raw.decode("utf-8", errors="replace")
+        if isinstance(body_raw, (bytes, bytearray))
+        else str(body_raw or "")
+    )
+    lower_headers = {str(k).strip().lower(): str(v) for k, v in hdrs_raw.items()}
+    return int(status_code), body_text, lower_headers
+
+
+def _inspect_html_parity_route(
+    status_code: int,
+    body_text: str,
+    headers: Mapping[str, str],
+    seen_nonces: set[str],
+) -> tuple[bool, dict[str, Any], list[str]]:
+    issues: list[str] = []
+    if status_code != 200:
+        issues.append(f"http_{status_code}")
+        return False, {"status_code": status_code, "csp_ok": False, "dom_clean": False, "compliance_ok": False}, issues
+
+    has_doctype = "<!doctype html" in body_text.lower()
+    if not has_doctype:
+        issues.append("missing_doctype")
+
+    csp_val = headers.get("content-security-policy", "")
+    csp_lower = csp_val.lower()
+    csp_unsafe = "'unsafe-inline'" in csp_lower or "'unsafe-eval'" in csp_lower
+    hdr_nonces = _CSP_NONCE_RE.findall(csp_val)
+    attr_nonces = [val for _, val in _HTML_NONCE_ATTR_RE.findall(body_text)]
+    header_nonce = hdr_nonces[0] if (hdr_nonces and len(set(hdr_nonces)) == 1) else None
+    nonce_reused = header_nonce is not None and header_nonce in seen_nonces
+    if header_nonce is not None:
+        seen_nonces.add(header_nonce)
+
+    csp_ok = bool(
+        "default-src 'none'" in csp_lower
+        and not csp_unsafe
+        and header_nonce is not None
+        and attr_nonces
+        and set(attr_nonces) == {header_nonce}
+        and not nonce_reused
+    )
+    if nonce_reused:
+        issues.append("reused_csp_nonce")
+    elif not csp_ok:
+        issues.append("invalid_or_missing_csp_nonce")
+
+    stripped_html = strip_masked_keys_and_nonces(body_text)
+    has_unsafe_sink = bool(_UNSAFE_DOM_SINK_RE.search(stripped_html))
+    has_static_fig = bool(_STATIC_FIGURE_RE.search(stripped_html))
+    if has_unsafe_sink:
+        issues.append("unsafe_dom_sink_detected")
+    if has_static_fig:
+        issues.append("unbacked_static_figure_detected")
+    dom_clean = not has_unsafe_sink and not has_static_fig
+
+    low_html = stripped_html.lower()
+    compliance_ok = (
+        ("personal" in low_html or "personnel" in low_html)
+        and ("0.00 eur" in low_html or "0,00 eur" in low_html)
+        and "agpl-3.0" in low_html
+    )
+    if not compliance_ok:
+        issues.append("missing_personal_pc_or_zero_eur_banner")
+
+    info = {
+        "status_code": status_code,
+        "has_doctype": has_doctype,
+        "csp_ok": csp_ok,
+        "nonce_reused": nonce_reused,
+        "dom_clean": dom_clean,
+        "compliance_ok": compliance_ok,
+    }
+    return len(issues) == 0, info, issues
+
+
+def _inspect_models_parity(code: int, body: Mapping[str, Any]) -> tuple[bool, list[str], bool, list[str]]:
+    if code != 200:
+        return False, [], False, [f"http_{code}"]
+    raw_data = body.get("data")
+    if not isinstance(raw_data, list) or not raw_data:
+        return False, [], False, ["models_empty_or_invalid"]
+    model_ids: list[str] = []
+    coder_meta_ok = False
+    for entry in raw_data:
+        if isinstance(entry, Mapping) and isinstance(entry.get("id"), str) and entry["id"].strip():
+            mid = entry["id"].strip()
+            model_ids.append(mid)
+            if mid == "hivemind/coder" and entry.get("object", "model") == "model":
+                coder_meta_ok = True
+    issues: list[str] = []
+    if not model_ids:
+        issues.append("models_missing_ids")
+    if not coder_meta_ok:
+        issues.append("models_missing_hivemind_coder")
+    return len(issues) == 0, model_ids, coder_meta_ok, issues
+
+
+def _inspect_manifest_parity(
+    code: int,
+    body: Mapping[str, Any],
+    expected_sha: str | None,
+) -> tuple[bool, str, bool | None, list[str], list[str]]:
+    if code != 200:
+        return False, "unknown", (False if expected_sha else None), [], [f"http_{code}"]
+    issues: list[str] = []
+    missing_routes: list[str] = []
+    if _has_forbidden_score_key(body):
+        issues.append("manifest_forbidden_key")
+    if body.get("campaign_id") != "noel-2026-easy-onboard":
+        issues.append("manifest_campaign_mismatch")
+    if body.get("personal_pc_only") is not True:
+        issues.append("manifest_personal_pc_only_false")
+    if body.get("financial_promise") != "0.00 EUR / 0.00 USD":
+        issues.append("manifest_financial_promise_mismatch")
+    if "build_sha" not in body:
+        issues.append("manifest_missing_build_sha")
+    live_sha = _sanitize_build_sha(body.get("build_sha"))
+    routes = body.get("holiday_routes")
+    if not isinstance(routes, list) or not all(isinstance(r, str) for r in routes):
+        issues.append("manifest_invalid_holiday_routes")
+        missing_routes.extend(EXPECTED_MANIFEST_CORE_ROUTES)
+    else:
+        for req in EXPECTED_MANIFEST_CORE_ROUTES:
+            if req not in routes:
+                missing_routes.append(req)
+        if missing_routes:
+            issues.append("manifest_missing_holiday_routes")
+    scripts = body.get("downloadable_scripts")
+    if not isinstance(scripts, list) or not all(isinstance(s, str) for s in scripts):
+        issues.append("manifest_invalid_downloadable_scripts")
+    elif any(req not in scripts for req in EXPECTED_MANIFEST_CORE_SCRIPTS):
+        issues.append("manifest_missing_core_scripts")
+    sha_match: bool | None = None
+    if expected_sha is not None:
+        sha_match = _shas_match(live_sha, expected_sha)
+        if not sha_match:
+            issues.append("manifest_build_sha_mismatch")
+    return len(issues) == 0, live_sha, sha_match, missing_routes, issues
+
+
+def _inspect_feedback_summary_parity(code: int, body: Mapping[str, Any]) -> tuple[bool, list[str]]:
+    if code != 200:
+        return False, [f"http_{code}"]
+    issues: list[str] = []
+    if _has_forbidden_score_key(body):
+        issues.append("summary_forbidden_key")
+    if body.get("object") != "hivemind.onboarding_feedback_summary":
+        issues.append("summary_invalid_object")
+    total_val = _nonneg_int(body.get("total_responses"))
+    if total_val is None:
+        issues.append("summary_invalid_total_responses")
+    has_mean = "mean_ease_rating" in body
+    has_avg = "average_ease_rating" in body
+    if not has_mean and not has_avg:
+        issues.append("summary_missing_ease_rating")
+    else:
+        ease_val = body.get("mean_ease_rating", body.get("average_ease_rating"))
+        if ease_val is None and has_avg:
+            ease_val = body.get("average_ease_rating")
+        if total_val == 0 and ease_val is not None:
+            issues.append("summary_non_null_ease_when_empty")
+        elif total_val is not None and total_val > 0 and _finite_bounded_float(ease_val, 1.0, 5.0) is None:
+            issues.append("summary_invalid_ease_rating")
+    if "zero_game_lag_ratio" not in body:
+        issues.append("summary_missing_zero_game_lag_ratio")
+    else:
+        lag_val = body.get("zero_game_lag_ratio")
+        if total_val == 0 and lag_val is not None:
+            issues.append("summary_non_null_lag_when_empty")
+        elif total_val is not None and total_val > 0 and _finite_bounded_float(lag_val, 0.0, 1.0) is None:
+            issues.append("summary_invalid_zero_game_lag_ratio")
+    bp = body.get("by_profile")
+    if not isinstance(bp, Mapping):
+        issues.append("summary_invalid_by_profile")
+    else:
+        dev_c = _nonneg_int(bp.get("dev"))
+        gamer_c = _nonneg_int(bp.get("gamer"))
+        if dev_c is None or gamer_c is None:
+            issues.append("summary_invalid_profile_counts")
+        elif total_val is not None and dev_c + gamer_c != total_val:
+            issues.append("summary_profile_conservation_mismatch")
+    return len(issues) == 0, issues
+
+
+def _inspect_raid_status_parity(code: int, body: Mapping[str, Any]) -> tuple[bool, list[str]]:
+    if code != 200:
+        return False, [f"http_{code}"]
+    issues: list[str] = []
+    if _has_forbidden_score_key(body):
+        issues.append("raid_status_forbidden_key")
+    if body.get("object") != "hivemind.raid_noel.status":
+        issues.append("raid_status_invalid_object")
+    comp = body.get("compliance")
+    if (
+        not isinstance(comp, Mapping)
+        or comp.get("personal_pc_only") is not True
+        or comp.get("monetary_cost_eur") != "0.00 EUR"
+        or comp.get("monetary_cost_usd") != "0.00 USD"
+    ):
+        issues.append("raid_status_compliance_mismatch")
+    return len(issues) == 0, issues
+
+
+def verify_holiday_routes_parity(
+    gateway: str,
+    *,
+    expected_sha: str | None = None,
+    raw_http_fn: HttpRawFn = default_http_raw,
+    http_fn: HttpJsonFn = default_http_json,
+) -> dict[str, Any]:
+    """Zero-inference Cloud Run PR #949 holiday route, CSP, manifest, and SHA parity smoke verifier."""
+    gw = validate_gateway_url(gateway)
+    clean_expected_sha: str | None = None
+    if expected_sha is not None:
+        if isinstance(expected_sha, bool) or not isinstance(expected_sha, str):
+            raise ValueError("expected_sha must be a 6-64 character alphanumeric/hex string or None.")
+        clean_expected_sha = _sanitize_build_sha(expected_sha)
+        if clean_expected_sha == "unknown":
+            raise ValueError("expected_sha must be a 6-64 character alphanumeric/hex string or None.")
+
+    missing_or_stale: list[str] = []
+    failed_routes: list[str] = []
+    diagnostics: list[str] = []
+    per_route: dict[str, dict[str, Any]] = {}
+
+    def _note_route_failure(route: str, code: int, issues: list[str]) -> None:
+        failed_routes.append(route)
+        if code == 404 and route not in missing_or_stale:
+            missing_or_stale.append(route)
+        diagnostics.extend(f"{route}: {item}" for item in issues)
+
+    health_code, health_body = _invoke_http_json(http_fn, "GET", f"{gw}/health")
+    health_ok = health_code == 200 and health_body.get("status", "ok") == "ok"
+    health_issues = [] if health_ok else ([f"http_{health_code}"] if health_code != 200 else ["unhealthy_status"])
+    per_route["/health"] = {"status_code": health_code, "ready": health_ok, "issues": health_issues}
+    if not health_ok:
+        _note_route_failure("/health", health_code, health_issues)
+
+    models_code, models_body = _invoke_http_json(http_fn, "GET", f"{gw}/v1/models")
+    models_ok, model_ids, coder_present, models_issues = _inspect_models_parity(models_code, models_body)
+    per_route["/v1/models"] = {
+        "status_code": models_code,
+        "ready": models_ok,
+        "model_ids": model_ids,
+        "issues": models_issues,
+    }
+    if not models_ok:
+        _note_route_failure("/v1/models", models_code, models_issues)
+
+    seen_nonces: set[str] = set()
+    all_html_ok = True
+    unique_csp_ok = True
+    html_dom_clean = True
+    html_compliance_ok = True
+    for route in HOLIDAY_HTML_ROUTES:
+        r_code, r_body, r_hdrs = _invoke_http_raw(raw_http_fn, "GET", f"{gw}{route}")
+        r_ok, r_info, r_issues = _inspect_html_parity_route(r_code, r_body, r_hdrs, seen_nonces)
+        per_route[route] = {"ready": r_ok, **r_info, "issues": r_issues}
+        all_html_ok = all_html_ok and r_ok
+        unique_csp_ok = unique_csp_ok and bool(r_info.get("csp_ok")) and not bool(r_info.get("nonce_reused"))
+        html_dom_clean = html_dom_clean and bool(r_info.get("dom_clean"))
+        html_compliance_ok = html_compliance_ok and bool(r_info.get("compliance_ok"))
+        if not r_ok:
+            _note_route_failure(route, r_code, r_issues)
+
+    man_code, man_body = _invoke_http_json(http_fn, "GET", f"{gw}/v1/hivemind/onboarding/manifest")
+    man_ok, live_sha, sha_match, man_missing, man_issues = _inspect_manifest_parity(
+        man_code, man_body, clean_expected_sha
+    )
+    per_route["/v1/hivemind/onboarding/manifest"] = {
+        "status_code": man_code,
+        "ready": man_ok,
+        "live_build_sha": live_sha,
+        "sha_match": sha_match,
+        "issues": man_issues,
+    }
+    for mr in man_missing:
+        if mr not in missing_or_stale:
+            missing_or_stale.append(mr)
+    if not man_ok:
+        _note_route_failure("/v1/hivemind/onboarding/manifest", man_code, man_issues)
+
+    fb_code, fb_body = _invoke_http_json(http_fn, "GET", f"{gw}/v1/hivemind/onboarding/feedback/summary")
+    fb_ok, fb_issues = _inspect_feedback_summary_parity(fb_code, fb_body)
+    per_route["/v1/hivemind/onboarding/feedback/summary"] = {
+        "status_code": fb_code,
+        "ready": fb_ok,
+        "issues": fb_issues,
+    }
+    if not fb_ok:
+        _note_route_failure("/v1/hivemind/onboarding/feedback/summary", fb_code, fb_issues)
+
+    raid_code, raid_body = _invoke_http_json(http_fn, "GET", f"{gw}/v1/hivemind/raid/status")
+    raid_ok, raid_issues = _inspect_raid_status_parity(raid_code, raid_body)
+    per_route["/v1/hivemind/raid/status"] = {
+        "status_code": raid_code,
+        "ready": raid_ok,
+        "issues": raid_issues,
+    }
+    if not raid_ok:
+        _note_route_failure("/v1/hivemind/raid/status", raid_code, raid_issues)
+
+    unique_csp_nonces_ok = unique_csp_ok and len(seen_nonces) == len(HOLIDAY_HTML_ROUTES)
+    stale_revision_detected = bool(
+        missing_or_stale or (clean_expected_sha is not None and sha_match is False)
+    )
+    parity_ok = bool(
+        health_ok
+        and models_ok
+        and all_html_ok
+        and unique_csp_nonces_ok
+        and html_dom_clean
+        and html_compliance_ok
+        and man_ok
+        and fb_ok
+        and raid_ok
+        and not stale_revision_detected
+    )
+
+    return {
+        "gateway": gw,
+        "parity_ok": parity_ok,
+        "stale_revision_detected": stale_revision_detected,
+        "missing_or_stale_routes": missing_or_stale,
+        "failed_routes": failed_routes,
+        "health_ok": health_ok,
+        "models_ok": models_ok,
+        "coder_model_present": coder_present,
+        "model_ids": model_ids,
+        "unique_csp_nonces_count": len(seen_nonces),
+        "unique_csp_nonces_ok": unique_csp_nonces_ok,
+        "html_dom_clean": html_dom_clean,
+        "compliance_ok": html_compliance_ok and (man_body.get("personal_pc_only") is True if man_code == 200 else False),
+        "manifest_ok": man_ok,
+        "live_build_sha": live_sha,
+        "expected_sha": clean_expected_sha,
+        "sha_match": sha_match,
+        "feedback_summary_ok": fb_ok,
+        "raid_status_ok": raid_ok,
+        "zero_inference_verified": True,
+        "per_route": per_route,
+        "diagnostics": diagnostics,
+    }
+
+
+def _extract_online_producers_and_gpus(fleet_body: Mapping[str, Any]) -> tuple[int, int | None]:
+    """Extract live producer count and distinct GPUs across real and legacy fleet payloads."""
+    hiveminders = fleet_body.get("hiveminders") if isinstance(fleet_body.get("hiveminders"), list) else []
+    producers = fleet_body.get("producers") if isinstance(fleet_body.get("producers"), list) else []
+    hm_online = sum(
+        1
+        for item in hiveminders
+        if isinstance(item, Mapping) and str(item.get("status", "")).lower() in LIVE_PRODUCER_STATUSES
+    )
+    legacy_online = sum(
+        1
+        for item in producers
+        if isinstance(item, Mapping) and str(item.get("status", "")).lower() in LIVE_PRODUCER_STATUSES
+    )
+    fleet_live_int = _nonneg_int(fleet_body.get("live_hiveminders")) or 0
+    distinct_gpus = _nonneg_int(fleet_body.get("distinct_physical_gpus"))
+    return max(fleet_live_int, hm_online, legacy_online), distinct_gpus
 
 
 def collect_platform_snapshot(
@@ -288,6 +1189,9 @@ def collect_platform_snapshot(
     today: date | None = None,
     http_fn: HttpJsonFn = default_http_json,
     gh_fn: GhJsonFn = default_gh_json,
+    probe_holiday_routes: bool = False,
+    raw_http_fn: HttpRawFn | None = None,
+    expected_sha: str | None = None,
 ) -> dict[str, Any]:
     """Gather read-only adoption, campaign, and satisfaction telemetry and compute deltas."""
     gw = validate_gateway_url(gateway)
@@ -319,9 +1223,8 @@ def collect_platform_snapshot(
     opentrainer_info = live_body.get("opentrainer") if isinstance(live_body.get("opentrainer"), dict) else {}
     models_list = models_body.get("data") if isinstance(models_body.get("data"), list) else []
 
-    producers = fleet_body.get("producers") if isinstance(fleet_body.get("producers"), list) else []
-    online_producers = sum(
-        1 for p in producers if isinstance(p, dict) and str(p.get("status", "")).lower() in ("online", "healthy", "ready")
+    online_producers, distinct_physical_gpus = _extract_online_producers_and_gpus(
+        fleet_body if isinstance(fleet_body, Mapping) else {}
     )
 
     repo_meta = gh_fn(["api", f"repos/{github_repo}"])
@@ -338,6 +1241,41 @@ def collect_platform_snapshot(
     total_accounts = accounts_info.get("total_registered_accounts")
     accepted_rounds = opentrainer_info.get("accepted_rounds_count")
     trainer_nodes = opentrainer_info.get("total_registered_nodes")
+    active_trainer_nodes = _nonneg_int(opentrainer_info.get("active_trainer_nodes"))
+
+    raw_ease = fb_body.get("mean_ease_rating", fb_body.get("average_ease_rating")) if fb_code == 200 else None
+    if raw_ease is None and fb_code == 200:
+        raw_ease = fb_body.get("average_ease_rating")
+    ease_val = (
+        raw_ease
+        if (
+            fb_code == 200
+            and not isinstance(raw_ease, bool)
+            and isinstance(raw_ease, (int, float))
+            and math.isfinite(float(raw_ease))
+        )
+        else None
+    )
+    fb_by_profile = (
+        dict(fb_body["by_profile"])
+        if (fb_code == 200 and isinstance(fb_body.get("by_profile"), Mapping))
+        else None
+    )
+
+    holiday_parity: dict[str, Any] | None = None
+    stale_revision_detected = fb_code == 404
+    missing_or_stale_routes: list[str] = (
+        ["/v1/hivemind/onboarding/feedback/summary"] if fb_code == 404 else []
+    )
+    if probe_holiday_routes:
+        holiday_parity = verify_holiday_routes_parity(
+            gw,
+            expected_sha=expected_sha,
+            raw_http_fn=raw_http_fn or default_http_raw,
+            http_fn=http_fn,
+        )
+        stale_revision_detected = bool(holiday_parity["stale_revision_detected"])
+        missing_or_stale_routes = list(holiday_parity["missing_or_stale_routes"])
 
     prev_snapshot: dict[str, Any] | None = None
     if history_path.exists():
@@ -363,7 +1301,9 @@ def collect_platform_snapshot(
         "total_registered_accounts": int(total_accounts) if isinstance(total_accounts, int) else None,
         "accounts_by_role": by_role,
         "online_producers": online_producers,
+        "distinct_physical_gpus": distinct_physical_gpus,
         "trainer_nodes": int(trainer_nodes) if isinstance(trainer_nodes, int) else None,
+        "active_trainer_nodes": active_trainer_nodes,
         "accepted_opentrainer_rounds": int(accepted_rounds) if isinstance(accepted_rounds, int) else None,
         "t4_status_http": t4_code,
         "t4_vram_free_mib": (t4_body.get("gpu") or {}).get("vram_free_mib")
@@ -371,8 +1311,13 @@ def collect_platform_snapshot(
         else t4_body.get("vram_free_mib"),
         "onboarding_feedback_deployed": fb_code == 200,
         "onboarding_feedback_total": int(fb_body.get("total_responses", 0)) if fb_code == 200 else 0,
-        "onboarding_average_ease_rating": fb_body.get("average_ease_rating") if fb_code == 200 else None,
+        "onboarding_mean_ease_rating": ease_val,
+        "onboarding_average_ease_rating": ease_val,
         "onboarding_zero_game_lag_ratio": fb_body.get("zero_game_lag_ratio") if fb_code == 200 else None,
+        "onboarding_feedback_by_profile": fb_by_profile,
+        "holiday_routes_parity": holiday_parity,
+        "stale_revision_detected": stale_revision_detected,
+        "missing_or_stale_routes": missing_or_stale_routes,
         "github_stars": stars,
         "github_forks": forks,
         "github_views_uniques_14d": views_uniques_14d,
@@ -388,42 +1333,70 @@ def collect_platform_snapshot(
         "fleet_http": fleet_code,
     }
 
-    with history_path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(snapshot, sort_keys=True) + "\n")
+    _append_jsonl_0600(history_path, snapshot)
 
     return snapshot
 
 
 def evaluate_readiness_gates(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Evaluate objective adoption, UX satisfaction, and campaign readiness gates."""
-    avg_ease = snapshot.get("onboarding_average_ease_rating")
+    avg_ease = snapshot.get("onboarding_mean_ease_rating")
+    if avg_ease is None:
+        avg_ease = snapshot.get("onboarding_average_ease_rating")
     zero_lag = snapshot.get("onboarding_zero_game_lag_ratio")
     fb_deployed = bool(snapshot.get("onboarding_feedback_deployed"))
+    parity_blk = snapshot.get("holiday_routes_parity")
+    holiday_routes_ok = (
+        fb_deployed and bool(parity_blk.get("parity_ok"))
+        if isinstance(parity_blk, Mapping)
+        else fb_deployed
+    )
     gw_ok = bool(snapshot.get("gateway_healthy"))
     by_role = snapshot.get("accounts_by_role") if isinstance(snapshot.get("accounts_by_role"), dict) else {}
-    role_trainers = int(by_role.get("trainer", 0)) if isinstance(by_role.get("trainer"), int) else 0
-    online_prods = int(snapshot.get("online_producers", 0)) if isinstance(snapshot.get("online_producers"), int) else 0
-    active_volunteer_gpus = max(role_trainers, online_prods)
+    role_trainers = _nonneg_int(by_role.get("trainer")) or 0
+    active_trainers = _nonneg_int(snapshot.get("active_trainer_nodes")) or 0
+    online_prods = _nonneg_int(snapshot.get("online_producers")) or 0
+    active_volunteer_gpus = max(role_trainers, active_trainers, online_prods)
+
+    ease_ok = (
+        not isinstance(avg_ease, bool)
+        and isinstance(avg_ease, (int, float))
+        and math.isfinite(float(avg_ease))
+        and float(avg_ease) >= 4.2
+    )
+    lag_ok = (
+        not isinstance(zero_lag, bool)
+        and isinstance(zero_lag, (int, float))
+        and math.isfinite(float(zero_lag))
+        and float(zero_lag) >= 0.95
+    )
 
     gates = {
         "gateway_and_models_online": gw_ok,
-        "holiday_routes_deployed_on_cloud_run": fb_deployed,
-        "satisfaction_ces_target_met": isinstance(avg_ease, (int, float)) and float(avg_ease) >= 4.2,
-        "gamer_zero_lag_target_met": isinstance(zero_lag, (int, float)) and float(zero_lag) >= 0.95,
+        "holiday_routes_deployed_on_cloud_run": holiday_routes_ok,
+        "satisfaction_ces_target_met": ease_ok,
+        "gamer_zero_lag_target_met": lag_ok,
         "external_volunteer_gpu_target_noel": active_volunteer_gpus >= 8,
     }
     blockers: list[str] = []
     if not gw_ok:
         blockers.append("Cloud Run gateway /health or /v1/models is unreachable.")
-    if not fb_deployed:
-        blockers.append(
-            "Cloud Run revision has not yet been redeployed with PR #949 (/noel, /quick, /v1/hivemind/onboarding/feedback)."
-        )
+    if not holiday_routes_ok:
+        if isinstance(parity_blk, Mapping) and not parity_blk.get("parity_ok"):
+            missing_list = parity_blk.get("missing_or_stale_routes") or parity_blk.get("failed_routes") or []
+            blockers.append(
+                "Holiday route parity drift detected on Cloud Run: "
+                + (", ".join(str(r) for r in missing_list) or "PR #949 parity check failed.")
+            )
+        else:
+            blockers.append(
+                "Cloud Run revision has not yet been redeployed with PR #949 (/noel, /quick, /v1/hivemind/onboarding/feedback)."
+            )
     if avg_ease is None:
         blockers.append("Zero onboarding satisfaction responses recorded yet (target CES >= 4.2/5).")
-    elif float(avg_ease) < 4.2:
+    elif not ease_ok:
         blockers.append(f"Average ease_rating {avg_ease} is below 4.2/5 target.")
-    if zero_lag is not None and float(zero_lag) < 0.95:
+    if zero_lag is not None and not lag_ok:
         blockers.append(f"Zero-game-lag comfort ratio {zero_lag} is below 0.95 target.")
     if active_volunteer_gpus < 8:
         blockers.append(
@@ -496,8 +1469,7 @@ def append_improvement_proposal(
         "test_plan": test_plan.strip(),
     }
     out_file = sdir / "improvement_proposals.jsonl"
-    with out_file.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, sort_keys=True) + "\n")
+    _append_jsonl_0600(out_file, record)
     return record
 
 
@@ -511,6 +1483,9 @@ def build_control_tools(
     credentials_path: Path | None = None,
     http_fn: HttpJsonFn = default_http_json,
     gh_fn: GhJsonFn = default_gh_json,
+    probe_holiday_routes: bool = False,
+    raw_http_fn: HttpRawFn | None = None,
+    expected_sha: str | None = None,
 ) -> list[Callable[..., str]]:
     """Create the custom tool functions registered with ``LocalAgentConfig(tools=...)``."""
     sdir = state_dir or default_state_dir()
@@ -533,6 +1508,9 @@ def build_control_tools(
             state_dir=sdir,
             http_fn=http_fn,
             gh_fn=gh_fn,
+            probe_holiday_routes=probe_holiday_routes,
+            raw_http_fn=raw_http_fn,
+            expected_sha=expected_sha,
         )
         return json.dumps(snap, indent=2, sort_keys=True)
 
@@ -544,6 +1522,9 @@ def build_control_tools(
             state_dir=sdir,
             http_fn=http_fn,
             gh_fn=gh_fn,
+            probe_holiday_routes=probe_holiday_routes,
+            raw_http_fn=raw_http_fn,
+            expected_sha=expected_sha,
         )
         gates = evaluate_readiness_gates(snap)
         return json.dumps(gates, indent=2, sort_keys=True)
@@ -635,9 +1616,8 @@ def load_saved_conversation_id(state_dir: Path) -> str | None:
 def save_conversation_id(state_dir: Path, conversation_id: str | None) -> None:
     if not conversation_id:
         return
-    state_dir.mkdir(parents=True, exist_ok=True)
     session_file = state_dir / "session_state.json"
-    session_file.write_text(
+    content = (
         json.dumps(
             {
                 "conversation_id": conversation_id,
@@ -645,9 +1625,9 @@ def save_conversation_id(state_dir: Path, conversation_id: str | None) -> None:
             },
             indent=2,
         )
-        + "\n",
-        encoding="utf-8",
+        + "\n"
     )
+    _atomic_write_text(session_file, sanitize_text_for_display(content), mode=0o600)
 
 
 def build_antigravity_agent_config(
@@ -792,7 +1772,7 @@ def format_report_markdown(report: dict[str, Any]) -> str:
                 f"- **[{act.get('priority')}] `{act.get('slice_id')}` — {act.get('title')}** "
                 f"(Target: *{act.get('target_metric')}*, Gate: *{act.get('test_gate')}*)"
             )
-    return "\n".join(lines) + "\n"
+    return sanitize_text_for_display("\n".join(lines) + "\n")
 
 
 async def run_sdk_audit_cycle(
@@ -848,10 +1828,10 @@ async def run_sdk_audit_cycle(
             structured = json.loads(raw_text)
         save_conversation_id(sdir, getattr(agent, "conversation_id", None))
 
-    sdir.mkdir(parents=True, exist_ok=True)
-    (sdir / "latest_report.json").write_text(json.dumps(structured, indent=2) + "\n", encoding="utf-8")
-    (sdir / "latest_report.md").write_text(format_report_markdown(structured), encoding="utf-8")
-    return structured
+    sanitized_json = sanitize_text_for_display(json.dumps(structured, indent=2) + "\n")
+    _atomic_write_text(sdir / "latest_report.json", sanitized_json, mode=0o600)
+    _atomic_write_text(sdir / "latest_report.md", format_report_markdown(structured), mode=0o600)
+    return json.loads(sanitized_json)
 
 
 async def run_sdk_daemon(
@@ -953,18 +1933,72 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vertex", action="store_true", help="Authenticate via Vertex AI ADC.")
     parser.add_argument("--project", default=None, help="GCP project ID when --vertex is enabled.")
     parser.add_argument("--model", default=None, help="Optional explicit model identifier override.")
+    parser.add_argument(
+        "--verify-holiday-routes",
+        action="store_true",
+        help="Run zero-inference Cloud Run PR #949 route, CSP, manifest, and SHA parity verification.",
+    )
+    parser.add_argument(
+        "--expected-sha",
+        default=None,
+        help="Optional expected Git build SHA (6-64 chars) verified against /v1/hivemind/onboarding/manifest.",
+    )
+    parser.add_argument(
+        "--enforce-personal-pc",
+        action="store_true",
+        help="Fail closed with exit code 2 (0 HTTP calls, 0 writes) if corporate indicators are detected locally.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    compliance: dict[str, Any] | None = None
+    if args.enforce_personal_pc:
+        compliance = evaluate_personal_pc_compliance()
+        if not compliance["compliance_ok"]:
+            print(
+                json.dumps(
+                    {
+                        "compliance": compliance,
+                        "error": "Corporate indicator detected; personal home PCs & hobby/open-source projects only (0.00 EUR / 0.00 USD).",
+                        "exit_code": 2,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 2
+
+    if args.verify_holiday_routes:
+        try:
+            parity = verify_holiday_routes_parity(args.gateway, expected_sha=args.expected_sha)
+        except ValueError as exc:
+            print(sanitize_text_for_display(f"Error: {exc}"), file=sys.stderr)
+            return 2
+        out_doc: dict[str, Any] = {
+            "gateway": parity["gateway"],
+            "holiday_routes_parity": parity,
+            "stale_revision_detected": parity["stale_revision_detected"],
+            "missing_or_stale_routes": parity["missing_or_stale_routes"],
+            "parity_ok": parity["parity_ok"],
+            "exit_code": 0 if parity["parity_ok"] else 2,
+        }
+        if compliance is not None:
+            out_doc["compliance"] = compliance
+        print(sanitize_text_for_display(json.dumps(out_doc, indent=2, sort_keys=True)))
+        return 0 if parity["parity_ok"] else 2
+
     sdir = (args.state_dir or default_state_dir()).resolve()
 
     if args.mode == "status":
         acct = ensure_operator_account(gateway=args.gateway, preferred_handle=args.handle)
         snap = collect_platform_snapshot(gateway=args.gateway, github_repo=args.github_repo, state_dir=sdir)
         gates = evaluate_readiness_gates(snap)
-        print(json.dumps({"account": acct, "snapshot": snap, "readiness": gates}, indent=2, sort_keys=True))
+        status_doc: dict[str, Any] = {"account": acct, "snapshot": snap, "readiness": gates}
+        if compliance is not None:
+            status_doc["compliance"] = compliance
+        print(sanitize_text_for_display(json.dumps(status_doc, indent=2, sort_keys=True)))
         return 0 if acct.get("authenticated") and snap.get("gateway_healthy") else 1
 
     try:

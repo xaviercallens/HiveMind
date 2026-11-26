@@ -1,0 +1,29 @@
+# Project HiveMind — Daily Roadmap & Foundation Paper Improvement Ledger
+
+> **Non-Monetary AGPL-3.0 Charter:** Project HiveMind operates strictly under the **`0.00 EUR / 0.00 USD`** non-commercial volunteer compute-reciprocity charter (`LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md`) and **`AGPL-3.0`** license, with zero monetary payouts, zero cryptocurrency wallets, zero external payment links, and zero unauthorized network egress. Root `ROADMAP.md` remains unmodified; daily roadmap and paper-improvement progress is tracked exclusively in this ledger.
+
+---
+
+## Foundation Paper Anchor
+
+- **Foundation Manuscript:** Project HiveMind Foundation Paper **v4.4.0** — DOI [**`10.5281/zenodo.24553269`**](https://doi.org/10.5281/zenodo.24553269) (`paper/hivemind_foundation_article.tex`).
+- **Companion Extension:** `Reine-Cortex` Zero-Gradient NeuroController Extension — DOI [**`10.5281/zenodo.24542441`**](https://doi.org/10.5281/zenodo.24542441).
+- **Target Paper Section:** Section `15.4` — *Opportunity `J1` (Theorem `15.1(2)`)*: Null-Space Protected Post-JEPA *Gelee Royale* Rescue eliminating general-prose and far-token regression from unconstrained LLM-JEPA (`P1` `+0.90` nat) and Semantic Tube Prediction (`E-STP-1b` `+1.37` nat) LoRA deltas.
+
+---
+
+## Daily Roadmap Ledger (`C1`)
+
+| Step ID | Track | Status | Paper Anchor | Target Module(s) | Test Suite |
+| :--- | :---: | :--- | :--- | :--- | :--- |
+| **`DAILY-C1-S1`** | **`C1`** | **Implemented** | v4.4.0 §15.4 Opportunity `J1` (Theorem `15.1(2)`, `10.5281/zenodo.24553269`) | `src/hivemind/jepa/nullspace_jepa_rescuer.py` | `tests/test_nullspace_jepa_rescuer.py` |
+
+---
+
+## Step `DAILY-C1-S1` Measurable Acceptance Criteria
+
+1. **Pure CPU Cleanroom Execution (`0 MiB` GPU VRAM):** Pure PyTorch/NumPy/stdlib CPU implementation with zero external network calls, zero subprocess invocations, zero stubs (`ZeroStubAudit` clean), and AGPL-3.0 header within the first 300 characters.
+2. **Exact Algebraic Prose-Nullspace Annihilation (`Theorem 15.1(2)`):** Given `P_0 = I - V_prose^T V_prose`, associative rank-preserving projection `(s * B)(A @ P_0)` achieves `||((s * B)(A @ P_0)) V_prose^T||_F < 1e-6` while preserving specialist JEPA alignment in the orthogonal complement (`S1`).
+3. **Post-JEPA *Gelee Royale* Rescue (`Opportunity J1`):** Turns a guard-failing post-round JEPA or STP LoRA delta (`D0 > +1.0%`, `+0.90` nat / `+1.37` nat regression) into an ANSE-admissible candidate (`ANSE Delta E < 0`, `D0 <= +1.0%`) (`S2`).
+4. **RankMe Isotropy & Cosine-Collapse Guard:** Computes spectral RankMe effective dimensionality and pairwise cosine distance (`1 - cos > threshold`), rejecting cosine-collapsed or low-RankMe representations with atomic rollback (`S3`).
+5. **Monotone ANSE Gate & SHA-256 Provenance:** Enforces `ANSE Delta E < 0` and `D0 / worst_domain <= +1.0%`, performing verified atomic bitwise rollback (`ANSE_MAXIMUM_PAIN = 1e6`) on any guard or energy failure (`S4`), emitting deterministic SHA-256 provenance receipts (`S5`), and achieving `>= 95.0%` standalone line coverage on `src/hivemind/jepa/nullspace_jepa_rescuer.py` across 5 deterministic CPU scenarios.

@@ -289,18 +289,19 @@ def test_s2_factorized_associative_nullspace_equivalence_and_flops() -> None:
     a_mat = torch.randn(rank, d_in, generator=gen)
     scale = 0.75
 
-    # Build orthonormal prose basis U_0 (rank 12) and P_0 = I - U_0 U_0^T.
+    # Build orthonormal prose basis U_0 (rank 12) and P_0 = I - U_0 U_0^T in float64 precision.
     prose_raw = torch.randn(12, d_in, generator=gen)
-    q_u, _ = torch.linalg.qr(prose_raw.T, mode="reduced")
-    p_null = torch.eye(d_in, dtype=torch.float32) - q_u @ q_u.T
+    q_u64, _ = torch.linalg.qr(prose_raw.double().T, mode="reduced")
+    p_null64 = torch.eye(d_in, dtype=torch.float64) - q_u64 @ q_u64.T
+    p_null = p_null64.to(dtype=torch.float32)
 
     fast_delta = factorized_associative_nullspace_delta(b_mat * scale, a_mat, p_null)
-    dense_delta = ((b_mat * scale) @ a_mat) @ p_null
+    dense_delta64 = ((b_mat.double() * scale) @ a_mat.double()) @ p_null.double()
 
-    max_diff = float((fast_delta - dense_delta).abs().max().item())
+    max_diff = float((fast_delta.double() - dense_delta64).abs().max().item())
     assert max_diff < 1e-5
-    # Verify prose invariance ||delta @ X_prose^T||_inf < 1e-5.
-    prose_leak = float((fast_delta @ prose_raw.T).abs().max().item())
+    # Verify prose invariance ||delta @ X_prose^T||_inf < 1e-5 against exact float64 projection.
+    prose_leak = float((fast_delta.double() @ prose_raw.double().T).abs().max().item())
     assert prose_leak < 1e-5
 
     # Verify incremental extraction supports both mapping and tuple inputs, with and without p_null.
@@ -318,7 +319,8 @@ def test_s2_factorized_associative_nullspace_equivalence_and_flops() -> None:
         p_null=p_null,
     )
     assert len(inc_dense) == 2 and len(inc_proj) == 2
-    assert float((inc_dense[0].delta_weight @ p_null - inc_proj[0].delta_weight).abs().max().item()) < 1e-5
+    inc_diff = float((inc_dense[0].delta_weight.double() @ p_null.double() - inc_proj[0].delta_weight.double()).abs().max().item())
+    assert inc_diff < 1e-5
     assert inc_proj[1].cosine_with_previous > 0.99
 
     flop_stats = estimate_factorized_vs_dense_flops(d_out=2048, d_in=2048, rank=16)

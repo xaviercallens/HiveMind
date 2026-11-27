@@ -3907,7 +3907,7 @@ def _run_deploy_sh_dry_run(
     is_fr = lang == "fr"
     base_root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[1]
     deploy_sh = base_root / "deploy" / "gcp_openrouter" / "deploy.sh"
-    display_path = redact_home_path(deploy_sh)
+    display_path = "deploy/gcp_openrouter/deploy.sh"
     if not deploy_sh.is_file():
         return {
             "executed": False,

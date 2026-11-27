@@ -803,7 +803,7 @@ def test_s4_end_to_end_anse_gated_hive_round_and_atomic_bitwise_rollback(
     g_tr = torch.Generator(device="cpu").manual_seed(20264741)
     pkt_forged = build_federated_hive_packet(
         "hive_byz_forged_trojan",
-        (3.0 * torch.randn_like(hw_base, generator=g_tr)),
+        (3.0 * torch.randn(hw_base.shape, dtype=hw_base.dtype, device=hw_base.device, generator=g_tr)),
         probe_comm,
         lean_spec_audit=lean_audit,
         round_id="ruche_r47",

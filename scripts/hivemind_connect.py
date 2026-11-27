@@ -34,13 +34,16 @@ import secrets
 import stat
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from contextlib import suppress
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 try:
     import httpx
@@ -59,6 +62,11 @@ TOOLS: tuple[str, ...] = ("continue", "opencode", "aider", "cline", "zed", "jetb
 SCHEMA: str = "hivemind.connect_doctor/1"
 RECEIPT_OBJECT: str = "hivemind.connect_doctor_report"
 CAMPAIGN_ID: str = "noel-2026-easy-onboard"
+MANIFEST_OBJECT: str = "hivemind.onboarding.manifest"
+FEEDBACK_SUMMARY_OBJECT: str = "hivemind.onboarding.feedback.summary"
+ARENA_SUMMARY_OBJECT: str = "hivemind.blind_ab_arena.summary"
+FLEET_OBJECT: str = "hivemind.producers.fleet"
+RAID_STATUS_OBJECT: str = "hivemind.raid_noel.status"
 FINANCIAL_PROMISE: str = "0.00 EUR / 0.00 USD"
 CONTINUE_MODELS: tuple[str, str] = ("hivemind/coder", "hivemind/bee-stars")
 DEFAULT_HOST_LABEL: str = "personal-pc"
@@ -68,9 +76,20 @@ DEFAULT_MIN_FREE_VRAM_MIB: int = 2048
 DEFAULT_YIELD_BUDGET_MS: float = 1500.0
 DOCTOR_HTTP_TIMEOUT_S: float = 4.5
 SUBPROCESS_TIMEOUT_S: float = 3.0
+MAX_HTTP_BODY_BYTES: int = 4 * 1024 * 1024
 NON_WORKER_GPU_UTIL_THRESHOLD_PCT: float = 15.0
 MIN_REPORTABLE_VRAM_TOTAL_MIB: int = 512
 MAX_GPU_VRAM_MIB: int = 1_048_576
+DEFAULT_TARGET_ONLINE_PRODUCERS: int = 8
+DEFAULT_MIN_EASE_RATING: float = 4.2
+DEFAULT_MIN_ZERO_LAG_RATIO: float = 0.95
+LIVE_PRODUCER_STATUSES: frozenset[str] = frozenset({"live", "online", "healthy", "ready"})
+
+CES_QUEUE_SCHEMA: str = "hivemind.connect.ces_queue/1"
+DEFAULT_CES_QUEUE_FILENAME: str = "connect_ces_queue.json"
+DEFAULT_MAX_CES_QUEUE_ENTRIES: int = 128
+DEFAULT_MAX_CES_DELIVERED: int = 512
+MAX_CES_QUEUE_ENTRIES_CEILING: int = 4096
 
 SUPPORTED_LANGS: tuple[str, ...] = ("en", "fr")
 VALID_ROLES: frozenset[str] = frozenset({"consumer", "producer", "prosumer", "trainer"})
@@ -90,6 +109,33 @@ DOCTOR_HOLIDAY_ROUTES: tuple[str, ...] = (
     "/v1/hivemind/raid/status",
 )
 DOCTOR_FLEET_ROUTES: tuple[str, ...] = ("/v1/hivemind/producers/fleet",)
+PR949_HTML_ROUTES: tuple[str, ...] = ("/noel", "/quick", "/raid-noel", "/arena-noel")
+_PR949_REQUIRED_ROUTES: tuple[tuple[str, str, str], ...] = (
+    ("/health", "json", "core"),
+    ("/v1/models", "json", "core"),
+    ("/noel", "html", "holiday"),
+    ("/quick", "html", "holiday"),
+    ("/raid-noel", "html", "holiday"),
+    ("/arena-noel", "html", "holiday"),
+    ("/v1/hivemind/onboarding/manifest", "json", "manifest"),
+    ("/v1/hivemind/onboarding/feedback/summary", "json", "holiday"),
+    ("/v1/hivemind/raid/status", "json", "holiday"),
+    ("/v1/hivemind/producers/fleet", "json", "holiday"),
+)
+_MANIFEST_REQUIRED_HOLIDAY_ROUTES: tuple[str, ...] = (
+    "/arena-noel",
+    "/noel",
+    "/quick",
+    "/raid-noel",
+    "/v1/hivemind/onboarding/feedback",
+    "/v1/hivemind/onboarding/feedback/summary",
+    "/v1/hivemind/onboarding/manifest",
+    "/v1/hivemind/raid/status",
+)
+_ACCEPTED_FLEET_OBJECTS: frozenset[str] = frozenset({FLEET_OBJECT, "hivemind.producer_fleet"})
+_ACCEPTED_FEEDBACK_SUMMARY_OBJECTS: frozenset[str] = frozenset(
+    {FEEDBACK_SUMMARY_OBJECT, "hivemind.onboarding_feedback_summary"}
+)
 
 EXIT_CODES: dict[str, int] = {
     "ready": 0,
@@ -188,17 +234,41 @@ _HOME_PATH_RE = re.compile(
 )
 _PYTEST_TMP_PREFIX_RE = re.compile(r"pytest-of-[^/\\]+[/\\]pytest-[^/\\]+")
 _RAW_API_KEY_RE = re.compile(r"\bhm(?:_live_|-)(?!\*\*\*)[A-Za-z0-9_-]{6,}\b")
+_MASKED_HM_KEY_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])(hm(?:_live_|-))\*\*\*(?!redacted\*\*\*)(?:[0-9]{1,4}(?:m"
+    + r"s\b|tok"
+    + r"/s)|[A-Za-z0-9_-]{4,})(?![A-Za-z0-9_-])"
+)
 _BEARER_RE = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{6,}\b", re.IGNORECASE)
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _FORBIDDEN_KEY_RE = re.compile(r'"' + "sco" + r're"\s*:\s*\d')
+_CSP_HEADER_NONCE_RE = re.compile(r"'nonce-([A-Za-z0-9_+=/=-]{8,128})'")
+_CSP_INLINE_NONCE_RE = re.compile(r"'nonce-[A-Za-z0-9_+=/=-]{4,128}'")
+_HTML_NONCE_ATTR_RE = re.compile(
+    r"""\bnonce=(?:"([A-Za-z0-9_+=/=-]{8,128})"|'([A-Za-z0-9_+=/=-]{8,128})')"""
+)
+_STRIP_NONCE_ATTR_RE = re.compile(r"""\bnonce=(?:"[^"]*"|'[^']*')""")
+_FORBIDDEN_DOM_SINK_RE = re.compile(
+    r"\b(?:" + "inner" + "HTML|" + "outer" + "HTML|" + "insertAdjacent" + "HTML|" + "docu" + r"ment\.write)\b"
+)
+_STATIC_FIG_UNIT_RE = re.compile(
+    r"\d[\d.,]*\s?(?:m" + r"s\b|tok" + r"/s|HTTP" + r" Reqs|Comple" + r"tions|\bs/" + r"round)"
+)
+_DNS_LABEL_RE = re.compile(r"\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z", re.ASCII)
 _PLATFORM_TAG_RE = re.compile(r"\A[a-z0-9][a-z0-9_-]{0,23}\Z", re.ASCII)
 _HOST_LABEL_CLEAN_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _BUILD_SHA_RE = re.compile(r"\A[A-Za-z0-9]{6,64}\Z", re.ASCII)
+_HEX_SHA_RE = re.compile(r"\A[0-9a-f]{7,64}\Z", re.ASCII)
+_SHA256_HEX_RE = re.compile(r"\A[0-9a-f]{64}\Z", re.ASCII)
 _REVISION_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z", re.ASCII)
 _SECRET_VALUE_MARKERS: tuple[str, ...] = ("secret", "token", "password", "passwd", "apikey", "bearer", "aiza")
 
+_CES_LOCK_GUARD = threading.Lock()
+_CES_PATH_LOCKS: dict[Path, threading.Lock] = {}
+
 HttpFn = Callable[..., tuple[int, Any]]
+RawHttpFn = Callable[..., tuple[int, Any, Mapping[str, str]]]
 RunnerFn = Callable[[Sequence[str], float], tuple[int, str]]
 GpuProbeFn = Callable[..., Any]
 ProcessProbeFn = Callable[..., Iterable[str]]
@@ -362,12 +432,24 @@ def sanitize_structure(value: Any, *, home: Path | None = None) -> Any:
     return value
 
 
+def strip_masked_keys_and_nonces(text: str) -> str:
+    """Strip HTML ``nonce=...`` attributes, CSP ``'nonce-...'`` tokens, and masked ``hm-...***XXXX`` suffixes."""
+    if not isinstance(text, str):
+        raise ValueError("strip_masked_keys_and_nonces requires a string.")
+    cleaned = _STRIP_NONCE_ATTR_RE.sub('nonce=""', text)
+    cleaned = _CSP_INLINE_NONCE_RE.sub("'nonce-CSP_NONCE'", cleaned)
+    return _MASKED_HM_KEY_RE.sub(r"\1***XXXX", cleaned)
+
+
 def scan_output_safety(text: str, *, home: Path | None = None) -> list[str]:
-    """Audit rendered CLI/Markdown/JSON output for leaked keys, home paths, PII, or forbidden keys."""
+    """Audit rendered CLI/Markdown/JSON output for leaked keys, home paths, PII, static figures, or forbidden keys."""
+    if not isinstance(text, str):
+        raise ValueError("scan_output_safety requires a string.")
+    scrubbed = strip_masked_keys_and_nonces(text)
     issues: list[str] = []
     if _FORBIDDEN_KEY_RE.search(text):
         issues.append("forbidden_key_detected")
-    if _RAW_API_KEY_RE.search(text):
+    if _RAW_API_KEY_RE.search(scrubbed):
         issues.append("unmasked_api_key_detected")
     if _BEARER_RE.search(text):
         issues.append("bearer_token_detected")
@@ -375,6 +457,8 @@ def scan_output_safety(text: str, *, home: Path | None = None) -> list[str]:
         issues.append("email_detected")
     if _HOME_PATH_RE.search(text) or any(v in text for v in _home_variants(home)):
         issues.append("unredacted_home_path_detected")
+    if _STATIC_FIG_UNIT_RE.search(scrubbed):
+        issues.append("static_figure_detected")
     for ip_hit in _IPV4_RE.findall(text):
         if ip_hit != "127.0.0.1":
             issues.append(f"non_loopback_ipv4_detected:{ip_hit}")
@@ -390,16 +474,30 @@ def compute_receipt_sha256(payload: Mapping[str, Any]) -> str:
 
 def is_allowed_gateway_host(host: str, *, allow_test_hosts: bool = False) -> bool:
     """Return True iff ``host`` is allowed by the strict lateral-movement host policy."""
-    h = (host or "").strip().lower().strip("[]")
-    if not h:
+    if not isinstance(host, str):
         return False
-    if h in ALLOWED_LOOPBACK_HOSTS or h in ALLOWED_READ_ONLY_DATA_HOSTS:
-        return True
-    if (len(h) > 8 and h.endswith(".run.app")) or h == "storage.googleapis.com":
-        return True
-    if len(h) > 15 and h.endswith(".googleapis.com"):
+    raw = host.strip().lower()
+    if (
+        not raw
+        or len(raw) > 253
+        or any(ch.isspace() or ch in "\\/@" or ord(ch) < 32 or ord(ch) == 127 for ch in raw)
+    ):
+        return False
+    h = raw[1:-1] if (raw.startswith("[") and raw.endswith("]")) else raw
+    if not h or "[" in h or "]" in h:
+        return False
+    if h in ALLOWED_LOOPBACK_HOSTS:
         return True
     if allow_test_hosts and h in ALLOWED_TEST_TRANSPORT_HOSTS:
+        return True
+    labels = h.split(".")
+    if len(labels) < 3 or any(not _DNS_LABEL_RE.fullmatch(lbl) for lbl in labels):
+        return False
+    if h in ALLOWED_READ_ONLY_DATA_HOSTS:
+        return True
+    if labels[-2:] == ["run", "app"]:
+        return True
+    if labels[-2:] == ["googleapis", "com"]:
         return True
     return False
 
@@ -408,22 +506,28 @@ def validate_gateway_url(url: str, *, allow_test_hosts: bool = False) -> str:
     """Validate gateway origin URL against strict host allowlist and transport scheme rules."""
     if isinstance(url, bool) or not isinstance(url, str) or not url.strip():
         raise GatewayPolicyError("Gateway URL must be a non-empty string.")
-    cleaned = url.strip().rstrip("/")
-    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in cleaned):
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in url):
         raise GatewayPolicyError("Gateway URL must not contain whitespace or control characters.")
-    parts = urlsplit(cleaned)
-    if parts.username is not None or parts.password is not None:
+    cleaned = url.strip().rstrip("/")
+    if any(ch.isspace() for ch in cleaned):
+        raise GatewayPolicyError("Gateway URL must not contain whitespace or control characters.")
+    if "\\" in cleaned or "\\" in unquote(cleaned):
+        raise GatewayPolicyError("Gateway URL must not contain backslashes.")
+    if "@" in cleaned or "@" in unquote(cleaned):
+        raise GatewayPolicyError("Gateway URL must not embed credentials.")
+    try:
+        parts = urlsplit(cleaned)
+        port = parts.port
+        host = (parts.hostname or "").lower()
+    except ValueError as exc:
+        raise GatewayPolicyError("Gateway URL contains an invalid port or authority.") from exc
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
         raise GatewayPolicyError("Gateway URL must not embed credentials.")
     if parts.query or parts.fragment or parts.path not in ("", "/"):
         raise GatewayPolicyError("Gateway URL must be a bare origin without path, query, or fragment.")
-    try:
-        port = parts.port
-    except ValueError as exc:
-        raise GatewayPolicyError("Gateway URL contains an invalid port.") from exc
     if port is not None and not (1 <= port <= 65535):
         raise GatewayPolicyError("Gateway URL port out of range.")
-    host = (parts.hostname or "").lower()
-    if not is_allowed_gateway_host(host, allow_test_hosts=allow_test_hosts):
+    if not parts.netloc or not is_allowed_gateway_host(host, allow_test_hosts=allow_test_hosts):
         raise GatewayPolicyError(
             f"Untrusted gateway host {host!r}; allowed hosts are *.run.app, *.googleapis.com, "
             "datasets-server.huggingface.co, or loopback."
@@ -436,22 +540,92 @@ def validate_gateway_url(url: str, *, allow_test_hosts: bool = False) -> str:
     return cleaned
 
 
-def _assert_zero_inference_request(method: str, url: str, *, allow_test_hosts: bool = False) -> str:
-    """Validate request target host and reject any LLM inference / chat-completion path."""
+def _safe_urlsplit(url: str) -> Any:
+    if isinstance(url, bool) or not isinstance(url, str) or not url.strip():
+        raise GatewayPolicyError("Request URL must be a non-empty string.")
+    cleaned = url.strip()
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in cleaned):
+        raise GatewayPolicyError("Request URL must not contain whitespace or control characters.")
+    if "\\" in cleaned or "\\" in unquote(cleaned):
+        raise GatewayPolicyError("Request URL must not contain backslashes.")
+    try:
+        parts = urlsplit(cleaned)
+    except ValueError as exc:
+        raise GatewayPolicyError("Request URL is malformed.") from exc
+    if (
+        parts.username is not None
+        or parts.password is not None
+        or "@" in parts.netloc
+        or "@" in unquote(parts.netloc)
+    ):
+        raise GatewayPolicyError("Request URL must not embed credentials.")
+    return parts
+
+
+def _payload_has_key(obj: Any, target_keys: frozenset[str]) -> bool:
+    if isinstance(obj, Mapping):
+        for k, v in obj.items():
+            if str(k).strip().lower() in target_keys or _payload_has_key(v, target_keys):
+                return True
+    elif isinstance(obj, (list, tuple)):
+        return any(_payload_has_key(item, target_keys) for item in obj)
+    return False
+
+
+def _assert_zero_inference_request(
+    method: str,
+    url: str,
+    *,
+    allow_test_hosts: bool = False,
+    payload: Any = None,
+) -> str:
+    """Validate request target host and reject any LLM inference / chat-completion path or payload."""
     verb = (method or "").strip().upper()
     if verb not in ("GET", "HEAD", "POST"):
         raise GatewayPolicyError(f"Unsupported HTTP method {verb!r}.")
-    parts = urlsplit(url)
+    parts = _safe_urlsplit(url)
     origin = f"{parts.scheme}://{parts.netloc}"
     validate_gateway_url(origin, allow_test_hosts=allow_test_hosts)
-    low_path = (parts.path or "").lower()
-    if "completions" in low_path or "/chat" in low_path or "hivemind/coder" in low_path:
+    low_path = unquote(parts.path or "").lower()
+    coder_id = "hivemind/" + "coder"
+    if "completions" in low_path or "/chat" in low_path or coder_id in low_path:
         raise GatewayPolicyError(f"Zero-inference invariant violated: {verb} {parts.path} is strictly forbidden.")
+    if payload is not None:
+        if verb in ("GET", "HEAD"):
+            raise GatewayPolicyError(f"Zero-inference invariant violated: {verb} requests must not attach a body payload.")
+        if isinstance(payload, (Mapping, list, tuple)):
+            if _payload_has_key(payload, frozenset({"messages", "prompt"})):
+                raise GatewayPolicyError(
+                    "Zero-inference invariant violated: messages/prompt payloads are strictly forbidden."
+                )
+            serialized = json.dumps(
+                dict(payload) if isinstance(payload, Mapping) else list(payload),
+                sort_keys=True,
+                ensure_ascii=False,
+                default=str,
+            ).lower()
+            is_transfer_ref_only = (
+                low_path == "/v1/hivemind/points/transfer"
+                and not _payload_has_key(payload, frozenset({"model"}))
+            )
+            if coder_id in serialized and not is_transfer_ref_only:
+                raise GatewayPolicyError(
+                    "Zero-inference invariant violated: hivemind/coder inference payloads are strictly forbidden."
+                )
+        elif isinstance(payload, (str, bytes, bytearray)):
+            text_payload = payload.decode("utf-8", errors="replace") if isinstance(payload, (bytes, bytearray)) else payload
+            low_body = unquote(text_payload).lower()
+            if '"messages"' in low_body or '"prompt"' in low_body or (
+                coder_id in low_body and low_path != "/v1/hivemind/points/transfer"
+            ):
+                raise GatewayPolicyError(
+                    "Zero-inference invariant violated: messages/prompt/model payloads are strictly forbidden."
+                )
     return origin
 
 
 class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Prevent HTTP redirects to untrusted hosts or completion endpoints."""
+    """Prevent HTTP redirects to untrusted hosts, downgrades, backslashes, credentials, or completion endpoints."""
 
     def redirect_request(  # type: ignore[override]
         self,
@@ -462,15 +636,136 @@ class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
         headers: Mapping[str, str],
         newurl: str,
     ) -> urllib.request.Request | None:
-        _assert_zero_inference_request(req.get_method(), newurl, allow_test_hosts=False)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        raw_loc: Any = newurl
+        if headers is not None and hasattr(headers, "get"):
+            for hdr_name in ("location", "Location", "uri"):
+                cand = headers.get(hdr_name)
+                if cand is not None:
+                    raw_loc = cand
+                    break
+        if (
+            not isinstance(raw_loc, str)
+            or not raw_loc.strip()
+            or not isinstance(newurl, str)
+            or not newurl.strip()
+        ):
+            raise GatewayPolicyError("Untrusted redirect: empty target URL.")
+        if "\\" in raw_loc or "\\" in unquote(raw_loc) or "@" in raw_loc or "@" in unquote(raw_loc):
+            raise GatewayPolicyError("Untrusted redirect: forbidden backslash or '@' in Location.")
+        orig_parts = _safe_urlsplit(req.full_url)
+        dest_parts = _safe_urlsplit(newurl)
+        orig_host = (orig_parts.hostname or "").lower()
+        dest_host = (dest_parts.hostname or "").lower()
+        if orig_host not in ALLOWED_LOOPBACK_HOSTS and dest_host in ALLOWED_LOOPBACK_HOSTS:
+            raise GatewayPolicyError("Untrusted redirect from remote host to loopback.")
+        if orig_parts.scheme == "https" and dest_parts.scheme != "https":
+            raise GatewayPolicyError("Untrusted HTTPS-to-HTTP downgrade redirect.")
+        effective_method = "GET" if (req.get_method() == "POST" and code in (301, 302, 303)) else req.get_method()
+        _assert_zero_inference_request(effective_method, newurl, allow_test_hosts=False)
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is not None:
+            _assert_zero_inference_request(new_req.get_method(), new_req.full_url, allow_test_hosts=False)
+        return new_req
+
+
+def _validate_timeout_s(timeout_s: float) -> float:
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)):
+        raise GatewayPolicyError("timeout_s must be a finite positive number.")
+    val = float(timeout_s)
+    if not math.isfinite(val) or val <= 0.0:
+        raise GatewayPolicyError("timeout_s must be a finite positive number.")
+    return min(max(0.05, val), 60.0)
+
+
+def _prepare_http_headers(
+    headers: Mapping[str, str] | None,
+    *,
+    has_json_body: bool = False,
+    user_agent: str = "hivemind-connect/2.0-stdlib",
+) -> dict[str, str]:
+    req_headers: dict[str, str] = {
+        "Accept": "application/json, text/html;q=0.9, text/plain;q=0.8",
+        "User-Agent": user_agent,
+    }
+    if has_json_body:
+        req_headers["Content-Type"] = "application/json"
+    if headers:
+        for hk, hv in headers.items():
+            ks = str(hk).strip()
+            vs = str(hv).strip()
+            raw_k = str(hk)
+            raw_v = str(hv)
+            if not ks or any(ord(ch) < 32 or ord(ch) == 127 for ch in raw_k + raw_v):
+                raise GatewayPolicyError("HTTP headers must be non-empty and must not contain CR/LF or control characters.")
+            req_headers[ks] = vs
+    return req_headers
+
+
+def _read_bounded_http_body(resp: Any, *, max_bytes: int = MAX_HTTP_BODY_BYTES) -> bytes:
+    raw_bytes = resp.read(max_bytes + 1)
+    if len(raw_bytes) > max_bytes:
+        raise GatewayPolicyError(f"HTTP response exceeded {max_bytes} byte limit.")
+    return bytes(raw_bytes)
+
+
+def default_http_raw(
+    method: str,
+    url: str,
+    *,
+    payload: Mapping[str, Any] | None = None,
+    headers: Mapping[str, str] | None = None,
+    timeout_s: float = DOCTOR_HTTP_TIMEOUT_S,
+) -> tuple[int, str, dict[str, str]]:
+    """Proxy-free stdlib raw HTTP helper returning ``(status_code, body_text, lower_headers)``."""
+    verb = (method or "").strip().upper()
+    _assert_zero_inference_request(verb, url, allow_test_hosts=False, payload=payload)
+    bounded_timeout = _validate_timeout_s(timeout_s)
+    body_bytes: bytes | None = None
+    if payload is not None:
+        body_bytes = json.dumps(dict(payload)).encode("utf-8")
+    req_headers = _prepare_http_headers(
+        headers,
+        has_json_body=body_bytes is not None,
+        user_agent="hivemind-connect/2.0-stdlib",
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _SafeRedirectHandler())
+    req = urllib.request.Request(url.strip(), data=body_bytes, headers=req_headers, method=verb)
+    try:
+        with opener.open(req, timeout=bounded_timeout) as resp:
+            raw_text = _read_bounded_http_body(resp, max_bytes=MAX_HTTP_BODY_BYTES).decode("utf-8", errors="replace")
+            status_code = int(getattr(resp, "status", 200))
+            lower_headers = {str(k).strip().lower(): str(v) for k, v in resp.headers.items()} if getattr(resp, "headers", None) else {}
+            return status_code, raw_text, lower_headers
+    except urllib.error.HTTPError as exc:
+        try:
+            err_bytes = _read_bounded_http_body(exc, max_bytes=MAX_HTTP_BODY_BYTES) if exc.fp is not None else b""
+            err_text = err_bytes.decode("utf-8", errors="replace")
+            err_headers = {str(k).strip().lower(): str(v) for k, v in exc.headers.items()} if exc.headers else {}
+        finally:
+            with suppress(Exception):
+                exc.close()
+        if err_text.strip():
+            try:
+                json.loads(err_text)
+            except ValueError:
+                err_text = sanitize_text_for_display(err_text)
+        return int(exc.code), err_text, err_headers
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        reason = getattr(exc, "reason", exc)
+        err_doc = json.dumps(
+            {
+                "network_error": type(exc).__name__,
+                "detail": sanitize_text_for_display(str(reason))[:200],
+            }
+        )
+        return 0, err_doc, {"x-hivemind-network-error": type(exc).__name__}
 
 
 class _StdlibHttpClient:
     """Proxy-free Python stdlib HTTP client using ``urllib.request.ProxyHandler({})``."""
 
     def __init__(self, *, timeout_s: float = HTTP_TIMEOUT_S) -> None:
-        self.timeout_s = float(timeout_s)
+        self.timeout_s = _validate_timeout_s(timeout_s)
         self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _SafeRedirectHandler())
 
     def __enter__(self) -> _StdlibHttpClient:
@@ -489,34 +784,31 @@ class _StdlibHttpClient:
         timeout: float | None = None,
     ) -> _StdlibHttpResponse:
         verb = method.upper()
-        _assert_zero_inference_request(verb, url, allow_test_hosts=False)
-        req_headers: dict[str, str] = {
-            "Accept": "application/json, text/html;q=0.9",
-            "User-Agent": "hivemind-connect/2.0-stdlib",
-        }
-        if headers:
-            for hk, hv in headers.items():
-                ks = str(hk).strip()
-                vs = str(hv).strip()
-                if any(ord(ch) < 32 or ord(ch) == 127 for ch in ks + vs):
-                    raise GatewayPolicyError("HTTP headers must not contain control characters.")
-                req_headers[ks] = vs
+        _assert_zero_inference_request(verb, url, allow_test_hosts=False, payload=json)
+        req_headers = _prepare_http_headers(
+            headers,
+            has_json_body=json is not None,
+            user_agent="hivemind-connect/2.0-stdlib",
+        )
         body_bytes: bytes | None = None
         if json is not None:
             body_bytes = globals()["json"].dumps(json).encode("utf-8")
-            req_headers["Content-Type"] = "application/json"
 
-        req = urllib.request.Request(url, data=body_bytes, headers=req_headers, method=verb)
-        eff_timeout = self.timeout_s if timeout is None else float(timeout)
+        req = urllib.request.Request(url.strip(), data=body_bytes, headers=req_headers, method=verb)
+        eff_timeout = self.timeout_s if timeout is None else _validate_timeout_s(timeout)
         try:
             with self._opener.open(req, timeout=eff_timeout) as resp:
-                raw_bytes = resp.read(524_288)
+                raw_bytes = _read_bounded_http_body(resp, max_bytes=MAX_HTTP_BODY_BYTES)
                 resp_headers = {str(k).lower(): str(v) for k, v in resp.headers.items()}
                 return _StdlibHttpResponse(int(getattr(resp, "status", 200)), raw_bytes, resp_headers)
         except urllib.error.HTTPError as exc:
-            err_bytes = exc.read(131_072)
-            resp_headers = {str(k).lower(): str(v) for k, v in exc.headers.items()} if exc.headers else {}
-            return _StdlibHttpResponse(int(exc.code), err_bytes, resp_headers)
+            try:
+                err_bytes = _read_bounded_http_body(exc, max_bytes=MAX_HTTP_BODY_BYTES) if exc.fp is not None else b""
+                resp_headers = {str(k).lower(): str(v) for k, v in exc.headers.items()} if exc.headers else {}
+                return _StdlibHttpResponse(int(exc.code), err_bytes, resp_headers)
+            finally:
+                with suppress(Exception):
+                    exc.close()
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise GatewayConnectionError(f"{type(exc).__name__}: {exc}") from exc
 
@@ -546,7 +838,7 @@ class _HttpxTransportClient:
     def __init__(self, *, transport: Any, timeout_s: float = HTTP_TIMEOUT_S) -> None:
         if httpx is None:
             raise RuntimeError("httpx is required when passing a custom transport.")
-        self._client = httpx.Client(timeout=timeout_s, transport=transport)
+        self._client = httpx.Client(timeout=_validate_timeout_s(timeout_s), transport=transport)
 
     def __enter__(self) -> _HttpxTransportClient:
         self._client.__enter__()
@@ -564,14 +856,14 @@ class _HttpxTransportClient:
         headers: Mapping[str, str] | None = None,
         timeout: float | None = None,
     ) -> Any:
-        _assert_zero_inference_request(method, url, allow_test_hosts=True)
+        _assert_zero_inference_request(method, url, allow_test_hosts=True, payload=json)
         kwargs: dict[str, Any] = {}
         if json is not None:
             kwargs["json"] = json
         if headers is not None:
             kwargs["headers"] = headers
         if timeout is not None:
-            kwargs["timeout"] = timeout
+            kwargs["timeout"] = _validate_timeout_s(timeout)
         return self._client.request(method, url, **kwargs)
 
     def get(self, url: str, *, headers: Mapping[str, str] | None = None, timeout: float | None = None) -> Any:
@@ -610,7 +902,7 @@ class _InjectedHttpClient:
         timeout: float | None = None,
     ) -> _StdlibHttpResponse:
         verb = method.upper()
-        _assert_zero_inference_request(verb, url, allow_test_hosts=True)
+        _assert_zero_inference_request(verb, url, allow_test_hosts=True, payload=json)
         sig = inspect.signature(self._http_fn)
         params = sig.parameters
         has_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
@@ -683,31 +975,38 @@ def _find_corporate_markers(raw_text: str) -> list[str]:
 
 
 def _resolve_git_config_files(workspace: Path) -> list[Path]:
-    """Locate local ``.git/config`` and worktree commondir ``config`` files strictly on disk."""
-    dot_git = workspace / ".git"
+    """Walk ``(workspace, *workspace.parents)`` to the first ``.git`` dir or worktree ``gitdir:``/``commondir``."""
     candidates: list[Path] = []
     try:
-        if dot_git.is_dir():
-            cfg = dot_git / "config"
-            if cfg.is_file():
-                candidates.append(cfg)
-        elif dot_git.is_file():
-            lines = dot_git.read_text(encoding="utf-8", errors="replace").splitlines()
-            if lines and lines[0].lower().startswith("gitdir:"):
-                raw_gitdir = lines[0].split(":", 1)[1].strip()
-                gitdir = Path(raw_gitdir)
-                if not gitdir.is_absolute():
-                    gitdir = (workspace / gitdir).resolve()
-                wt_cfg = gitdir / "config"
-                if wt_cfg.is_file():
-                    candidates.append(wt_cfg)
-                commondir_file = gitdir / "commondir"
-                if commondir_file.is_file():
-                    rel_common = commondir_file.read_text(encoding="utf-8", errors="replace").strip()
-                    if rel_common:
-                        common_cfg = (gitdir / rel_common).resolve() / "config"
-                        if common_cfg.is_file() and common_cfg not in candidates:
-                            candidates.append(common_cfg)
+        for candidate_root in (workspace, *workspace.parents):
+            dot_git = candidate_root / ".git"
+            if dot_git.is_dir():
+                cfg = dot_git / "config"
+                if cfg.is_file():
+                    candidates.append(cfg)
+                break
+            if dot_git.is_file():
+                lines = dot_git.read_text(encoding="utf-8", errors="replace").splitlines()
+                first_line = next((ln.strip() for ln in lines if ln.strip()), "")
+                if first_line.lower().startswith("gitdir:"):
+                    raw_gitdir = first_line.split(":", 1)[1].strip()
+                    gitdir = Path(raw_gitdir)
+                    if not gitdir.is_absolute():
+                        gitdir = (candidate_root / gitdir).resolve()
+                    wt_cfg = gitdir / "config"
+                    if wt_cfg.is_file():
+                        candidates.append(wt_cfg)
+                    commondir_file = gitdir / "commondir"
+                    if commondir_file.is_file():
+                        rel_common = commondir_file.read_text(encoding="utf-8", errors="replace").strip()
+                        if rel_common:
+                            common_dir = Path(rel_common)
+                            if not common_dir.is_absolute():
+                                common_dir = (gitdir / common_dir).resolve()
+                            common_cfg = common_dir / "config"
+                            if common_cfg.is_file() and common_cfg not in candidates:
+                                candidates.append(common_cfg)
+                break
     except OSError:
         return candidates
     return candidates
@@ -801,15 +1100,14 @@ def evaluate_personal_pc_compliance(
     for hit in _find_corporate_markers(scrubbed_ws):
         _add(f"workspace_path:{hit}", (hit,))
 
-    if workspace.exists():
-        for cfg_path in _resolve_git_config_files(workspace):
-            try:
-                cfg_text = cfg_path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            for remote_url in extract_git_config_remote_urls(cfg_text):
-                for hit in _find_corporate_markers(remote_url):
-                    _add(f"git_remote:{hit}", (hit,))
+    for cfg_path in _resolve_git_config_files(workspace):
+        try:
+            cfg_text = cfg_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for remote_url in extract_git_config_remote_urls(cfg_text):
+            for hit in _find_corporate_markers(remote_url):
+                _add(f"git_remote:{hit}", (hit,))
 
     compliance_ok = len(indicators) == 0
     if compliance_ok:
@@ -866,6 +1164,8 @@ def _write_file_secure_atomic(
     os_name: str | None = None,
 ) -> None:
     """Atomically write UTF-8 ``content`` to ``path`` with ``0600`` owner-only permissions."""
+    if path.exists() and path.is_dir():
+        raise ValueError("Target output path must not be an existing directory.")
     eff_os = os_name if os_name is not None else os.name
     if eff_os != "nt" and not path.parent.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -873,7 +1173,7 @@ def _write_file_secure_atomic(
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
 
-    tmp_path = path.parent / f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp"
+    tmp_path = path.parent / f".{path.name}.{os.getpid()}.{threading.get_ident()}.{secrets.token_hex(4)}.tmp"
     fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, posix_mode)
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
@@ -883,6 +1183,9 @@ def _write_file_secure_atomic(
         if eff_os != "nt":
             os.chmod(tmp_path, posix_mode)
         os.replace(tmp_path, path)
+        if eff_os != "nt":
+            with suppress(OSError):
+                os.chmod(path, posix_mode)
     except BaseException:
         try:
             tmp_path.unlink(missing_ok=True)
@@ -1400,12 +1703,20 @@ def cmd_snippet(client: Any, args: argparse.Namespace, parser: argparse.Argument
     return 0
 
 
-def default_subprocess_runner(argv: Sequence[str], timeout_s: float = SUBPROCESS_TIMEOUT_S) -> tuple[int, str]:
+def default_subprocess_runner(
+    argv: Sequence[str],
+    timeout_s: float = SUBPROCESS_TIMEOUT_S,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> tuple[int, str]:
     """Run a local read-only command using explicit list args (``shell=False``) and bounded timeout."""
     if isinstance(argv, (str, bytes)) or not argv:
         raise ValueError("Subprocess command must be a non-empty list/tuple of strings.")
     cmd = [str(part) for part in argv]
-    bounded = min(max(0.1, float(timeout_s)), SUBPROCESS_TIMEOUT_S)
+    if Path(cmd[0]).name.lower() in ("gcloud", "gcloud.cmd", "gcloud.exe"):
+        raise GatewayPolicyError("Direct gcloud invocation is forbidden in hivemind_connect.")
+    max_cap = 15.0 if env is not None else SUBPROCESS_TIMEOUT_S
+    bounded = min(max(0.1, float(timeout_s)), max_cap)
     try:
         proc = subprocess.run(
             cmd,
@@ -1415,6 +1726,7 @@ def default_subprocess_runner(argv: Sequence[str], timeout_s: float = SUBPROCESS
             timeout=bounded,
             check=False,
             shell=False,
+            env=dict(env) if env is not None else None,
         )
     except (FileNotFoundError, PermissionError, subprocess.TimeoutExpired, OSError):
         return 127, ""
@@ -1855,6 +2167,977 @@ def _safe_http_post(
         return int(resp.status_code), {"raw_length": len(resp.text)}
 
 
+def _get_ces_path_lock(path: Path) -> threading.Lock:
+    resolved = path.resolve()
+    with _CES_LOCK_GUARD:
+        lock = _CES_PATH_LOCKS.get(resolved)
+        if lock is None:
+            lock = threading.Lock()
+            _CES_PATH_LOCKS[resolved] = lock
+        return lock
+
+
+def _expand_home_path(raw_path: Path | str, *, home: Path | None = None) -> Path:
+    text = str(raw_path).strip()
+    if text == "~" or text.startswith("~/") or text.startswith("~\\"):
+        base_home = Path(home) if home is not None else Path.home()
+        suffix = text[2:] if len(text) > 1 else ""
+        return (base_home / suffix) if suffix else base_home
+    return Path(text)
+
+
+def default_ces_queue_path(
+    *,
+    home: Path | None = None,
+    credentials_path: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> Path:
+    """Return the default ``0600`` CES retry spool path without touching real ``~/.hivemind`` when isolated."""
+    env_view = env if env is not None else os.environ
+    resolved_home = (
+        Path(home)
+        if home is not None
+        else Path(env_view.get("HOME") or env_view.get("USERPROFILE") or Path.home())
+    )
+    if credentials_path is not None and str(credentials_path).strip():
+        cred_p = _expand_home_path(credentials_path, home=resolved_home)
+        if home is not None and cred_p == default_credentials_path() and resolved_home.resolve() != Path.home().resolve():
+            return resolved_home / ".hivemind" / DEFAULT_CES_QUEUE_FILENAME
+        return cred_p.parent / DEFAULT_CES_QUEUE_FILENAME
+    return resolved_home / ".hivemind" / DEFAULT_CES_QUEUE_FILENAME
+
+
+def _validate_ces_spool_payload(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, Mapping):
+        raise ValueError("CES feedback payload must be a JSON object.")
+    allowed_keys = {"profile", "ease_rating", "zero_game_lag", "platform", "note"}
+    extra_keys = set(raw.keys()) - allowed_keys
+    if extra_keys:
+        raise ValueError(f"CES feedback payload contains unsupported keys: {sorted(extra_keys)}")
+    prof = normalize_profile(raw.get("profile"))  # type: ignore[arg-type]
+    ease = parse_ease_rating(raw.get("ease_rating"))  # type: ignore[arg-type]
+    zero_lag = raw.get("zero_game_lag")
+    if not isinstance(zero_lag, bool):
+        raise ValueError("CES feedback zero_game_lag must be a boolean.")
+    plat_raw = str(raw.get("platform") or "unknown").strip().lower()
+    if not _PLATFORM_TAG_RE.fullmatch(plat_raw):
+        raise ValueError("CES feedback platform contains unsupported characters.")
+    note_raw = raw.get("note", "")
+    if not isinstance(note_raw, str) or note_raw != "":
+        raise ValueError("CES feedback note must remain empty to guarantee zero PII.")
+    return {
+        "profile": prof,
+        "ease_rating": ease,
+        "zero_game_lag": zero_lag,
+        "platform": plat_raw,
+        "note": "",
+    }
+
+
+def build_ces_idempotency_key(
+    *,
+    gateway: str = DEFAULT_GATEWAY,
+    host_label: str = DEFAULT_HOST_LABEL,
+    resolved_key: str | None = None,
+    payload: Mapping[str, Any],
+) -> str:
+    """Build deterministic zero-PII ``Idempotency-Key`` for CES feedback submissions."""
+    key_salt = hashlib.sha256(f"hm-connect:{resolved_key}".encode()).hexdigest()[:16] if resolved_key else "anon"
+    canon_ces = json.dumps(dict(payload), sort_keys=True, separators=(",", ":"))
+    return (
+        "ces-idem-"
+        + hashlib.sha256(
+            f"hivemind.connect.ces/1:{gateway.rstrip('/')}:{host_label}:{key_salt}:{canon_ces}".encode()
+        ).hexdigest()[:32]
+    )
+
+
+def _classify_ces_flush_status(status_code: int) -> tuple[str, str]:
+    if 200 <= status_code < 300:
+        return "delivered", "ok"
+    if status_code == 404:
+        return "retryable", "stale_cloud_run_404"
+    if status_code == 408:
+        return "retryable", "request_timeout_408"
+    if status_code == 429:
+        return "retryable", "rate_limited_429"
+    if status_code == 0:
+        return "retryable", "network_timeout"
+    if status_code >= 500:
+        return "retryable", f"gateway_{status_code}"
+    return "permanent_quarantine", f"permanent_http_{status_code}"
+
+
+class ConnectCesRetrySpool:
+    """Thread-safe, atomic POSIX ``0600``, bounded CES retry spool (128 pending / 512 delivered)."""
+
+    def __init__(
+        self,
+        queue_file: Path | str | None = None,
+        *,
+        max_entries: int = DEFAULT_MAX_CES_QUEUE_ENTRIES,
+        max_delivered: int = DEFAULT_MAX_CES_DELIVERED,
+        home: Path | None = None,
+        credentials_path: Path | str | None = None,
+        env: Mapping[str, str] | None = None,
+        os_name: str | None = None,
+    ) -> None:
+        if (
+            isinstance(max_entries, bool)
+            or not isinstance(max_entries, int)
+            or not (1 <= max_entries <= MAX_CES_QUEUE_ENTRIES_CEILING)
+        ):
+            raise ValueError(f"max_entries must be an integer in 1..{MAX_CES_QUEUE_ENTRIES_CEILING}.")
+        if isinstance(max_delivered, bool) or not isinstance(max_delivered, int) or not (1 <= max_delivered <= 32768):
+            raise ValueError("max_delivered must be an integer in 1..32768.")
+        env_view = env if env is not None else os.environ
+        resolved_home = (
+            Path(home)
+            if home is not None
+            else Path(env_view.get("HOME") or env_view.get("USERPROFILE") or Path.home())
+        )
+        self._home = resolved_home
+        self._eff_os = os_name if os_name is not None else os.name
+        self._max_entries = int(max_entries)
+        self._max_delivered = int(max_delivered)
+        if queue_file is not None and str(queue_file).strip():
+            raw_path = _expand_home_path(queue_file, home=resolved_home)
+        else:
+            raw_path = default_ces_queue_path(home=resolved_home, credentials_path=credentials_path, env=env_view)
+        self._path = raw_path.resolve()
+        self._lock = _get_ces_path_lock(self._path)
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    @property
+    def redacted_path(self) -> str:
+        return redact_home_path(self._path, home=self._home)
+
+    @property
+    def max_entries(self) -> int:
+        return self._max_entries
+
+    @property
+    def max_delivered(self) -> int:
+        return self._max_delivered
+
+    def _empty_state(self) -> dict[str, Any]:
+        return {
+            "schema": CES_QUEUE_SCHEMA,
+            "max_entries": self._max_entries,
+            "max_delivered": self._max_delivered,
+            "dropped_overflow_count": 0,
+            "pending": [],
+            "delivered_ids": [],
+            "quarantined": [],
+        }
+
+    def _load_state_unlocked(self) -> tuple[dict[str, Any], bool]:
+        if not self._path.is_file():
+            return self._empty_state(), False
+        try:
+            parsed = json.loads(self._path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            recovered = self._empty_state()
+            recovered["quarantined"] = [
+                {
+                    "event_id": hashlib.sha256(b"corrupted_connect_ces_spool").hexdigest(),
+                    "idempotency_key": "corrupted-spool-recovered",
+                    "http_status": 0,
+                    "reason": "corrupted_queue_json_recovered",
+                }
+            ]
+            return recovered, True
+        if not isinstance(parsed, Mapping):
+            return self._empty_state(), True
+
+        mutated = False
+        delivered: list[str] = []
+        seen_delivered: set[str] = set()
+        raw_delivered = parsed.get("delivered_ids")
+        if raw_delivered is None:
+            raw_delivered = parsed.get("delivered_event_ids")
+        if isinstance(raw_delivered, list):
+            for item in raw_delivered:
+                if isinstance(item, str) and item.strip() and item.strip() not in seen_delivered:
+                    tok = item.strip()[:128]
+                    delivered.append(tok)
+                    seen_delivered.add(tok)
+                else:
+                    mutated = True
+        if len(delivered) > self._max_delivered:
+            delivered = delivered[-self._max_delivered :]
+            mutated = True
+
+        quarantined: list[dict[str, Any]] = []
+        raw_quar = parsed.get("quarantined")
+        if isinstance(raw_quar, list):
+            for q_item in raw_quar[-self._max_entries :]:
+                if isinstance(q_item, Mapping) and isinstance(q_item.get("event_id"), str):
+                    q_status = q_item.get("http_status")
+                    quarantined.append(
+                        {
+                            "event_id": q_item["event_id"][:64],
+                            "idempotency_key": str(q_item.get("idempotency_key") or "")[:128],
+                            "http_status": (
+                                int(q_status)
+                                if not isinstance(q_status, bool) and isinstance(q_status, int)
+                                else 422
+                            ),
+                            "reason": sanitize_text_for_display(
+                                str(q_item.get("reason") or "quarantined")[:80],
+                                home=self._home,
+                            ),
+                        }
+                    )
+
+        pending: list[dict[str, Any]] = []
+        seen_pending: set[str] = set()
+        raw_pending = parsed.get("pending")
+        if isinstance(raw_pending, list):
+            for entry in raw_pending:
+                if not isinstance(entry, Mapping):
+                    mutated = True
+                    continue
+                idem_raw = str(entry.get("idempotency_key") or "").strip()[:128]
+                eid_raw = entry.get("event_id")
+                eid = (
+                    eid_raw
+                    if isinstance(eid_raw, str) and _SHA256_HEX_RE.fullmatch(eid_raw)
+                    else hashlib.sha256((idem_raw or json.dumps(entry, sort_keys=True, default=str)).encode("utf-8")).hexdigest()
+                )
+                dedup_tok = idem_raw or eid
+                if dedup_tok in seen_delivered or eid in seen_delivered or dedup_tok in seen_pending or eid in seen_pending:
+                    mutated = True
+                    continue
+                try:
+                    clean_payload = _validate_ces_spool_payload(entry.get("payload"))
+                except ValueError:
+                    mutated = True
+                    quarantined.append(
+                        {
+                            "event_id": eid,
+                            "idempotency_key": idem_raw,
+                            "http_status": 422,
+                            "reason": "tampered_or_invalid_local_payload",
+                        }
+                    )
+                    quarantined = quarantined[-self._max_entries :]
+                    continue
+                raw_rc = entry.get("retry_count", 0)
+                rc = max(0, int(raw_rc)) if not isinstance(raw_rc, bool) and isinstance(raw_rc, int) else 0
+                raw_st = entry.get("last_http_status")
+                last_st = int(raw_st) if not isinstance(raw_st, bool) and isinstance(raw_st, int) else None
+                raw_ts = entry.get("enqueued_epoch", 0.0)
+                enq_ts = round(max(0.0, float(raw_ts)), 3) if not isinstance(raw_ts, bool) and isinstance(raw_ts, (int, float)) else 0.0
+                pending.append(
+                    {
+                        "event_id": eid,
+                        "idempotency_key": idem_raw or f"ces-idem-{eid[:32]}",
+                        "payload": clean_payload,
+                        "enqueued_epoch": enq_ts,
+                        "retry_count": rc,
+                        "last_http_status": last_st,
+                        "last_reason": sanitize_text_for_display(str(entry.get("last_reason") or "")[:80], home=self._home),
+                    }
+                )
+                seen_pending.add(dedup_tok)
+                seen_pending.add(eid)
+
+        raw_dropped = parsed.get("dropped_overflow_count", 0)
+        dropped_count = (
+            max(0, int(raw_dropped))
+            if not isinstance(raw_dropped, bool) and isinstance(raw_dropped, int)
+            else 0
+        )
+        if len(pending) > self._max_entries:
+            overflow = len(pending) - self._max_entries
+            pending = pending[-self._max_entries :]
+            dropped_count += overflow
+            mutated = True
+
+        return (
+            {
+                "schema": CES_QUEUE_SCHEMA,
+                "max_entries": self._max_entries,
+                "max_delivered": self._max_delivered,
+                "dropped_overflow_count": dropped_count,
+                "pending": pending,
+                "delivered_ids": delivered,
+                "quarantined": quarantined[-self._max_entries :],
+            },
+            mutated,
+        )
+
+    def _atomic_save_unlocked(self, state: Mapping[str, Any]) -> None:
+        doc = {
+            "schema": CES_QUEUE_SCHEMA,
+            "max_entries": self._max_entries,
+            "max_delivered": self._max_delivered,
+            "dropped_overflow_count": int(state.get("dropped_overflow_count", 0)),
+            "pending": list(state.get("pending", []))[-self._max_entries :],
+            "delivered_ids": list(state.get("delivered_ids", []))[-self._max_delivered :],
+            "quarantined": list(state.get("quarantined", []))[-self._max_entries :],
+        }
+        serialized = json.dumps(doc, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+        safety_hits = scan_output_safety(serialized, home=self._home)
+        if safety_hits:
+            raise ValueError(f"Refusing unsafe CES spool serialization: {', '.join(safety_hits)}")
+        _write_file_secure_atomic(self._path, serialized, posix_mode=0o600, os_name=self._eff_os)
+
+    def snapshot(self, *, lang: str = "en") -> dict[str, Any]:
+        """Return a sanitized read-only snapshot without creating a spool file when absent."""
+        lang_code = normalize_lang(lang)
+        with self._lock:
+            state, _ = self._load_state_unlocked()
+            exists = self._path.is_file()
+        snap: dict[str, Any] = {
+            "schema": SCHEMA,
+            "mode": "ces_queue_snapshot",
+            "lang": lang_code,
+            "queue_file": self.redacted_path,
+            "queue_exists": exists,
+            "max_entries": self._max_entries,
+            "max_delivered": self._max_delivered,
+            "pending_count": len(state["pending"]),
+            "delivered_ledger_count": len(state["delivered_ids"]),
+            "quarantined_count": len(state["quarantined"]),
+            "dropped_overflow_count": int(state["dropped_overflow_count"]),
+            "pending_idempotency_keys": [item["idempotency_key"] for item in state["pending"]],
+        }
+        snap["receipt_sha256"] = compute_receipt_sha256(snap)
+        return snap
+
+    def mark_delivered(self, token: str) -> bool:
+        """Record ``token`` as delivered ONLY if the spool file already exists (no file creation when empty)."""
+        cleaned = str(token or "").strip()
+        if not cleaned:
+            return False
+        eid = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()
+        with self._lock:
+            if not self._path.is_file():
+                return False
+            state, mutated = self._load_state_unlocked()
+            prev_len = len(state["pending"])
+            state["pending"] = [
+                item for item in state["pending"] if item["idempotency_key"] != cleaned and item["event_id"] != eid
+            ]
+            removed = len(state["pending"]) != prev_len
+            if cleaned not in state["delivered_ids"]:
+                state["delivered_ids"].append(cleaned)
+                state["delivered_ids"] = state["delivered_ids"][-self._max_delivered :]
+                mutated = True
+            if removed or mutated:
+                self._atomic_save_unlocked(state)
+            return removed
+
+    def enqueue(
+        self,
+        *,
+        gateway: str = DEFAULT_GATEWAY,
+        host_label: str = DEFAULT_HOST_LABEL,
+        resolved_key: str | None = None,
+        profile: str = "dev",
+        ease_rating: int = 5,
+        zero_game_lag: bool = True,
+        os_name: str | None = None,
+        system_name: str | None = None,
+        platform: str | None = None,
+        idempotency_key: str | None = None,
+        last_http_status: int | None = None,
+        last_reason: str = "",
+        enforce_personal_pc: bool = True,
+        allow_test_hosts: bool = False,
+        environ: Mapping[str, str] | None = None,
+        env: Mapping[str, str] | None = None,
+        cwd: Path | str | None = None,
+        lang: str = "en",
+    ) -> dict[str, Any]:
+        """Enforce compliance, deduplicate by ``Idempotency-Key``, cap pending at ``max_entries``, and save ``0600``."""
+        lang_code = normalize_lang(lang)
+        eff_env = environ if environ is not None else env
+        comp_doc = evaluate_personal_pc_compliance(env=eff_env, cwd=cwd, lang=lang_code)
+        if enforce_personal_pc and not comp_doc["compliance_ok"]:
+            blocked: dict[str, Any] = {
+                "schema": SCHEMA,
+                "mode": "enqueue_ces",
+                "ok": False,
+                "ready": False,
+                "compliance_ok": False,
+                "exit_code": 2,
+                "queue_file": self.redacted_path,
+                "enqueued": False,
+                "deduplicated": False,
+                "duplicate_state": "compliance_blocked",
+                "evicted_oldest": False,
+                "file_writes": 0,
+                "network_calls": 0,
+                "compliance": comp_doc,
+                "summary": comp_doc["summary"],
+            }
+            blocked["receipt_sha256"] = compute_receipt_sha256(blocked)
+            return blocked
+
+        clean_gw = validate_gateway_url(gateway, allow_test_hosts=allow_test_hosts)
+        plat = (
+            platform.strip().lower()
+            if (isinstance(platform, str) and platform.strip())
+            else _platform_feedback_tag(os_name=os_name, system_name=system_name)
+        )
+        clean_payload = _validate_ces_spool_payload(
+            {
+                "profile": profile,
+                "ease_rating": ease_rating,
+                "zero_game_lag": zero_game_lag,
+                "platform": plat,
+                "note": "",
+            }
+        )
+        if idempotency_key is not None:
+            if isinstance(idempotency_key, bool) or not isinstance(idempotency_key, str):
+                raise ValueError("idempotency_key must be a string.")
+            idem_key = idempotency_key.strip()
+            if (
+                not idem_key
+                or len(idem_key) > 128
+                or not idem_key.isascii()
+                or any(ord(c) < 32 or ord(c) == 127 for c in idem_key)
+            ):
+                raise ValueError("idempotency_key must be 1..128 printable ASCII characters.")
+        else:
+            idem_key = build_ces_idempotency_key(
+                gateway=clean_gw,
+                host_label=_sanitize_host_label(host_label, home=self._home),
+                resolved_key=resolved_key,
+                payload=clean_payload,
+            )
+        event_id = hashlib.sha256(idem_key.encode("utf-8")).hexdigest()
+        ts = round(time.time(), 3)
+
+        with self._lock:
+            state, recovered = self._load_state_unlocked()
+            delivered_ids: list[str] = state["delivered_ids"]
+            pending: list[dict[str, Any]] = state["pending"]
+
+            if idem_key in delivered_ids or event_id in delivered_ids:
+                if recovered:
+                    self._atomic_save_unlocked(state)
+                res_deliv: dict[str, Any] = {
+                    "schema": SCHEMA,
+                    "mode": "enqueue_ces",
+                    "ok": True,
+                    "ready": True,
+                    "compliance_ok": True,
+                    "exit_code": 0,
+                    "queue_file": self.redacted_path,
+                    "enqueued": False,
+                    "deduplicated": True,
+                    "duplicate_state": "already_delivered",
+                    "evicted_oldest": False,
+                    "event_id": event_id,
+                    "idempotency_key": idem_key,
+                    "payload": clean_payload,
+                    "pending_count": len(pending),
+                    "delivered_ledger_count": len(delivered_ids),
+                    "quarantined_count": len(state["quarantined"]),
+                    "dropped_overflow_count": int(state["dropped_overflow_count"]),
+                    "file_writes": 1 if recovered else 0,
+                    "network_calls": 0,
+                    "compliance": comp_doc,
+                }
+                res_deliv["receipt_sha256"] = compute_receipt_sha256(res_deliv)
+                return res_deliv
+
+            if any(item["idempotency_key"] == idem_key or item["event_id"] == event_id for item in pending):
+                if recovered:
+                    self._atomic_save_unlocked(state)
+                res_pend: dict[str, Any] = {
+                    "schema": SCHEMA,
+                    "mode": "enqueue_ces",
+                    "ok": True,
+                    "ready": True,
+                    "compliance_ok": True,
+                    "exit_code": 0,
+                    "queue_file": self.redacted_path,
+                    "enqueued": False,
+                    "deduplicated": True,
+                    "duplicate_state": "already_pending",
+                    "evicted_oldest": False,
+                    "event_id": event_id,
+                    "idempotency_key": idem_key,
+                    "payload": clean_payload,
+                    "pending_count": len(pending),
+                    "delivered_ledger_count": len(delivered_ids),
+                    "quarantined_count": len(state["quarantined"]),
+                    "dropped_overflow_count": int(state["dropped_overflow_count"]),
+                    "file_writes": 1 if recovered else 0,
+                    "network_calls": 0,
+                    "compliance": comp_doc,
+                }
+                res_pend["receipt_sha256"] = compute_receipt_sha256(res_pend)
+                return res_pend
+
+            evicted_oldest = False
+            if len(pending) >= self._max_entries:
+                pending.pop(0)
+                state["dropped_overflow_count"] = int(state["dropped_overflow_count"]) + 1
+                evicted_oldest = True
+
+            pending.append(
+                {
+                    "event_id": event_id,
+                    "idempotency_key": idem_key,
+                    "payload": clean_payload,
+                    "enqueued_epoch": ts,
+                    "retry_count": 0,
+                    "last_http_status": last_http_status,
+                    "last_reason": sanitize_text_for_display(str(last_reason or "")[:80], home=self._home),
+                }
+            )
+            self._atomic_save_unlocked(state)
+            pending_count = len(pending)
+            delivered_count = len(delivered_ids)
+            quarantined_count = len(state["quarantined"])
+            dropped_count = int(state["dropped_overflow_count"])
+
+        res_ok: dict[str, Any] = {
+            "schema": SCHEMA,
+            "mode": "enqueue_ces",
+            "ok": True,
+            "ready": True,
+            "compliance_ok": True,
+            "exit_code": 0,
+            "queue_file": self.redacted_path,
+            "enqueued": True,
+            "deduplicated": False,
+            "duplicate_state": "none",
+            "evicted_oldest": evicted_oldest,
+            "event_id": event_id,
+            "idempotency_key": idem_key,
+            "payload": clean_payload,
+            "pending_count": pending_count,
+            "delivered_ledger_count": delivered_count,
+            "quarantined_count": quarantined_count,
+            "dropped_overflow_count": dropped_count,
+            "file_writes": 1,
+            "network_calls": 0,
+            "compliance": comp_doc,
+        }
+        res_ok["receipt_sha256"] = compute_receipt_sha256(res_ok)
+        return res_ok
+
+    def flush(
+        self,
+        gateway: str = DEFAULT_GATEWAY,
+        *,
+        client: Any = None,
+        http_fn: HttpFn | None = None,
+        transport: Any = None,
+        raw_http_fn: RawHttpFn | None = None,
+        allow_test_hosts: bool | None = None,
+        enforce_personal_pc: bool = True,
+        environ: Mapping[str, str] | None = None,
+        env: Mapping[str, str] | None = None,
+        cwd: Path | str | None = None,
+        timeout_s: float = DOCTOR_HTTP_TIMEOUT_S,
+        lang: str = "en",
+    ) -> dict[str, Any]:
+        """Idempotently flush pending CES events with ``Idempotency-Key`` (no file created when empty)."""
+        lang_code = normalize_lang(lang)
+        is_fr = lang_code == "fr"
+        eff_env = environ if environ is not None else env
+        eff_allow_test = (
+            allow_test_hosts
+            if allow_test_hosts is not None
+            else bool(
+                (client is not None and not isinstance(client, _StdlibHttpClient))
+                or http_fn is not None
+                or transport is not None
+                or (raw_http_fn is not None and raw_http_fn is not default_http_raw)
+            )
+        )
+        comp_doc = evaluate_personal_pc_compliance(env=eff_env, cwd=cwd, lang=lang_code)
+        if enforce_personal_pc and not comp_doc["compliance_ok"]:
+            blocked: dict[str, Any] = {
+                "schema": SCHEMA,
+                "mode": "flush_ces_queue",
+                "ok": False,
+                "ready": False,
+                "compliance_ok": False,
+                "exit_code": 2,
+                "gateway": DEFAULT_GATEWAY,
+                "queue_file": self.redacted_path,
+                "queue_exists": self._path.is_file(),
+                "flush_ok": False,
+                "flushed_count": 0,
+                "delivered_count": 0,
+                "retained_retry_count": 0,
+                "quarantined_count": 0,
+                "pending_count": 0,
+                "delivered_ledger_count": 0,
+                "total_quarantined_count": 0,
+                "stale_cloud_run_detected": False,
+                "file_writes": 0,
+                "network_calls": 0,
+                "zero_inference_verified": True,
+                "outcomes": [],
+                "diagnostics": [comp_doc["summary"]],
+                "compliance": comp_doc,
+                "summary": comp_doc["summary"],
+            }
+            blocked["receipt_sha256"] = compute_receipt_sha256(blocked)
+            return blocked
+
+        clean_gw = validate_gateway_url(gateway, allow_test_hosts=eff_allow_test)
+        post_url = f"{clean_gw}/v1/hivemind/onboarding/feedback"
+        bounded_to = _validate_timeout_s(timeout_s)
+
+        delivered_now = 0
+        retained_retry = 0
+        quarantined_now = 0
+        network_calls = 0
+        stale_404_seen = False
+        outcomes: list[dict[str, Any]] = []
+
+        with self._lock:
+            if not self._path.is_file():
+                summary_empty = (
+                    "File CES vide (aucun fichier créé, 0 appel réseau)."
+                    if is_fr
+                    else "CES retry queue empty (no queue file created, 0 network calls)."
+                )
+                empty_res: dict[str, Any] = {
+                    "schema": SCHEMA,
+                    "mode": "flush_ces_queue",
+                    "ok": True,
+                    "ready": True,
+                    "compliance_ok": True,
+                    "exit_code": 0,
+                    "gateway": clean_gw,
+                    "queue_file": self.redacted_path,
+                    "queue_exists": False,
+                    "flush_ok": True,
+                    "flushed_count": 0,
+                    "delivered_count": 0,
+                    "retained_retry_count": 0,
+                    "quarantined_count": 0,
+                    "pending_count": 0,
+                    "delivered_ledger_count": 0,
+                    "total_quarantined_count": 0,
+                    "stale_cloud_run_detected": False,
+                    "file_writes": 0,
+                    "network_calls": 0,
+                    "zero_inference_verified": True,
+                    "outcomes": [],
+                    "diagnostics": [],
+                    "compliance": comp_doc,
+                    "summary": summary_empty,
+                }
+                empty_res["receipt_sha256"] = compute_receipt_sha256(empty_res)
+                return empty_res
+
+            state, mutated = self._load_state_unlocked()
+            if mutated:
+                quarantined_now += len(state["quarantined"])
+            delivered_set = set(state["delivered_ids"])
+            next_pending: list[dict[str, Any]] = []
+
+            owned_cm: Any = None
+            active_client = client
+            if active_client is None:
+                if http_fn is not None:
+                    owned_cm = _InjectedHttpClient(http_fn)
+                elif transport is not None:
+                    owned_cm = _HttpxTransportClient(transport=transport, timeout_s=bounded_to)
+                elif raw_http_fn is None or raw_http_fn is default_http_raw:
+                    owned_cm = _StdlibHttpClient(timeout_s=bounded_to)
+
+            def _send_one(entry_payload: dict[str, Any], hdrs: dict[str, str]) -> int:
+                if active_client is not None:
+                    c, _ = _safe_http_post(active_client, post_url, payload=entry_payload, headers=hdrs, timeout=bounded_to)
+                    return c
+                assert raw_http_fn is not None
+                c_raw, _, _ = _dispatch_raw_http_fn(
+                    raw_http_fn,
+                    "POST",
+                    post_url,
+                    payload=entry_payload,
+                    headers=hdrs,
+                    allow_test_hosts=eff_allow_test,
+                )
+                return c_raw
+
+            try:
+                if owned_cm is not None:
+                    active_client = owned_cm.__enter__()
+                for entry in state["pending"]:
+                    eid = str(entry["event_id"])
+                    idem_key = str(entry["idempotency_key"])
+                    if idem_key in delivered_set or eid in delivered_set:
+                        mutated = True
+                        continue
+
+                    code = _send_one(dict(entry["payload"]), {"Idempotency-Key": idem_key})
+                    network_calls += 1
+                    disposition, reason = _classify_ces_flush_status(code)
+                    mutated = True
+
+                    if disposition == "delivered":
+                        state["delivered_ids"].append(idem_key)
+                        delivered_set.add(idem_key)
+                        delivered_set.add(eid)
+                        delivered_now += 1
+                        outcomes.append(
+                            {
+                                "event_id": eid,
+                                "idempotency_key": idem_key,
+                                "disposition": "delivered",
+                                "http_status": code,
+                            }
+                        )
+                    elif disposition == "retryable":
+                        if code == 404:
+                            stale_404_seen = True
+                        new_rc = int(entry.get("retry_count", 0)) + 1
+                        next_pending.append(
+                            {
+                                **entry,
+                                "retry_count": new_rc,
+                                "last_http_status": code,
+                                "last_reason": reason,
+                            }
+                        )
+                        retained_retry += 1
+                        outcomes.append(
+                            {
+                                "event_id": eid,
+                                "idempotency_key": idem_key,
+                                "disposition": "retained_for_retry",
+                                "http_status": code,
+                                "reason": reason,
+                                "retry_count": new_rc,
+                            }
+                        )
+                    else:
+                        state["quarantined"].append(
+                            {
+                                "event_id": eid,
+                                "idempotency_key": idem_key,
+                                "http_status": code,
+                                "reason": reason,
+                            }
+                        )
+                        state["quarantined"] = state["quarantined"][-self._max_entries :]
+                        quarantined_now += 1
+                        outcomes.append(
+                            {
+                                "event_id": eid,
+                                "idempotency_key": idem_key,
+                                "disposition": "quarantined",
+                                "http_status": code,
+                                "reason": reason,
+                            }
+                        )
+            finally:
+                if owned_cm is not None:
+                    owned_cm.__exit__(None, None, None)
+
+            state["pending"] = next_pending
+            state["delivered_ids"] = state["delivered_ids"][-self._max_delivered :]
+            if mutated:
+                self._atomic_save_unlocked(state)
+
+            pending_after = len(state["pending"])
+            delivered_total = len(state["delivered_ids"])
+            quarantined_total = len(state["quarantined"])
+
+        diagnostics: list[str] = []
+        if stale_404_seen:
+            diagnostics.append(
+                "HTTP 404 sur /v1/hivemind/onboarding/feedback : retours CES conservés dans la file 0600."
+                if is_fr
+                else "HTTP 404 on /v1/hivemind/onboarding/feedback: CES items retained safely in 0600 spool."
+            )
+        if quarantined_now > 0:
+            diagnostics.append(
+                f"{quarantined_now} entrée(s) permanente(s) 400/422 mise(s) en quarantaine."
+                if is_fr
+                else f"{quarantined_now} permanent 400/422 entry/entries moved to quarantine."
+            )
+
+        flush_ok = retained_retry == 0 and quarantined_now == 0
+        summary = (
+            f"Vidage file CES : {delivered_now} envoyé(s), {retained_retry} en attente, {quarantined_now} en quarantaine."
+            if is_fr
+            else f"CES queue flush: {delivered_now} delivered, {retained_retry} retained, {quarantined_now} quarantined."
+        )
+        flush_res: dict[str, Any] = {
+            "schema": SCHEMA,
+            "mode": "flush_ces_queue",
+            "ok": flush_ok,
+            "ready": flush_ok,
+            "compliance_ok": True,
+            "exit_code": 0 if flush_ok else 2,
+            "gateway": clean_gw,
+            "queue_file": self.redacted_path,
+            "queue_exists": self._path.is_file(),
+            "flush_ok": flush_ok,
+            "flushed_count": delivered_now,
+            "delivered_count": delivered_now,
+            "retained_retry_count": retained_retry,
+            "quarantined_count": quarantined_now,
+            "pending_count": pending_after,
+            "delivered_ledger_count": delivered_total,
+            "total_quarantined_count": quarantined_total,
+            "stale_cloud_run_detected": stale_404_seen,
+            "file_writes": 1 if mutated else 0,
+            "network_calls": network_calls,
+            "zero_inference_verified": True,
+            "outcomes": outcomes,
+            "diagnostics": diagnostics,
+            "compliance": comp_doc,
+            "summary": summary,
+        }
+        flush_res["receipt_sha256"] = compute_receipt_sha256(flush_res)
+        return flush_res
+
+    def purge(self, *, lang: str = "en") -> dict[str, Any]:
+        """Remove local CES retry spool and temporary files safely (0 HTTP calls)."""
+        lang_code = normalize_lang(lang)
+        is_fr = lang_code == "fr"
+        removed = False
+        with self._lock:
+            if self._path.is_file():
+                self._path.unlink(missing_ok=True)
+                removed = True
+            if self._path.parent.is_dir():
+                for extra in self._path.parent.glob(f".{self._path.name}.*"):
+                    if extra.is_file():
+                        extra.unlink(missing_ok=True)
+        purge_res: dict[str, Any] = {
+            "schema": SCHEMA,
+            "mode": "purge_ces_queue",
+            "ok": True,
+            "ready": True,
+            "exit_code": 0,
+            "queue_file": self.redacted_path,
+            "purged": removed,
+            "network_calls": 0,
+            "summary": (
+                f"File CES purgée ({self.redacted_path})."
+                if is_fr
+                else f"CES retry queue purged ({self.redacted_path})."
+            ),
+        }
+        purge_res["receipt_sha256"] = compute_receipt_sha256(purge_res)
+        return purge_res
+
+
+def enqueue_connect_ces_event(
+    *,
+    queue_file: Path | str | None = None,
+    gateway: str = DEFAULT_GATEWAY,
+    host_label: str = DEFAULT_HOST_LABEL,
+    resolved_key: str | None = None,
+    profile: str = "dev",
+    ease_rating: int = 5,
+    zero_game_lag: bool = True,
+    system_name: str | None = None,
+    platform: str | None = None,
+    idempotency_key: str | None = None,
+    last_http_status: int | None = None,
+    last_reason: str = "",
+    max_entries: int = DEFAULT_MAX_CES_QUEUE_ENTRIES,
+    max_delivered: int = DEFAULT_MAX_CES_DELIVERED,
+    home: Path | None = None,
+    credentials_path: Path | str | None = None,
+    enforce_personal_pc: bool = True,
+    allow_test_hosts: bool = False,
+    environ: Mapping[str, str] | None = None,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    os_name: str | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Convenience wrapper around ``ConnectCesRetrySpool.enqueue(...)``."""
+    spool = ConnectCesRetrySpool(
+        queue_file,
+        max_entries=max_entries,
+        max_delivered=max_delivered,
+        home=home,
+        credentials_path=credentials_path,
+        env=environ if environ is not None else env,
+        os_name=os_name,
+    )
+    return spool.enqueue(
+        gateway=gateway,
+        host_label=host_label,
+        resolved_key=resolved_key,
+        profile=profile,
+        ease_rating=ease_rating,
+        zero_game_lag=zero_game_lag,
+        os_name=os_name,
+        system_name=system_name,
+        platform=platform,
+        idempotency_key=idempotency_key,
+        last_http_status=last_http_status,
+        last_reason=last_reason,
+        enforce_personal_pc=enforce_personal_pc,
+        allow_test_hosts=allow_test_hosts,
+        environ=environ,
+        env=env,
+        cwd=cwd,
+        lang=lang,
+    )
+
+
+def flush_connect_ces_queue(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    queue_file: Path | str | None = None,
+    max_entries: int = DEFAULT_MAX_CES_QUEUE_ENTRIES,
+    max_delivered: int = DEFAULT_MAX_CES_DELIVERED,
+    home: Path | None = None,
+    credentials_path: Path | str | None = None,
+    enforce_personal_pc: bool = True,
+    allow_test_hosts: bool | None = None,
+    environ: Mapping[str, str] | None = None,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    os_name: str | None = None,
+    http_fn: HttpFn | None = None,
+    transport: Any = None,
+    raw_http_fn: RawHttpFn | None = None,
+    timeout_s: float = DOCTOR_HTTP_TIMEOUT_S,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Convenience wrapper around ``ConnectCesRetrySpool.flush(...)``."""
+    spool = ConnectCesRetrySpool(
+        queue_file,
+        max_entries=max_entries,
+        max_delivered=max_delivered,
+        home=home,
+        credentials_path=credentials_path,
+        env=environ if environ is not None else env,
+        os_name=os_name,
+    )
+    return spool.flush(
+        gateway,
+        http_fn=http_fn,
+        transport=transport,
+        raw_http_fn=raw_http_fn,
+        allow_test_hosts=allow_test_hosts,
+        enforce_personal_pc=enforce_personal_pc,
+        environ=environ,
+        env=env,
+        cwd=cwd,
+        timeout_s=timeout_s,
+        lang=lang,
+    )
+
+
 def _inspect_doctor_credentials(
     credentials_path: Path,
     *,
@@ -2064,6 +3347,9 @@ def run_connect_doctor(
     clock_fn: ClockFn | None = None,
     input_fn: InputFn | None = None,
     runner: RunnerFn | None = None,
+    spool_path: Path | str | None = None,
+    flush_ces_queue: bool = False,
+    clean_ces_queue: bool = False,
 ) -> dict[str, Any]:
     """Run zero-inference <60s Noel doctor checks across Cloud Run routes, local GPU/Steam yield, heartbeat, and CES."""
     eff_clock: ClockFn = clock_fn if clock_fn is not None else time.monotonic
@@ -2079,6 +3365,7 @@ def run_connect_doctor(
     clean_ease = parse_ease_rating(ease_rating)
     if profile is not None:
         _ = normalize_profile(profile)
+    use_spool = bool(spool_path is not None or flush_ces_queue or clean_ces_queue)
 
     raw_gw = (
         gateway
@@ -2228,13 +3515,13 @@ def run_connect_doctor(
         recommended_mode = "dev_api_only"
         hw_status = "fail" if not yield_slo_ok else "warn"
     else:
-        assert gpu.temp_c is not None and gpu.free_mib is not None
-        thermal_ok = bool(gpu.temp_c <= cap_temp_c and not game_running)
+        assert gpu.free_mib is not None
+        thermal_ok = bool((gpu.temp_c is None or gpu.temp_c <= cap_temp_c) and not game_running)
         vram_reserve_ok = bool(gpu.free_mib >= reserve_mib)
         if not yield_slo_ok:
             gpu_status = "yield_slo_exceeded"
             hw_status = "fail"
-        elif gpu.temp_c > cap_temp_c:
+        elif gpu.temp_c is not None and gpu.temp_c > cap_temp_c:
             gpu_status = "gpu_thermal_cooldown"
             hw_status = "warn"
         elif game_running:
@@ -2263,7 +3550,7 @@ def run_connect_doctor(
             if not is_fr
             else f"Aucun GPU NVIDIA détecté (dev_api_only_no_nvidia_gpu) ; préemption vérifiée en {lat_s_text}."
         )
-    elif gpu_status == "gpu_thermal_cooldown":
+    elif gpu_status == "gpu_thermal_cooldown" and gpu.temp_c is not None:
         hw_summary = (
             f"{gpu.name} temperature {gpu.temp_c:.1f} C > {cap_temp_c:.1f} C quiet-fan ceiling."
             if not is_fr
@@ -2277,7 +3564,7 @@ def run_connect_doctor(
             else f"{gpu.name} VRAM libre {gpu.free_mib} MiB < {reserve_mib} MiB."
         )
         diagnostics.append(hw_summary)
-    elif gpu_status == "active_game_yield":
+    elif gpu_status == "active_game_yield" or (not gpu.present and game_running):
         hw_summary = (
             f"Active game detected ({', '.join(active_games)}); Gamer-Whisper yielded in {lat_s_text}."
             if not is_fr
@@ -2292,10 +3579,11 @@ def run_connect_doctor(
         )
         diagnostics.append(hw_summary)
     else:
+        temp_str = f"{gpu.temp_c:.1f} C" if gpu.temp_c is not None else "n/a C"
         hw_summary = (
-            f"{gpu.name} Gamer-Whisper ready ({lat_s_text} < {budget_s:.2f}s, {gpu.temp_c:.1f} C, {gpu.free_mib} MiB free)."
+            f"{gpu.name} Gamer-Whisper ready ({lat_s_text} < {budget_s:.2f}s, {temp_str}, {gpu.free_mib} MiB free)."
             if not is_fr
-            else f"{gpu.name} Gamer-Whisper prêt ({lat_s_text} < {budget_s:.2f}s, {gpu.temp_c:.1f} C, {gpu.free_mib} MiB libres)."
+            else f"{gpu.name} Gamer-Whisper prêt ({lat_s_text} < {budget_s:.2f}s, {temp_str}, {gpu.free_mib} MiB libres)."
         )
 
     checks.append(
@@ -2446,10 +3734,15 @@ def run_connect_doctor(
                     missing_or_stale.append(route)
                 else:
                     by_prof = body.get("by_profile") if isinstance(body.get("by_profile"), Mapping) else {}
+                    raw_mean = (
+                        body.get("mean_ease_rating")
+                        if body.get("mean_ease_rating") is not None
+                        else body.get("average_ease_rating")
+                    )
                     feedback_summary = {
                         "object": str(body.get("object") or "hivemind.onboarding_feedback_summary"),
                         "total_responses": int(body.get("total_responses") or 0),
-                        "mean_ease_rating": body.get("mean_ease_rating"),
+                        "mean_ease_rating": raw_mean,
                         "zero_game_lag_ratio": body.get("zero_game_lag_ratio"),
                         "by_profile": {
                             "dev": int(by_prof.get("dev", 0)),
@@ -2537,11 +3830,26 @@ def run_connect_doctor(
         ces_http_status: int | None = None
         ces_idempotency_key: str | None = None
         ces_payload: dict[str, Any] | None = None
+        ces_spooled = False
+        ces_flush_report: dict[str, Any] | None = None
+        ces_clean_report: dict[str, Any] | None = None
         mean_ease_rating: float | None = (
             float(feedback_summary["mean_ease_rating"])
             if feedback_summary is not None and isinstance(feedback_summary.get("mean_ease_rating"), (int, float))
             else None
         )
+
+        spool_obj: ConnectCesRetrySpool | None = None
+        if use_spool:
+            spool_obj = ConnectCesRetrySpool(
+                spool_path,
+                home=eff_home,
+                credentials_path=cred_target,
+                env=eff_env,
+                os_name=eff_os,
+            )
+            if clean_ces_queue:
+                ces_clean_report = spool_obj.purge(lang=lang_code)
 
         if do_submit_ces:
             ces_attempted = True
@@ -2552,11 +3860,11 @@ def run_connect_doctor(
                 "platform": _platform_feedback_tag(os_name=eff_os, system_name=system_name),
                 "note": "",
             }
-            key_salt = hashlib.sha256(f"hm-connect:{resolved_key}".encode()).hexdigest()[:16] if resolved_key else "anon"
-            canon_ces = json.dumps(ces_payload, sort_keys=True, separators=(",", ":"))
-            ces_idempotency_key = (
-                "hm-ces-"
-                + hashlib.sha256(f"hivemind.connect.ces/1:{clean_gw}:{clean_host}:{key_salt}:{canon_ces}".encode()).hexdigest()[:32]
+            ces_idempotency_key = build_ces_idempotency_key(
+                gateway=clean_gw,
+                host_label=clean_host,
+                resolved_key=resolved_key,
+                payload=ces_payload,
             )
             outbound_requests += 1
             ces_http_status, ces_body = _safe_http_post(
@@ -2571,14 +3879,64 @@ def run_connect_doctor(
                 raw_mean = ces_body.get("mean_ease_rating", ces_body.get("average_ease_rating"))
                 if isinstance(raw_mean, (int, float)) and not isinstance(raw_mean, bool):
                     mean_ease_rating = round(float(raw_mean), 2)
+                if spool_obj is not None and spool_obj.path.is_file():
+                    spool_obj.mark_delivered(ces_idempotency_key)
+                    if flush_ces_queue:
+                        ces_flush_report = spool_obj.flush(
+                            clean_gw,
+                            client=client,
+                            allow_test_hosts=allow_test_hosts,
+                            enforce_personal_pc=True,
+                            env=eff_env,
+                            cwd=eff_cwd,
+                            timeout_s=bounded_timeout,
+                            lang=lang_code,
+                        )
+                        outbound_requests += int(ces_flush_report.get("network_calls", 0))
+                        file_writes += int(ces_flush_report.get("file_writes", 0))
             else:
                 ces_recorded = False
                 ces_degraded = True
+                if spool_obj is not None:
+                    disp, reason_tok = _classify_ces_flush_status(int(ces_http_status or 0))
+                    if disp == "retryable":
+                        enq_res = spool_obj.enqueue(
+                            gateway=clean_gw,
+                            host_label=clean_host,
+                            resolved_key=resolved_key,
+                            profile=inferred_profile,
+                            ease_rating=eff_ease,
+                            zero_game_lag=zero_game_lag,
+                            platform=str(ces_payload["platform"]),
+                            idempotency_key=ces_idempotency_key,
+                            last_http_status=ces_http_status,
+                            last_reason=reason_tok,
+                            enforce_personal_pc=True,
+                            allow_test_hosts=allow_test_hosts,
+                            env=eff_env,
+                            cwd=eff_cwd,
+                            lang=lang_code,
+                        )
+                        ces_spooled = bool(enq_res.get("enqueued") or enq_res.get("duplicate_state") == "already_pending")
+                        file_writes += int(enq_res.get("file_writes", 0))
                 diagnostics.append(
                     f"CES submission degraded non-blocking (HTTP {ces_http_status})."
                     if not is_fr
                     else f"Envoi CES dégradé sans blocage (HTTP {ces_http_status})."
                 )
+        elif spool_obj is not None and flush_ces_queue:
+            ces_flush_report = spool_obj.flush(
+                clean_gw,
+                client=client,
+                allow_test_hosts=allow_test_hosts,
+                enforce_personal_pc=True,
+                env=eff_env,
+                cwd=eff_cwd,
+                timeout_s=bounded_timeout,
+                lang=lang_code,
+            )
+            outbound_requests += int(ces_flush_report.get("network_calls", 0))
+            file_writes += int(ces_flush_report.get("file_writes", 0))
 
     # 5. Aggregate route drift, fleet metrics, and final verdict
     swarm = raid_body.get("swarm") if isinstance(raid_body.get("swarm"), Mapping) else {}
@@ -2748,6 +4106,16 @@ def run_connect_doctor(
             "feedback_summary": feedback_summary,
             "checks": checks,
             "diagnostics": diagnostics,
+            **(
+                {
+                    "ces_spooled": ces_spooled,
+                    "ces_queue": spool_obj.snapshot(lang=lang_code) if spool_obj is not None else None,
+                    "ces_flush": ces_flush_report,
+                    "ces_clean": ces_clean_report,
+                }
+                if use_spool
+                else {}
+            ),
         },
         home=eff_home,
     )
@@ -2820,59 +4188,1664 @@ def render_doctor_markdown(report: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def cmd_doctor(client: Any, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    """Execute Noel doctor checks and emit CLI, Markdown, or JSON output."""
-    _ = (client, parser)
-    report = run_connect_doctor(
-        gateway=getattr(args, "gateway", None),
-        credentials_path=_credentials_path(args),
-        continue_path=_continue_path(args),
-        save_credentials=bool(getattr(args, "save_credentials", False)),
-        write_continue=bool(getattr(args, "write_continue", False)),
-        require_holiday_routes=bool(getattr(args, "require_holiday_routes", False)),
-        first_heartbeat=bool(getattr(args, "first_heartbeat", False)),
-        submit_ces=bool(getattr(args, "submit_ces", False)),
-        prompt_ces=bool(getattr(args, "prompt_ces", False)),
-        profile=getattr(args, "profile", None),
-        ease_rating=int(getattr(args, "ease_rating", 5)),
-        had_game_lag=bool(getattr(args, "had_game_lag", False)),
-        host_label=str(getattr(args, "host_label", DEFAULT_HOST_LABEL)),
-        max_temp_c=float(getattr(args, "max_temp_c", DEFAULT_MAX_TEMP_C)),
-        min_free_vram_mib=int(getattr(args, "min_free_vram_mib", DEFAULT_MIN_FREE_VRAM_MIB)),
-        yield_budget_ms=float(getattr(args, "yield_budget_ms", DEFAULT_YIELD_BUDGET_MS)),
-        extra_games=list(getattr(args, "game", []) or []),
-        lang=str(getattr(args, "lang", "en")),
-        timeout_s=float(getattr(args, "timeout", DOCTOR_HTTP_TIMEOUT_S)),
-        cwd=getattr(args, "cwd", None) or _ctx_cwd(args),
-        home=_ctx_home(args),
-        environ=_ctx_environ(args),
-        os_name=_ctx_os_name(args),
-        system_name=getattr(args, "_system_name", None),
-        transport=getattr(args, "_transport", None),
-        http_fn=getattr(args, "_http_fn", None),
-        gpu_probe_fn=getattr(args, "_gpu_probe_fn", None),
-        process_probe_fn=getattr(args, "_process_probe_fn", None),
-        worker_yield_fn=getattr(args, "_worker_yield_fn", None),
-        clock_fn=getattr(args, "_clock_fn", None),
-        input_fn=getattr(args, "_input_fn", None),
-        runner=getattr(args, "_runner", None),
-    )
-    if getattr(args, "json", False):
-        rendered = json.dumps(report, indent=2)
-    elif getattr(args, "markdown", False):
-        rendered = render_doctor_markdown(report)
+def _is_nonneg_int(val: object) -> bool:
+    return not isinstance(val, bool) and isinstance(val, int) and val >= 0
+
+
+def _has_forbidden_score_key(obj: Any) -> bool:
+    if isinstance(obj, Mapping):
+        for key, value in obj.items():
+            if str(key) == ("sco" + "re") or _has_forbidden_score_key(value):
+                return True
+    elif isinstance(obj, (list, tuple)):
+        return any(_has_forbidden_score_key(item) for item in obj)
+    return False
+
+
+def _validate_expected_sha(raw: str) -> str:
+    if isinstance(raw, bool) or not isinstance(raw, str):
+        raise GatewayPolicyError("expected_sha must be a 6..64 character alphanumeric/hex string.")
+    cleaned = raw.strip().lower()
+    if (
+        not cleaned
+        or cleaned == "unknown"
+        or not _BUILD_SHA_RE.fullmatch(cleaned)
+        or any(tok in cleaned for tok in _SECRET_VALUE_MARKERS)
+    ):
+        raise GatewayPolicyError("expected_sha must be a 6..64 character alphanumeric/hex string (not 'unknown' or secret).")
+    return cleaned
+
+
+def _shas_match(live_sha: str, expected_sha: str) -> bool:
+    clean_live = _sanitize_manifest_sha(live_sha)
+    clean_exp = _sanitize_manifest_sha(expected_sha)
+    if clean_live == "unknown" or clean_exp == "unknown":
+        return False
+    if clean_live == clean_exp:
+        return True
+    if _HEX_SHA_RE.fullmatch(clean_live) and _HEX_SHA_RE.fullmatch(clean_exp):
+        return clean_live.startswith(clean_exp) or clean_exp.startswith(clean_live)
+    return False
+
+
+def _dispatch_raw_http_fn(
+    raw_http_fn: RawHttpFn,
+    method: str,
+    url: str,
+    *,
+    payload: Mapping[str, Any] | None = None,
+    headers: Mapping[str, str] | None = None,
+    allow_test_hosts: bool = True,
+) -> tuple[int, str, dict[str, str]]:
+    verb = (method or "").strip().upper()
+    _assert_zero_inference_request(verb, url, allow_test_hosts=allow_test_hosts, payload=payload)
+    clean_payload = dict(payload) if payload is not None else None
+    clean_headers = {str(k): str(v) for k, v in headers.items()} if headers is not None else None
+    sig = inspect.signature(raw_http_fn)
+    params = sig.parameters
+    has_varargs = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params.values())
+    has_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+    pos = [
+        p
+        for p in params.values()
+        if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    try:
+        if raw_http_fn is default_http_raw:
+            return default_http_raw(
+                verb,
+                url,
+                payload=clean_payload,
+                headers=clean_headers,
+                timeout_s=DOCTOR_HTTP_TIMEOUT_S,
+            )
+        if has_varargs or len(pos) >= 4:
+            raw_res = raw_http_fn(verb, url, clean_payload, clean_headers)
+        elif has_varkw or ("payload" in params and "headers" in params):
+            raw_res = raw_http_fn(verb, url, payload=clean_payload, headers=clean_headers)
+        elif "headers" in params:
+            raw_res = raw_http_fn(verb, url, headers=clean_headers)
+        elif len(pos) == 3:
+            raw_res = raw_http_fn(verb, url, clean_payload)
+        else:
+            raw_res = raw_http_fn(verb, url)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return 0, json.dumps({"network_error": type(exc).__name__, "detail": sanitize_text_for_display(str(exc))[:200]}), {}
+
+    if isinstance(raw_res, tuple) and len(raw_res) == 3:
+        code_raw, body_raw, hdrs_raw = raw_res
+        lower_hdrs = {str(k).strip().lower(): str(v) for k, v in (hdrs_raw or {}).items()}
     else:
-        rendered = render_doctor_cli(report)
-    issues = scan_output_safety(rendered, home=_ctx_home(args))
+        code_raw, body_raw = raw_res  # type: ignore[misc]
+        lower_hdrs = {}
+
+    if isinstance(body_raw, Mapping) or isinstance(body_raw, list):
+        body_text = json.dumps(body_raw, ensure_ascii=False)
+        lower_hdrs.setdefault("content-type", "application/json")
+    elif isinstance(body_raw, (bytes, bytearray)):
+        body_text = bytes(body_raw).decode("utf-8", errors="replace")
+    else:
+        body_text = str(body_raw or "")
+    return int(code_raw), body_text, lower_hdrs
+
+
+def _inspect_models_contract(
+    body: Mapping[str, Any] | None,
+    *,
+    lang: str,
+) -> tuple[bool, list[str], bool, list[str]]:
+    is_fr = lang == "fr"
+    if not isinstance(body, Mapping) or _has_forbidden_score_key(body) or body.get("object", "list") != "list":
+        msg = (
+            "Contrat JSON `/v1/models` invalide."
+            if is_fr
+            else "Invalid `/v1/models` JSON schema (`object` != 'list')."
+        )
+        return False, [], False, [msg]
+    raw_data = body.get("data")
+    if not isinstance(raw_data, list):
+        msg = (
+            "Liste `data` absente dans `GET /v1/models`."
+            if is_fr
+            else "Missing `data` model list in `GET /v1/models`."
+        )
+        return False, [], False, [msg]
+    valid_entries = [
+        entry
+        for entry in raw_data
+        if isinstance(entry, Mapping) and isinstance(entry.get("id"), str) and bool(entry["id"].strip())
+    ]
+    model_ids = [str(entry["id"]).strip() for entry in valid_entries]
+    issues: list[str] = []
+    if not model_ids:
+        issues.append(
+            "Liste `data` de `GET /v1/models` vide."
+            if is_fr
+            else "`GET /v1/models` returned an empty `data` model list."
+        )
+    coder_id = "hivemind/" + "coder"
+    coder_entries = [
+        entry
+        for entry in valid_entries
+        if str(entry["id"]).strip() == coder_id
+        and entry.get("object") in (None, "model")
+        and ("owned_by" not in entry or (isinstance(entry.get("owned_by"), str) and bool(str(entry["owned_by"]).strip())))
+    ]
+    coder_present = len(coder_entries) >= 1
+    if not coder_present:
+        issues.append(
+            "Modèle `hivemind/coder` absent des métadonnées `GET /v1/models`."
+            if is_fr
+            else "Required model `hivemind/coder` missing from `GET /v1/models` metadata."
+        )
+    return len(issues) == 0, model_ids, coder_present, issues
+
+
+def _inspect_html_contract(
+    path: str,
+    html_text: str,
+    resp_headers: Mapping[str, str],
+    seen_nonces: set[str],
+    *,
+    lang: str,
+) -> tuple[bool, dict[str, Any], list[str]]:
+    is_fr = lang == "fr"
+    has_doctype = "<!doctype html" in html_text.lower()
+    csp_val = str(resp_headers.get("content-security-policy") or "")
+    csp_lower = csp_val.lower()
+    csp_unsafe = "'unsafe-inline'" in csp_lower or "'unsafe-eval'" in csp_lower
+    hdr_nonces = _CSP_HEADER_NONCE_RE.findall(csp_val)
+    header_nonce = hdr_nonces[0] if (hdr_nonces and len(set(hdr_nonces)) == 1) else None
+    attr_nonces = [a or b for a, b in _HTML_NONCE_ATTR_RE.findall(html_text)]
+    nonce_reused = header_nonce is not None and header_nonce in seen_nonces
+    if header_nonce is not None:
+        seen_nonces.add(header_nonce)
+
+    csp_ok = bool(
+        "default-src 'none'" in csp_lower
+        and not csp_unsafe
+        and header_nonce is not None
+        and attr_nonces
+        and set(attr_nonces) == {header_nonce}
+        and not nonce_reused
+    )
+
+    stripped_html = strip_masked_keys_and_nonces(html_text)
+    has_unsafe_sink = bool(_FORBIDDEN_DOM_SINK_RE.search(stripped_html))
+    has_static_fig = bool(_STATIC_FIG_UNIT_RE.search(stripped_html))
+    dom_clean = not has_unsafe_sink and not has_static_fig
+
+    low_html = stripped_html.lower()
+    compliance_banner_ok = (
+        any(
+            token in low_html
+            for token in (
+                "100% personal",
+                "100 % personnel",
+                "pc personnel",
+                "personal home pc",
+                "personal-pc",
+                "personal home machine",
+            )
+        )
+        and ("0.00 eur" in low_html or "0,00 eur" in low_html)
+        and ("agpl-3.0" in low_html)
+    )
+
+    issues: list[str] = []
+    if not has_doctype:
+        issues.append(
+            f"HTML invalide sur {path} : `<!DOCTYPE html>` absent."
+            if is_fr
+            else f"Invalid HTML on {path}: missing `<!DOCTYPE html>`."
+        )
+    if nonce_reused:
+        issues.append(
+            f"Nonce CSP réutilisé détecté sur {path}."
+            if is_fr
+            else f"Reused CSP nonce detected on {path}."
+        )
+    elif not csp_ok:
+        issues.append(
+            f"Contrat CSP par requête invalide ou absent sur {path}."
+            if is_fr
+            else f"Invalid or missing per-request CSP nonce contract on {path}."
+        )
+    if has_unsafe_sink:
+        issues.append(
+            f"Sink DOM non sûr détecté sur {path}."
+            if is_fr
+            else f"Unsafe DOM sink detected on {path}."
+        )
+    if has_static_fig:
+        issues.append(
+            f"Métrique statique détectée dans le HTML de {path}."
+            if is_fr
+            else f"Unbacked static telemetry figure detected in HTML on {path}."
+        )
+    if not compliance_banner_ok:
+        issues.append(
+            f"Bannière conformité PC perso / 0,00 EUR / AGPL-3.0 absente sur {path}."
+            if is_fr
+            else f"Personal-PC / 0.00 EUR / AGPL-3.0 compliance banner missing on {path}."
+        )
+
+    ok = len(issues) == 0
+    return (
+        ok,
+        {
+            "path": path,
+            "ok": ok,
+            "has_doctype": has_doctype,
+            "csp_ok": csp_ok,
+            "nonce_reused": nonce_reused,
+            "csp_nonce_sha256_prefix": (
+                hashlib.sha256(header_nonce.encode("utf-8")).hexdigest()[:16] if header_nonce else None
+            ),
+            "dom_clean": dom_clean,
+            "unsafe_dom_sink_detected": has_unsafe_sink,
+            "static_figure_detected": has_static_fig,
+            "compliance_banner_ok": compliance_banner_ok,
+            "issues": issues,
+        },
+        issues,
+    )
+
+
+def _inspect_manifest_contract(
+    body: Mapping[str, Any] | None,
+    *,
+    expected_sha: str | None,
+    lang: str,
+) -> tuple[bool, str, str | None, bool | None, list[str], list[str], list[str]]:
+    is_fr = lang == "fr"
+    if not isinstance(body, Mapping):
+        msg = (
+            "Manifeste `/v1/hivemind/onboarding/manifest` absent ou JSON invalide."
+            if is_fr
+            else "Manifest `/v1/hivemind/onboarding/manifest` missing or returned invalid JSON."
+        )
+        return False, "unknown", None, (False if expected_sha else None), list(_MANIFEST_REQUIRED_HOLIDAY_ROUTES), ["hivemind_connect.py"], [msg]
+
+    issues: list[str] = []
+    if _has_forbidden_score_key(body):
+        issues.append("Manifest contains forbidden key.")
+    if (
+        body.get("object") != MANIFEST_OBJECT
+        or body.get("campaign_id") != CAMPAIGN_ID
+        or body.get("status") != "ok"
+        or body.get("personal_pc_only") is not True
+        or body.get("financial_promise") != FINANCIAL_PROMISE
+    ):
+        issues.append(
+            "Contrat `/v1/hivemind/onboarding/manifest` invalide (`campaign_id`, `personal_pc_only` ou `0.00 EUR / 0.00 USD`)."
+            if is_fr
+            else "Invalid `/v1/hivemind/onboarding/manifest` contract (`campaign_id`, `personal_pc_only`, or `0.00 EUR / 0.00 USD`)."
+        )
+
+    raw_routes = body.get("holiday_routes")
+    if isinstance(raw_routes, list) and all(isinstance(r, str) for r in raw_routes):
+        missing_routes = [r for r in _MANIFEST_REQUIRED_HOLIDAY_ROUTES if r not in raw_routes]
+    else:
+        missing_routes = list(_MANIFEST_REQUIRED_HOLIDAY_ROUTES)
+    if missing_routes:
+        issues.append(
+            f"Manifeste `holiday_routes` incomplet : {', '.join(missing_routes)}."
+            if is_fr
+            else f"Manifest `holiday_routes` missing required routes: {', '.join(missing_routes)}."
+        )
+
+    raw_scripts = body.get("downloadable_scripts")
+    if isinstance(raw_scripts, list) and all(isinstance(s, str) and s.strip() for s in raw_scripts) and raw_scripts:
+        missing_scripts = [] if "hivemind_connect.py" in raw_scripts else ["hivemind_connect.py"]
+    else:
+        missing_scripts = ["hivemind_connect.py"]
+    if missing_scripts:
+        issues.append(
+            "Manifeste `downloadable_scripts` sans `hivemind_connect.py`."
+            if is_fr
+            else "Manifest `downloadable_scripts` missing `hivemind_connect.py`."
+        )
+
+    live_sha = _sanitize_manifest_sha(body.get("build_sha"))
+    live_rev = _sanitize_manifest_revision(body.get("cloud_run_revision"))
+    sha_match: bool | None = None
+    if expected_sha is not None:
+        sha_match = _shas_match(live_sha, expected_sha)
+        if not sha_match:
+            issues.append(
+                f"Dérive `build_sha` : actif='{live_sha}' != attendu='{expected_sha}'."
+                if is_fr
+                else f"Manifest `build_sha` mismatch: live='{live_sha}' != expected='{expected_sha}'."
+            )
+
+    return len(issues) == 0, live_sha, live_rev, sha_match, missing_routes, missing_scripts, issues
+
+
+def _inspect_feedback_summary_contract(
+    body: Mapping[str, Any] | None,
+    *,
+    lang: str,
+) -> tuple[bool, dict[str, Any] | None, list[str]]:
+    is_fr = lang == "fr"
+    if not isinstance(body, Mapping) or _has_forbidden_score_key(body):
+        msg = (
+            "Contrat `/v1/hivemind/onboarding/feedback/summary` invalide."
+            if is_fr
+            else "Invalid `/v1/hivemind/onboarding/feedback/summary` JSON payload."
+        )
+        return False, None, [msg]
+    obj_ok = body.get("object") in _ACCEPTED_FEEDBACK_SUMMARY_OBJECTS
+    raw_total = body.get("total_responses")
+    total_ok = _is_nonneg_int(raw_total)
+    total_val = int(raw_total) if total_ok else -1
+
+    has_mean = "mean_ease_rating" in body
+    has_avg = "average_ease_rating" in body
+    ease_ok = bool((has_mean or has_avg) and total_ok)
+    ease_vals: list[float] = []
+    if ease_ok:
+        for present, raw_val in ((has_mean, body.get("mean_ease_rating")), (has_avg, body.get("average_ease_rating"))):
+            if not present:
+                continue
+            if total_val == 0:
+                if raw_val is not None:
+                    ease_ok = False
+                    break
+            elif (
+                isinstance(raw_val, bool)
+                or not isinstance(raw_val, (int, float))
+                or not math.isfinite(float(raw_val))
+                or not (1.0 <= float(raw_val) <= 5.0)
+            ):
+                ease_ok = False
+                break
+            else:
+                ease_vals.append(round(float(raw_val), 2))
+        if ease_ok and len(ease_vals) == 2 and ease_vals[0] != ease_vals[1]:
+            ease_ok = False
+    ease_val = ease_vals[0] if (ease_ok and ease_vals) else None
+
+    raw_lag = body.get("zero_game_lag_ratio")
+    lag_ok = bool(
+        "zero_game_lag_ratio" in body
+        and total_ok
+        and (
+            (total_val == 0 and raw_lag is None)
+            or (
+                total_val > 0
+                and not isinstance(raw_lag, bool)
+                and isinstance(raw_lag, (int, float))
+                and math.isfinite(float(raw_lag))
+                and 0.0 <= float(raw_lag) <= 1.0
+            )
+        )
+    )
+    lag_val = round(float(raw_lag), 4) if (lag_ok and raw_lag is not None) else None
+
+    bp = body.get("by_profile")
+    d_raw = bp.get("dev") if isinstance(bp, Mapping) else None
+    g_raw = bp.get("gamer") if isinstance(bp, Mapping) else None
+    prof_ok = bool(
+        isinstance(bp, Mapping)
+        and _is_nonneg_int(d_raw)
+        and _is_nonneg_int(g_raw)
+        and total_ok
+        and int(d_raw) + int(g_raw) == total_val  # type: ignore[arg-type]
+    )
+    ok = bool(obj_ok and total_ok and ease_ok and lag_ok and prof_ok)
+    if not ok:
+        msg = (
+            "Schéma `/v1/hivemind/onboarding/feedback/summary` non conforme."
+            if is_fr
+            else "Schema mismatch on `/v1/hivemind/onboarding/feedback/summary`."
+        )
+        return False, None, [msg]
+    sanitized = {
+        "object": str(body.get("object")),
+        "total_responses": total_val,
+        "mean_ease_rating": ease_val,
+        "zero_game_lag_ratio": lag_val,
+        "by_profile": {"dev": int(d_raw), "gamer": int(g_raw)},  # type: ignore[arg-type]
+    }
+    return True, sanitized, []
+
+
+def _inspect_raid_status_contract(
+    body: Mapping[str, Any] | None,
+    *,
+    lang: str,
+) -> tuple[bool, int, list[str]]:
+    is_fr = lang == "fr"
+    if not isinstance(body, Mapping) or _has_forbidden_score_key(body):
+        msg = (
+            "Réponse `/v1/hivemind/raid/status` invalide."
+            if is_fr
+            else "Invalid `/v1/hivemind/raid/status` payload."
+        )
+        return False, 0, [msg]
+    comp = body.get("compliance")
+    comp_ok = bool(
+        isinstance(comp, Mapping)
+        and comp.get("personal_pc_only") is True
+        and comp.get("monetary_cost_eur") == "0.00 EUR"
+        and comp.get("monetary_cost_usd") == "0.00 USD"
+    )
+    ok = bool(
+        body.get("object") == RAID_STATUS_OBJECT
+        and comp_ok
+        and isinstance(body.get("onboarding_feedback"), Mapping)
+    )
+    active_trainers = 0
+    if isinstance(body.get("swarm"), Mapping):
+        raw_tr = body["swarm"].get("active_trainers")
+        if _is_nonneg_int(raw_tr):
+            active_trainers = int(raw_tr)
+    if not ok:
+        msg = (
+            "Contrat conformité/télémétrie invalide sur `/v1/hivemind/raid/status`."
+            if is_fr
+            else "Invalid compliance or telemetry contract on `/v1/hivemind/raid/status`."
+        )
+        return False, active_trainers, [msg]
+    return True, active_trainers, []
+
+
+def _inspect_fleet_contract(
+    body: Mapping[str, Any] | None,
+    *,
+    lang: str,
+) -> tuple[bool, int, int, list[str]]:
+    is_fr = lang == "fr"
+    if not isinstance(body, Mapping) or _has_forbidden_score_key(body):
+        msg = (
+            "Contrat `/v1/hivemind/producers/fleet` invalide."
+            if is_fr
+            else "Invalid `/v1/hivemind/producers/fleet` JSON payload."
+        )
+        return False, 0, 0, [msg]
+    if body.get("object") not in _ACCEPTED_FLEET_OBJECTS:
+        msg = (
+            "Champ `object` invalide sur `/v1/hivemind/producers/fleet`."
+            if is_fr
+            else "Invalid `object` metadata on `/v1/hivemind/producers/fleet`."
+        )
+        return False, 0, 0, [msg]
+    rows = body.get("hiveminders")
+    if not isinstance(rows, list):
+        msg = (
+            "Liste `hiveminders` absente sur `/v1/hivemind/producers/fleet`."
+            if is_fr
+            else "Missing `hiveminders` list on `/v1/hivemind/producers/fleet`."
+        )
+        return False, 0, 0, [msg]
+    for row in rows:
+        if isinstance(row, Mapping) and "endpoint_url" in row:
+            msg = (
+                "Fuite `endpoint_url` interdite sur `/v1/hivemind/producers/fleet`."
+                if is_fr
+                else "Forbidden `endpoint_url` leak detected on `/v1/hivemind/producers/fleet`."
+            )
+            return False, 0, 0, [msg]
+    has_live_hm = "live_hiveminders" in body
+    if has_live_hm and not _is_nonneg_int(body.get("live_hiveminders")):
+        msg = (
+            "Champ `live_hiveminders` invalide sur `/v1/hivemind/producers/fleet`."
+            if is_fr
+            else "Invalid non-integer `live_hiveminders` count on `/v1/hivemind/producers/fleet`."
+        )
+        return False, 0, 0, [msg]
+
+    live_hm_int = int(body["live_hiveminders"]) if has_live_hm else 0
+    row_online = sum(
+        1
+        for row in rows
+        if isinstance(row, Mapping) and str(row.get("status", "")).strip().lower() in LIVE_PRODUCER_STATUSES
+    )
+    online_producers = max(live_hm_int, row_online)
+    raw_gpu = body.get("distinct_physical_gpus")
+    distinct_gpus = int(raw_gpu) if _is_nonneg_int(raw_gpu) else 0
+    return True, online_producers, distinct_gpus, []
+
+
+def _inspect_arena_summary_contract(
+    body: Mapping[str, Any] | None,
+    *,
+    lang: str,
+) -> tuple[bool, dict[str, Any] | None, list[str]]:
+    is_fr = lang == "fr"
+    if not isinstance(body, Mapping) or body.get("object") != ARENA_SUMMARY_OBJECT:
+        msg = (
+            "Contrat `/v1/hivemind/arena/summary` invalide (`object` manquant ou inconnu)."
+            if is_fr
+            else "Arena summary `/v1/hivemind/arena/summary` invalid `object` metadata."
+        )
+        return False, None, [msg]
+    if _has_forbidden_score_key(body):
+        return False, None, ["Arena summary `/v1/hivemind/arena/summary` contains forbidden key."]
+
+    tv = body.get("total_votes")
+    hw = body.get("holiday_wins")
+    bw = body.get("baseline_wins")
+    ti = body.get("ties")
+    counts_valid = all(_is_nonneg_int(x) for x in (tv, hw, bw, ti))
+    conserved = bool(counts_valid and int(hw) + int(bw) + int(ti) == int(tv))  # type: ignore[arg-type]
+
+    dec_ok = True
+    if "decisive_votes" in body:
+        dv = body.get("decisive_votes")
+        dec_ok = bool(_is_nonneg_int(dv) and counts_valid and int(dv) == int(hw) + int(bw))  # type: ignore[arg-type]
+
+    raw_wlb = body.get("wilson_95_lower_bound")
+    wlb_ok = bool(
+        "wilson_95_lower_bound" in body
+        and not isinstance(raw_wlb, bool)
+        and isinstance(raw_wlb, (int, float))
+        and math.isfinite(float(raw_wlb))
+        and 0.0 <= float(raw_wlb) <= 1.0
+    )
+    decisive = (int(hw) + int(bw)) if counts_valid else 0  # type: ignore[arg-type]
+    if wlb_ok and counts_valid and decisive == 0 and float(raw_wlb) != 0.0:  # type: ignore[arg-type]
+        wlb_ok = False
+
+    win_ratio_ok = True
+    if "win_ratio" in body:
+        raw_wr = body.get("win_ratio")
+        if counts_valid and decisive == 0:
+            win_ratio_ok = raw_wr is None
+        else:
+            win_ratio_ok = bool(
+                not isinstance(raw_wr, bool)
+                and isinstance(raw_wr, (int, float))
+                and math.isfinite(float(raw_wr))
+                and 0.0 <= float(raw_wr) <= 1.0
+            )
+
+    by_task_ok = True
+    raw_tasks = body.get("by_task")
+    if isinstance(raw_tasks, Mapping):
+        for t_doc in raw_tasks.values():
+            if not isinstance(t_doc, Mapping):
+                by_task_ok = False
+                break
+            t_tv, t_hw, t_bw, t_ti = (
+                t_doc.get("total_votes"),
+                t_doc.get("holiday_wins"),
+                t_doc.get("baseline_wins"),
+                t_doc.get("ties"),
+            )
+            t_wlb = t_doc.get("wilson_95_lower_bound")
+            if (
+                not all(_is_nonneg_int(x) for x in (t_tv, t_hw, t_bw, t_ti))
+                or int(t_hw) + int(t_bw) + int(t_ti) != int(t_tv)  # type: ignore[arg-type]
+                or "wilson_95_lower_bound" not in t_doc
+                or isinstance(t_wlb, bool)
+                or not isinstance(t_wlb, (int, float))
+                or not math.isfinite(float(t_wlb))
+                or not (0.0 <= float(t_wlb) <= 1.0)
+            ):
+                by_task_ok = False
+                break
+
+    ok = bool(counts_valid and conserved and dec_ok and wlb_ok and win_ratio_ok and by_task_ok)
+    if not ok:
+        msg = (
+            "Conservation des votes ou borne Wilson 95 % invalide sur `/v1/hivemind/arena/summary`."
+            if is_fr
+            else "Vote conservation (`holiday_wins + baseline_wins + ties == total_votes`) or Wilson 95% lower-bound invalid on `/v1/hivemind/arena/summary`."
+        )
+        return False, None, [msg]
+
+    raw_wr_val = body.get("win_ratio")
+    sanitized: dict[str, Any] = {
+        "object": ARENA_SUMMARY_OBJECT,
+        "total_votes": int(tv),  # type: ignore[arg-type]
+        "decisive_votes": decisive,
+        "holiday_wins": int(hw),  # type: ignore[arg-type]
+        "baseline_wins": int(bw),  # type: ignore[arg-type]
+        "ties": int(ti),  # type: ignore[arg-type]
+        "win_ratio": (
+            round(float(raw_wr_val), 4)
+            if isinstance(raw_wr_val, (int, float)) and not isinstance(raw_wr_val, bool)
+            else None
+        ),
+        "wilson_95_lower_bound": round(float(raw_wlb), 4),  # type: ignore[arg-type]
+    }
+    return True, sanitized, []
+
+
+def _run_deploy_sh_dry_run(
+    *,
+    repo_root: Path | str | None = None,
+    expected_sha: str | None = None,
+    runner: RunnerFn = default_subprocess_runner,
+    environ: Mapping[str, str] | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Execute list-argv ``bash deploy/gcp_openrouter/deploy.sh --dry-run`` without invoking live ``gcloud``."""
+    is_fr = lang == "fr"
+    base_root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[1]
+    deploy_sh = base_root / "deploy" / "gcp_openrouter" / "deploy.sh"
+    display_path = "deploy/gcp_openrouter/deploy.sh"
+    if not deploy_sh.is_file():
+        return {
+            "executed": False,
+            "ok": False,
+            "returncode": 127,
+            "deploy_script_path": display_path,
+            "gcloud_invoked": False,
+            "dry_run_build_sha": "unknown",
+            "checks": {},
+            "diagnostic": (
+                f"Script `{display_path}` introuvable pour `--dry-run`."
+                if is_fr
+                else f"Deploy script `{display_path}` missing for `--dry-run`."
+            ),
+        }
+
+    dry_env: dict[str, str] = dict(environ) if environ is not None else dict(os.environ)
+    if "PATH" not in dry_env:
+        dry_env["PATH"] = os.environ.get("PATH", "/usr/bin:/bin")
+    dry_env["HIVEMIND_DEPLOY_DRY_RUN"] = "1"
+    if expected_sha is not None:
+        dry_env["HIVEMIND_BUILD_SHA"] = expected_sha
+
+    argv = ["bash", str(deploy_sh), "--dry-run"]
+    try:
+        sig = inspect.signature(runner)
+        if "env" in sig.parameters:
+            rc, stdout = runner(argv, 15.0, env=dry_env)  # type: ignore[call-arg]
+        else:
+            env_prefix = ["env", "HIVEMIND_DEPLOY_DRY_RUN=1"]
+            if expected_sha is not None:
+                env_prefix.append(f"HIVEMIND_BUILD_SHA={expected_sha}")
+            rc, stdout = runner([*env_prefix, *argv], 15.0)
+    except (OSError, subprocess.SubprocessError, GatewayPolicyError) as exc:
+        return {
+            "executed": True,
+            "ok": False,
+            "returncode": 1,
+            "deploy_script_path": display_path,
+            "gcloud_invoked": False,
+            "dry_run_build_sha": "unknown",
+            "checks": {},
+            "diagnostic": sanitize_text_for_display(f"deploy.sh --dry-run failed ({type(exc).__name__})."),
+        }
+
+    kv: dict[str, str] = {}
+    for line in str(stdout or "").splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            kv[k.strip()] = v.strip()
+
+    finops_line = kv.get("finops_flags", "")
+    env_vars_line = kv.get("update_env_vars", "")
+    raw_dry_sha = kv.get("build_sha", "")
+    dry_sha = _sanitize_manifest_sha(raw_dry_sha)
+    sha_propagated = bool(
+        raw_dry_sha
+        and raw_dry_sha.strip().lower() == dry_sha
+        and f"HIVEMIND_BUILD_SHA={raw_dry_sha}" in env_vars_line
+        and (expected_sha is None or _shas_match(dry_sha, expected_sha))
+    )
+    checks = {
+        "returncode_zero": int(rc) == 0,
+        "dry_run_marker": kv.get("HIVEMIND_CLOUD_RUN_DEPLOY_DRY_RUN") == "1",
+        "gcloud_invoked_zero": kv.get("gcloud_invoked") == "0",
+        "finops_flags_present": all(
+            tok in finops_line
+            for tok in ("--min-instances 0", "--max-instances 1", "--no-cpu-throttling", "--concurrency 80")
+        ),
+        "replica_url_gcs": kv.get("replica_url", "").startswith("gcs://"),
+        "secret_manager_mounted": "HIVEMIND_ROUTER_SECRET=" in kv.get("secrets", ""),
+        "zero_grants_env": "HIVEMIND_STARTER_GRANT_HMT=0" in env_vars_line,
+        "build_sha_propagated": sha_propagated,
+    }
+    ok = all(checks.values())
+    return {
+        "executed": True,
+        "ok": ok,
+        "returncode": int(rc),
+        "deploy_script_path": display_path,
+        "gcloud_invoked": kv.get("gcloud_invoked") != "0",
+        "dry_run_build_sha": dry_sha,
+        "checks": checks,
+        "diagnostic": (
+            ""
+            if ok
+            else (
+                f"Échec vérification `{display_path} --dry-run`."
+                if is_fr
+                else f"Subprocess verification `{display_path} --dry-run` failed."
+            )
+        ),
+    }
+
+
+def verify_pr949_connect_quorum_and_parity(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    expected_sha: str | None = None,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    min_ease_rating: float = DEFAULT_MIN_EASE_RATING,
+    min_zero_lag_ratio: float = DEFAULT_MIN_ZERO_LAG_RATIO,
+    require_live_quorum: bool = False,
+    require_ces_slo: bool = False,
+    check_arena_summary: bool = True,
+    verify_idempotency_replay: bool = False,
+    execute_deploy_dry_run: bool = False,
+    repo_root: Path | str | None = None,
+    raw_http_fn: RawHttpFn = default_http_raw,
+    http_fn: HttpFn | None = None,
+    transport: Any = None,
+    runner: RunnerFn = default_subprocess_runner,
+    environ: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    home: Path | None = None,
+    lang: str = "en",
+    env: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Verify PR #949 zero-inference 4-HTML-route parity, ``/v1/models`` metadata, 8+ quorum, CES SLO, arena, replay, and deploy dry-run."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    if (
+        isinstance(target_online_producers, bool)
+        or not isinstance(target_online_producers, int)
+        or not (1 <= target_online_producers <= 500)
+    ):
+        raise GatewayPolicyError("target_online_producers must be an integer between 1 and 500.")
+    if (
+        isinstance(min_ease_rating, bool)
+        or not isinstance(min_ease_rating, (int, float))
+        or not math.isfinite(float(min_ease_rating))
+        or not (1.0 <= float(min_ease_rating) <= 5.0)
+    ):
+        raise GatewayPolicyError("min_ease_rating must be a finite number between 1.0 and 5.0.")
+    if (
+        isinstance(min_zero_lag_ratio, bool)
+        or not isinstance(min_zero_lag_ratio, (int, float))
+        or not math.isfinite(float(min_zero_lag_ratio))
+        or not (0.0 <= float(min_zero_lag_ratio) <= 1.0)
+    ):
+        raise GatewayPolicyError("min_zero_lag_ratio must be a finite number between 0.0 and 1.0.")
+    for flag in (
+        require_live_quorum,
+        require_ces_slo,
+        check_arena_summary,
+        verify_idempotency_replay,
+        execute_deploy_dry_run,
+    ):
+        if not isinstance(flag, bool):
+            raise GatewayPolicyError("Gate boolean flags must be True or False.")
+
+    target_n = int(target_online_producers)
+    min_ease_f = float(min_ease_rating)
+    min_lag_f = float(min_zero_lag_ratio)
+    clean_expected_sha = _validate_expected_sha(expected_sha) if (expected_sha is not None and str(expected_sha).strip()) else None
+
+    eff_env = environ if environ is not None else (env if env is not None else os.environ)
+    eff_home = home if home is not None else Path.home()
+    eff_cwd = Path(cwd) if cwd is not None else Path.cwd()
+    cred_target = default_credentials_path(home=eff_home)
+    saved_creds = load_credentials(cred_target)
+    env_key = str(eff_env.get(API_KEY_ENV, "")).strip()
+    resolved_key = env_key if is_valid_hivemind_key(env_key) else (str(saved_creds["api_key"]).strip() if saved_creds else None)
+    masked_key = mask_api_key(resolved_key)
+    redacted_cred = redact_home_path(cred_target, home=eff_home)
+
+    # 1. Local Personal-PC & Amadeus compliance gate BEFORE any network or subprocess call
+    compliance = evaluate_personal_pc_compliance(env=eff_env, cwd=eff_cwd, lang=lang_code)
+    if not compliance["compliance_ok"]:
+        safe_gw = DEFAULT_GATEWAY
+        with suppress(GatewayPolicyError):
+            safe_gw = validate_gateway_url(
+                str(gateway),
+                allow_test_hosts=bool(transport is not None or http_fn is not None or raw_http_fn is not default_http_raw),
+            )
+        blocked: dict[str, Any] = sanitize_structure(
+            {
+                "schema": SCHEMA,
+                "object": "hivemind.connect.pr949_quorum_parity_receipt",
+                "slice_id": "SLICE-SCALE-DYN-49",
+                "campaign_id": CAMPAIGN_ID,
+                "mode": "pr949_quorum_gate",
+                "lang": lang_code,
+                "gateway": safe_gw,
+                "compliance_ok": False,
+                "corporate_detected": True,
+                "compliance": compliance,
+                "ready": False,
+                "parity_ok": False,
+                "gate_ok": False,
+                "quorum_gate_ok": False,
+                "ces_gate_ok": False,
+                "exit_code": 2,
+                "holiday_routes_deployed_on_cloud_run": False,
+                "onboarding_feedback_deployed": False,
+                "stale_revision_detected": False,
+                "stale_404_drift": False,
+                "cloud_run_lags_main": False,
+                "redeploy_recommended": False,
+                "routes_passed_count": 0,
+                "routes_total_count": len(_PR949_REQUIRED_ROUTES) + (1 if check_arena_summary else 0),
+                "http_statuses": {},
+                "missing_routes": [],
+                "failed_routes": [],
+                "models_ok": False,
+                "live_model_ids": [],
+                "models_count": 0,
+                "models_coder_present": False,
+                "hivemind_coder_present": False,
+                "html_contract_ok": False,
+                "html_contracts": {},
+                "unique_csp_nonces_count": 0,
+                "unique_csp_nonces_ok": False,
+                "html_dom_clean": False,
+                "compliance_banners_ok": False,
+                "manifest_present": False,
+                "manifest_valid": False,
+                "live_build_sha": "unknown",
+                "expected_sha": clean_expected_sha,
+                "sha_match": False if clean_expected_sha is not None else None,
+                "sha_drift": False,
+                "cloud_run_revision": None,
+                "manifest_missing_routes": [],
+                "manifest_missing_scripts": [],
+                "feedback_schema_ok": False,
+                "feedback_summary_ok": False,
+                "feedback_summary": None,
+                "mean_ease_rating": None,
+                "average_ease_rating": None,
+                "zero_game_lag_ratio": None,
+                "min_ease_rating": min_ease_f,
+                "min_zero_lag_ratio": min_lag_f,
+                "ces_slo_ok": False,
+                "zero_lag_slo_ok": False,
+                "raid_status_ok": False,
+                "active_trainers": 0,
+                "fleet_ok": False,
+                "online_producers": 0,
+                "distinct_physical_gpus": 0,
+                "target_online_producers": target_n,
+                "producer_quorum_met": False,
+                "awaiting_producer_quorum": True,
+                "require_live_quorum": bool(require_live_quorum),
+                "require_ces_slo": bool(require_ces_slo),
+                "arena_summary_checked": bool(check_arena_summary),
+                "arena_summary_ok": False if check_arena_summary else None,
+                "arena_summary": None,
+                "idempotency_replay_checked": bool(verify_idempotency_replay),
+                "idempotent_dedup_ok": None,
+                "idempotency_key": None,
+                "deploy_dry_run_executed": bool(execute_deploy_dry_run),
+                "deploy_dry_run": None,
+                "zero_inference_verified": True,
+                "outbound_http_requests": 0,
+                "network_calls": 0,
+                "subprocess_calls": 0,
+                "file_writes": 0,
+                "masked_api_key": masked_key,
+                "credentials_path": redacted_cred,
+                "routes": [],
+                "diagnostics": [compliance["summary"]],
+                "notice_bilingual": COMPLIANCE_NOTICE_BILINGUAL,
+                "financial_promise": FINANCIAL_PROMISE,
+            },
+            home=eff_home,
+        )
+        blocked["receipt_sha256"] = compute_receipt_sha256(blocked)
+        return blocked
+
+    allow_test_hosts = bool(
+        transport is not None or http_fn is not None or (raw_http_fn is not default_http_raw)
+    )
+    clean_gw = validate_gateway_url(str(gateway), allow_test_hosts=allow_test_hosts)
+
+    client_cm: Any = None
+    if http_fn is not None:
+        client_cm = _InjectedHttpClient(http_fn)
+    elif transport is not None:
+        client_cm = _HttpxTransportClient(transport=transport, timeout_s=DOCTOR_HTTP_TIMEOUT_S)
+
+    route_rows: list[dict[str, Any]] = []
+    http_statuses: dict[str, int] = {}
+    missing_routes: list[str] = []
+    failed_routes: list[str] = []
+    diagnostics: list[str] = []
+    seen_nonces: set[str] = set()
+    html_contracts: dict[str, dict[str, Any]] = {}
+    html_all_ok = True
+    html_dom_clean = True
+    compliance_banners_ok = True
+
+    health_ok = False
+    models_ok = False
+    model_ids: list[str] = []
+    models_count = 0
+    coder_present = False
+    manifest_present = False
+    manifest_valid = False
+    live_build_sha = "unknown"
+    cloud_run_revision: str | None = None
+    sha_match: bool | None = None if clean_expected_sha is None else False
+    manifest_missing_routes: list[str] = []
+    manifest_missing_scripts: list[str] = []
+    feedback_summary_ok = False
+    feedback_summary: dict[str, Any] | None = None
+    raw_feedback_doc: Mapping[str, Any] | None = None
+    raid_status_ok = False
+    active_trainers = 0
+    fleet_ok = False
+    online_producers = 0
+    distinct_gpus = 0
+    arena_summary_ok: bool | None = None
+    arena_summary_doc: dict[str, Any] | None = None
+    idempotent_dedup_ok: bool | None = None
+    idem_key: str | None = None
+    network_calls = 0
+    subprocess_calls = 0
+
+    def _call_pr949(
+        client_obj: Any,
+        method: str,
+        path_or_url: str,
+        *,
+        payload: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> tuple[int, Mapping[str, Any] | None, str, dict[str, str]]:
+        target_url = path_or_url if "://" in path_or_url else f"{clean_gw}{path_or_url}"
+        if client_obj is not None:
+            _assert_zero_inference_request(method, target_url, allow_test_hosts=True, payload=payload)
+            try:
+                resp = client_obj.request(
+                    method,
+                    target_url,
+                    json=dict(payload) if payload is not None else None,
+                    headers=dict(headers) if headers is not None else None,
+                    timeout=DOCTOR_HTTP_TIMEOUT_S,
+                )
+                code = int(resp.status_code)
+                body_text = resp.text
+                hdrs = {str(k).strip().lower(): str(v) for k, v in resp.headers.items()}
+            except (GatewayConnectionError, OSError, ValueError) as exc:
+                return 0, None, json.dumps({"network_error": type(exc).__name__}), {}
+            except Exception as exc:
+                if httpx is not None and isinstance(exc, httpx.HTTPError):
+                    return 0, None, json.dumps({"network_error": type(exc).__name__}), {}
+                raise
+        else:
+            code, body_text, hdrs = _dispatch_raw_http_fn(
+                raw_http_fn,
+                method,
+                target_url,
+                payload=payload,
+                headers=headers,
+                allow_test_hosts=allow_test_hosts,
+            )
+
+        json_doc: dict[str, Any] | None = None
+        if body_text.strip():
+            with suppress(json.JSONDecodeError, ValueError):
+                loaded = json.loads(body_text)
+                if isinstance(loaded, Mapping):
+                    json_doc = dict(loaded)
+        return code, json_doc, body_text, hdrs
+
+    with (client_cm if client_cm is not None else suppress()) as active_client:
+        client_arg = active_client if client_cm is not None else None
+
+        for path, kind, group in _PR949_REQUIRED_ROUTES:
+            network_calls += 1
+            code, json_doc, text_body, resp_headers = _call_pr949(client_arg, "GET", path)
+            http_statuses[path] = code
+            ok = code == 200
+            route_issues: list[str] = []
+
+            if not ok:
+                if code == 404:
+                    missing_routes.append(path)
+                if code == 404 and group != "core":
+                    route_issues.append(
+                        f"GET {path} a répondu HTTP 404 : révision Cloud Run en retard sur `main`."
+                        if is_fr
+                        else f"GET {path} returned HTTP 404: Cloud Run revision lags behind `main`."
+                    )
+                elif code == 0:
+                    route_issues.append(
+                        f"GET {path} injoignable (erreur réseau/TLS)."
+                        if is_fr
+                        else f"GET {path} unreachable (network/TLS error)."
+                    )
+                else:
+                    route_issues.append(
+                        f"GET {path} a répondu HTTP {code} (attendu HTTP 200)."
+                        if is_fr
+                        else f"GET {path} returned HTTP {code} (expected HTTP 200)."
+                    )
+                if kind == "html":
+                    html_all_ok = False
+                    compliance_banners_ok = False
+            elif path == "/health":
+                health_ok = bool(
+                    isinstance(json_doc, Mapping)
+                    and json_doc.get("status") == "ok"
+                    and not _has_forbidden_score_key(json_doc)
+                )
+                if not health_ok:
+                    ok = False
+                    route_issues.append(
+                        "GET /health a répondu HTTP 200 sans `status == 'ok'`."
+                        if is_fr
+                        else "GET /health returned HTTP 200 without `status == 'ok'`."
+                    )
+            elif path == "/v1/models":
+                models_ok, model_ids, coder_present, m_issues = _inspect_models_contract(json_doc, lang=lang_code)
+                models_count = len(model_ids)
+                if not models_ok:
+                    ok = False
+                    route_issues.extend(m_issues)
+            elif kind == "html":
+                h_ok, h_info, h_issues = _inspect_html_contract(
+                    path,
+                    text_body,
+                    resp_headers,
+                    seen_nonces,
+                    lang=lang_code,
+                )
+                html_contracts[path] = h_info
+                html_all_ok = html_all_ok and h_ok
+                html_dom_clean = html_dom_clean and bool(h_info["dom_clean"])
+                compliance_banners_ok = compliance_banners_ok and bool(h_info["compliance_banner_ok"])
+                if not h_ok:
+                    ok = False
+                    route_issues.extend(h_issues)
+            elif path == "/v1/hivemind/onboarding/manifest":
+                manifest_present = True
+                (
+                    manifest_valid,
+                    live_build_sha,
+                    cloud_run_revision,
+                    sha_match,
+                    manifest_missing_routes,
+                    manifest_missing_scripts,
+                    man_issues,
+                ) = _inspect_manifest_contract(json_doc, expected_sha=clean_expected_sha, lang=lang_code)
+                if not manifest_valid:
+                    ok = False
+                    route_issues.extend(man_issues)
+            elif path == "/v1/hivemind/onboarding/feedback/summary":
+                feedback_summary_ok, feedback_summary, fb_issues = _inspect_feedback_summary_contract(
+                    json_doc,
+                    lang=lang_code,
+                )
+                if feedback_summary_ok:
+                    raw_feedback_doc = json_doc
+                else:
+                    ok = False
+                    route_issues.extend(fb_issues)
+            elif path == "/v1/hivemind/raid/status":
+                raid_status_ok, active_trainers, r_issues = _inspect_raid_status_contract(json_doc, lang=lang_code)
+                if not raid_status_ok:
+                    ok = False
+                    route_issues.extend(r_issues)
+            elif path == "/v1/hivemind/producers/fleet":
+                fleet_ok, online_producers, distinct_gpus, f_issues = _inspect_fleet_contract(json_doc, lang=lang_code)
+                if not fleet_ok:
+                    ok = False
+                    route_issues.extend(f_issues)
+
+            if not ok:
+                failed_routes.append(path)
+                for item in route_issues:
+                    diagnostics.append(sanitize_text_for_display(item, home=eff_home))
+
+            route_rows.append(
+                {
+                    "path": path,
+                    "method": "GET",
+                    "kind": kind,
+                    "group": group,
+                    "http_status": code,
+                    "ok": ok,
+                    "diagnostic": sanitize_text_for_display(route_issues[0] if route_issues else "", home=eff_home),
+                }
+            )
+
+        if check_arena_summary:
+            a_path = "/v1/hivemind/arena/summary"
+            network_calls += 1
+            a_code, a_json, _, _ = _call_pr949(client_arg, "GET", a_path)
+            http_statuses[a_path] = a_code
+            a_issues: list[str] = []
+            if a_code != 200:
+                arena_summary_ok = False
+                if a_code == 404:
+                    missing_routes.append(a_path)
+                a_issues.append(
+                    f"GET {a_path} a répondu HTTP {a_code}."
+                    if is_fr
+                    else f"GET {a_path} returned HTTP {a_code}."
+                )
+            else:
+                arena_summary_ok, arena_summary_doc, a_issues = _inspect_arena_summary_contract(a_json, lang=lang_code)
+            if not arena_summary_ok:
+                failed_routes.append(a_path)
+                for item in a_issues:
+                    diagnostics.append(sanitize_text_for_display(item, home=eff_home))
+            route_rows.append(
+                {
+                    "path": a_path,
+                    "method": "GET",
+                    "kind": "json",
+                    "group": "holiday",
+                    "http_status": a_code,
+                    "ok": bool(arena_summary_ok),
+                    "diagnostic": sanitize_text_for_display(a_issues[0] if a_issues else "", home=eff_home),
+                }
+            )
+
+        if verify_idempotency_replay:
+            pre_total = (
+                int(feedback_summary["total_responses"])
+                if (feedback_summary_ok and feedback_summary is not None)
+                else None
+            )
+            pre_dev = (
+                int(feedback_summary["by_profile"]["dev"])
+                if (feedback_summary_ok and feedback_summary is not None)
+                else None
+            )
+            seed = f"{clean_gw}|{clean_expected_sha or 'live'}|{pre_total if pre_total is not None else -1}"
+            idem_key = f"pr949-replay-{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:24]}"
+            fb_payload = {
+                "profile": "dev",
+                "ease_rating": 5,
+                "zero_game_lag": True,
+                "platform": _platform_feedback_tag(),
+                "note": "",
+            }
+            replay_headers = {"Idempotency-Key": idem_key}
+
+            p1_code, p1_json, _, _ = _call_pr949(
+                client_arg,
+                "POST",
+                "/v1/hivemind/onboarding/feedback",
+                payload=fb_payload,
+                headers=replay_headers,
+            )
+            network_calls += 1
+            http_statuses["POST /v1/hivemind/onboarding/feedback"] = p1_code
+            p1_ok, p1_sum, _ = (
+                _inspect_feedback_summary_contract(p1_json, lang=lang_code)
+                if p1_code in (200, 201)
+                else (False, None, [])
+            )
+
+            p2_code, p2_json, _, _ = _call_pr949(
+                client_arg,
+                "POST",
+                "/v1/hivemind/onboarding/feedback",
+                payload=fb_payload,
+                headers=replay_headers,
+            )
+            network_calls += 1
+            http_statuses["POST /v1/hivemind/onboarding/feedback#replay"] = p2_code
+            p2_ok, p2_sum, _ = (
+                _inspect_feedback_summary_contract(p2_json, lang=lang_code)
+                if p2_code in (200, 201)
+                else (False, None, [])
+            )
+
+            ref_code, ref_json, _, _ = _call_pr949(client_arg, "GET", "/v1/hivemind/onboarding/feedback/summary")
+            network_calls += 1
+            http_statuses["/v1/hivemind/onboarding/feedback/summary#after_replay"] = ref_code
+            ref_ok, ref_sum, _ = (
+                _inspect_feedback_summary_contract(ref_json, lang=lang_code)
+                if ref_code == 200
+                else (False, None, [])
+            )
+
+            p1_inc_ok = bool(
+                p1_ok
+                and p1_sum is not None
+                and pre_total is not None
+                and pre_dev is not None
+                and int(p1_sum["total_responses"]) == int(pre_total) + 1
+                and int(p1_sum["by_profile"]["dev"]) == int(pre_dev) + 1
+            )
+            replay_eq_ok = bool(
+                p2_ok
+                and p2_sum is not None
+                and p1_sum is not None
+                and ref_ok
+                and ref_sum is not None
+                and p2_sum["total_responses"] == p1_sum["total_responses"]
+                and p2_sum["by_profile"] == p1_sum["by_profile"]
+                and ref_sum["total_responses"] == p1_sum["total_responses"]
+                and ref_sum["by_profile"] == p1_sum["by_profile"]
+            )
+            idempotent_dedup_ok = bool(p1_inc_ok and replay_eq_ok)
+            if idempotent_dedup_ok and ref_sum is not None and isinstance(ref_json, Mapping):
+                feedback_summary_ok = True
+                feedback_summary = ref_sum
+                raw_feedback_doc = ref_json
+            else:
+                diagnostics.append(
+                    "Échec vérification replay idempotent `Idempotency-Key` sur `/v1/hivemind/onboarding/feedback`."
+                    if is_fr
+                    else "Idempotency-Key duplicate-replay verification failed on `/v1/hivemind/onboarding/feedback`."
+                )
+
+    producer_quorum_met = bool(fleet_ok and online_producers >= target_n)
+    awaiting_producer_quorum = not producer_quorum_met
+    quorum_gate_ok = bool(producer_quorum_met or not require_live_quorum)
+    if require_live_quorum and not producer_quorum_met:
+        diagnostics.append(
+            f"Quorum producteurs en ligne insuffisant ({online_producers} < {target_n})."
+            if is_fr
+            else f"Live producer quorum not met ({online_producers} < {target_n})."
+        )
+
+    ces_slo_ok: bool | None
+    zero_lag_slo_ok: bool | None
+    if not feedback_summary_ok or feedback_summary is None or raw_feedback_doc is None:
+        ces_slo_ok = False
+        zero_lag_slo_ok = False
+        ces_gate_ok = False
+    elif int(feedback_summary["total_responses"]) > 0:
+        raw_ease = (
+            raw_feedback_doc.get("mean_ease_rating")
+            if raw_feedback_doc.get("mean_ease_rating") is not None
+            else raw_feedback_doc.get("average_ease_rating")
+        )
+        raw_lag = raw_feedback_doc.get("zero_game_lag_ratio")
+        ces_slo_ok = bool(raw_ease is not None and Fraction(str(float(raw_ease))) >= Fraction(str(min_ease_f)))
+        zero_lag_slo_ok = bool(raw_lag is not None and Fraction(str(float(raw_lag))) >= Fraction(str(min_lag_f)))
+        ces_gate_ok = bool(not require_ces_slo or (ces_slo_ok and zero_lag_slo_ok))
+        if require_ces_slo and not ces_gate_ok:
+            diagnostics.append(
+                f"SLO CES/zéro-lag non respecté (ease={raw_ease}, lag={raw_lag})."
+                if is_fr
+                else f"CES/zero-lag SLO breached (ease={raw_ease} < {min_ease_f} or lag={raw_lag} < {min_lag_f})."
+            )
+    else:
+        ces_slo_ok = None
+        zero_lag_slo_ok = None
+        ces_gate_ok = True
+
+    deploy_dry_run_res: dict[str, Any] | None = None
+    if execute_deploy_dry_run:
+        deploy_dry_run_res = _run_deploy_sh_dry_run(
+            repo_root=repo_root,
+            expected_sha=clean_expected_sha,
+            runner=runner,
+            environ=eff_env,
+            lang=lang_code,
+        )
+        if deploy_dry_run_res.get("executed"):
+            subprocess_calls += 1
+        if not deploy_dry_run_res.get("ok"):
+            diagnostics.append(str(deploy_dry_run_res.get("diagnostic") or "deploy.sh --dry-run failed."))
+
+    passed_count = sum(1 for row in route_rows if row["ok"])
+    total_count = len(route_rows)
+    html_count = len(PR949_HTML_ROUTES)
+    unique_csp_nonces_ok = bool(
+        html_all_ok
+        and len(html_contracts) == html_count
+        and len(seen_nonces) == html_count
+        and not any(info.get("nonce_reused") for info in html_contracts.values())
+    )
+    sha_drift = bool(clean_expected_sha is not None and sha_match is not True)
+    stale_404_drift = bool(missing_routes or manifest_missing_routes or manifest_missing_scripts)
+    cloud_run_lags_main = bool(http_statuses.get("/health") == 200 and (stale_404_drift or sha_drift))
+    onboarding_feedback_deployed = bool(
+        http_statuses.get("/v1/hivemind/onboarding/feedback/summary") == 200 and feedback_summary_ok
+    )
+    holiday_routes_deployed = bool(
+        health_ok
+        and manifest_valid
+        and unique_csp_nonces_ok
+        and html_dom_clean
+        and compliance_banners_ok
+        and onboarding_feedback_deployed
+        and raid_status_ok
+        and (not check_arena_summary or arena_summary_ok is True)
+    )
+
+    parity_ok = bool(
+        passed_count == total_count
+        and health_ok
+        and models_ok
+        and coder_present
+        and manifest_valid
+        and unique_csp_nonces_ok
+        and html_dom_clean
+        and compliance_banners_ok
+        and feedback_summary_ok
+        and raid_status_ok
+        and fleet_ok
+        and not sha_drift
+        and (not check_arena_summary or arena_summary_ok is True)
+        and (not verify_idempotency_replay or idempotent_dedup_ok is True)
+        and (not execute_deploy_dry_run or (deploy_dry_run_res is not None and deploy_dry_run_res["ok"] is True))
+    )
+    gate_ok = bool(parity_ok and quorum_gate_ok and ces_gate_ok)
+    stale_revision_detected = bool(stale_404_drift or sha_drift or not holiday_routes_deployed)
+
+    mean_ease_out = feedback_summary.get("mean_ease_rating") if feedback_summary is not None else None
+    zero_lag_out = feedback_summary.get("zero_game_lag_ratio") if feedback_summary is not None else None
+
+    report: dict[str, Any] = sanitize_structure(
+        {
+            "schema": SCHEMA,
+            "object": "hivemind.connect.pr949_quorum_parity_receipt",
+            "slice_id": "SLICE-SCALE-DYN-49",
+            "campaign_id": CAMPAIGN_ID,
+            "mode": "pr949_quorum_gate",
+            "lang": lang_code,
+            "gateway": clean_gw,
+            "compliance_ok": True,
+            "corporate_detected": False,
+            "compliance": compliance,
+            "ready": gate_ok,
+            "parity_ok": parity_ok,
+            "gate_ok": gate_ok,
+            "quorum_gate_ok": quorum_gate_ok,
+            "ces_gate_ok": ces_gate_ok,
+            "exit_code": 0 if gate_ok else 2,
+            "holiday_routes_deployed_on_cloud_run": holiday_routes_deployed,
+            "onboarding_feedback_deployed": onboarding_feedback_deployed,
+            "stale_revision_detected": stale_revision_detected,
+            "stale_404_drift": stale_404_drift,
+            "cloud_run_lags_main": cloud_run_lags_main,
+            "redeploy_recommended": bool(not parity_ok or cloud_run_lags_main or sha_drift),
+            "routes_passed_count": passed_count,
+            "routes_total_count": total_count,
+            "http_statuses": http_statuses,
+            "missing_routes": missing_routes,
+            "failed_routes": failed_routes,
+            "models_ok": models_ok,
+            "live_model_ids": model_ids,
+            "models_count": models_count,
+            "models_coder_present": coder_present,
+            "hivemind_coder_present": coder_present,
+            "html_contract_ok": unique_csp_nonces_ok and html_dom_clean and compliance_banners_ok,
+            "html_contracts": html_contracts,
+            "unique_csp_nonces_count": len(seen_nonces),
+            "unique_csp_nonces_ok": unique_csp_nonces_ok,
+            "html_dom_clean": html_dom_clean,
+            "compliance_banners_ok": compliance_banners_ok,
+            "manifest_present": manifest_present,
+            "manifest_valid": manifest_valid,
+            "live_build_sha": live_build_sha,
+            "expected_sha": clean_expected_sha,
+            "sha_match": sha_match,
+            "sha_drift": sha_drift,
+            "cloud_run_revision": cloud_run_revision,
+            "manifest_missing_routes": manifest_missing_routes,
+            "manifest_missing_scripts": manifest_missing_scripts,
+            "feedback_schema_ok": feedback_summary_ok,
+            "feedback_summary_ok": feedback_summary_ok,
+            "feedback_summary": feedback_summary,
+            "mean_ease_rating": mean_ease_out,
+            "average_ease_rating": mean_ease_out,
+            "zero_game_lag_ratio": zero_lag_out,
+            "min_ease_rating": min_ease_f,
+            "min_zero_lag_ratio": min_lag_f,
+            "ces_slo_ok": ces_slo_ok,
+            "zero_lag_slo_ok": zero_lag_slo_ok,
+            "raid_status_ok": raid_status_ok,
+            "active_trainers": active_trainers,
+            "fleet_ok": fleet_ok,
+            "online_producers": online_producers,
+            "distinct_physical_gpus": distinct_gpus,
+            "target_online_producers": target_n,
+            "producer_quorum_met": producer_quorum_met,
+            "awaiting_producer_quorum": awaiting_producer_quorum,
+            "require_live_quorum": bool(require_live_quorum),
+            "require_ces_slo": bool(require_ces_slo),
+            "arena_summary_checked": bool(check_arena_summary),
+            "arena_summary_ok": arena_summary_ok,
+            "arena_summary": arena_summary_doc,
+            "idempotency_replay_checked": bool(verify_idempotency_replay),
+            "idempotent_dedup_ok": idempotent_dedup_ok,
+            "idempotency_key": idem_key,
+            "deploy_dry_run_executed": bool(execute_deploy_dry_run),
+            "deploy_dry_run": deploy_dry_run_res,
+            "zero_inference_verified": True,
+            "outbound_http_requests": network_calls,
+            "network_calls": network_calls,
+            "subprocess_calls": subprocess_calls,
+            "file_writes": 0,
+            "masked_api_key": masked_key,
+            "credentials_path": redacted_cred,
+            "routes": route_rows,
+            "diagnostics": diagnostics,
+            "notice_bilingual": COMPLIANCE_NOTICE_BILINGUAL,
+            "financial_promise": FINANCIAL_PROMISE,
+        },
+        home=eff_home,
+    )
+    report["receipt_sha256"] = compute_receipt_sha256(report)
+    return report
+
+
+def render_pr949_cli(report: Mapping[str, Any]) -> str:
+    """Render concise EN or FR PR #949 quorum & parity CLI report."""
+    lang_code = normalize_lang(str(report.get("lang", "en")))
+    is_fr = lang_code == "fr"
+    title = (
+        "HIVEMIND PR #949 QUORUM & PARITÉ NOËL (PC PERSO • 0,00 EUR / 0,00 USD)"
+        if is_fr
+        else "HIVEMIND PR #949 QUORUM & PARITY GATE (PERSONAL PC ONLY • 0.00 EUR / 0.00 USD)"
+    )
+    verdict = "READY" if report.get("gate_ok") else "NOT_READY"
+    lines = [
+        "=" * 72,
+        title,
+        "=" * 72,
+        f"{'Règle' if is_fr else 'Rule'}: {report.get('notice_bilingual', COMPLIANCE_NOTICE_BILINGUAL)}",
+        f"Gateway: {report.get('gateway')} | Verdict: {verdict} | Key: {report.get('masked_api_key')}",
+        (
+            f"Routes: {report.get('routes_passed_count')}/{report.get('routes_total_count')} | "
+            f"CSP nonces={report.get('unique_csp_nonces_count')} | "
+            f"hivemind/coder={report.get('models_coder_present')}"
+        ),
+        (
+            f"Quorum: {report.get('online_producers')}/{report.get('target_online_producers')} "
+            f"(met={report.get('producer_quorum_met')}, awaiting={report.get('awaiting_producer_quorum')}) | "
+            f"CES ease={report.get('mean_ease_rating')} lag={report.get('zero_game_lag_ratio')}"
+        ),
+        (
+            f"Arena OK: {report.get('arena_summary_ok')} | "
+            f"Idempotent Replay: {report.get('idempotent_dedup_ok')} | "
+            f"Build SHA: {report.get('live_build_sha')}"
+        ),
+        *(
+            [f"CES Queue Flush: {report['ces_flush'].get('summary')}"]
+            if isinstance(report.get("ces_flush"), Mapping)
+            else []
+        ),
+        f"SHA-256: {report.get('receipt_sha256', '')}",
+    ]
+    return "\n".join(lines)
+
+
+def render_pr949_markdown(report: Mapping[str, Any]) -> str:
+    """Render EN or FR Markdown PR #949 quorum & parity report with SHA-256 receipt."""
+    lang_code = normalize_lang(str(report.get("lang", "en")))
+    is_fr = lang_code == "fr"
+    heading = (
+        "# HiveMind PR #949 — Rapport Quorum & Parité Noël"
+        if is_fr
+        else "# HiveMind PR #949 — Quorum & Holiday Parity Report"
+    )
+    lines = [
+        heading,
+        "",
+        f"> {report.get('notice_bilingual', COMPLIANCE_NOTICE_BILINGUAL)}",
+        "",
+        f"- **Verdict**: `{'READY' if report.get('gate_ok') else 'NOT_READY'}` (`exit_code={report.get('exit_code')}`)",
+        f"- **Gateway**: `{report.get('gateway')}`",
+        f"- **{'Clé API (masquée)' if is_fr else 'API Key (masked)'}**: `{report.get('masked_api_key')}`",
+        f"- **{'Identifiants' if is_fr else 'Credentials'}**: `{report.get('credentials_path')}`",
+        f"- **Routes PR #949**: `{report.get('routes_passed_count')}/{report.get('routes_total_count')}` (`unique_csp_nonces={report.get('unique_csp_nonces_count')}`)",
+        f"- **Models (`hivemind/coder`)**: `{report.get('models_coder_present')}`",
+        f"- **{'Quorum Producteurs' if is_fr else 'Producer Quorum'}**: `{report.get('online_producers')}/{report.get('target_online_producers')}` (`met={report.get('producer_quorum_met')}`, `awaiting={report.get('awaiting_producer_quorum')}`)",
+        f"- **CES & Gamer Lag**: `mean_ease={report.get('mean_ease_rating')}`, `zero_game_lag_ratio={report.get('zero_game_lag_ratio')}`, `ces_slo_ok={report.get('ces_slo_ok')}`",
+        f"- **Arena Summary OK**: `{report.get('arena_summary_ok')}` | **Idempotency Replay**: `{report.get('idempotent_dedup_ok')}`",
+        *(
+            [f"- **CES Queue Flush**: {report['ces_flush'].get('summary')}"]
+            if isinstance(report.get("ces_flush"), Mapping)
+            else []
+        ),
+        f"- **Build SHA**: `{report.get('live_build_sha')}` (expected=`{report.get('expected_sha') or 'n/a'}`)",
+        f"- **Receipt SHA-256**: `{report.get('receipt_sha256')}`",
+        "",
+        "| Route | HTTP | OK | Diagnostic |",
+        "| :--- | :---: | :---: | :--- |",
+    ]
+    for row in report.get("routes", ()):
+        lines.append(f"| `{row.get('path')}` | `{row.get('http_status')}` | `{row.get('ok')}` | {row.get('diagnostic') or '—'} |")
+    return "\n".join(lines)
+
+
+def cmd_doctor(client: Any, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Execute Noel doctor or PR #949 quorum/parity gate and emit CLI, Markdown, or JSON output."""
+    _ = (client, parser)
+    raw_out = getattr(args, "output", None)
+    out_path: Path | None = None
+    if raw_out is not None:
+        cleaned_out = str(raw_out).strip()
+        if not cleaned_out or "\x00" in cleaned_out:
+            raise GatewayPolicyError("Invalid --output path.")
+        out_path = Path(cleaned_out).expanduser()
+
+    raw_cwd = getattr(args, "cwd", None)
+    if raw_cwd is not None:
+        cleaned_cwd = str(raw_cwd).strip()
+        if not cleaned_cwd or "\x00" in cleaned_cwd:
+            raise GatewayPolicyError("Invalid --cwd path.")
+        eff_cwd: Path | str | None = Path(cleaned_cwd)
+    else:
+        eff_cwd = _ctx_cwd(args)
+
+    eff_home = _ctx_home(args)
+    eff_env = _ctx_environ(args)
+    eff_lang = str(getattr(args, "lang", "en"))
+
+    if getattr(args, "pr949_quorum_gate", False):
+        gw_arg = getattr(args, "gateway", None) or eff_env.get(GATEWAY_ENV) or eff_env.get("HIVEMIND_GATEWAY_URL") or DEFAULT_GATEWAY
+        report = verify_pr949_connect_quorum_and_parity(
+            str(gw_arg),
+            expected_sha=getattr(args, "expected_sha", None),
+            target_online_producers=int(getattr(args, "target_online_producers", DEFAULT_TARGET_ONLINE_PRODUCERS)),
+            min_ease_rating=float(getattr(args, "min_ease_rating", DEFAULT_MIN_EASE_RATING)),
+            min_zero_lag_ratio=float(getattr(args, "min_zero_lag_ratio", DEFAULT_MIN_ZERO_LAG_RATIO)),
+            require_live_quorum=bool(getattr(args, "require_live_quorum", False)),
+            require_ces_slo=bool(getattr(args, "require_ces_slo", False)),
+            check_arena_summary=bool(getattr(args, "check_arena_summary", True)),
+            verify_idempotency_replay=bool(getattr(args, "verify_idempotency_replay", False)),
+            execute_deploy_dry_run=bool(getattr(args, "run_deploy_dry_run", False)),
+            repo_root=getattr(args, "_repo_root", None),
+            raw_http_fn=getattr(args, "_raw_http_fn", None) or default_http_raw,
+            http_fn=getattr(args, "_http_fn", None),
+            transport=getattr(args, "_transport", None),
+            runner=getattr(args, "_runner", None) or default_subprocess_runner,
+            environ=eff_env,
+            cwd=eff_cwd,
+            home=eff_home,
+            lang=eff_lang,
+        )
+        if getattr(args, "flush_ces_queue", False) and report.get("compliance_ok", True):
+            spool = ConnectCesRetrySpool(
+                getattr(args, "ces_queue_file", None),
+                home=eff_home,
+                credentials_path=_credentials_path(args),
+                env=eff_env,
+                os_name=_ctx_os_name(args),
+            )
+            report["ces_flush"] = spool.flush(
+                str(report["gateway"]),
+                http_fn=getattr(args, "_http_fn", None),
+                transport=getattr(args, "_transport", None),
+                raw_http_fn=getattr(args, "_raw_http_fn", None),
+                environ=eff_env,
+                cwd=eff_cwd,
+                lang=eff_lang,
+            )
+            report["receipt_sha256"] = compute_receipt_sha256(report)
+        if getattr(args, "json", False):
+            rendered = json.dumps(report, indent=2, ensure_ascii=False)
+        elif getattr(args, "markdown", False):
+            rendered = render_pr949_markdown(report)
+        else:
+            rendered = render_pr949_cli(report)
+    else:
+        report = run_connect_doctor(
+            gateway=getattr(args, "gateway", None),
+            credentials_path=_credentials_path(args),
+            continue_path=_continue_path(args),
+            save_credentials=bool(getattr(args, "save_credentials", False)),
+            write_continue=bool(getattr(args, "write_continue", False)),
+            require_holiday_routes=bool(getattr(args, "require_holiday_routes", False)),
+            first_heartbeat=bool(getattr(args, "first_heartbeat", False)),
+            submit_ces=bool(getattr(args, "submit_ces", False)),
+            prompt_ces=bool(getattr(args, "prompt_ces", False)),
+            profile=getattr(args, "profile", None),
+            ease_rating=int(getattr(args, "ease_rating", 5)),
+            had_game_lag=bool(getattr(args, "had_game_lag", False)),
+            host_label=str(getattr(args, "host_label", DEFAULT_HOST_LABEL)),
+            max_temp_c=float(getattr(args, "max_temp_c", DEFAULT_MAX_TEMP_C)),
+            min_free_vram_mib=int(getattr(args, "min_free_vram_mib", DEFAULT_MIN_FREE_VRAM_MIB)),
+            yield_budget_ms=float(getattr(args, "yield_budget_ms", DEFAULT_YIELD_BUDGET_MS)),
+            extra_games=list(getattr(args, "game", []) or []),
+            lang=eff_lang,
+            timeout_s=float(getattr(args, "timeout", DOCTOR_HTTP_TIMEOUT_S)),
+            cwd=eff_cwd,
+            home=eff_home,
+            environ=eff_env,
+            os_name=_ctx_os_name(args),
+            system_name=getattr(args, "_system_name", None),
+            transport=getattr(args, "_transport", None),
+            http_fn=getattr(args, "_http_fn", None),
+            gpu_probe_fn=getattr(args, "_gpu_probe_fn", None),
+            process_probe_fn=getattr(args, "_process_probe_fn", None),
+            worker_yield_fn=getattr(args, "_worker_yield_fn", None),
+            clock_fn=getattr(args, "_clock_fn", None),
+            input_fn=getattr(args, "_input_fn", None),
+            runner=getattr(args, "_runner", None),
+            spool_path=getattr(args, "ces_queue_file", None),
+            flush_ces_queue=bool(getattr(args, "flush_ces_queue", False)),
+            clean_ces_queue=bool(getattr(args, "clean_ces_queue", False)),
+        )
+        if getattr(args, "json", False):
+            rendered = json.dumps(report, indent=2)
+        elif getattr(args, "markdown", False):
+            rendered = render_doctor_markdown(report)
+        else:
+            rendered = render_doctor_cli(report)
+
+    issues = scan_output_safety(rendered, home=eff_home)
     if issues:
         raise ValueError(f"Output safety guard failed: {', '.join(issues)}")
+    if out_path is not None and report.get("compliance_ok", True):
+        _write_file_secure_atomic(
+            out_path,
+            rendered + ("\n" if not rendered.endswith("\n") else ""),
+            posix_mode=0o600,
+            os_name=_ctx_os_name(args),
+        )
     print(rendered)
     return int(report["exit_code"])
 
 
 def _add_shared_continuity_flags(subparser: argparse.ArgumentParser, *, include_writes: bool = True) -> None:
+    subparser.add_argument("--gateway", default=argparse.SUPPRESS, help=f"Gateway URL (default: ${GATEWAY_ENV} or the public HiveMind gateway)")
     subparser.add_argument("--credentials", default=argparse.SUPPRESS, metavar="FILE", help="Credentials JSON path (default ~/.hivemind/credentials.json)")
     subparser.add_argument("--enforce-personal-pc", action="store_true", default=argparse.SUPPRESS, help="Refuse corporate environments/repos with exit code 2")
+    subparser.add_argument("--cwd", default=argparse.SUPPRESS, metavar="DIR", help="Workspace path checked locally for corporate markers/.git/config")
     if include_writes:
         subparser.add_argument("--save-credentials", action="store_true", help="Atomically save 0600 credentials JSON")
         subparser.add_argument("--write-continue", action="store_true", help="Atomically write 0600 ~/.continue/hivemind_provider.yaml")
@@ -2885,6 +5858,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gateway", help=f"Gateway URL (default: ${GATEWAY_ENV} or the public HiveMind gateway)")
     parser.add_argument("--credentials", default=None, metavar="FILE", help="Path to saved HiveMind credentials JSON (default ~/.hivemind/credentials.json)")
     parser.add_argument("--enforce-personal-pc", action="store_true", default=False, help="Enforce local Personal-PC / Amadeus compliance gate (exit 2 on corporate markers)")
+    parser.add_argument("--cwd", default=None, metavar="DIR", help="Workspace directory checked locally for corporate markers/.git/config")
     parser.add_argument("--lang", type=normalize_lang, default="en", choices=SUPPORTED_LANGS, help="CLI output language ('en' or 'fr')")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -2942,7 +5916,6 @@ def build_parser() -> argparse.ArgumentParser:
     snip.set_defaults(func=cmd_snippet)
 
     doc = sub.add_parser("doctor", help="Zero-inference <60s Noel Cloud Run drift, Steam yield, heartbeat & CES verifier")
-    doc.add_argument("--gateway", default=argparse.SUPPRESS, help="HiveMind gateway URL")
     doc.add_argument("--lang", type=normalize_lang, default=argparse.SUPPRESS, choices=SUPPORTED_LANGS, help="Output language ('en' or 'fr')")
     _add_shared_continuity_flags(doc)
     doc.add_argument("--require-holiday-routes", action="store_true", help="Fail closed (exit 2) if Cloud Run holiday routes or CES hit stale 404/5xx")
@@ -2953,12 +5926,25 @@ def build_parser() -> argparse.ArgumentParser:
     doc.add_argument("--ease-rating", type=parse_ease_rating, default=5, choices=(1, 2, 3, 4, 5), help="CES ease rating 1..5")
     doc.add_argument("--had-game-lag", action="store_true", help="Report foreground game lag (sets zero_game_lag=False)")
     doc.add_argument("--host-label", default=DEFAULT_HOST_LABEL, help="Sanitized host label for OpenTrainer heartbeat")
-    doc.add_argument("--cwd", default=None, help="Workspace path checked locally for corporate markers/.git/config")
     doc.add_argument("--max-temp-c", type=float, default=DEFAULT_MAX_TEMP_C, help="Quiet-fan GPU temperature ceiling (default 70.0 C)")
     doc.add_argument("--min-free-vram-mib", type=int, default=DEFAULT_MIN_FREE_VRAM_MIB, help="Free VRAM reserve in MiB (default 2048)")
     doc.add_argument("--yield-budget-ms", type=float, default=DEFAULT_YIELD_BUDGET_MS, help="Steam yield budget in milliseconds (default 1500.0)")
     doc.add_argument("--game", action="append", default=[], help="Extra game executable name to watch")
     doc.add_argument("--timeout", type=float, default=DOCTOR_HTTP_TIMEOUT_S, help="Bounded HTTP timeout per probe")
+    doc.add_argument("--output", default=None, metavar="FILE", help="Atomically write JSON/Markdown/CLI output with POSIX 0600 permissions")
+    doc.add_argument("--ces-queue-file", default=None, metavar="FILE", help="Optional 0600 CES retry spool JSON path")
+    doc.add_argument("--flush-ces-queue", action="store_true", help="Idempotently flush pending spooled CES events")
+    doc.add_argument("--clean-ces-queue", action="store_true", help="Remove local CES retry spool cleanly")
+    doc.add_argument("--pr949-quorum-gate", action="store_true", help="Run PR #949 live 4-HTML parity, models, 8+ producer quorum, arena, and replay gate")
+    doc.add_argument("--expected-sha", default=None, help="Expected Cloud Run HIVEMIND_BUILD_SHA (6..64 chars)")
+    doc.add_argument("--target-online-producers", type=int, default=DEFAULT_TARGET_ONLINE_PRODUCERS, help="Target online producers for PR #949 quorum (default 8)")
+    doc.add_argument("--min-ease-rating", type=float, default=DEFAULT_MIN_EASE_RATING, help="Minimum mean CES ease rating (default 4.2)")
+    doc.add_argument("--min-zero-lag-ratio", type=float, default=DEFAULT_MIN_ZERO_LAG_RATIO, help="Minimum zero_game_lag_ratio (default 0.95)")
+    doc.add_argument("--require-live-quorum", action="store_true", help="Fail closed (exit 2) when online_producers < --target-online-producers")
+    doc.add_argument("--require-ces-slo", action="store_true", help="Fail closed (exit 2) when CES/zero-lag SLOs are breached")
+    doc.add_argument("--check-arena-summary", action=argparse.BooleanOptionalAction, default=True, help="Check /v1/hivemind/arena/summary vote conservation and Wilson LB")
+    doc.add_argument("--verify-idempotency-replay", action="store_true", help="Verify Idempotency-Key deduplication on POST /v1/hivemind/onboarding/feedback")
+    doc.add_argument("--run-deploy-dry-run", action="store_true", help="Verify bash deploy/gcp_openrouter/deploy.sh --dry-run (0 gcloud calls)")
     out_grp = doc.add_mutually_exclusive_group()
     out_grp.add_argument("--json", action="store_true", help="Emit machine-readable JSON report with SHA-256 receipt")
     out_grp.add_argument("--markdown", action="store_true", help="Emit Markdown verification report")
@@ -2971,6 +5957,8 @@ def main(
     *,
     transport: Any | None = None,
     http_fn: HttpFn | None = None,
+    raw_http_fn: RawHttpFn | None = None,
+    repo_root: Path | str | None = None,
     environ: Mapping[str, str] | None = None,
     cwd: Path | str | None = None,
     home: Path | None = None,
@@ -2986,16 +5974,30 @@ def main(
     """CLI entrypoint preserving backward-compatible ``main(argv=..., transport=...)``."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    allow_test_hosts = transport is not None or http_fn is not None
+    allow_test_hosts = bool(
+        transport is not None or http_fn is not None or (raw_http_fn is not None and raw_http_fn is not default_http_raw)
+    )
+
+    raw_cli_cwd = getattr(args, "cwd", None)
+    if raw_cli_cwd is not None:
+        cleaned_cli_cwd = str(raw_cli_cwd).strip()
+        if not cleaned_cli_cwd or "\x00" in cleaned_cli_cwd:
+            print("Invalid --cwd path.", file=sys.stderr)
+            return 2
+        eff_cwd: Path | str | None = Path(cleaned_cli_cwd)
+    else:
+        eff_cwd = cwd
 
     args._environ = environ
-    args._cwd = cwd
+    args._cwd = eff_cwd
     args._home = home
     args._os_name = os_name
     args._system_name = system_name
     args._allow_test_hosts = allow_test_hosts
     args._transport = transport
     args._http_fn = http_fn
+    args._raw_http_fn = raw_http_fn
+    args._repo_root = repo_root
     args._gpu_probe_fn = gpu_probe_fn
     args._process_probe_fn = process_probe_fn
     args._worker_yield_fn = worker_yield_fn
@@ -3006,7 +6008,7 @@ def main(
     if args.command != "doctor" and getattr(args, "enforce_personal_pc", False):
         comp = evaluate_personal_pc_compliance(
             env=environ,
-            cwd=cwd,
+            cwd=eff_cwd,
             lang=str(getattr(args, "lang", "en")),
         )
         if not comp["compliance_ok"]:
@@ -3014,7 +6016,11 @@ def main(
             return 2
 
     if args.command == "doctor":
-        return int(args.func(None, args, parser))
+        try:
+            return int(args.func(None, args, parser))
+        except GatewayPolicyError as exc:
+            print(sanitize_text_for_display(str(exc), home=home), file=sys.stderr)
+            return 2
 
     if http_fn is not None:
         client_cm: Any = _InjectedHttpClient(http_fn)

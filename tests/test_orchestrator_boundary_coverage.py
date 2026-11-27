@@ -20,10 +20,17 @@ def test_gh_read_adapters_handle_failure_or_empty_output(monkeypatch, returncode
 
 
 def test_gh_read_adapters_normalize_metadata_and_missing_optional_fields(monkeypatch):
-    prs = [{"number": 7, "files": [{"path": "src/worker.py", "additions": 2, "deletions": 1}]}]
+    prs = [{"number": 7, "changedFiles": 2}]
+    files = [
+        {"filename": "src/worker.py", "additions": 2, "deletions": 1,
+         "patch": "@@ -1 +1,2 @@\n-old_value = 0\n+new_value = 1\n+other_value = 2"},
+        {"filename": "src/config.py", "additions": 1, "deletions": 0,
+         "patch": "@@ -0,0 +1 @@\n+enabled = True"},
+    ]
     discussion = {"id": "discussion-id", "number": 3}
     run = Mock(side_effect=[
         SimpleNamespace(returncode=0, stdout=json.dumps(prs)),
+        SimpleNamespace(returncode=0, stdout=json.dumps([[files[0]], [files[1]]])),
         SimpleNamespace(returncode=0, stdout=json.dumps({"data": {"repository": {"discussions": {"nodes": [discussion]}}}})),
     ])
     monkeypatch.setattr(orchestrator.subprocess, "run", run)
@@ -33,8 +40,11 @@ def test_gh_read_adapters_normalize_metadata_and_missing_optional_fields(monkeyp
     assert normalized[0]["body"] == ""
     assert normalized[0]["mergeable"] == "UNKNOWN"
     assert normalized[0]["isDraft"] is False
-    assert normalized[0]["files"][0]["filename"] == "src/worker.py"
-    assert normalized[0]["files"][0]["additions"] == 2
+    assert normalized[0]["files"] == files
+    assert normalized[0]["diff_retrieved"] is True
+    assert run.call_args_list[1].args[0] == [
+        "gh", "api", "--paginate", "--slurp", "repos/fixture/repo/pulls/7/files?per_page=100",
+    ]
     assert orchestrator._fetch_discussions_via_gh("fixture", "repo") == [discussion]
 
 
@@ -47,6 +57,27 @@ def test_general_discussion_reply_contains_wiki_and_idempotency_marker():
     assert orchestrator.ORCHESTRATOR_REPLY_MARKER in plan["reply_markdown"]
     assert "reader" in plan["reply_markdown"]
     assert plan["recommended_wiki_pages"]
+
+
+@pytest.mark.parametrize("returncode, files", [
+    (1, []),
+    (0, []),
+    (0, [{"filename": "src/worker.py", "additions": 1, "deletions": 0}]),
+    (0, [{"filename": "src/worker.py", "additions": 2, "deletions": 0, "patch": "+enabled = True"}]),
+])
+def test_pr_audit_holds_incomplete_diff(monkeypatch, returncode, files):
+    prs = [{"number": 7, "changedFiles": 1, "mergeable": "MERGEABLE"}]
+    run = Mock(side_effect=[
+        SimpleNamespace(returncode=0, stdout=json.dumps(prs)),
+        SimpleNamespace(returncode=returncode, stdout=json.dumps([files])),
+    ])
+    monkeypatch.setattr(orchestrator.subprocess, "run", run)
+    pr, = orchestrator._fetch_open_prs_via_gh("fixture/repo")
+    decision = orchestrator.evaluate_pull_request_for_merge(pr)
+    assert decision["verdict"] == "HOLD_FOR_INCOMPLETE_DIFF"
+    assert decision["diff_retrieved"] is False
+    assert decision["security_passed"] is False
+    assert decision["can_merge"] is False
 
 
 def test_quality_audit_handles_corrupt_report_files(tmp_path, monkeypatch):
@@ -78,15 +109,11 @@ def test_cycle_command_dispatch_and_receipts_are_offline(monkeypatch, tmp_path, 
     monkeypatch.setattr(orchestrator, "run_hourly_quality_and_experiment_audit", lambda: {"fixture": True})
     output = tmp_path / "nested" / "cycle.json"
     report = orchestrator.run_orchestrator_cycle("fixture/repo", execute_live, auto_merge, output)
-    merging = execute_live and auto_merge
-    assert report["prs_merged_live"] == ([7] if merging and returncode == 0 else [])
+    assert report["prs_merged_live"] == []
     assert report["discussion_replies_posted"] == int(execute_live and returncode == 0)
-    assert report["pr_decisions"][0]["merged_live"] is bool(merging and returncode == 0)
+    assert report["pr_decisions"][0]["merged_live"] is False
     assert report["discussion_actions"][1]["posted_live"] is False
-    assert run.call_count == (2 if merging else 0) + int(execute_live)
-    if merging:
-        assert run.call_args_list[0].args[0] == ["gh", "pr", "comment", "7", "--repo", "fixture/repo", "--body", "fixture review"]
-        assert run.call_args_list[1].args[0][:6] == ["gh", "pr", "merge", "7", "--repo", "fixture/repo"]
+    assert run.call_count == int(execute_live)
     if execute_live:
         discussion_command = run.call_args_list[-1].args[0]
         assert discussion_command[:3] == ["gh", "api", "graphql"]
@@ -111,5 +138,5 @@ def test_main_forwards_flags_and_prints_json(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(orchestrator, "run_orchestrator_cycle", cycle)
     target = tmp_path / "cycle.json"
     assert orchestrator.main(["--repo", "fixture/repo", "--execute-live", "--no-auto-merge", "--output", str(target)]) == 0
-    cycle.assert_called_once_with(repo="fixture/repo", execute_live=True, auto_merge=False, output_path=target)
+    cycle.assert_called_once_with(repo="fixture/repo", execute_live=True, output_path=target)
     assert json.loads(capsys.readouterr().out) == {"fixture": True}

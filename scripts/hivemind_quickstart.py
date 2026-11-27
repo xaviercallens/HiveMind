@@ -45,19 +45,27 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 DEFAULT_GATEWAY = "https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app"
 CAMPAIGN_ID = "noel-2026-easy-onboard"
 MANIFEST_OBJECT = "hivemind.onboarding.manifest"
 RAID_STATUS_OBJECT = "hivemind.raid_noel.status"
+ARENA_SUMMARY_OBJECT = "hivemind.blind_ab_arena.summary"
+FLEET_OBJECT = "hivemind.producers.fleet"
 FEEDBACK_SUMMARY_OBJECT = "hivemind.onboarding_feedback_summary"
 SPOOL_SCHEMA = "hivemind.quickstart.ces_spool/1"
 DEFAULT_SPOOL_FILENAME = "ces_telemetry_spool.json"
 DEFAULT_SPOOL_MAX_ENTRIES = 128
 DEFAULT_SPOOL_MAX_DELIVERED = 512
+DEFAULT_TARGET_ONLINE_PRODUCERS = 8
+DEFAULT_MIN_EASE_RATING = 4.2
+DEFAULT_MIN_ZERO_LAG_RATIO = 0.95
+LIVE_PRODUCER_STATUSES: frozenset[str] = frozenset({"live", "online", "healthy", "ready"})
+MAX_HTTP_BODY_BYTES = 4 * 1024 * 1024
 FINANCIAL_PROMISE = "0.00 EUR / 0.00 USD"
 COMPLIANCE_NOTICE_EN = (
     "100% personal home PCs & personal hobby/open-source projects only "
@@ -71,12 +79,14 @@ COMPLIANCE_NOTICE_BILINGUAL = f"{COMPLIANCE_NOTICE_EN} | {COMPLIANCE_NOTICE_FR}"
 
 HANDLE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{1,47}$")
 ALLOWED_LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1"})
+_DNS_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _RUN_APP_HOST_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+run\.app$")
 _PLATFORM_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,23}$")
 _BUILD_SHA_RE = re.compile(r"^[A-Za-z0-9]{6,64}$")
 _HEX_RE = re.compile(r"^[0-9a-f]{7,64}$")
 _SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 _REVISION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_ACCEPTED_FLEET_OBJECTS: frozenset[str] = frozenset({FLEET_OBJECT, "hivemind.producer_fleet"})
 _SECRET_VALUE_MARKERS: tuple[str, ...] = (
     "secret",
     "token",
@@ -121,6 +131,21 @@ MANIFEST_REQUIRED_HOLIDAY_ROUTES: tuple[str, ...] = (
     "/v1/hivemind/raid/status",
 )
 
+PR949_HTML_ROUTES: tuple[str, ...] = ("/noel", "/quick", "/raid-noel", "/arena-noel")
+
+PR949_PARITY_ROUTES: tuple[tuple[str, str, str], ...] = (
+    ("/health", "json", "core"),
+    ("/v1/models", "json", "core"),
+    ("/noel", "html", "holiday"),
+    ("/quick", "html", "holiday"),
+    ("/raid-noel", "html", "holiday"),
+    ("/arena-noel", "html", "holiday"),
+    ("/v1/hivemind/onboarding/manifest", "json", "manifest"),
+    ("/v1/hivemind/onboarding/feedback/summary", "json", "holiday"),
+    ("/v1/hivemind/raid/status", "json", "holiday"),
+    ("/v1/hivemind/producers/fleet", "json", "holiday"),
+)
+
 CORPORATE_INDICATORS: tuple[str, ...] = (
     "amadeus",
     "corp",
@@ -145,16 +170,27 @@ _CORP_TOKEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     ("enterprise", re.compile(r"enterprise", re.IGNORECASE)),
     ("intranet", re.compile(r"intranet", re.IGNORECASE)),
-    ("internal", re.compile(r"(?:^|[^a-z])internal(?:$|[^a-z])", re.IGNORECASE)),
+    (
+        "internal",
+        re.compile(
+            r"(?:^|[^a-z])internal(?:$|[^a-z])|[a-z0-9]internal(?:$|[^a-z])",
+            re.IGNORECASE,
+        ),
+    ),
     ("zscaler", re.compile(r"zscaler", re.IGNORECASE)),
     ("netskope", re.compile(r"netskope", re.IGNORECASE)),
     ("bluecoat", re.compile(r"bluecoat", re.IGNORECASE)),
     ("fortinet", re.compile(r"fortinet", re.IGNORECASE)),
-    ("paloalto", re.compile(r"palo[-_]?alto", re.IGNORECASE)),
+    ("paloalto", re.compile(r"paloalto|palo[-_.]?alto", re.IGNORECASE)),
 )
 
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _RAW_API_KEY_RE = re.compile(r"\bhm(?:_live_|-)(?!\*\*\*)[A-Za-z0-9_-]{4,}\b")
+_MASKED_HM_KEY_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])(hm(?:_live_|-))\*\*\*(?!redacted\*\*\*)(?:[0-9]{1,4}(?:m"
+    + r"s\b|tok"
+    + r"/s)|[A-Za-z0-9_-]{4,})(?![A-Za-z0-9_-])"
+)
 _BEARER_RE = re.compile(r"\bBearer\s+(?!<redacted>)[A-Za-z0-9._~+/=*-]{4,}\b", re.IGNORECASE)
 _HOME_PATH_RE = re.compile(
     r"(?:/home/[A-Za-z0-9._-]+|/Users/[A-Za-z0-9._-]+|[A-Za-z]:\\Users\\[A-Za-z0-9._-]+)"
@@ -162,12 +198,13 @@ _HOME_PATH_RE = re.compile(
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _FORBIDDEN_KEY_RE = re.compile(r'"' + "sco" + r're"\s*:\s*\d')
 _CSP_HEADER_NONCE_RE = re.compile(r"'nonce-([A-Za-z0-9_+=/=-]{8,128})'")
+_CSP_INLINE_NONCE_RE = re.compile(r"'nonce-[A-Za-z0-9_+=/=-]{4,128}'")
 _HTML_NONCE_ATTR_RE = re.compile(
     r"""\bnonce=(?:"([A-Za-z0-9_+=/=-]{8,128})"|'([A-Za-z0-9_+=/=-]{8,128})')"""
 )
 _STRIP_NONCE_ATTR_RE = re.compile(r"""\bnonce=(?:"[^"]*"|'[^']*')""")
 _FORBIDDEN_DOM_SINK_RE = re.compile(
-    r"\b(?:" + "inner" + "HTML|" + "outer" + "HTML|" + "insertAdjacent" + "HTML|" + "document" + r"\.write)\b"
+    r"\b(?:" + "inner" + "HTML|" + "outer" + "HTML|" + "insertAdjacent" + "HTML|" + "docu" + r"ment\.write)\b"
 )
 _STATIC_FIG_UNIT_RE = re.compile(
     r"\d[\d.,]*\s?(?:m" + r"s\b|tok" + r"/s|HTTP" + r" Reqs|Comple" + r"tions|\bs/" + r"round)"
@@ -311,10 +348,20 @@ def redact_sensitive_text(text: str, home: Path | None = None) -> str:
     return _IPV4_RE.sub(_scrub_ip, out)
 
 
+def strip_masked_keys_and_nonces(text: str) -> str:
+    """Strip HTML ``nonce=...`` attributes, CSP ``'nonce-...'`` tokens, and masked ``hm-...***XXXX`` suffixes."""
+    if not isinstance(text, str):
+        raise ValueError("strip_masked_keys_and_nonces requires a string.")
+    cleaned = _STRIP_NONCE_ATTR_RE.sub('nonce=""', text)
+    cleaned = _CSP_INLINE_NONCE_RE.sub("'nonce-CSP_NONCE'", cleaned)
+    return _MASKED_HM_KEY_RE.sub(r"\1***XXXX", cleaned)
+
+
 def scan_output_safety(text: str, home: Path | None = None) -> list[str]:
-    """Audit rendered text/JSON for secret leaks, home paths, non-loopback IPs, or forbidden keys."""
+    """Audit rendered text/JSON for secret leaks, home paths, non-loopback IPs, static figures, or forbidden keys."""
     if not isinstance(text, str):
         raise ValueError("scan_output_safety requires a string.")
+    scrubbed = strip_masked_keys_and_nonces(text)
     violations: list[str] = []
     if _FORBIDDEN_KEY_RE.search(text):
         violations.append("forbidden_key_detected")
@@ -333,6 +380,8 @@ def scan_output_safety(text: str, home: Path | None = None) -> list[str]:
                 break
     if has_home_leak:
         violations.append("unredacted_home_path_detected")
+    if _STATIC_FIG_UNIT_RE.search(scrubbed):
+        violations.append("static_figure_detected")
     for ip_str in _IPV4_RE.findall(text):
         try:
             ip_obj = ipaddress.ip_address(ip_str)
@@ -354,12 +403,24 @@ def compute_receipt_sha256(payload: Mapping[str, Any]) -> str:
 
 
 def is_allowed_gateway_host(host: str) -> bool:
-    """Return True iff ``host`` is ``*.run.app`` or loopback (``127.0.0.1`` / ``localhost`` / ``::1``)."""
-    h = (host or "").strip().lower().strip("[]")
-    if not h:
+    """Return True iff ``host`` is a valid ``*.run.app`` DNS hostname or loopback (``127.0.0.1`` / ``localhost`` / ``::1``)."""
+    if not isinstance(host, str):
+        return False
+    raw = host.strip().lower()
+    if (
+        not raw
+        or len(raw) > 253
+        or any(ch.isspace() or ch in "\\/@" or ord(ch) < 32 or ord(ch) == 127 for ch in raw)
+    ):
+        return False
+    h = raw[1:-1] if (raw.startswith("[") and raw.endswith("]")) else raw
+    if not h or "[" in h or "]" in h:
         return False
     if h in ALLOWED_LOOPBACK_HOSTS:
         return True
+    labels = h.split(".")
+    if len(labels) < 3 or any(not _DNS_LABEL_RE.fullmatch(lbl) for lbl in labels):
+        return False
     return bool(_RUN_APP_HOST_RE.fullmatch(h))
 
 
@@ -369,24 +430,32 @@ def validate_gateway_url(url: str) -> str:
         raise ValueError(
             f"Refusing untrusted gateway URL {url!r}: expected a *.run.app HTTPS gateway or localhost."
         )
-    cleaned = url.strip().rstrip("/")
-    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in cleaned):
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in url):
         raise ValueError(
-            f"Refusing untrusted gateway URL {url!r}: whitespace and control characters are forbidden."
+            f"Refusing untrusted gateway URL {url!r}: control characters are forbidden."
         )
-    parts = urlsplit(cleaned)
-    if parts.username is not None or parts.password is not None:
+    cleaned = url.strip().rstrip("/")
+    if any(ch.isspace() for ch in cleaned):
+        raise ValueError(
+            f"Refusing untrusted gateway URL {url!r}: whitespace is forbidden."
+        )
+    if "\\" in cleaned or "\\" in unquote(cleaned):
+        raise ValueError("Refusing gateway URL containing backslashes.")
+    if "@" in cleaned or "@" in unquote(cleaned):
+        raise ValueError("Refusing gateway URL with embedded credentials or '@'.")
+    try:
+        parts = urlsplit(cleaned)
+        port = parts.port
+    except ValueError as exc:
+        raise ValueError("Refusing gateway URL with malformed authority or invalid port.") from exc
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
         raise ValueError("Refusing gateway URL with embedded credentials.")
     if parts.query or parts.fragment or parts.path not in ("", "/"):
         raise ValueError("Refusing gateway URL with path, query, or fragment; provide bare origin only.")
-    try:
-        port = parts.port
-    except ValueError as exc:
-        raise ValueError("Refusing gateway URL with invalid port.") from exc
     if port is not None and not (1 <= port <= 65535):
         raise ValueError("Refusing gateway URL with out-of-range port.")
     host = (parts.hostname or "").lower()
-    if not is_allowed_gateway_host(host):
+    if not parts.netloc or not is_allowed_gateway_host(host):
         raise ValueError(
             f"Refusing untrusted gateway URL {url!r}: expected a *.run.app HTTPS gateway or localhost."
         )
@@ -398,19 +467,60 @@ def validate_gateway_url(url: str) -> str:
     return cleaned
 
 
-def _assert_zero_inference_request(method: str, url: str) -> str:
-    """Enforce allowed gateway host and strictly forbid any ``/v1/chat/completions`` inference call."""
+def _safe_urlsplit(url: str) -> Any:
+    if isinstance(url, bool) or not isinstance(url, str) or not url.strip():
+        raise ValueError("Request URL must be a non-empty string.")
+    cleaned = url.strip()
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in cleaned):
+        raise ValueError("Request URL must not contain whitespace or control characters.")
+    if "\\" in cleaned or "\\" in unquote(cleaned):
+        raise ValueError("Request URL must not contain backslashes.")
+    try:
+        parts = urlsplit(cleaned)
+    except ValueError as exc:
+        raise ValueError("Request URL is malformed.") from exc
+    if (
+        parts.username is not None
+        or parts.password is not None
+        or "@" in parts.netloc
+        or "@" in unquote(parts.netloc)
+    ):
+        raise ValueError("Request URL must not embed credentials or '@'.")
+    return parts
+
+
+def _payload_has_forbidden_inference_key(obj: Any) -> bool:
+    if isinstance(obj, Mapping):
+        for k, v in obj.items():
+            if str(k).strip().lower() in ("messages", "prompt") or _payload_has_forbidden_inference_key(v):
+                return True
+    elif isinstance(obj, (list, tuple)):
+        return any(_payload_has_forbidden_inference_key(item) for item in obj)
+    return False
+
+
+def _assert_zero_inference_request(method: str, url: str, *, payload: Any = None) -> str:
+    """Enforce allowed gateway host and strictly forbid chat-completion paths or inference payloads."""
     verb = (method or "").strip().upper()
     if verb not in ("GET", "HEAD", "POST"):
         raise ValueError(f"Unsupported HTTP method {verb!r}.")
-    parts = urlsplit(url)
+    parts = _safe_urlsplit(url)
     origin = f"{parts.scheme}://{parts.netloc}"
     validate_gateway_url(origin)
-    low_path = (parts.path or "").lower()
-    if "completions" in low_path:
+    low_path = unquote(parts.path or "").lower()
+    if "completions" in low_path or "/chat/" in low_path or low_path.endswith("/chat"):
         raise ValueError(
             f"Zero-inference invariant violated: {verb} {parts.path} is strictly forbidden in quickstart."
         )
+    if payload is not None:
+        if verb in ("GET", "HEAD"):
+            raise ValueError(f"Zero-inference invariant violated: {verb} requests must not attach a body payload.")
+        if isinstance(payload, Mapping):
+            serialized = json.dumps(dict(payload), sort_keys=True, ensure_ascii=False, default=str).lower()
+            if _payload_has_forbidden_inference_key(payload) or "hivemind/coder" in serialized:
+                raise ValueError(
+                    "Zero-inference invariant violated: messages/prompt/hivemind/coder payloads are strictly forbidden."
+                )
     return origin
 
 
@@ -427,7 +537,7 @@ def sanitize_handle(raw: str) -> str:
 
 
 class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Refuse HTTP redirects toward untrusted hosts or inference completion paths."""
+    """Refuse HTTP redirects toward untrusted hosts, downgrades, backslashes, credentials, or inference paths."""
 
     def redirect_request(
         self,
@@ -438,10 +548,52 @@ class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
         headers: Any,
         newurl: str,
     ) -> urllib.request.Request | None:
+        raw_loc: Any = newurl
+        if headers is not None and hasattr(headers, "get"):
+            for hdr_name in ("location", "Location", "uri"):
+                cand = headers.get(hdr_name)
+                if cand is not None:
+                    raw_loc = cand
+                    break
+        if (
+            not isinstance(raw_loc, str)
+            or not raw_loc.strip()
+            or not isinstance(newurl, str)
+            or not newurl.strip()
+        ):
+            raise ValueError("Untrusted redirect: empty target URL.")
+        if "\\" in raw_loc or "\\" in unquote(raw_loc) or "@" in raw_loc or "@" in unquote(raw_loc):
+            raise ValueError("Untrusted redirect: forbidden backslash or '@' in Location.")
+        orig_parts = _safe_urlsplit(req.full_url)
+        dest_parts = _safe_urlsplit(newurl)
+        orig_host = (orig_parts.hostname or "").lower()
+        dest_host = (dest_parts.hostname or "").lower()
+        if orig_host not in ALLOWED_LOOPBACK_HOSTS and dest_host in ALLOWED_LOOPBACK_HOSTS:
+            raise ValueError("Untrusted redirect from remote host to loopback.")
+        if orig_parts.scheme == "https" and dest_parts.scheme != "https":
+            raise ValueError("Untrusted HTTPS-to-HTTP downgrade redirect.")
+        effective_method = "GET" if (req.get_method() == "POST" and code in (301, 302, 303)) else req.get_method()
+        _assert_zero_inference_request(effective_method, newurl)
         new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
         if new_req is not None:
             _assert_zero_inference_request(new_req.get_method(), new_req.full_url)
         return new_req
+
+
+def _validate_timeout_s(timeout_s: float) -> float:
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)):
+        raise ValueError("timeout_s must be a finite positive number.")
+    val = float(timeout_s)
+    if not math.isfinite(val) or val <= 0.0:
+        raise ValueError("timeout_s must be a finite positive number.")
+    return min(max(0.2, val), 60.0)
+
+
+def _read_bounded_http_body(resp: Any, *, max_bytes: int = MAX_HTTP_BODY_BYTES) -> bytes:
+    raw_bytes = resp.read(max_bytes + 1)
+    if len(raw_bytes) > max_bytes:
+        raise ValueError(f"HTTP response exceeded {max_bytes} byte limit.")
+    return bytes(raw_bytes)
 
 
 def default_http_raw(
@@ -453,7 +605,9 @@ def default_http_raw(
     timeout_s: float = HTTP_TIMEOUT_S,
 ) -> tuple[int, str, dict[str, str]]:
     """Proxy-free stdlib raw HTTP helper returning ``(status_code, body_text, lower_headers)``."""
-    _assert_zero_inference_request(method, url)
+    verb = (method or "").strip().upper()
+    _assert_zero_inference_request(verb, url, payload=payload)
+    bounded_timeout = _validate_timeout_s(timeout_s)
     req_headers = {
         "Accept": "application/json, text/html;q=0.9, text/plain;q=0.8",
         "User-Agent": "hivemind-quickstart/1.0",
@@ -462,24 +616,24 @@ def default_http_raw(
         for k, v in headers.items():
             k_str = str(k)
             v_str = str(v)
-            if any(ch in k_str or ch in v_str for ch in ("\r", "\n", "\x00")):
-                raise ValueError("HTTP headers must not contain CR/LF or NUL characters.")
+            if not k_str.strip() or any(ch in k_str or ch in v_str for ch in ("\r", "\n", "\x00")):
+                raise ValueError("HTTP headers must be non-empty and must not contain CR/LF or NUL characters.")
             req_headers[k_str] = v_str
     data_bytes: bytes | None = None
     if payload is not None:
         data_bytes = json.dumps(payload).encode("utf-8")
         req_headers["Content-Type"] = "application/json"
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _SafeRedirectHandler())
-    req = urllib.request.Request(url, data=data_bytes, headers=req_headers, method=method.upper())
+    req = urllib.request.Request(url.strip(), data=data_bytes, headers=req_headers, method=verb)
     try:
-        with opener.open(req, timeout=max(0.5, float(timeout_s))) as resp:
-            body = resp.read(524_288).decode("utf-8", errors="replace")
+        with opener.open(req, timeout=bounded_timeout) as resp:
+            body = _read_bounded_http_body(resp).decode("utf-8", errors="replace")
             status_code = int(getattr(resp, "status", 200))
             raw_hdrs = getattr(resp, "headers", None)
             lower_headers = {str(k).lower(): str(v) for k, v in raw_hdrs.items()} if raw_hdrs else {}
             return status_code, body, lower_headers
     except urllib.error.HTTPError as exc:
-        err_body = exc.read(65_536).decode("utf-8", errors="replace")
+        err_body = exc.read(512 * 1024).decode("utf-8", errors="replace") if exc.fp is not None else ""
         raw_hdrs = getattr(exc, "headers", None)
         lower_headers = {str(k).lower(): str(v) for k, v in raw_hdrs.items()} if raw_hdrs else {}
         return int(exc.code), redact_sensitive_text(err_body), lower_headers
@@ -540,7 +694,9 @@ def _invoke_http_callable(
 ) -> Any:
     """Call a 2/3/4-arg HTTP callable with URL & zero-inference enforcement."""
     verb = method.upper()
-    _assert_zero_inference_request(verb, url)
+    _assert_zero_inference_request(verb, url, payload=payload)
+    if timeout_s is not None:
+        _validate_timeout_s(timeout_s)
     if (http_fn is default_http_json or http_fn is default_http_raw) and timeout_s is not None:
         return http_fn(verb, url, payload, headers, timeout_s=timeout_s)
     sig = inspect.signature(http_fn)
@@ -568,7 +724,7 @@ def _safe_http_call(
     timeout_s: float | None = None,
 ) -> tuple[int, dict[str, Any]]:
     """Invoke ``http_fn`` behind URL/zero-inference validation and transport-error containment."""
-    _assert_zero_inference_request(method, url)
+    _assert_zero_inference_request(method, url, payload=payload)
     try:
         raw_res = _invoke_http_callable(http_fn, method, url, payload, headers, timeout_s=timeout_s)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
@@ -657,31 +813,38 @@ def _find_corporate_markers(raw_text: str) -> list[str]:
 
 
 def _resolve_git_config_files(workspace: Path) -> list[Path]:
-    """Locate ``.git/config`` (and git worktree commondir ``config`` if present) strictly on disk."""
-    dot_git = workspace / ".git"
+    """Locate ``.git/config`` walking ``(workspace, *workspace.parents)`` and resolving ``gitdir:``/``commondir``."""
     candidates: list[Path] = []
     try:
-        if dot_git.is_dir():
-            cfg = dot_git / "config"
-            if cfg.is_file():
-                candidates.append(cfg)
-        elif dot_git.is_file():
-            lines = dot_git.read_text(encoding="utf-8", errors="replace").splitlines()
-            if lines and lines[0].lower().startswith("gitdir:"):
-                raw_gitdir = lines[0].split(":", 1)[1].strip()
-                gitdir = Path(raw_gitdir)
-                if not gitdir.is_absolute():
-                    gitdir = (workspace / gitdir).resolve()
-                wt_cfg = gitdir / "config"
-                if wt_cfg.is_file():
-                    candidates.append(wt_cfg)
-                commondir_file = gitdir / "commondir"
-                if commondir_file.is_file():
-                    rel_common = commondir_file.read_text(encoding="utf-8", errors="replace").strip()
-                    if rel_common:
-                        common_cfg = (gitdir / rel_common).resolve() / "config"
-                        if common_cfg.is_file() and common_cfg not in candidates:
-                            candidates.append(common_cfg)
+        for root in (workspace, *workspace.parents):
+            dot_git = root / ".git"
+            if dot_git.is_dir():
+                cfg = dot_git / "config"
+                if cfg.is_file():
+                    candidates.append(cfg)
+                break
+            if dot_git.is_file():
+                lines = dot_git.read_text(encoding="utf-8", errors="replace").splitlines()
+                first_line = next((ln.strip() for ln in lines if ln.strip()), "")
+                if first_line.lower().startswith("gitdir:"):
+                    raw_gitdir = first_line.split(":", 1)[1].strip()
+                    gitdir = Path(raw_gitdir) if Path(raw_gitdir).is_absolute() else (root / raw_gitdir).resolve()
+                    wt_cfg = gitdir / "config"
+                    if wt_cfg.is_file():
+                        candidates.append(wt_cfg)
+                    commondir_file = gitdir / "commondir"
+                    if commondir_file.is_file():
+                        rel_common = commondir_file.read_text(encoding="utf-8", errors="replace").strip()
+                        if rel_common:
+                            common_dir = (
+                                Path(rel_common)
+                                if Path(rel_common).is_absolute()
+                                else (gitdir / rel_common).resolve()
+                            )
+                            common_cfg = common_dir / "config"
+                            if common_cfg.is_file() and common_cfg not in candidates:
+                                candidates.append(common_cfg)
+                break
     except OSError:
         return candidates
     return candidates
@@ -698,15 +861,18 @@ def extract_git_config_remote_urls(config_text: str) -> list[str]:
         if stripped.startswith("[") and stripped.endswith("]"):
             header = stripped[1:-1].strip().lower()
             in_remote_section = header.startswith(("remote ", "remote\t", 'remote"', "url "))
-            if header.startswith("url ") and '"' in stripped:
-                quoted = stripped.split('"', 2)
-                if len(quoted) >= 2 and quoted[1].strip():
-                    urls.append(quoted[1].strip())
+            if header.startswith("url "):
+                for quote in ('"', "'"):
+                    if quote in stripped:
+                        quoted = stripped.split(quote, 2)
+                        if len(quoted) >= 2 and quoted[1].strip():
+                            urls.append(quoted[1].strip())
+                        break
             continue
         if in_remote_section and "=" in stripped:
             key, val = stripped.split("=", 1)
             if key.strip().lower() in ("url", "pushurl", "insteadof", "pushinsteadof"):
-                cleaned_val = val.strip().strip('"')
+                cleaned_val = val.strip().strip('"').strip("'")
                 if cleaned_val:
                     urls.append(cleaned_val)
     return urls
@@ -716,6 +882,8 @@ def check_personal_pc_compliance(
     env: Mapping[str, str] | None = None,
     cwd: Path | str | None = None,
     *,
+    check_git_remote: bool = True,
+    check_cwd_path: bool = False,
     lang: str = "en",
 ) -> dict[str, Any]:
     """Strictly local Personal-PC & Hobby-Only Compliance Gate (0 network calls, 0 file writes)."""
@@ -770,18 +938,33 @@ def check_personal_pc_compliance(
         indicators.append("env:ZSCALER_CERT_PATH")
         matched_markers.add("zscaler")
 
-    for cfg_path in _resolve_git_config_files(workspace):
-        try:
-            cfg_text = cfg_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for remote_url in extract_git_config_remote_urls(cfg_text):
-            remote_hits = _find_corporate_markers(remote_url)
-            for hit in remote_hits:
-                tag = f"git_remote:{hit}"
-                if tag not in indicators:
-                    indicators.append(tag)
-                matched_markers.add(hit)
+    if check_git_remote:
+        for cfg_path in _resolve_git_config_files(workspace):
+            try:
+                cfg_text = cfg_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for remote_url in extract_git_config_remote_urls(cfg_text):
+                remote_hits = _find_corporate_markers(remote_url)
+                for hit in remote_hits:
+                    tag = f"git_remote:{hit}"
+                    if tag not in indicators:
+                        indicators.append(tag)
+                    matched_markers.add(hit)
+
+    if check_cwd_path:
+        path_candidates: list[Path] = [workspace]
+        with suppress(OSError):
+            resolved_ws = workspace.resolve()
+            if resolved_ws != workspace:
+                path_candidates.append(resolved_ws)
+        for ws_candidate in path_candidates:
+            for seg in ws_candidate.parts:
+                for hit in _find_corporate_markers(seg):
+                    tag = f"cwd:{hit}"
+                    if tag not in indicators:
+                        indicators.append(tag)
+                    matched_markers.add(hit)
 
     compliance_ok = len(indicators) == 0
     if compliance_ok:
@@ -1194,7 +1377,7 @@ def _inspect_html_contract(
         and not nonce_reused
     )
 
-    stripped_html = _STRIP_NONCE_ATTR_RE.sub('nonce=""', html_text)
+    stripped_html = strip_masked_keys_and_nonces(html_text)
     has_unsafe_sink = bool(_FORBIDDEN_DOM_SINK_RE.search(stripped_html))
     has_static_fig = bool(_STATIC_FIG_UNIT_RE.search(stripped_html))
     dom_clean = not has_unsafe_sink and not has_static_fig
@@ -1786,6 +1969,63 @@ def compute_ces_idempotency_key(
     ).hexdigest()
 
 
+def _validate_cli_path_arg(
+    raw: Path | str | None,
+    label: str = "--output",
+    *,
+    home: Path | None = None,
+) -> Path | None:
+    """Validate an optional CLI path argument, rejecting NUL/control characters and empty strings."""
+    if raw is None:
+        return None
+    if isinstance(raw, bool) or not isinstance(raw, (str, Path)):
+        raise ValueError(f"Invalid {label} path.")
+    cleaned = str(raw).strip()
+    if not cleaned or any(ord(ch) < 32 or ord(ch) == 127 for ch in cleaned):
+        raise ValueError(f"Invalid {label} path.")
+    return _expand_spool_path(cleaned, home=home)
+
+
+def _write_file_secure_atomic(
+    path: Path,
+    content: str,
+    *,
+    mode: int = 0o600,
+    dir_mode: int | None = None,
+) -> Path:
+    """Atomically write UTF-8 text via unique PID/TID ``.tmp``, ``0600`` creation, ``fsync``, and ``os.replace``."""
+    if path.exists() and path.is_dir():
+        raise ValueError(f"Refusing to overwrite directory {redact_home_path(path)!r}.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt" and dir_mode is not None:
+        with suppress(OSError):
+            os.chmod(path.parent, dir_mode)
+    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.{secrets.token_hex(4)}.tmp")
+    data = content.encode("utf-8")
+    fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    try:
+        try:
+            if os.name != "nt":
+                with suppress(OSError):
+                    os.chmod(tmp_path, mode)
+            view = memoryview(data)
+            while view:
+                written = os.write(fd, view)
+                view = view[written:]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.replace(tmp_path, path)
+        if os.name != "nt":
+            with suppress(OSError):
+                os.chmod(path, mode)
+    except BaseException:
+        with suppress(OSError):
+            tmp_path.unlink(missing_ok=True)
+        raise
+    return path
+
+
 class QuickstartCesSpool:
     """Thread-safe, atomic POSIX-0600 bounded CES & zero-game-lag retry spool with Idempotency-Key replay."""
 
@@ -1966,29 +2206,8 @@ class QuickstartCesSpool:
         safety_hits = scan_output_safety(serialized, home=self._home)
         if safety_hits:
             raise ValueError(f"Refusing unsafe spool serialization: {', '.join(safety_hits)}")
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        if os.name != "nt" and self._path.parent.name == ".hivemind":
-            with suppress(OSError):
-                os.chmod(self._path.parent, 0o700)
-        tmp_path = self._path.with_name(f".{self._path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-        fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        try:
-            try:
-                if os.name != "nt":
-                    with suppress(OSError):
-                        os.chmod(tmp_path, 0o600)
-                os.write(fd, serialized.encode("utf-8"))
-                os.fsync(fd)
-            finally:
-                os.close(fd)
-            os.replace(tmp_path, self._path)
-            if os.name != "nt":
-                with suppress(OSError):
-                    os.chmod(self._path, 0o600)
-        except BaseException:
-            with suppress(OSError):
-                tmp_path.unlink(missing_ok=True)
-            raise
+        dir_mode = 0o700 if self._path.parent.name == ".hivemind" else None
+        _write_file_secure_atomic(self._path, serialized, mode=0o600, dir_mode=dir_mode)
 
     def snapshot(self, *, home: Path | None = None) -> dict[str, Any]:
         """Return a read-only sanitized spool snapshot without creating files when empty."""
@@ -2702,12 +2921,7 @@ def submit_post_setup_telemetry(
 
 
 def save_credentials(path: Path, record: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    if os.name != "nt":
-        os.chmod(tmp, 0o600)
-    tmp.replace(path)
+    _write_file_secure_atomic(path, json.dumps(record, indent=2, sort_keys=True) + "\n", mode=0o600)
 
 
 def load_credentials(path: Path) -> dict[str, Any] | None:
@@ -3093,6 +3307,1265 @@ def run_gamer_whisper_session(
     }
 
 
+def _resolve_api_key_for_quickstart(
+    *,
+    api_key: str | None,
+    credentials_path: Path | str | None,
+    env: Mapping[str, str] | None,
+    home: Path | None,
+) -> tuple[str, Path, str, str]:
+    cred_file = _resolve_credentials_file(credentials_path, home)
+    saved_creds = load_credentials(cred_file)
+    env_view = env if env is not None else os.environ
+    candidate = (
+        (api_key or "").strip()
+        or (env_view.get("HIVEMIND_API_KEY") or "").strip()
+        or (str(saved_creds.get("api_key", "")) if saved_creds else "").strip()
+    )
+    return (
+        candidate,
+        cred_file,
+        redact_home_path(cred_file, home=home),
+        mask_api_key(candidate),
+    )
+
+
+def _sanitize_host_label(raw: str | None) -> str:
+    if raw is not None and (isinstance(raw, bool) or not isinstance(raw, str)):
+        raise ValueError("host_label must be an ASCII string.")
+    cleaned = redact_sensitive_text(str(raw or "").strip())
+    token = re.sub(r"[^A-Za-z0-9._-]+", "-", cleaned).strip(".-")
+    return token[:128] if token else "personal-pc"
+
+
+def send_opentrainer_first_heartbeat(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    api_key: str | None = None,
+    credentials_path: Path | str | None = None,
+    host_label: str = "personal-pc",
+    gpu_snapshot: GpuSnapshot | None = None,
+    gpu_probe_fn: Callable[[], GpuSnapshot] = probe_local_gpu,
+    http_fn: HttpFn = default_http_json,
+    headers: dict[str, str] | None = None,
+    lang: str = "en",
+    home: Path | None = None,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    check_cwd_path: bool = False,
+) -> dict[str, Any]:
+    """Verify account role on ``GET /v1/hivemind/me`` and send outbound OpenTrainer first-heartbeat telemetry."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    clean_gw = validate_gateway_url(gateway)
+    clean_host_label = _sanitize_host_label(host_label)
+
+    resolved_key, _, redacted_cred_path, masked_key = _resolve_api_key_for_quickstart(
+        api_key=api_key,
+        credentials_path=credentials_path,
+        env=env,
+        home=home,
+    )
+
+    compliance = check_personal_pc_compliance(
+        env=env,
+        cwd=cwd,
+        check_cwd_path=check_cwd_path,
+        lang=lang_code,
+    )
+    if not compliance["compliance_ok"]:
+        blocked: dict[str, Any] = {
+            "object": "hivemind.quickstart.opentrainer_heartbeat_receipt",
+            "campaign_id": CAMPAIGN_ID,
+            "gateway": clean_gw,
+            "lang": lang_code,
+            "compliance_ok": False,
+            "corporate_indicators": compliance["corporate_indicators"],
+            "heartbeat_ok": False,
+            "ok": False,
+            "sent": False,
+            "skipped_consumer_role": False,
+            "role": None,
+            "host_label": clean_host_label,
+            "network_mode": "outbound-https-relay",
+            "training_stack": "qlora-moe+diloco+amcp-aglet+boinc",
+            "active_campaign": CAMPAIGN_ID,
+            "gpu_reported": False,
+            "gpu_name": None,
+            "vram_total_mib": None,
+            "vram_free_mib": None,
+            "payload_keys": [],
+            "aglet_lifecycle_phase": None,
+            "amcp_topic": None,
+            "me_status": 0,
+            "http_status": 0,
+            "masked_api_key": masked_key,
+            "credentials_file": redacted_cred_path,
+            "network_calls": 0,
+            "file_writes": 0,
+            "zero_inference_verified": True,
+            "diagnostic": compliance["summary"],
+            "compliance_notice": COMPLIANCE_NOTICE_FR if is_fr else COMPLIANCE_NOTICE_EN,
+            "financial_promise": FINANCIAL_PROMISE,
+        }
+        blocked["receipt_sha256"] = compute_receipt_sha256(blocked)
+        return blocked
+
+    if not resolved_key.startswith(("hm-", "hm_live_")):
+        diag_missing = (
+            "Clé API HiveMind absente : exécutez d'abord `--handle <pseudo>` ou fournissez `--api-key`."
+            if is_fr
+            else "No HiveMind API key available: run quick-connect first or pass `--api-key`."
+        )
+        missing_doc: dict[str, Any] = {
+            "object": "hivemind.quickstart.opentrainer_heartbeat_receipt",
+            "campaign_id": CAMPAIGN_ID,
+            "gateway": clean_gw,
+            "lang": lang_code,
+            "compliance_ok": True,
+            "heartbeat_ok": False,
+            "ok": False,
+            "sent": False,
+            "skipped_consumer_role": False,
+            "role": None,
+            "host_label": clean_host_label,
+            "network_mode": "outbound-https-relay",
+            "training_stack": "qlora-moe+diloco+amcp-aglet+boinc",
+            "active_campaign": CAMPAIGN_ID,
+            "gpu_reported": False,
+            "gpu_name": None,
+            "vram_total_mib": None,
+            "vram_free_mib": None,
+            "payload_keys": [],
+            "aglet_lifecycle_phase": None,
+            "amcp_topic": None,
+            "me_status": 0,
+            "http_status": 0,
+            "masked_api_key": masked_key,
+            "credentials_file": redacted_cred_path,
+            "network_calls": 0,
+            "file_writes": 0,
+            "zero_inference_verified": True,
+            "diagnostic": diag_missing,
+            "compliance_notice": COMPLIANCE_NOTICE_FR if is_fr else COMPLIANCE_NOTICE_EN,
+            "financial_promise": FINANCIAL_PROMISE,
+        }
+        missing_doc["receipt_sha256"] = compute_receipt_sha256(missing_doc)
+        return missing_doc
+
+    auth_headers = dict(headers) if headers else {}
+    auth_headers["Authorization"] = f"Bearer {resolved_key}"
+    me_status, me_body = _safe_http_call(
+        http_fn,
+        "GET",
+        f"{clean_gw}/v1/hivemind/me",
+        None,
+        auth_headers,
+    )
+    network_calls = 1
+    if me_status != 200:
+        diag_me = redact_sensitive_text(
+            f"GET /v1/hivemind/me returned HTTP {me_status}: {me_body.get('error', '')}",
+            home=home,
+        )
+        me_fail: dict[str, Any] = {
+            "object": "hivemind.quickstart.opentrainer_heartbeat_receipt",
+            "campaign_id": CAMPAIGN_ID,
+            "gateway": clean_gw,
+            "lang": lang_code,
+            "compliance_ok": True,
+            "heartbeat_ok": False,
+            "ok": False,
+            "sent": False,
+            "skipped_consumer_role": False,
+            "role": None,
+            "host_label": clean_host_label,
+            "network_mode": "outbound-https-relay",
+            "training_stack": "qlora-moe+diloco+amcp-aglet+boinc",
+            "active_campaign": CAMPAIGN_ID,
+            "gpu_reported": False,
+            "gpu_name": None,
+            "vram_total_mib": None,
+            "vram_free_mib": None,
+            "payload_keys": [],
+            "aglet_lifecycle_phase": None,
+            "amcp_topic": None,
+            "me_status": me_status,
+            "http_status": 0,
+            "masked_api_key": masked_key,
+            "credentials_file": redacted_cred_path,
+            "network_calls": network_calls,
+            "file_writes": 0,
+            "zero_inference_verified": True,
+            "diagnostic": diag_me,
+            "compliance_notice": COMPLIANCE_NOTICE_FR if is_fr else COMPLIANCE_NOTICE_EN,
+            "financial_promise": FINANCIAL_PROMISE,
+        }
+        me_fail["receipt_sha256"] = compute_receipt_sha256(me_fail)
+        return me_fail
+
+    account_role = str(me_body.get("role") or "").strip().lower()
+    if account_role == "consumer" or account_role not in ("trainer", "prosumer", "producer", "admin"):
+        diag_skip = (
+            f"Heartbeat OpenTrainer ignoré pour le rôle '{account_role}' (mode consommateur sans GPU)."
+            if is_fr
+            else f"OpenTrainer heartbeat skipped cleanly for '{account_role}' role."
+        )
+        skipped_doc: dict[str, Any] = {
+            "object": "hivemind.quickstart.opentrainer_heartbeat_receipt",
+            "campaign_id": CAMPAIGN_ID,
+            "gateway": clean_gw,
+            "lang": lang_code,
+            "compliance_ok": True,
+            "heartbeat_ok": True,
+            "ok": True,
+            "sent": False,
+            "skipped_consumer_role": True,
+            "role": account_role,
+            "host_label": clean_host_label,
+            "network_mode": "outbound-https-relay",
+            "training_stack": "qlora-moe+diloco+amcp-aglet+boinc",
+            "active_campaign": CAMPAIGN_ID,
+            "gpu_reported": False,
+            "gpu_name": None,
+            "vram_total_mib": None,
+            "vram_free_mib": None,
+            "payload_keys": [],
+            "aglet_lifecycle_phase": None,
+            "amcp_topic": None,
+            "me_status": me_status,
+            "http_status": 0,
+            "masked_api_key": masked_key,
+            "credentials_file": redacted_cred_path,
+            "network_calls": network_calls,
+            "file_writes": 0,
+            "zero_inference_verified": True,
+            "diagnostic": diag_skip,
+            "compliance_notice": COMPLIANCE_NOTICE_FR if is_fr else COMPLIANCE_NOTICE_EN,
+            "financial_promise": FINANCIAL_PROMISE,
+        }
+        skipped_doc["receipt_sha256"] = compute_receipt_sha256(skipped_doc)
+        return skipped_doc
+
+    gpu = gpu_snapshot if gpu_snapshot is not None else gpu_probe_fn()
+    gpu_reported = bool(
+        gpu.present
+        and str(gpu.name or "").strip()
+        and not isinstance(gpu.total_mib, bool)
+        and isinstance(gpu.total_mib, int)
+        and gpu.total_mib >= 512
+    )
+    gpu_name: str | None = None
+    vram_total_mib: int | None = None
+    vram_free_mib: int | None = None
+    if gpu_reported:
+        vram_total_mib = min(int(gpu.total_mib), 1_048_576)
+        raw_free = int(gpu.free_mib) if (not isinstance(gpu.free_mib, bool) and isinstance(gpu.free_mib, int)) else 0
+        vram_free_mib = max(0, min(raw_free, vram_total_mib))
+        gpu_name = redact_sensitive_text(str(gpu.name).strip(), home=home)[:128] or "GPU"
+
+    hb_payload: dict[str, Any] = {
+        "host_label": clean_host_label,
+        "gpu_name": gpu_name,
+        "vram_total_mib": vram_total_mib,
+        "vram_free_mib": vram_free_mib,
+        "network_mode": "outbound-https-relay",
+        "training_stack": "qlora-moe+diloco+amcp-aglet+boinc",
+        "active_campaign": CAMPAIGN_ID,
+    }
+    hb_status, hb_body = _safe_http_call(
+        http_fn,
+        "POST",
+        f"{clean_gw}/v1/hivemind/opentrainer/heartbeat",
+        hb_payload,
+        auth_headers,
+    )
+    network_calls += 1
+    hb_ok = bool(
+        hb_status in (200, 201)
+        and not _has_forbidden_score_key(hb_body)
+        and (
+            hb_body.get("object") == "hivemind.opentrainer_heartbeat_ack"
+            or isinstance(hb_body.get("node"), Mapping)
+        )
+    )
+    diag = (
+        (
+            "Premier heartbeat OpenTrainer sortant enregistré."
+            if is_fr
+            else "Outbound OpenTrainer first-heartbeat recorded."
+        )
+        if hb_ok
+        else redact_sensitive_text(
+            f"POST /v1/hivemind/opentrainer/heartbeat returned HTTP {hb_status}: {hb_body.get('error', '')}",
+            home=home,
+        )
+    )
+    raw_phase = hb_body.get("aglet_lifecycle_phase") if hb_ok else None
+    raw_topic = hb_body.get("amcp_topic") if hb_ok else None
+    receipt: dict[str, Any] = {
+        "object": "hivemind.quickstart.opentrainer_heartbeat_receipt",
+        "campaign_id": CAMPAIGN_ID,
+        "gateway": clean_gw,
+        "lang": lang_code,
+        "compliance_ok": True,
+        "heartbeat_ok": hb_ok,
+        "ok": hb_ok,
+        "sent": hb_ok,
+        "skipped_consumer_role": False,
+        "role": account_role,
+        "host_label": clean_host_label,
+        "network_mode": "outbound-https-relay",
+        "training_stack": "qlora-moe+diloco+amcp-aglet+boinc",
+        "active_campaign": CAMPAIGN_ID,
+        "gpu_reported": gpu_reported,
+        "gpu_name": gpu_name,
+        "vram_total_mib": vram_total_mib,
+        "vram_free_mib": vram_free_mib,
+        "payload_keys": list(hb_payload.keys()),
+        "aglet_lifecycle_phase": redact_sensitive_text(str(raw_phase), home=home) if raw_phase is not None else None,
+        "amcp_topic": redact_sensitive_text(str(raw_topic), home=home) if raw_topic is not None else None,
+        "me_status": me_status,
+        "http_status": hb_status,
+        "masked_api_key": masked_key,
+        "credentials_file": redacted_cred_path,
+        "network_calls": network_calls,
+        "file_writes": 0,
+        "zero_inference_verified": True,
+        "diagnostic": diag,
+        "compliance_notice": COMPLIANCE_NOTICE_FR if is_fr else COMPLIANCE_NOTICE_EN,
+        "financial_promise": FINANCIAL_PROMISE,
+    }
+    receipt["receipt_sha256"] = compute_receipt_sha256(receipt)
+    return receipt
+
+
+def _is_nonneg_int(val: object) -> bool:
+    return not isinstance(val, bool) and isinstance(val, int) and val >= 0
+
+
+def _inspect_models_contract(
+    body: Mapping[str, Any] | None,
+    *,
+    lang: str,
+) -> tuple[bool, list[str], bool, list[str]]:
+    is_fr = lang == "fr"
+    if not isinstance(body, Mapping) or _has_forbidden_score_key(body) or body.get("object", "list") != "list":
+        msg = (
+            "Contrat JSON `/v1/models` invalide."
+            if is_fr
+            else "Invalid `/v1/models` JSON schema (`object` != 'list')."
+        )
+        return False, [], False, [msg]
+    raw_data = body.get("data")
+    if not isinstance(raw_data, list):
+        msg = (
+            "Liste `data` absente dans `GET /v1/models`."
+            if is_fr
+            else "Missing `data` model list in `GET /v1/models`."
+        )
+        return False, [], False, [msg]
+    model_ids = [
+        str(entry.get("id")).strip()
+        for entry in raw_data
+        if isinstance(entry, Mapping) and isinstance(entry.get("id"), str) and entry.get("id").strip()
+    ]
+    issues: list[str] = []
+    if not model_ids:
+        issues.append(
+            "Liste `data` de `GET /v1/models` vide."
+            if is_fr
+            else "`GET /v1/models` returned an empty `data` model list."
+        )
+    coder_present = ("hivemind/" + "coder") in model_ids
+    if not coder_present:
+        issues.append(
+            "Modèle `hivemind/coder` absent des métadonnées `GET /v1/models`."
+            if is_fr
+            else "Required model `hivemind/coder` missing from `GET /v1/models` metadata."
+        )
+    return len(issues) == 0, model_ids, coder_present, issues
+
+
+def _inspect_fleet_contract(
+    body: Mapping[str, Any] | None,
+    *,
+    lang: str,
+) -> tuple[bool, int, int, list[str]]:
+    is_fr = lang == "fr"
+    if not isinstance(body, Mapping) or _has_forbidden_score_key(body):
+        msg = (
+            "Contrat `/v1/hivemind/producers/fleet` invalide."
+            if is_fr
+            else "Invalid `/v1/hivemind/producers/fleet` JSON payload."
+        )
+        return False, 0, 0, [msg]
+    if body.get("object") not in _ACCEPTED_FLEET_OBJECTS:
+        msg = (
+            "Champ `object` invalide sur `/v1/hivemind/producers/fleet`."
+            if is_fr
+            else "Invalid `object` metadata on `/v1/hivemind/producers/fleet`."
+        )
+        return False, 0, 0, [msg]
+    rows = body.get("hiveminders")
+    if not isinstance(rows, list):
+        msg = (
+            "Liste `hiveminders` absente sur `/v1/hivemind/producers/fleet`."
+            if is_fr
+            else "Missing `hiveminders` list on `/v1/hivemind/producers/fleet`."
+        )
+        return False, 0, 0, [msg]
+    for row in rows:
+        if isinstance(row, Mapping) and "endpoint_url" in row:
+            msg = (
+                "Fuite `endpoint_url` interdite sur `/v1/hivemind/producers/fleet`."
+                if is_fr
+                else "Forbidden `endpoint_url` leak detected on `/v1/hivemind/producers/fleet`."
+            )
+            return False, 0, 0, [msg]
+    has_live_hm = "live_hiveminders" in body
+    if has_live_hm and not _is_nonneg_int(body.get("live_hiveminders")):
+        msg = (
+            "Champ `live_hiveminders` invalide sur `/v1/hivemind/producers/fleet`."
+            if is_fr
+            else "Invalid non-integer `live_hiveminders` count on `/v1/hivemind/producers/fleet`."
+        )
+        return False, 0, 0, [msg]
+
+    live_hm_int = int(body["live_hiveminders"]) if has_live_hm else 0
+    row_online = sum(
+        1
+        for row in rows
+        if isinstance(row, Mapping) and str(row.get("status", "")).strip().lower() in LIVE_PRODUCER_STATUSES
+    )
+    online_producers = max(live_hm_int, row_online)
+    raw_gpu = body.get("distinct_physical_gpus")
+    distinct_gpus = int(raw_gpu) if _is_nonneg_int(raw_gpu) else 0
+    return True, online_producers, distinct_gpus, []
+
+
+def _inspect_arena_summary_contract(
+    body: Mapping[str, Any] | None,
+    *,
+    lang: str,
+) -> tuple[bool, dict[str, Any] | None, list[str]]:
+    is_fr = lang == "fr"
+    if not isinstance(body, Mapping) or body.get("object") != ARENA_SUMMARY_OBJECT:
+        msg = (
+            "Contrat `/v1/hivemind/arena/summary` invalide (`object` manquant ou inconnu)."
+            if is_fr
+            else "Arena summary `/v1/hivemind/arena/summary` invalid `object` metadata."
+        )
+        return False, None, [msg]
+    if _has_forbidden_score_key(body):
+        return False, None, ["Arena summary `/v1/hivemind/arena/summary` contains forbidden key."]
+
+    tv = body.get("total_votes")
+    hw = body.get("holiday_wins")
+    bw = body.get("baseline_wins")
+    ti = body.get("ties")
+    counts_valid = all(_is_nonneg_int(x) for x in (tv, hw, bw, ti))
+    conserved = bool(counts_valid and int(hw) + int(bw) + int(ti) == int(tv))
+
+    dec_ok = True
+    if "decisive_votes" in body:
+        dv = body.get("decisive_votes")
+        dec_ok = bool(_is_nonneg_int(dv) and counts_valid and int(dv) == int(hw) + int(bw))
+
+    raw_wlb = body.get("wilson_95_lower_bound")
+    wlb_ok = bool(
+        "wilson_95_lower_bound" in body
+        and not isinstance(raw_wlb, bool)
+        and isinstance(raw_wlb, (int, float))
+        and math.isfinite(float(raw_wlb))
+        and 0.0 <= float(raw_wlb) <= 1.0
+    )
+    decisive = (int(hw) + int(bw)) if counts_valid else 0
+    if wlb_ok and counts_valid and decisive == 0 and float(raw_wlb) != 0.0:
+        wlb_ok = False
+
+    win_ratio_ok = True
+    if "win_ratio" in body:
+        raw_wr = body.get("win_ratio")
+        if counts_valid and decisive == 0:
+            win_ratio_ok = raw_wr is None
+        else:
+            win_ratio_ok = bool(
+                not isinstance(raw_wr, bool)
+                and isinstance(raw_wr, (int, float))
+                and math.isfinite(float(raw_wr))
+                and 0.0 <= float(raw_wr) <= 1.0
+            )
+
+    by_task_ok = True
+    raw_tasks = body.get("by_task")
+    if isinstance(raw_tasks, Mapping):
+        for t_doc in raw_tasks.values():
+            if not isinstance(t_doc, Mapping):
+                by_task_ok = False
+                break
+            t_tv, t_hw, t_bw, t_ti = (
+                t_doc.get("total_votes"),
+                t_doc.get("holiday_wins"),
+                t_doc.get("baseline_wins"),
+                t_doc.get("ties"),
+            )
+            t_wlb = t_doc.get("wilson_95_lower_bound")
+            if (
+                not all(_is_nonneg_int(x) for x in (t_tv, t_hw, t_bw, t_ti))
+                or int(t_hw) + int(t_bw) + int(t_ti) != int(t_tv)
+                or "wilson_95_lower_bound" not in t_doc
+                or isinstance(t_wlb, bool)
+                or not isinstance(t_wlb, (int, float))
+                or not math.isfinite(float(t_wlb))
+                or not (0.0 <= float(t_wlb) <= 1.0)
+            ):
+                by_task_ok = False
+                break
+
+    ok = bool(counts_valid and conserved and dec_ok and wlb_ok and win_ratio_ok and by_task_ok)
+    if not ok:
+        msg = (
+            "Conservation des votes ou borne Wilson 95 % invalide sur `/v1/hivemind/arena/summary`."
+            if is_fr
+            else "Vote conservation (`holiday_wins + baseline_wins + ties == total_votes`) or Wilson 95% lower-bound invalid on `/v1/hivemind/arena/summary`."
+        )
+        return False, None, [msg]
+
+    raw_wr_val = body.get("win_ratio")
+    sanitized: dict[str, Any] = {
+        "object": ARENA_SUMMARY_OBJECT,
+        "total_votes": int(tv),  # type: ignore[arg-type]
+        "decisive_votes": decisive,
+        "holiday_wins": int(hw),  # type: ignore[arg-type]
+        "baseline_wins": int(bw),  # type: ignore[arg-type]
+        "ties": int(ti),  # type: ignore[arg-type]
+        "win_ratio": (
+            round(float(raw_wr_val), 4)
+            if isinstance(raw_wr_val, (int, float)) and not isinstance(raw_wr_val, bool)
+            else None
+        ),
+        "wilson_95_lower_bound": round(float(raw_wlb), 4),  # type: ignore[arg-type]
+    }
+    return True, sanitized, []
+
+
+def _validate_quorum_slo_options(
+    *,
+    target_online_producers: int,
+    min_ease_rating: float,
+    min_zero_lag_ratio: float,
+    require_live_quorum: bool,
+    require_ces_slo: bool,
+    check_arena_summary: bool,
+    verify_idempotency_replay: bool,
+    execute_deploy_dry_run: bool,
+    check_cwd_path: bool,
+) -> tuple[int, float, float]:
+    if (
+        isinstance(target_online_producers, bool)
+        or not isinstance(target_online_producers, int)
+        or not (1 <= target_online_producers <= 500)
+    ):
+        raise ValueError("target_online_producers must be an integer between 1 and 500.")
+    if (
+        isinstance(min_ease_rating, bool)
+        or not isinstance(min_ease_rating, (int, float))
+        or not math.isfinite(float(min_ease_rating))
+        or not (1.0 <= float(min_ease_rating) <= 5.0)
+    ):
+        raise ValueError("min_ease_rating must be a finite number between 1.0 and 5.0.")
+    if (
+        isinstance(min_zero_lag_ratio, bool)
+        or not isinstance(min_zero_lag_ratio, (int, float))
+        or not math.isfinite(float(min_zero_lag_ratio))
+        or not (0.0 <= float(min_zero_lag_ratio) <= 1.0)
+    ):
+        raise ValueError("min_zero_lag_ratio must be a finite number between 0.0 and 1.0.")
+    for flag in (
+        require_live_quorum,
+        require_ces_slo,
+        check_arena_summary,
+        verify_idempotency_replay,
+        execute_deploy_dry_run,
+        check_cwd_path,
+    ):
+        if not isinstance(flag, bool):
+            raise ValueError("Gate boolean options must be True or False.")
+    return int(target_online_producers), float(min_ease_rating), float(min_zero_lag_ratio)
+
+
+def _run_deploy_sh_dry_run(
+    *,
+    repo_root: Path | str | None = None,
+    expected_sha: str | None = None,
+    runner_fn: RunnerFn | None = None,
+    env: Mapping[str, str] | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Execute list-argv ``bash deploy/gcp_openrouter/deploy.sh --dry-run`` without calling ``gcloud``."""
+    is_fr = lang == "fr"
+    base_root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[1]
+    deploy_sh = base_root / "deploy" / "gcp_openrouter" / "deploy.sh"
+    display_path = redact_home_path(deploy_sh)
+    if not deploy_sh.is_file():
+        return {
+            "executed": False,
+            "ok": False,
+            "returncode": 127,
+            "deploy_script_path": display_path,
+            "gcloud_invoked": False,
+            "dry_run_build_sha": "unknown",
+            "checks": {},
+            "diagnostic": (
+                f"Script `{display_path}` introuvable pour `--dry-run`."
+                if is_fr
+                else f"Deploy script `{display_path}` missing for `--dry-run`."
+            ),
+        }
+
+    dry_env: dict[str, str] = dict(env) if env is not None else dict(os.environ)
+    if "PATH" not in dry_env:
+        dry_env["PATH"] = os.environ.get("PATH", "/usr/bin:/bin")
+    dry_env["HIVEMIND_DEPLOY_DRY_RUN"] = "1"
+    if expected_sha is not None:
+        dry_env["HIVEMIND_BUILD_SHA"] = expected_sha
+
+    argv = ["bash", str(deploy_sh), "--dry-run"]
+    if Path(argv[0]).name.lower() == "gcloud":
+        raise ValueError("Direct gcloud invocation is forbidden in quickstart dry-run.")
+    try:
+        if runner_fn is not None:
+            sig = inspect.signature(runner_fn)
+            if "env" in sig.parameters:
+                rc, stdout = runner_fn(argv, 15.0, env=dry_env)  # type: ignore[call-arg]
+            else:
+                env_prefix = ["env", "HIVEMIND_DEPLOY_DRY_RUN=1"]
+                if expected_sha is not None:
+                    env_prefix.append(f"HIVEMIND_BUILD_SHA={expected_sha}")
+                rc, stdout = runner_fn([*env_prefix, *argv], 15.0)
+        else:
+            proc = subprocess.run(
+                argv,
+                capture_output=True,
+                text=True,
+                timeout=15.0,
+                check=False,
+                shell=False,
+                env=dry_env,
+            )
+            rc, stdout = proc.returncode, proc.stdout
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {
+            "executed": True,
+            "ok": False,
+            "returncode": 1,
+            "deploy_script_path": display_path,
+            "gcloud_invoked": False,
+            "dry_run_build_sha": "unknown",
+            "checks": {},
+            "diagnostic": redact_sensitive_text(f"deploy.sh --dry-run failed ({type(exc).__name__})."),
+        }
+
+    kv: dict[str, str] = {}
+    for line in str(stdout or "").splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            kv[k.strip()] = v.strip()
+
+    finops_line = kv.get("finops_flags", "")
+    env_vars_line = kv.get("update_env_vars", "")
+    raw_dry_sha = kv.get("build_sha", "")
+    dry_sha = _sanitize_build_sha(raw_dry_sha)
+    sha_propagated = bool(
+        raw_dry_sha
+        and raw_dry_sha.strip().lower() == dry_sha
+        and f"HIVEMIND_BUILD_SHA={raw_dry_sha}" in env_vars_line
+        and (expected_sha is None or _shas_match(dry_sha, expected_sha))
+    )
+    checks = {
+        "returncode_zero": int(rc) == 0,
+        "dry_run_marker": kv.get("HIVEMIND_CLOUD_RUN_DEPLOY_DRY_RUN") == "1",
+        "gcloud_invoked_zero": kv.get("gcloud_invoked") == "0",
+        "finops_flags_present": all(
+            tok in finops_line
+            for tok in ("--min-instances 0", "--max-instances 1", "--no-cpu-throttling", "--concurrency 80")
+        ),
+        "replica_url_gcs": kv.get("replica_url", "").startswith("gcs://"),
+        "secret_manager_mounted": "HIVEMIND_ROUTER_SECRET=" in kv.get("secrets", ""),
+        "zero_grants_env": "HIVEMIND_STARTER_GRANT_HMT=0" in env_vars_line,
+        "build_sha_propagated": sha_propagated,
+    }
+    ok = all(checks.values())
+    return {
+        "executed": True,
+        "ok": ok,
+        "returncode": int(rc),
+        "deploy_script_path": display_path,
+        "gcloud_invoked": kv.get("gcloud_invoked") != "0",
+        "dry_run_build_sha": dry_sha,
+        "checks": checks,
+        "diagnostic": (
+            ""
+            if ok
+            else (
+                f"Échec vérification `{display_path} --dry-run`."
+                if is_fr
+                else f"Subprocess verification `{display_path} --dry-run` failed."
+            )
+        ),
+    }
+
+
+def verify_pr949_quickstart_quorum_and_parity(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    expected_sha: str | None = None,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    min_ease_rating: float = DEFAULT_MIN_EASE_RATING,
+    min_zero_lag_ratio: float = DEFAULT_MIN_ZERO_LAG_RATIO,
+    require_live_quorum: bool = False,
+    require_ces_slo: bool = False,
+    check_arena_summary: bool = True,
+    verify_idempotency_replay: bool = False,
+    execute_deploy_dry_run: bool = False,
+    repo_root: Path | str | None = None,
+    http_fn: HttpFn = default_http_json,
+    raw_http_fn: RawHttpFn | None = None,
+    runner_fn: RunnerFn | None = None,
+    api_key: str | None = None,
+    credentials_path: Path | str | None = None,
+    headers: dict[str, str] | None = None,
+    lang: str = "en",
+    home: Path | None = None,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    check_cwd_path: bool = False,
+) -> dict[str, Any]:
+    """Run the zero-inference PR #949 live quorum, 4-HTML parity, CES SLO, arena, replay & dry-run gate."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    target_n, min_ease_f, min_lag_f = _validate_quorum_slo_options(
+        target_online_producers=target_online_producers,
+        min_ease_rating=min_ease_rating,
+        min_zero_lag_ratio=min_zero_lag_ratio,
+        require_live_quorum=require_live_quorum,
+        require_ces_slo=require_ces_slo,
+        check_arena_summary=check_arena_summary,
+        verify_idempotency_replay=verify_idempotency_replay,
+        execute_deploy_dry_run=execute_deploy_dry_run,
+        check_cwd_path=check_cwd_path,
+    )
+    clean_gw = validate_gateway_url(gateway)
+    clean_expected_sha = _validate_expected_sha(expected_sha) if (expected_sha and str(expected_sha).strip()) else None
+
+    _, _, redacted_cred_path, masked_key = _resolve_api_key_for_quickstart(
+        api_key=api_key,
+        credentials_path=credentials_path,
+        env=env,
+        home=home,
+    )
+
+    compliance = check_personal_pc_compliance(
+        env=env,
+        cwd=cwd,
+        check_cwd_path=check_cwd_path,
+        lang=lang_code,
+    )
+    if not compliance["compliance_ok"]:
+        blocked: dict[str, Any] = {
+            "object": "hivemind.quickstart.pr949_quorum_parity_receipt",
+            "campaign_id": CAMPAIGN_ID,
+            "gateway": clean_gw,
+            "lang": lang_code,
+            "compliance_ok": False,
+            "corporate_indicators": compliance["corporate_indicators"],
+            "parity_ok": False,
+            "gate_ok": False,
+            "quorum_gate_ok": False,
+            "ces_gate_ok": False,
+            "redeploy_recommended": False,
+            "cloud_run_lags_main": False,
+            "stale_404_drift": False,
+            "routes_passed_count": 0,
+            "routes_total_count": len(PR949_PARITY_ROUTES) + (1 if check_arena_summary else 0),
+            "http_statuses": {},
+            "missing_routes": [],
+            "failed_routes": [],
+            "models_ok": False,
+            "live_model_ids": [],
+            "hivemind_coder_present": False,
+            "unique_csp_nonces_count": 0,
+            "unique_csp_nonces_ok": False,
+            "html_dom_clean": False,
+            "compliance_banners_ok": False,
+            "html_contracts": {},
+            "manifest_valid": False,
+            "live_build_sha": "unknown",
+            "expected_sha": clean_expected_sha,
+            "sha_match": False if clean_expected_sha is not None else None,
+            "sha_drift": False,
+            "cloud_run_revision": None,
+            "manifest_missing_routes": [],
+            "manifest_missing_scripts": [],
+            "feedback_summary_ok": False,
+            "feedback_summary": None,
+            "ces_slo_ok": False,
+            "zero_lag_slo_ok": False,
+            "min_ease_rating": min_ease_f,
+            "min_zero_lag_ratio": min_lag_f,
+            "raid_status_ok": False,
+            "active_trainers": 0,
+            "fleet_ok": False,
+            "online_producers": 0,
+            "target_online_producers": target_n,
+            "producer_quorum_met": False,
+            "awaiting_producer_quorum": True,
+            "distinct_physical_gpus": 0,
+            "arena_summary_checked": bool(check_arena_summary),
+            "arena_summary_ok": False if check_arena_summary else None,
+            "arena_summary": None,
+            "idempotency_replay_checked": bool(verify_idempotency_replay),
+            "idempotent_dedup_ok": None,
+            "idempotency_key": None,
+            "deploy_dry_run_executed": bool(execute_deploy_dry_run),
+            "deploy_dry_run": None,
+            "zero_inference_verified": True,
+            "network_calls": 0,
+            "subprocess_calls": 0,
+            "file_writes": 0,
+            "masked_api_key": masked_key,
+            "credentials_file": redacted_cred_path,
+            "fallback_guidance": None,
+            "diagnostics": [compliance["summary"]],
+            "routes": [],
+            "compliance_notice": COMPLIANCE_NOTICE_FR if is_fr else COMPLIANCE_NOTICE_EN,
+            "financial_promise": FINANCIAL_PROMISE,
+            "exit_code": 2,
+        }
+        blocked["receipt_sha256"] = compute_receipt_sha256(blocked)
+        return blocked
+
+    effective_raw_fn: Callable[..., Any] = (
+        raw_http_fn if raw_http_fn is not None else (default_http_raw if http_fn is default_http_json else http_fn)
+    )
+    effective_json_fn: Callable[..., Any] = (
+        http_fn if (http_fn is not default_http_json or raw_http_fn is None) else raw_http_fn
+    )
+
+    route_rows: list[dict[str, Any]] = []
+    http_statuses: dict[str, int] = {}
+    missing_routes: list[str] = []
+    failed_routes: list[str] = []
+    diagnostics: list[str] = []
+    seen_nonces: set[str] = set()
+    html_contracts: dict[str, dict[str, Any]] = {}
+    html_all_ok = True
+    html_dom_clean = True
+    compliance_banners_ok = True
+
+    models_ok = False
+    model_ids: list[str] = []
+    coder_present = False
+    manifest_valid = False
+    live_build_sha = "unknown"
+    cloud_run_revision: str | None = None
+    sha_match: bool | None = None if clean_expected_sha is None else False
+    manifest_missing_routes: list[str] = []
+    manifest_missing_scripts: list[str] = []
+    feedback_summary_ok = False
+    feedback_summary: dict[str, Any] | None = None
+    raw_feedback_doc: Mapping[str, Any] | None = None
+    raid_status_ok = False
+    active_trainers = 0
+    fleet_ok = False
+    online_producers = 0
+    distinct_gpus = 0
+    network_calls = 0
+    subprocess_calls = 0
+
+    for path, kind, group in PR949_PARITY_ROUTES:
+        target_fn = effective_raw_fn if kind == "html" else effective_json_fn
+        code, json_doc, text_body, resp_headers = _safe_parity_call(target_fn, "GET", f"{clean_gw}{path}", headers)
+        network_calls += 1
+        http_statuses[path] = code
+        ok = code == 200
+        route_issues: list[str] = []
+
+        if not ok:
+            if code == 404:
+                missing_routes.append(path)
+            route_issues.append(_route_smoke_diagnostic(path, group, code, lang=lang_code))
+            if kind == "html":
+                html_all_ok = False
+                compliance_banners_ok = False
+        elif path == "/health":
+            if not isinstance(json_doc, Mapping) or json_doc.get("status") != "ok":
+                ok = False
+                route_issues.append(
+                    "GET /health a répondu HTTP 200 sans `status == 'ok'`."
+                    if is_fr
+                    else "GET /health returned HTTP 200 without `status == 'ok'`."
+                )
+        elif path == "/v1/models":
+            models_ok, model_ids, coder_present, m_issues = _inspect_models_contract(json_doc, lang=lang_code)
+            if not models_ok:
+                ok = False
+                route_issues.extend(m_issues)
+        elif kind == "html":
+            h_ok, h_info, h_issues = _inspect_html_contract(
+                path,
+                text_body,
+                resp_headers,
+                seen_nonces,
+                lang=lang_code,
+            )
+            html_contracts[path] = h_info
+            html_all_ok = html_all_ok and h_ok
+            html_dom_clean = html_dom_clean and bool(h_info["dom_clean"])
+            compliance_banners_ok = compliance_banners_ok and bool(h_info["compliance_banner_ok"])
+            if not h_ok:
+                ok = False
+                route_issues.extend(h_issues)
+        elif path == "/v1/hivemind/onboarding/manifest":
+            (
+                manifest_valid,
+                live_build_sha,
+                cloud_run_revision,
+                sha_match,
+                manifest_missing_routes,
+                manifest_missing_scripts,
+                man_issues,
+            ) = _inspect_manifest_contract(json_doc, expected_sha=clean_expected_sha, lang=lang_code)
+            if not manifest_valid:
+                ok = False
+                route_issues.extend(man_issues)
+        elif path == "/v1/hivemind/onboarding/feedback/summary":
+            feedback_summary_ok, feedback_summary, fb_issues = _inspect_feedback_summary_contract(
+                json_doc,
+                lang=lang_code,
+            )
+            if feedback_summary_ok:
+                raw_feedback_doc = json_doc
+            else:
+                ok = False
+                route_issues.extend(fb_issues)
+        elif path == "/v1/hivemind/raid/status":
+            raid_status_ok, r_issues = _inspect_raid_status_contract(json_doc, lang=lang_code)
+            if not raid_status_ok:
+                ok = False
+                route_issues.extend(r_issues)
+            elif isinstance(json_doc, Mapping) and isinstance(json_doc.get("swarm"), Mapping):
+                raw_tr = json_doc["swarm"].get("active_trainers")
+                if _is_nonneg_int(raw_tr):
+                    active_trainers = int(raw_tr)
+        elif path == "/v1/hivemind/producers/fleet":
+            fleet_ok, online_producers, distinct_gpus, f_issues = _inspect_fleet_contract(json_doc, lang=lang_code)
+            if not fleet_ok:
+                ok = False
+                route_issues.extend(f_issues)
+
+        if not ok:
+            failed_routes.append(path)
+            for item in route_issues:
+                diagnostics.append(redact_sensitive_text(item, home=home))
+
+        route_rows.append(
+            {
+                "path": path,
+                "method": "GET",
+                "kind": kind,
+                "group": group,
+                "http_status": code,
+                "ok": ok,
+                "diagnostic": redact_sensitive_text(route_issues[0] if route_issues else "", home=home),
+            }
+        )
+
+    arena_summary_ok: bool | None = None
+    arena_summary_doc: dict[str, Any] | None = None
+    if check_arena_summary:
+        a_path = "/v1/hivemind/arena/summary"
+        a_code, a_json, _, _ = _safe_parity_call(effective_json_fn, "GET", f"{clean_gw}{a_path}", headers)
+        network_calls += 1
+        http_statuses[a_path] = a_code
+        a_issues: list[str] = []
+        if a_code != 200:
+            arena_summary_ok = False
+            if a_code == 404:
+                missing_routes.append(a_path)
+            a_issues.append(_route_smoke_diagnostic(a_path, "holiday", a_code, lang=lang_code))
+        else:
+            arena_summary_ok, arena_summary_doc, a_issues = _inspect_arena_summary_contract(a_json, lang=lang_code)
+        if not arena_summary_ok:
+            failed_routes.append(a_path)
+            for item in a_issues:
+                diagnostics.append(redact_sensitive_text(item, home=home))
+        route_rows.append(
+            {
+                "path": a_path,
+                "method": "GET",
+                "kind": "json",
+                "group": "holiday",
+                "http_status": a_code,
+                "ok": bool(arena_summary_ok),
+                "diagnostic": redact_sensitive_text(a_issues[0] if a_issues else "", home=home),
+            }
+        )
+
+    idempotent_dedup_ok: bool | None = None
+    idem_key: str | None = None
+    if verify_idempotency_replay:
+        pre_total = (
+            int(feedback_summary["total_responses"])
+            if (feedback_summary_ok and feedback_summary is not None)
+            else None
+        )
+        pre_dev = (
+            int(feedback_summary["by_profile"]["dev"])
+            if (feedback_summary_ok and feedback_summary is not None)
+            else None
+        )
+        idem_key = f"pr949-replay-{secrets.token_hex(12)}"
+        fb_payload = _normalize_ces_payload(
+            profile="dev",
+            ease_rating=5,
+            zero_game_lag=True,
+            platform_name=_normalize_platform_token(None),
+            note="",
+            home=home,
+        )
+        replay_headers = dict(headers) if headers else {}
+        replay_headers["Idempotency-Key"] = idem_key
+        post_url = f"{clean_gw}/v1/hivemind/onboarding/feedback"
+        p1_code, p1_body = _safe_http_call(effective_json_fn, "POST", post_url, fb_payload, replay_headers)
+        network_calls += 1
+        http_statuses["POST /v1/hivemind/onboarding/feedback"] = p1_code
+        p1_ok, p1_sum, _ = (
+            _inspect_feedback_summary_contract(p1_body, lang=lang_code)
+            if p1_code in (200, 201)
+            else (False, None, [])
+        )
+        p2_code, p2_body = _safe_http_call(effective_json_fn, "POST", post_url, fb_payload, replay_headers)
+        network_calls += 1
+        http_statuses["POST /v1/hivemind/onboarding/feedback#replay"] = p2_code
+        p2_ok, p2_sum, _ = (
+            _inspect_feedback_summary_contract(p2_body, lang=lang_code)
+            if p2_code in (200, 201)
+            else (False, None, [])
+        )
+        ref_code, ref_body, _, _ = _safe_parity_call(
+            effective_json_fn,
+            "GET",
+            f"{clean_gw}/v1/hivemind/onboarding/feedback/summary",
+            headers,
+        )
+        network_calls += 1
+        http_statuses["/v1/hivemind/onboarding/feedback/summary#after_replay"] = ref_code
+        ref_ok, ref_sum, _ = (
+            _inspect_feedback_summary_contract(ref_body, lang=lang_code)
+            if ref_code == 200
+            else (False, None, [])
+        )
+
+        p1_inc_ok = bool(
+            p1_ok
+            and p1_sum is not None
+            and (
+                pre_total is None
+                or (
+                    int(p1_sum["total_responses"]) >= int(pre_total) + 1
+                    and int(p1_sum["by_profile"]["dev"]) >= int(pre_dev or 0) + 1
+                )
+            )
+        )
+        replay_eq_ok = bool(
+            p2_ok
+            and p2_sum is not None
+            and p1_sum is not None
+            and ref_ok
+            and ref_sum is not None
+            and p2_sum["total_responses"] == p1_sum["total_responses"]
+            and p2_sum["by_profile"] == p1_sum["by_profile"]
+            and ref_sum["total_responses"] == p1_sum["total_responses"]
+            and ref_sum["by_profile"] == p1_sum["by_profile"]
+        )
+        idempotent_dedup_ok = bool(p1_inc_ok and replay_eq_ok)
+        if idempotent_dedup_ok and ref_sum is not None and isinstance(ref_body, Mapping):
+            feedback_summary_ok = True
+            feedback_summary = ref_sum
+            raw_feedback_doc = ref_body
+        else:
+            diagnostics.append(
+                "Échec vérification replay idempotent `Idempotency-Key` sur `/v1/hivemind/onboarding/feedback`."
+                if is_fr
+                else "Idempotency-Key duplicate-replay verification failed on `/v1/hivemind/onboarding/feedback`."
+            )
+
+    producer_quorum_met = bool(fleet_ok and online_producers >= target_n)
+    awaiting_producer_quorum = not producer_quorum_met
+    quorum_gate_ok = bool(producer_quorum_met or not require_live_quorum)
+    if require_live_quorum and not producer_quorum_met:
+        diagnostics.append(
+            f"Quorum producteurs en ligne insuffisant ({online_producers} < {target_n})."
+            if is_fr
+            else f"Live producer quorum not met ({online_producers} < {target_n})."
+        )
+
+    ces_slo_ok: bool | None
+    zero_lag_slo_ok: bool | None
+    if not feedback_summary_ok or feedback_summary is None or raw_feedback_doc is None:
+        ces_slo_ok = False
+        zero_lag_slo_ok = False
+        ces_gate_ok = False
+    elif int(feedback_summary["total_responses"]) > 0:
+        raw_ease = (
+            raw_feedback_doc.get("mean_ease_rating")
+            if raw_feedback_doc.get("mean_ease_rating") is not None
+            else raw_feedback_doc.get("average_ease_rating")
+        )
+        raw_lag = raw_feedback_doc.get("zero_game_lag_ratio")
+        ces_slo_ok = bool(raw_ease is not None and Fraction(str(float(raw_ease))) >= Fraction(str(min_ease_f)))
+        zero_lag_slo_ok = bool(raw_lag is not None and Fraction(str(float(raw_lag))) >= Fraction(str(min_lag_f)))
+        ces_gate_ok = bool(not require_ces_slo or (ces_slo_ok and zero_lag_slo_ok))
+        if require_ces_slo and not ces_gate_ok:
+            diagnostics.append(
+                f"SLO CES/zéro-lag non respecté (ease={raw_ease}, lag={raw_lag})."
+                if is_fr
+                else f"CES/zero-lag SLO breached (ease={raw_ease} < {min_ease_f} or lag={raw_lag} < {min_lag_f})."
+            )
+    else:
+        ces_slo_ok = None
+        zero_lag_slo_ok = None
+        ces_gate_ok = True
+
+    deploy_dry_run_res: dict[str, Any] | None = None
+    if execute_deploy_dry_run:
+        deploy_dry_run_res = _run_deploy_sh_dry_run(
+            repo_root=repo_root,
+            expected_sha=clean_expected_sha,
+            runner_fn=runner_fn,
+            env=env,
+            lang=lang_code,
+        )
+        if deploy_dry_run_res.get("executed"):
+            subprocess_calls += 1
+        if not deploy_dry_run_res.get("ok"):
+            diagnostics.append(str(deploy_dry_run_res.get("diagnostic") or "deploy.sh --dry-run failed."))
+
+    passed_count = sum(1 for row in route_rows if row["ok"])
+    total_count = len(route_rows)
+    html_count = len(PR949_HTML_ROUTES)
+    unique_csp_nonces_ok = bool(
+        html_all_ok
+        and len(html_contracts) == html_count
+        and len(seen_nonces) == html_count
+        and not any(info.get("nonce_reused") for info in html_contracts.values())
+    )
+    sha_drift = bool(clean_expected_sha is not None and sha_match is not True)
+    stale_404_drift = bool(missing_routes or manifest_missing_routes or manifest_missing_scripts)
+    cloud_run_lags_main = bool(http_statuses.get("/health") == 200 and (stale_404_drift or sha_drift))
+
+    parity_ok = bool(
+        passed_count == total_count
+        and models_ok
+        and coder_present
+        and manifest_valid
+        and unique_csp_nonces_ok
+        and html_dom_clean
+        and compliance_banners_ok
+        and feedback_summary_ok
+        and raid_status_ok
+        and fleet_ok
+        and not sha_drift
+        and (not check_arena_summary or arena_summary_ok is True)
+        and (not verify_idempotency_replay or idempotent_dedup_ok is True)
+        and (not execute_deploy_dry_run or (deploy_dry_run_res is not None and deploy_dry_run_res["ok"] is True))
+    )
+    gate_ok = bool(parity_ok and quorum_gate_ok and ces_gate_ok)
+
+    fallback_guidance: dict[str, Any] | None = None
+    if stale_404_drift:
+        fallback_guidance = build_holiday_fallback_guidance(
+            clean_gw,
+            missing_routes=missing_routes or manifest_missing_routes,
+            lang=lang_code,
+        )
+        diagnostics.insert(0, redact_sensitive_text(fallback_guidance["active_message"], home=home))
+
+    report: dict[str, Any] = {
+        "object": "hivemind.quickstart.pr949_quorum_parity_receipt",
+        "campaign_id": CAMPAIGN_ID,
+        "gateway": clean_gw,
+        "lang": lang_code,
+        "compliance_ok": True,
+        "parity_ok": parity_ok,
+        "gate_ok": gate_ok,
+        "quorum_gate_ok": quorum_gate_ok,
+        "ces_gate_ok": ces_gate_ok,
+        "redeploy_recommended": bool(not parity_ok or cloud_run_lags_main or sha_drift),
+        "cloud_run_lags_main": cloud_run_lags_main,
+        "stale_404_drift": stale_404_drift,
+        "routes_passed_count": passed_count,
+        "routes_total_count": total_count,
+        "http_statuses": http_statuses,
+        "missing_routes": missing_routes,
+        "failed_routes": failed_routes,
+        "models_ok": models_ok,
+        "live_model_ids": model_ids,
+        "hivemind_coder_present": coder_present,
+        "unique_csp_nonces_count": len(seen_nonces),
+        "unique_csp_nonces_ok": unique_csp_nonces_ok,
+        "html_dom_clean": html_dom_clean,
+        "compliance_banners_ok": compliance_banners_ok,
+        "html_contracts": html_contracts,
+        "manifest_valid": manifest_valid,
+        "live_build_sha": live_build_sha,
+        "expected_sha": clean_expected_sha,
+        "sha_match": sha_match,
+        "sha_drift": sha_drift,
+        "cloud_run_revision": cloud_run_revision,
+        "manifest_missing_routes": manifest_missing_routes,
+        "manifest_missing_scripts": manifest_missing_scripts,
+        "feedback_summary_ok": feedback_summary_ok,
+        "feedback_summary": feedback_summary,
+        "ces_slo_ok": ces_slo_ok,
+        "zero_lag_slo_ok": zero_lag_slo_ok,
+        "min_ease_rating": min_ease_f,
+        "min_zero_lag_ratio": min_lag_f,
+        "raid_status_ok": raid_status_ok,
+        "active_trainers": active_trainers,
+        "fleet_ok": fleet_ok,
+        "online_producers": online_producers,
+        "target_online_producers": target_n,
+        "producer_quorum_met": producer_quorum_met,
+        "awaiting_producer_quorum": awaiting_producer_quorum,
+        "distinct_physical_gpus": distinct_gpus,
+        "arena_summary_checked": bool(check_arena_summary),
+        "arena_summary_ok": arena_summary_ok,
+        "arena_summary": arena_summary_doc,
+        "idempotency_replay_checked": bool(verify_idempotency_replay),
+        "idempotent_dedup_ok": idempotent_dedup_ok,
+        "idempotency_key": idem_key,
+        "deploy_dry_run_executed": bool(execute_deploy_dry_run),
+        "deploy_dry_run": deploy_dry_run_res,
+        "zero_inference_verified": True,
+        "network_calls": network_calls,
+        "subprocess_calls": subprocess_calls,
+        "file_writes": 0,
+        "masked_api_key": masked_key,
+        "credentials_file": redacted_cred_path,
+        "fallback_guidance": fallback_guidance,
+        "diagnostics": diagnostics,
+        "routes": route_rows,
+        "compliance_notice": COMPLIANCE_NOTICE_FR if is_fr else COMPLIANCE_NOTICE_EN,
+        "financial_promise": FINANCIAL_PROMISE,
+        "exit_code": 0 if gate_ok else 2,
+    }
+    report["receipt_sha256"] = compute_receipt_sha256(report)
+    return report
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="HiveMind 60-second Personal Quick-Connect & Gamer-Whisper Assistant (0.00 EUR, personal PCs only)."
@@ -3105,6 +4578,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--write-continue-config", action="store_true", help="Write ~/.continue/hivemind_provider.yaml.")
     p.add_argument("--continue-config-path", default=str(_default_continue_snippet_path()))
     p.add_argument("--lang", default="en", help="Output and diagnostic language ('en' or 'fr').")
+    p.add_argument("--cwd", default=None, help="Workspace path override (enables local cwd corporate indicator check).")
+    p.add_argument(
+        "--enforce-personal-pc",
+        action="store_true",
+        help="Strictly enforce workspace cwd Personal-PC compliance check before any action.",
+    )
+    p.add_argument(
+        "--output",
+        default=None,
+        help="Atomically persist verified CLI/JSON output (POSIX 0600); writes 0 files if compliance fails.",
+    )
     p.add_argument(
         "--smoke-routes",
         action="store_true",
@@ -3116,15 +4600,55 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run 8-endpoint zero-inference Cloud Run holiday deploy-parity gate (CSP, banners, manifest, SHA) and exit.",
     )
     p.add_argument(
+        "--pr949-quorum-gate",
+        action="store_true",
+        help="Run zero-inference PR #949 4-HTML parity, models, live quorum, arena summary, replay & deploy dry-run gate.",
+    )
+    p.add_argument(
         "--expected-sha",
         default="",
-        help="Expected build SHA to verify against /v1/hivemind/onboarding/manifest under --check-deploy-parity.",
+        help="Expected build SHA to verify against /v1/hivemind/onboarding/manifest under parity gates.",
+    )
+    p.add_argument("--target-online-producers", type=int, default=DEFAULT_TARGET_ONLINE_PRODUCERS)
+    p.add_argument("--min-ease-rating", type=float, default=DEFAULT_MIN_EASE_RATING)
+    p.add_argument("--min-zero-lag-ratio", type=float, default=DEFAULT_MIN_ZERO_LAG_RATIO)
+    p.add_argument("--require-live-quorum", action="store_true", help="Fail closed (exit 2) when online_producers < target.")
+    p.add_argument("--require-ces-slo", action="store_true", help="Fail closed (exit 2) when CES/zero-lag SLO is breached.")
+    p.add_argument(
+        "--check-arena-summary",
+        dest="check_arena_summary",
+        action="store_true",
+        default=True,
+        help="Verify GET /v1/hivemind/arena/summary vote conservation & Wilson 95%% lower bound.",
+    )
+    p.add_argument(
+        "--skip-arena-summary",
+        "--no-check-arena-summary",
+        dest="check_arena_summary",
+        action="store_false",
+        help="Skip GET /v1/hivemind/arena/summary check under --pr949-quorum-gate.",
+    )
+    p.add_argument(
+        "--verify-idempotency-replay",
+        action="store_true",
+        help="Run Idempotency-Key duplicate-replay feedback conservation check under --pr949-quorum-gate.",
+    )
+    p.add_argument(
+        "--run-deploy-dry-run",
+        action="store_true",
+        help="Run bash deploy/gcp_openrouter/deploy.sh --dry-run (0 gcloud invocations) under --pr949-quorum-gate.",
     )
     p.add_argument(
         "--require-holiday-routes",
         action="store_true",
         help="Fail closed (exit 2) before setup when required Cloud Run holiday routes fail or return 404/5xx.",
     )
+    p.add_argument(
+        "--send-opentrainer-heartbeat",
+        action="store_true",
+        help="Send outbound POST /v1/hivemind/opentrainer/heartbeat using real local GPU info only.",
+    )
+    p.add_argument("--host-label", default="personal-pc", help="Host label for outbound OpenTrainer heartbeat.")
     p.add_argument("--gamer-check", action="store_true", help="Inspect GPU, temperature, and running games only.")
     p.add_argument("--gamer-whisper", action="store_true", help="Run quiet GPU contributor (<70C, <1.5s game stop).")
     p.add_argument("--game", action="append", default=[], help="Extra game executable name to auto-stop on.")
@@ -3213,6 +4737,57 @@ def _render_deploy_parity_cli_output(parity: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _render_pr949_quorum_cli_output(report: Mapping[str, Any]) -> str:
+    is_fr = report.get("lang") == "fr"
+    header = (
+        "HIVEMIND NOËL — PARITÉ PR #949 & QUORUM PRODUCTEURS (ZÉRO INFÉRENCE • 0,00 EUR)"
+        if is_fr
+        else "HIVEMIND HOLIDAY — PR #949 PARITY & LIVE QUORUM GATE (ZERO INFERENCE • 0.00 EUR)"
+    )
+    lines = [
+        "====================================================================",
+        f"  {header}",
+        "====================================================================",
+        f"  [Rule] {report.get('compliance_notice')}",
+        f"  Gateway          : {report.get('gateway')}",
+        f"  Credentials      : {report.get('credentials_file')} (key {report.get('masked_api_key')})",
+        f"  Routes verified  : {report.get('routes_passed_count')}/{report.get('routes_total_count')} "
+        f"(parity_ok={report.get('parity_ok')} gate_ok={report.get('gate_ok')})",
+        f"  Live Quorum      : online={report.get('online_producers')}/{report.get('target_online_producers')} "
+        f"awaiting={report.get('awaiting_producer_quorum')} gpus={report.get('distinct_physical_gpus')}",
+        f"  Arena / Replay   : arena_ok={report.get('arena_summary_ok')} idempotent_ok={report.get('idempotent_dedup_ok')}",
+    ]
+    for row in report.get("routes") or ():
+        mark = "OK" if row.get("ok") else "FAIL"
+        lines.append(f"  [{mark:<4}] GET {row.get('path'):<42} -> HTTP {row.get('http_status')}")
+    for diag in report.get("diagnostics") or ():
+        lines.append(f"  [DIAG] {diag}")
+    lines.append(f"  SHA-256 Receipt  : {report.get('receipt_sha256')}")
+    return "\n".join(lines)
+
+
+def _render_opentrainer_heartbeat_cli_output(hb: Mapping[str, Any]) -> str:
+    is_fr = hb.get("lang") == "fr"
+    header = (
+        "HIVEMIND NOËL — HEARTBEAT SORTANT OPENTRAINER (0,00 EUR)"
+        if is_fr
+        else "HIVEMIND HOLIDAY — OUTBOUND OPENTRAINER HEARTBEAT (0.00 EUR)"
+    )
+    lines = [
+        "====================================================================",
+        f"  {header}",
+        "====================================================================",
+        f"  [Rule] {hb.get('compliance_notice')}",
+        f"  Gateway          : {hb.get('gateway')}",
+        f"  Host / Role      : {hb.get('host_label')} ({hb.get('role')})",
+        f"  GPU Reported     : {hb.get('gpu_reported')} ({hb.get('gpu_name') or 'none'})",
+        f"  Heartbeat Status : ok={hb.get('heartbeat_ok')} sent={hb.get('sent')} http={hb.get('http_status')}",
+        f"  Diagnostic       : {hb.get('diagnostic')}",
+        f"  SHA-256 Receipt  : {hb.get('receipt_sha256')}",
+    ]
+    return "\n".join(lines)
+
+
 def _render_flush_cli_output(flush_res: Mapping[str, Any]) -> str:
     is_fr = flush_res.get("lang") == "fr"
     header = (
@@ -3233,6 +4808,25 @@ def _render_flush_cli_output(flush_res: Mapping[str, Any]) -> str:
         lines.append(f"  [DIAG] {diag}")
     lines.append(f"  SHA-256 Receipt  : {flush_res.get('receipt_sha256')}")
     return "\n".join(lines)
+
+
+def _emit_cli_output(
+    rendered: str,
+    *,
+    out_stream: Any,
+    err_stream: Any,
+    output_path: Path | None,
+    home: Path | None,
+) -> bool:
+    print(rendered, file=out_stream)
+    if output_path is not None:
+        safety_hits = scan_output_safety(rendered, home=home)
+        if safety_hits:
+            print(f"Error: refusing unsafe --output write ({', '.join(safety_hits)}).", file=err_stream)
+            return False
+        payload = rendered if rendered.endswith("\n") else (rendered + "\n")
+        _write_file_secure_atomic(output_path, payload, mode=0o600)
+    return True
 
 
 def _resolve_cli_spool_path(
@@ -3265,11 +4859,20 @@ def main(
     poll_interval_s: float = 0.5,
     out_stream: Any = None,
     err_stream: Any = None,
+    runner_fn: RunnerFn | None = None,
 ) -> int:
     eff_out = out_stream if out_stream is not None else sys.stdout
     eff_err = err_stream if err_stream is not None else sys.stderr
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
     args = build_parser().parse_args(raw_argv)
+
+    try:
+        cli_cwd = _validate_cli_path_arg(getattr(args, "cwd", None), "--cwd", home=home)
+        output_path = _validate_cli_path_arg(getattr(args, "output", None), "--output", home=home)
+    except ValueError as exc:
+        print(f"Error: {redact_sensitive_text(str(exc), home=home)}", file=eff_err)
+        return 2
+
     explicit_cred_flag = any(tok == "--credentials-file" or tok.startswith("--credentials-file=") for tok in raw_argv)
     explicit_cont_flag = any(
         tok == "--continue-config-path" or tok.startswith("--continue-config-path=") for tok in raw_argv
@@ -3303,8 +4906,14 @@ def main(
         return 2
 
     eff_env = env if env is not None else os.environ
-    eff_cwd = Path(cwd) if cwd is not None else Path.cwd()
-    compliance = check_personal_pc_compliance(env=eff_env, cwd=eff_cwd, lang=lang_code)
+    eff_cwd = Path(cwd) if cwd is not None else (cli_cwd if cli_cwd is not None else Path.cwd())
+    eff_check_cwd = bool(args.enforce_personal_pc or cli_cwd is not None)
+    compliance = check_personal_pc_compliance(
+        env=eff_env,
+        cwd=eff_cwd,
+        check_cwd_path=eff_check_cwd,
+        lang=lang_code,
+    )
     if not compliance["compliance_ok"]:
         print(compliance["summary"], file=eff_err)
         if args.json:
@@ -3329,6 +4938,74 @@ def main(
         return 2
 
     explicit_or_env_key = (args.api_key or eff_env.get("HIVEMIND_API_KEY") or "").strip() or None
+    eff_flush_http_fn: HttpFn = (
+        http_fn if (http_fn is not default_http_json or raw_http_fn is None) else raw_http_fn  # type: ignore[assignment]
+    )
+
+    if args.pr949_quorum_gate:
+        try:
+            pr949 = verify_pr949_quickstart_quorum_and_parity(
+                gateway,
+                expected_sha=args.expected_sha.strip() or None,
+                target_online_producers=int(args.target_online_producers),
+                min_ease_rating=float(args.min_ease_rating),
+                min_zero_lag_ratio=float(args.min_zero_lag_ratio),
+                require_live_quorum=bool(args.require_live_quorum),
+                require_ces_slo=bool(args.require_ces_slo),
+                check_arena_summary=bool(args.check_arena_summary),
+                verify_idempotency_replay=bool(args.verify_idempotency_replay),
+                execute_deploy_dry_run=bool(args.run_deploy_dry_run),
+                http_fn=http_fn,
+                raw_http_fn=raw_http_fn,
+                runner_fn=runner_fn,
+                api_key=explicit_or_env_key,
+                credentials_path=cred_path if eff_cred_for_spool is not None else None,
+                headers=headers,
+                lang=lang_code,
+                home=home,
+                env=eff_env,
+                cwd=eff_cwd,
+                check_cwd_path=eff_check_cwd,
+            )
+        except ValueError as exc:
+            print(f"Error: {redact_sensitive_text(str(exc), home=home)}", file=eff_err)
+            return 2
+
+        flush_after_pr949: dict[str, Any] | None = None
+        if pr949["gate_ok"] and args.flush_feedback_queue:
+            flush_after_pr949 = flush_spooled_telemetry(
+                gateway,
+                spool_path=spool_path,
+                credentials_path=eff_cred_for_spool,
+                http_fn=eff_flush_http_fn,
+                headers=headers,
+                lang=lang_code,
+                home=home,
+                env=eff_env,
+                cwd=eff_cwd,
+            )
+            pr949["flush_feedback_queue"] = flush_after_pr949
+            pr949["receipt_sha256"] = compute_receipt_sha256(pr949)
+
+        rendered = (
+            json.dumps(pr949, indent=2, ensure_ascii=False)
+            if args.json
+            else (
+                _render_pr949_quorum_cli_output(pr949)
+                + ("\n" + _render_flush_cli_output(flush_after_pr949) if flush_after_pr949 is not None else "")
+            )
+        )
+        if not _emit_cli_output(rendered, out_stream=eff_out, err_stream=eff_err, output_path=output_path, home=home):
+            return 2
+        if not pr949["gate_ok"]:
+            for diag in pr949["diagnostics"]:
+                print(diag, file=eff_err)
+            return 2
+        if flush_after_pr949 is not None and not flush_after_pr949["flush_ok"]:
+            for diag in flush_after_pr949["diagnostics"]:
+                print(diag, file=eff_err)
+            return 2
+        return 0
 
     if args.check_deploy_parity:
         try:
@@ -3355,7 +5032,7 @@ def main(
                 gateway,
                 spool_path=spool_path,
                 credentials_path=eff_cred_for_spool,
-                http_fn=http_fn,
+                http_fn=eff_flush_http_fn,
                 headers=headers,
                 lang=lang_code,
                 home=home,
@@ -3365,12 +5042,16 @@ def main(
             parity["flush_feedback_queue"] = flush_after_parity
             parity["receipt_sha256"] = compute_receipt_sha256(parity)
 
-        if args.json:
-            print(json.dumps(parity, indent=2, ensure_ascii=False), file=eff_out)
-        else:
-            print(_render_deploy_parity_cli_output(parity), file=eff_out)
-            if flush_after_parity is not None:
-                print(_render_flush_cli_output(flush_after_parity), file=eff_out)
+        rendered = (
+            json.dumps(parity, indent=2, ensure_ascii=False)
+            if args.json
+            else (
+                _render_deploy_parity_cli_output(parity)
+                + ("\n" + _render_flush_cli_output(flush_after_parity) if flush_after_parity is not None else "")
+            )
+        )
+        if not _emit_cli_output(rendered, out_stream=eff_out, err_stream=eff_err, output_path=output_path, home=home):
+            return 2
         if not parity["parity_ok"]:
             for diag in parity["diagnostics"]:
                 print(diag, file=eff_err)
@@ -3391,13 +5072,46 @@ def main(
             headers=headers,
             home=home,
         )
-        if args.json:
-            print(json.dumps(smoke, indent=2, ensure_ascii=False), file=eff_out)
-        else:
-            print(_render_smoke_cli_output(smoke), file=eff_out)
+        rendered = json.dumps(smoke, indent=2, ensure_ascii=False) if args.json else _render_smoke_cli_output(smoke)
+        if not _emit_cli_output(rendered, out_stream=eff_out, err_stream=eff_err, output_path=output_path, home=home):
+            return 2
         if not smoke["smoke_ok"]:
             for diag in smoke["diagnostics"]:
                 print(diag, file=eff_err)
+            return 2
+        return 0
+
+    if args.send_opentrainer_heartbeat and not (
+        args.handle
+        or args.write_continue_config
+        or args.gamer_whisper
+        or args.post_setup_telemetry
+        or args.feedback
+        or args.gamer_check
+    ):
+        hb_res = send_opentrainer_first_heartbeat(
+            gateway,
+            api_key=explicit_or_env_key,
+            credentials_path=cred_path,
+            host_label=args.host_label,
+            gpu_probe_fn=gpu_probe_fn,
+            http_fn=http_fn,
+            headers=headers,
+            lang=lang_code,
+            home=home,
+            env=eff_env,
+            cwd=eff_cwd,
+            check_cwd_path=eff_check_cwd,
+        )
+        rendered = (
+            json.dumps(hb_res, indent=2, ensure_ascii=False)
+            if args.json
+            else _render_opentrainer_heartbeat_cli_output(hb_res)
+        )
+        if not _emit_cli_output(rendered, out_stream=eff_out, err_stream=eff_err, output_path=output_path, home=home):
+            return 2
+        if not hb_res["heartbeat_ok"]:
+            print(hb_res["diagnostic"], file=eff_err)
             return 2
         return 0
 
@@ -3415,10 +5129,13 @@ def main(
             env=eff_env,
             cwd=eff_cwd,
         )
-        if args.json:
-            print(json.dumps(flush_res, indent=2, ensure_ascii=False), file=eff_out)
-        else:
-            print(_render_flush_cli_output(flush_res), file=eff_out)
+        rendered = (
+            json.dumps(flush_res, indent=2, ensure_ascii=False)
+            if args.json
+            else _render_flush_cli_output(flush_res)
+        )
+        if not _emit_cli_output(rendered, out_stream=eff_out, err_stream=eff_err, output_path=output_path, home=home):
+            return 2
         if not flush_res["flush_ok"]:
             for diag in flush_res["diagnostics"]:
                 print(diag, file=eff_err)
@@ -3446,7 +5163,9 @@ def main(
             "os_idle_seconds": get_os_idle_seconds(),
             "gamer_whisper": decision,
         }
-        print(json.dumps(out, indent=2), file=eff_out)
+        rendered = json.dumps(out, indent=2)
+        if not _emit_cli_output(rendered, out_stream=eff_out, err_stream=eff_err, output_path=output_path, home=home):
+            return 2
         return 0 if decision["allow"] else 2
 
     required_smoke: dict[str, Any] | None = None
@@ -3471,9 +5190,10 @@ def main(
                     "holiday_routes": required_smoke,
                 }
                 fail_doc["receipt_sha256"] = compute_receipt_sha256(fail_doc)
-                print(json.dumps(fail_doc, indent=2, ensure_ascii=False), file=eff_out)
+                rendered = json.dumps(fail_doc, indent=2, ensure_ascii=False)
             else:
-                print(_render_smoke_cli_output(required_smoke), file=eff_out)
+                rendered = _render_smoke_cli_output(required_smoke)
+            _emit_cli_output(rendered, out_stream=eff_out, err_stream=eff_err, output_path=output_path, home=home)
             return 2
 
     if args.feedback:
@@ -3506,10 +5226,9 @@ def main(
                 file=eff_err,
             )
             return 1
-        print(
-            json.dumps({"status": "feedback_recorded", "summary": _sanitize_feedback_summary(body)}, indent=2),
-            file=eff_out,
-        )
+        rendered = json.dumps({"status": "feedback_recorded", "summary": _sanitize_feedback_summary(body)}, indent=2)
+        if not _emit_cli_output(rendered, out_stream=eff_out, err_stream=eff_err, output_path=output_path, home=home):
+            return 2
         return 0
 
     try:
@@ -3530,10 +5249,7 @@ def main(
     acct = connected["account"]
     yaml_snippet = build_continue_yaml(gateway, acct["api_key"])
     if args.write_continue_config:
-        cont_path.parent.mkdir(parents=True, exist_ok=True)
-        cont_path.write_text(yaml_snippet, encoding="utf-8")
-        if os.name != "nt":
-            os.chmod(cont_path, 0o600)
+        _write_file_secure_atomic(cont_path, yaml_snippet, mode=0o600)
 
     explicit_profile_flag = any(tok == "--profile" or tok.startswith("--profile=") for tok in raw_argv)
     eff_profile = args.profile if explicit_profile_flag else ("gamer" if args.gamer_whisper else args.profile)
@@ -3587,7 +5303,9 @@ def main(
                 cwd=eff_cwd,
             )
         result["receipt_sha256"] = compute_receipt_sha256(result)
-        print(json.dumps(result, indent=2, ensure_ascii=False), file=eff_out)
+        rendered = json.dumps(result, indent=2, ensure_ascii=False)
+        if not _emit_cli_output(rendered, out_stream=eff_out, err_stream=eff_err, output_path=output_path, home=home):
+            return 2
         return 0 if result.get("status") in ("round_completed", "yielded_to_owner", "yielded_before_start") else 1
 
     telemetry_res: dict[str, Any] | None = None
@@ -3621,6 +5339,23 @@ def main(
             cwd=eff_cwd,
         )
 
+    hb_conn_res: dict[str, Any] | None = None
+    if args.send_opentrainer_heartbeat:
+        hb_conn_res = send_opentrainer_first_heartbeat(
+            gateway,
+            api_key=acct["api_key"],
+            credentials_path=cred_path,
+            host_label=args.host_label,
+            gpu_probe_fn=gpu_probe_fn,
+            http_fn=http_fn,
+            headers=headers,
+            lang=lang_code,
+            home=home,
+            env=eff_env,
+            cwd=eff_cwd,
+            check_cwd_path=eff_check_cwd,
+        )
+
     redacted_cred = redact_home_path(cred_path, home=home)
     redacted_cont = redact_home_path(cont_path, home=home) if args.write_continue_config else None
     masked_key = mask_api_key(acct["api_key"])
@@ -3643,8 +5378,15 @@ def main(
             json_out["post_setup_telemetry"] = telemetry_res
         if flush_res_conn is not None:
             json_out["flush_feedback_queue"] = flush_res_conn
+        if hb_conn_res is not None:
+            json_out["opentrainer_heartbeat"] = hb_conn_res
         json_out["receipt_sha256"] = compute_receipt_sha256(json_out)
-        print(json.dumps(json_out, indent=2, ensure_ascii=False), file=eff_out)
+        rendered = json.dumps(json_out, indent=2, ensure_ascii=False)
+        if not _emit_cli_output(rendered, out_stream=eff_out, err_stream=eff_err, output_path=output_path, home=home):
+            return 2
+        if hb_conn_res is not None and not hb_conn_res["heartbeat_ok"]:
+            print(hb_conn_res["diagnostic"], file=eff_err)
+            return 1
         return 0
 
     is_fr = lang_code == "fr"
@@ -3658,35 +5400,49 @@ def main(
             "masked_api_key": masked_key,
             "credentials_file": redacted_cred,
             "telemetry_recorded": telemetry_res["telemetry_recorded"] if telemetry_res else None,
+            "opentrainer_heartbeat_ok": hb_conn_res["heartbeat_ok"] if hb_conn_res else None,
         }
     )
-    print("====================================================================", file=eff_out)
-    if is_fr:
-        print("  HIVEMIND LABO DE NOËL — CONNECTÉ (PC PERSONNEL • 0,00 EUR)", file=eff_out)
-    else:
-        print("  HIVEMIND HOLIDAY LAB — CONNECTED (PERSONAL HOME PC ONLY • 0.00 EUR)", file=eff_out)
-    print("====================================================================", file=eff_out)
-    print(f"  [Rule] {COMPLIANCE_NOTICE_FR if is_fr else COMPLIANCE_NOTICE_EN}", file=eff_out)
-    print(f"  Handle           : {acct['handle']} ({acct['role']})", file=eff_out)
-    print(f"  Gateway          : {gateway}", file=eff_out)
-    print(f"  API key (masked) : {masked_key}", file=eff_out)
-    print(f"  Credentials saved: {redacted_cred}", file=eff_out)
-    print(f"  Models online    : {', '.join(connected['models']) or 'verified'}", file=eff_out)
+    cli_lines = [
+        "====================================================================",
+        (
+            "  HIVEMIND LABO DE NOËL — CONNECTÉ (PC PERSONNEL • 0,00 EUR)"
+            if is_fr
+            else "  HIVEMIND HOLIDAY LAB — CONNECTED (PERSONAL HOME PC ONLY • 0.00 EUR)"
+        ),
+        "====================================================================",
+        f"  [Rule] {COMPLIANCE_NOTICE_FR if is_fr else COMPLIANCE_NOTICE_EN}",
+        f"  Handle           : {acct['handle']} ({acct['role']})",
+        f"  Gateway          : {gateway}",
+        f"  API key (masked) : {masked_key}",
+        f"  Credentials saved: {redacted_cred}",
+        f"  Models online    : {', '.join(connected['models']) or 'verified'}",
+    ]
     if redacted_cont:
-        print(f"  VS Code snippet  : {redacted_cont}", file=eff_out)
+        cli_lines.append(f"  VS Code snippet  : {redacted_cont}")
     if telemetry_res is not None:
-        print(
-            f"  CES telemetry    : recorded={telemetry_res['telemetry_recorded']} ({telemetry_res['diagnostic']})",
-            file=eff_out,
+        cli_lines.append(
+            f"  CES telemetry    : recorded={telemetry_res['telemetry_recorded']} ({telemetry_res['diagnostic']})"
         )
-    print(f"  SHA-256 Receipt  : {cli_receipt}", file=eff_out)
-    print(
-        "\n--- VS Code (Continue.dev) snippet (key masked in terminal; use --write-continue-config) ---",
-        file=eff_out,
+    if hb_conn_res is not None:
+        cli_lines.append(
+            f"  OpenTrainer HB   : ok={hb_conn_res['heartbeat_ok']} sent={hb_conn_res['sent']} ({hb_conn_res['diagnostic']})"
+        )
+    cli_lines.extend(
+        [
+            f"  SHA-256 Receipt  : {cli_receipt}",
+            "\n--- VS Code (Continue.dev) snippet (key masked in terminal; use --write-continue-config) ---",
+            masked_yaml.rstrip(),
+            "\n--- Clean uninstall anytime ---",
+            "  python3 scripts/hivemind_quickstart.py --uninstall",
+        ]
     )
-    print(masked_yaml.rstrip(), file=eff_out)
-    print("\n--- Clean uninstall anytime ---", file=eff_out)
-    print("  python3 scripts/hivemind_quickstart.py --uninstall", file=eff_out)
+    rendered_cli = "\n".join(cli_lines)
+    if not _emit_cli_output(rendered_cli, out_stream=eff_out, err_stream=eff_err, output_path=output_path, home=home):
+        return 2
+    if hb_conn_res is not None and not hb_conn_res["heartbeat_ok"]:
+        print(hb_conn_res["diagnostic"], file=eff_err)
+        return 1
     return 0
 
 

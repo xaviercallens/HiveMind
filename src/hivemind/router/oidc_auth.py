@@ -253,7 +253,8 @@ def providers_from_json(text: str, *, clock: Callable[[], float] = time.time) ->
     for entry in entries:
         if not isinstance(entry, dict):
             raise ValueError("each OIDC provider must be a JSON object")
-        unknown = set(entry) - {"name", "issuer", "issuers", "jwks_url", "client_id", "require_verified_email"}
+        unknown = set(entry) - {"name", "issuer", "issuers", "jwks_url", "client_id", "require_verified_email",
+                                 "authorization_endpoint", "token_endpoint", "label"}  # the last three are read by the web portal
         if unknown:
             raise ValueError(f"unknown OIDC provider field(s): {sorted(unknown)}")
         name = entry.get("name")
@@ -262,6 +263,11 @@ def providers_from_json(text: str, *, clock: Callable[[], float] = time.time) ->
         issuers = entry.get("issuers", [entry["issuer"]] if "issuer" in entry else [])
         if not isinstance(issuers, list):
             raise ValueError("issuers must be a list")
+        for iss in issuers:
+            # Microsoft's multi-tenant endpoints put each user's tenant in "iss": a fixed-issuer check would reject everyone,
+            # and matching any tenant would accept every Microsoft account. Only tenant-specific issuers are accepted.
+            if not isinstance(iss, str) or "{" in iss or "/common/" in iss or "/organizations/" in iss or "/consumers/" in iss:
+                raise ValueError(f"issuer must be a fixed, tenant-specific URL: {iss!r}")
         verify_email = entry.get("require_verified_email", True)
         if not isinstance(verify_email, bool):
             raise ValueError("require_verified_email must be true or false")

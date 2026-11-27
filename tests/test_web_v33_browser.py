@@ -115,3 +115,29 @@ def test_axe_core_finds_no_serious_accessibility_issue(portal_url: str, browser)
     ]
     assert not serious, json.dumps(serious, indent=1)
     context.close()
+
+
+def test_sso_buttons_render_safely_from_the_capabilities_list(portal_url: str, browser) -> None:
+    """v3.4: provider buttons are built by script from /v32/api/capabilities. Over plain http the portal offers no provider,
+    so the response is substituted here; a malformed name and a markup label must not become a link or markup."""
+    page = browser.new_page()
+    problems: list[str] = []
+    page.on("console", lambda m: problems.append(m.text) if m.type == "error" else None)
+    page.on("pageerror", lambda e: problems.append(str(e)))
+    caps = {"sessions": True, "password_login": True, "password_reset_email": False, "google": True,
+            "providers": [{"name": "google", "label": "Google"}, {"name": "github", "label": "GitHub"},
+                          {"name": "evil/../x", "label": "Evil"}, {"name": "acme", "label": "<img src=x onerror=alert(1)>"}]}
+    page.route("**/v32/api/capabilities", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(caps)))
+    page.goto(f"{portal_url}/v32", wait_until="networkidle")
+    page.wait_for_selector("#sso-buttons a")
+    links = page.locator("#sso-buttons a")
+    hrefs = [links.nth(i).get_attribute("href") for i in range(links.count())]
+    assert hrefs == ["/auth/google/start", "/auth/github/start", "/auth/acme/start"]
+    assert links.nth(1).inner_text() == "Sign in with GitHub"
+    assert links.nth(2).inner_text() == "Sign in with <img src=x onerror=alert(1)>"  # shown as text, never parsed
+    assert page.locator("#sso-buttons img").count() == 0
+    assert page.locator("#sso").is_visible()
+    page.click("#lang-toggle")
+    page.wait_for_function("document.documentElement.lang === 'fr'")
+    assert not problems, problems
+    page.close()

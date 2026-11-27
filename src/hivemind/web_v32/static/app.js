@@ -160,8 +160,7 @@
     show($("signed-out"), caps.sessions && !signedIn && !resetToken);
     show($("form-reset"), caps.sessions && !!resetToken);
     show($("signed-in"), signedIn);
-    show($("sso"), !!caps.google);
-    show($("link-google"), signedIn && !!caps.google);
+    renderProviders(signedIn);
     const nav = $("nav-account");
     nav.dataset.i18n = signedIn ? "nav_account" : "nav_signin";
     nav.textContent = t(nav.dataset.i18n);
@@ -170,6 +169,22 @@
       $("role").textContent = s.data.role ? "(" + s.data.role + ")" : "";
       loadAccount();
     }
+  }
+
+  function providerLink(p, linkMode) {
+    const a = document.createElement("a");
+    a.className = "button";
+    a.href = "/auth/" + encodeURIComponent(p.name) + "/start" + (linkMode ? "?link=1" : "");
+    a.textContent = t(linkMode ? "b_link_with" : "b_sso_with").replace("{provider}", p.label);
+    return a;
+  }
+
+  function renderProviders(signedIn) {
+    const list = (caps.providers || []).filter((p) => p && /^[a-z][a-z0-9]{1,15}$/.test(p.name));
+    const sso = $("sso-buttons"), links = $("link-buttons");
+    sso.textContent = ""; links.textContent = "";
+    list.forEach((p) => { sso.appendChild(providerLink(p, false)); if (signedIn) links.appendChild(providerLink(p, true)); });
+    show($("sso"), list.length > 0);
   }
 
   function bind(id, handler) {
@@ -223,8 +238,8 @@
     });
 
     const h = location.hash;
-    if (h.indexOf("signin-error") >= 0) say(t("msg_google_failed"), "err");
-    if (h === "#linked") say(t("msg_google_linked"), "ok");
+    if (h.indexOf("signin-error") >= 0) say(t("msg_sso_failed"), "err");
+    if (h === "#linked") say(t("msg_sso_linked"), "ok");
     await refresh();
     selectTab("login", false);
     loadFacts();

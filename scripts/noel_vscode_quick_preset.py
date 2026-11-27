@@ -1687,7 +1687,10 @@ def run_deploy_sh_dry_run(
     lang_code = normalize_lang(lang)
     is_fr = lang_code == "fr"
     path = Path(deploy_sh_path) if deploy_sh_path is not None else DEFAULT_DEPLOY_SH_PATH
-    shown_path = redact_home_path(path)
+    try:
+        shown_path = path.resolve().relative_to(DEFAULT_DEPLOY_SH_PATH.parents[2].resolve()).as_posix()
+    except ValueError:
+        shown_path = _API_KEY_RE.sub("<redacted-path-segment>", redact_home_path(path))
     if not path.is_file():
         return {
             "executed": False,

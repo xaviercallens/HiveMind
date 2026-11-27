@@ -24,7 +24,9 @@
        resolving permuted/rotated router-expert co-adaptation mismatch prior to fusion
      - Dynamic Alvéole Mitosis recycling causal-knockout corruptor cells into high-deficit
        specialist domains inside P_0 with BOS sink stability guard (D4)
-     - Selective ghost sinks (w_B = 0), OOF multi-gate routing & ker(G_D0) Fisher/folded RMSNorm
+     - Selective ghost sinks (w_B = 0), OOF multi-gate routing & Empirical-Bayes James-Stein
+       rank-k ker(G_D0) Fisher-Norm calibration with small-probe overfit guard (DYN-48)
+       & automatic 1-DOF folded-tau fallback when probe SNR is insufficient
           |
           v
   3. Operculation d'Alvéole ANSE & Alvéole Vierge
@@ -47,13 +49,13 @@
      - Sequential Wald SPRT canary routing with instant bitwise rollback
 ```
 
-### Operator Mapping to Cleanroom Modules (`54` Merged PRs `#978`–`#1069` + Current `NEURAL-CTRL-DYN-49`)
+### Operator Mapping to Cleanroom Modules (`55` Merged Code PRs `#978`–`#1073` + Paper v4.4.0 `#1054` + Current `NEURAL-CTRL-DYN-49`)
 
 | Campaign Stage | Primary Module(s) | Algebraic / Thermodynamic Invariant |
 | :--- | :--- | :--- |
 | **Butinage & La Ruche Vault** | `la_ruche_vault.py`, `crowdgpt_moe_opendiloco.py`, `volunteer_wsp_workunit_exporter.py` | Content-addressed `Alvéoles`, AGPL-3.0 allowlisted shards, `0.00 EUR / 0.00 USD` compute reciprocity |
 | **Preflight & Byzantine Filter** | `marchenko_pastur_covariance_guard.py`, `byzantine_wsp_delta_aggregator.py`, `representation_collapse_wsp_guard.py` | Oracle shrinkage $\Sigma_{\text{shrunk}} = (1-\rho)M + \rho \frac{\text{tr}(M)}{d}I$, Multi-Krum filters poisoned deltas |
-| **Sequential Chain & Inter-Round Trophallaxie (`D1`)** | `inter_round_royal_jelly_trophallaxis.py` (`#1056`), `sequential_chain_ties_nullspace_rescuer.py` (`#1052`), `queen_cortex_moe_campaign_governor.py` (`#1051`), `ties_dare_moe_merger.py`, `rank_preserving_nullspace_input_injector.py`, `folded_norm_ece_calibrator.py` | Consecutive chain differencing $\Delta W_d = W_d - W_{d-1}$, associative low-RSS $(s B)(A P_0)$, pre-momentum $P_0$ projection ($M_t = \beta P_0(M_{t-1}) + \Delta_t^{\text{RJ}}$, $\|M_t V_0\|_F = 0$), and $\ker(G_{D_0})$ diagonal-Fisher + folded $1/\tau_{\text{temp}}$ calibration |
+| **Sequential Chain & Inter-Round Trophallaxie (`D1`)** | `inter_round_royal_jelly_trophallaxis.py` (`#1056`), `sequential_chain_ties_nullspace_rescuer.py` (`#1052`), `queen_cortex_moe_campaign_governor.py` (`#1051`), `ties_dare_moe_merger.py`, `rank_preserving_nullspace_input_injector.py`, `folded_norm_ece_calibrator.py`, **`james_stein_spectral_norm_surgeon.py`** (`NEURAL-CTRL-DYN-48`) | Consecutive chain differencing $\Delta W_d = W_d - W_{d-1}$, associative low-RSS $(s B)(A P_0)$, pre-momentum $P_0$ projection ($M_t = \beta P_0(M_{t-1}) + \Delta_t^{\text{RJ}}$, $\|M_t V_0\|_F = 0$), and Empirical-Bayes James-Stein rank-$k$ $\ker(G_{D_0})$ Fisher norm ($c_j = \max(0, 1 - \sigma_j^2 / (\mu_j^2 + \sigma_j^2/n))$) + 1-DOF folded $1/\tau_{\text{temp}}$ fallback |
 | **Kronecker Riemannian Null-Space Transport (`D2`)** | `kronecker_riemannian_nullspace_transport.py` (`#1059`), `natural_gradient_trust_wsp_surgeon.py` (`#1025`) | Damped K-FAC $(G_{\text{cov}} \otimes A_{\text{cov}})$ whitened null-space operators $R_{\text{step}}, R_{\text{proj}}$, isometric layer parallel transport, Theorem 3.7 unconditional descent ($\le 0$), geodesic KL trust bound $\frac{1}{2}\operatorname{tr}(G \Delta W A \Delta W^\top) \le \delta_{\text{KL}}$ |
 | **Optimal-Transport Cross-Arm Alignment (`D3`)** | `optimal_transport_moe_arm_fuser.py` (`#1062`), `procrustes_wsp_skill_transfer.py` (`#1023`), `domain_matched_moe_arm_composer.py` (`#1043`) | Exact $O(E^3)$ Hungarian bijection $\pi^*$ + SVD Orthogonal Procrustes $R_{B \to A}$ & LoRA rank alignment $S_r \in O(r)$, Theorem 3.8 exact permutation-transport MoE invariance (`RCD_D3`), $P_0$ orthogonal residual synergy + 2-matmul affine LayerNorm |
 | **Dynamic Alvéole Mitosis & Hessian NF4 Export (`D4`)** | `alveole_mitosis_hessian_nf4_exporter.py` (`#1066`), `quantization_compensated_wsp.py` (`#993`), `attention_sink_kv_surgeon.py` (`#1005`) | LOEO corruptor recycling into high-deficit domains inside $P_0$ ($\| \Delta_{\text{mitosis}} V_0 \|_F = 0$), BOS sink guard, diagonal prose-Hessian NF4 low-rank residual inside $P_0$, `<= 6,656 MiB` WDDM envelope (`RCD_D4`) |
@@ -70,7 +72,7 @@ Each NeuroController improvement slice progresses through five deterministic loc
 
 1. **Stage 1 — Local Empirical Ratchet Audit & Slice Triage:**
    - Confirms local CPU isolation (`CUDA_VISIBLE_DEVICES=""`) and verifies active local CPU processes (`pgrep -af '[p]ilot[0-9]'` returned `NO_ACTIVE_PILOT_PROCESS`) while auditing certified receipts (`PILOT1`..`PILOT12` + `PILOT13` spec + `PILOT14` ModernBERT-base finding) and leaving every `.lock.json` holdout vault untouched.
-   - Syncs merged PR states (`54` merged NeuroController PRs `#978`–`#1069` incl. Foundation Paper v4.4.0 `#1054`) and checks out the active `NEURAL-CTRL-DYN-*` branch cleanly off `origin/main`.
+   - Syncs merged PR states (`55` merged NeuroController code PRs `#978`–`#1073` + Foundation Paper v4.4.0 `#1054`) and checks out the active `NEURAL-CTRL-DYN-*` branch cleanly off `origin/main`.
 2. **Stage 2 — Cleanroom Module, 5-Scenario Test Suite & Tracking Docs Authoring:**
    - Implements the target module in `src/hivemind/swarm/` with AGPL-3.0 copyright header, zero stubs, zero forbidden patterns, and zero network/subprocess egress.
    - Authors `5` deterministic CPU scenarios (`tests/test_*_scenarios.py`, CI-safe `try/except ImportError` guard around optional `gwaya`) targeting `>= 95.0%` standalone line coverage, and updates both `docs/NEURO_CONTROLLER_ROADMAP.md` and `docs/NEURO_CONTROLLER_IMPLEMENTATION_PLAN.md`.
@@ -80,7 +82,7 @@ Each NeuroController improvement slice progresses through five deterministic loc
 4. **Stage 4 — Review-Ready Slice Packaging & Telemetry Receipt Logging:**
    - Stages verified slice files cleanly with owner identity and logs JSONL telemetry receipts (leaving final commit/publication exclusively to the Phase 4 workflow).
 5. **Stage 5 — Plan & Roadmap Progress Sync:**
-   - Records latest empirical CPU verdicts, standalone coverage, and Gen-3 `D1`–`D5` completion status in tracking documents.
+   - Records latest empirical CPU verdicts, standalone coverage, and slice completion status in tracking documents.
 
 ---
 
@@ -95,7 +97,8 @@ Each NeuroController improvement slice progresses through five deterministic loc
 - **`NEURAL-CTRL-DYN-44` (Gen-3 Direction `D2`, Merged `#1059`):** [`src/hivemind/swarm/kronecker_riemannian_nullspace_transport.py`](../src/hivemind/swarm/kronecker_riemannian_nullspace_transport.py) + [`tests/test_kronecker_riemannian_nullspace_transport_scenarios.py`](../tests/test_kronecker_riemannian_nullspace_transport_scenarios.py) (`99%` standalone coverage).
 - **`NEURAL-CTRL-DYN-45` (Gen-3 Direction `D3`, Merged `#1062`):** [`src/hivemind/swarm/optimal_transport_moe_arm_fuser.py`](../src/hivemind/swarm/optimal_transport_moe_arm_fuser.py) + [`tests/test_optimal_transport_moe_arm_fuser_scenarios.py`](../tests/test_optimal_transport_moe_arm_fuser_scenarios.py) (`O(E^3)` Hungarian + Orthogonal Procrustes cross-arm MoE fuser).
 - **`NEURAL-CTRL-DYN-46` (Gen-3 Direction `D4`, Merged `#1066`):** [`src/hivemind/swarm/alveole_mitosis_hessian_nf4_exporter.py`](../src/hivemind/swarm/alveole_mitosis_hessian_nf4_exporter.py) + [`tests/test_alveole_mitosis_hessian_nf4_exporter_scenarios.py`](../tests/test_alveole_mitosis_hessian_nf4_exporter_scenarios.py) (Dynamic *Alvéole* Mitosis corruptor recycler & diagonal prose-Hessian 4-bit NF4 edge exporter).
-- **`NEURAL-CTRL-DYN-47` (Gen-3 Direction `D5`, Merged `#1069`):** [`src/hivemind/swarm/zk_wsp_federated_hive_verifier.py`](../src/hivemind/swarm/zk_wsp_federated_hive_verifier.py) + [`tests/test_zk_wsp_federated_hive_verifier_scenarios.py`](../tests/test_zk_wsp_federated_hive_verifier_scenarios.py) (Proof-carrying `ZK-WSP` subspace spot-checks, Lean 4 theorem attestation, and Multi-Krum federation).
+- **`NEURAL-CTRL-DYN-47` (Gen-3 Direction `D5`, Merged `#1069`):** [`src/hivemind/swarm/zk_wsp_federated_hive_verifier.py`](../src/hivemind/swarm/zk_wsp_federated_hive_verifier.py) + [`tests/test_zk_wsp_federated_hive_verifier_scenarios.py`](../tests/test_zk_wsp_federated_hive_verifier_scenarios.py) (Proof-carrying `ZK-WSP` subspace spot-checks, Lean 4 theorem attestation, and Multi-Krum multi-hive federation).
+- **`NEURAL-CTRL-DYN-48` (Empirical-Bayes James-Stein Spectral-Shrinkage Surgeon, Merged `#1073`):** [`src/hivemind/swarm/james_stein_spectral_norm_surgeon.py`](../src/hivemind/swarm/james_stein_spectral_norm_surgeon.py) + [`tests/test_james_stein_spectral_norm_surgeon_scenarios.py`](../tests/test_james_stein_spectral_norm_surgeon_scenarios.py) (`99.08%` standalone coverage — probe-DOF / spectral-anisotropy / massive-activation guard, top-`k` James-Stein `ker(G_D0)` Fisher-Norm shrinkage, 1-DOF folded-tau fallback, and ANSE atomic bitwise rollback).
 
 ---
 

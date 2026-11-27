@@ -24,7 +24,9 @@
        resolving permuted/rotated router-expert co-adaptation mismatch prior to fusion
      - Dynamic Alvéole Mitosis recycling causal-knockout corruptor cells into high-deficit
        specialist domains inside P_0 with BOS sink stability guard (D4)
-     - Selective ghost sinks (w_B = 0), OOF multi-gate routing & ker(G_D0) Fisher/folded RMSNorm
+     - Selective ghost sinks (w_B = 0), OOF multi-gate routing & Empirical-Bayes James-Stein
+       rank-k ker(G_D0) Fisher-Norm calibration with small-probe overfit guard (DYN-48)
+       & automatic 1-DOF folded-tau fallback when probe SNR is insufficient
           |
           v
   3. Operculation d'Alvéole ANSE & Alvéole Vierge
@@ -47,19 +49,19 @@
      - Sequential Wald SPRT canary routing with instant bitwise rollback
 ```
 
-### Operator Mapping to Cleanroom Modules (`53` Merged PRs `#978`–`#1066` + Current `NEURAL-CTRL-DYN-47`)
+### Operator Mapping to Cleanroom Modules (`54` Merged PRs `#978`–`#1069` + Current `NEURAL-CTRL-DYN-48`)
 
 | Campaign Stage | Primary Module(s) | Algebraic / Thermodynamic Invariant |
 | :--- | :--- | :--- |
 | **Butinage & La Ruche Vault** | `la_ruche_vault.py`, `crowdgpt_moe_opendiloco.py`, `volunteer_wsp_workunit_exporter.py` | Content-addressed `Alvéoles`, AGPL-3.0 allowlisted shards, `0.00 EUR / 0.00 USD` compute reciprocity |
 | **Preflight & Byzantine Filter** | `marchenko_pastur_covariance_guard.py`, `byzantine_wsp_delta_aggregator.py`, `representation_collapse_wsp_guard.py` | Oracle shrinkage $\Sigma_{\text{shrunk}} = (1-\rho)M + \rho \frac{\text{tr}(M)}{d}I$, Multi-Krum filters poisoned deltas |
-| **Sequential Chain & Inter-Round Trophallaxie (`D1`)** | `inter_round_royal_jelly_trophallaxis.py` (`#1056`), `sequential_chain_ties_nullspace_rescuer.py` (`#1052`), `queen_cortex_moe_campaign_governor.py` (`#1051`), `ties_dare_moe_merger.py`, `rank_preserving_nullspace_input_injector.py`, `folded_norm_ece_calibrator.py` | Consecutive chain differencing $\Delta W_d = W_d - W_{d-1}$, associative low-RSS $(s B)(A P_0)$, pre-momentum $P_0$ projection ($M_t = \beta P_0(M_{t-1}) + \Delta_t^{\text{RJ}}$, $\|M_t V_0\|_F = 0$), and $\ker(G_{D_0})$ diagonal-Fisher + folded $1/\tau_{\text{temp}}$ calibration |
+| **Sequential Chain & Inter-Round Trophallaxie (`D1`)** | `inter_round_royal_jelly_trophallaxis.py` (`#1056`), `sequential_chain_ties_nullspace_rescuer.py` (`#1052`), `queen_cortex_moe_campaign_governor.py` (`#1051`), `ties_dare_moe_merger.py`, `rank_preserving_nullspace_input_injector.py`, `folded_norm_ece_calibrator.py`, **`james_stein_spectral_norm_surgeon.py`** (`NEURAL-CTRL-DYN-48`) | Consecutive chain differencing $\Delta W_d = W_d - W_{d-1}$, associative low-RSS $(s B)(A P_0)$, pre-momentum $P_0$ projection ($M_t = \beta P_0(M_{t-1}) + \Delta_t^{\text{RJ}}$, $\|M_t V_0\|_F = 0$), and Empirical-Bayes James-Stein rank-$k$ $\ker(G_{D_0})$ Fisher norm ($c_j = \max(0, 1 - \sigma_j^2 / (\mu_j^2 + \sigma_j^2/n))$) + 1-DOF folded $1/\tau_{\text{temp}}$ fallback |
 | **Kronecker Riemannian Null-Space Transport (`D2`)** | `kronecker_riemannian_nullspace_transport.py` (`#1059`), `natural_gradient_trust_wsp_surgeon.py` (`#1025`) | Damped K-FAC $(G_{\text{cov}} \otimes A_{\text{cov}})$ whitened null-space operators $R_{\text{step}}, R_{\text{proj}}$, isometric layer parallel transport, Theorem 3.7 unconditional descent ($\le 0$), geodesic KL trust bound $\frac{1}{2}\operatorname{tr}(G \Delta W A \Delta W^\top) \le \delta_{\text{KL}}$ |
 | **Optimal-Transport Cross-Arm Alignment (`D3`)** | `optimal_transport_moe_arm_fuser.py` (`#1062`), `procrustes_wsp_skill_transfer.py` (`#1023`), `domain_matched_moe_arm_composer.py` (`#1043`) | Exact $O(E^3)$ Hungarian bijection $\pi^*$ + SVD Orthogonal Procrustes $R_{B \to A}$ & LoRA rank alignment $S_r \in O(r)$, Theorem 3.8 exact permutation-transport MoE invariance (`RCD_D3`), $P_0$ orthogonal residual synergy + 2-matmul affine LayerNorm |
 | **Dynamic Alvéole Mitosis & Hessian NF4 Export (`D4`)** | `alveole_mitosis_hessian_nf4_exporter.py` (`#1066`), `quantization_compensated_wsp.py` (`#993`), `attention_sink_kv_surgeon.py` (`#1005`) | LOEO corruptor recycling into high-deficit domains inside $P_0$ ($\| \Delta_{\text{mitosis}} V_0 \|_F = 0$), BOS sink guard, diagonal prose-Hessian NF4 low-rank residual inside $P_0$, `<= 6,656 MiB` WDDM envelope (`RCD_D4`) |
 | **Causal Attribution & Co-Adaptation** | `prefix_cached_causal_attribution.py`, `self_healing_checkpoint_rescuer.py`, `router_freeze_cross_arm_surgeon.py` | Prefix-cached $L + L(L+1)/2$ LOEO knockouts; anchor layers & combs preserved bitwise |
 | **Operculation ANSE & Phéromones Royales** | `inter_round_royal_jelly_trophallaxis.py`, `queen_cortex_moe_campaign_governor.py`, `monotone_wsp_stage_composer.py`, `auto_wsp_campaign_scheduler.py`, `lean4_wsp_theorem_registry.py` | Commit iff $\Delta E < 0$ & $D_0 \le +1.0\%$; atomic bitwise rollback (`1e6` pain); signed `QueenPheromoneDirective`; zero-`sorry` Lean 4 proofs (DOIs `10.5281/zenodo.24553269` & `10.5281/zenodo.24542441`) |
-| **Proof-Carrying ZK-WSP Multi-Hive (`D5`) & Wald SPRT Canary** | **`zk_wsp_federated_hive_verifier.py`** (`NEURAL-CTRL-DYN-47`), `auto_open_weight_orchestrator.py`, `shadow_canary_wsp_traffic_router.py` | Fiat-Shamir `ZK-WSP` subspace spot-checks (`RCD_D5`) + `Lean4WSPAttestationReceipt` cross-binding + Multi-Krum in $P_0$ ($n \ge 2f + 3$) + sequential Wald SPRT shadow canary |
+| **Proof-Carrying ZK-WSP Multi-Hive (`D5`) & Wald SPRT Canary** | `zk_wsp_federated_hive_verifier.py` (`#1069`), `auto_open_weight_orchestrator.py`, `shadow_canary_wsp_traffic_router.py` | Fiat-Shamir `ZK-WSP` subspace spot-checks (`RCD_D5`) + `Lean4WSPAttestationReceipt` cross-binding + Multi-Krum in $P_0$ ($n \ge 2f + 3$) + sequential Wald SPRT shadow canary |
 
 ---
 
@@ -69,7 +71,7 @@ Each NeuroController improvement slice progresses through five deterministic loc
 
 1. **Stage 1 — Local Empirical Ratchet Audit & Slice Triage:**
    - Confirms local CPU isolation (`CUDA_VISIBLE_DEVICES=""`) and verifies active local CPU processes (`pgrep -af '[p]ilot[0-9]'` returned `NO_ACTIVE_PILOT`) while auditing certified receipts (`PILOT1`..`PILOT12` + `PILOT13` spec + `PILOT14` ModernBERT-base finding) and leaving every `.lock.json` holdout vault untouched.
-   - Syncs merged PR states (`53` merged NeuroController code PRs `#978`–`#1066` + Foundation Paper v4.4.0 `#1054`) and checks out the active `NEURAL-CTRL-DYN-*` branch cleanly off `origin/main`.
+   - Syncs merged PR states (`54` merged NeuroController code PRs `#978`–`#1069` + Foundation Paper v4.4.0 `#1054`) and checks out the active `NEURAL-CTRL-DYN-*` branch cleanly off `origin/main`.
 2. **Stage 2 — Cleanroom Module, 5-Scenario Test Suite & Tracking Docs Authoring:**
    - Implements the target module in `src/hivemind/swarm/` with AGPL-3.0 copyright header, zero stubs, zero forbidden patterns, and zero network/subprocess egress.
    - Authors `5` deterministic CPU scenarios (`tests/test_*_scenarios.py`, CI-safe `try/except ImportError` guard around optional `gwaya`) targeting `>= 95.0%` standalone line coverage, and updates both `docs/NEURO_CONTROLLER_ROADMAP.md` and `docs/NEURO_CONTROLLER_IMPLEMENTATION_PLAN.md`.
@@ -79,11 +81,11 @@ Each NeuroController improvement slice progresses through five deterministic loc
 4. **Stage 4 — Review-Ready Slice Packaging & Telemetry Receipt Logging:**
    - Stages verified slice files cleanly with owner identity and logs JSONL telemetry receipts (leaving final commit/publication exclusively to the Phase 4 workflow).
 5. **Stage 5 — Plan & Roadmap Progress Sync:**
-   - Records latest empirical CPU verdicts, standalone coverage, and Gen-3 `D1`–`D5` completion status in tracking documents.
+   - Records latest empirical CPU verdicts, standalone coverage, and slice completion status in tracking documents.
 
 ---
 
-## 3. Delivered Status of Prior Merged Slices (`NEURAL-CTRL-DYN-38`..`46`)
+## 3. Delivered Status of Prior Merged Slices (`NEURAL-CTRL-DYN-38`..`47`)
 
 - **`NEURAL-CTRL-DYN-38` (`#1040`):** `prefix_cached_causal_attribution.py` (`99%` standalone coverage).
 - **`NEURAL-CTRL-DYN-39` (`#1043`):** `domain_matched_moe_arm_composer.py` (`99%` standalone coverage).
@@ -94,21 +96,20 @@ Each NeuroController improvement slice progresses through five deterministic loc
 - **`NEURAL-CTRL-DYN-44` (Gen-3 Direction `D2`, Merged `#1059`):** [`src/hivemind/swarm/kronecker_riemannian_nullspace_transport.py`](../src/hivemind/swarm/kronecker_riemannian_nullspace_transport.py) + [`tests/test_kronecker_riemannian_nullspace_transport_scenarios.py`](../tests/test_kronecker_riemannian_nullspace_transport_scenarios.py) (`99%` standalone coverage).
 - **`NEURAL-CTRL-DYN-45` (Gen-3 Direction `D3`, Merged `#1062`):** [`src/hivemind/swarm/optimal_transport_moe_arm_fuser.py`](../src/hivemind/swarm/optimal_transport_moe_arm_fuser.py) + [`tests/test_optimal_transport_moe_arm_fuser_scenarios.py`](../tests/test_optimal_transport_moe_arm_fuser_scenarios.py) (`O(E^3)` Hungarian + Orthogonal Procrustes cross-arm MoE fuser).
 - **`NEURAL-CTRL-DYN-46` (Gen-3 Direction `D4`, Merged `#1066`):** [`src/hivemind/swarm/alveole_mitosis_hessian_nf4_exporter.py`](../src/hivemind/swarm/alveole_mitosis_hessian_nf4_exporter.py) + [`tests/test_alveole_mitosis_hessian_nf4_exporter_scenarios.py`](../tests/test_alveole_mitosis_hessian_nf4_exporter_scenarios.py) (Dynamic *Alvéole* Mitosis corruptor recycler & diagonal prose-Hessian 4-bit NF4 edge exporter).
+- **`NEURAL-CTRL-DYN-47` (Gen-3 Direction `D5`, Merged `#1069`):** [`src/hivemind/swarm/zk_wsp_federated_hive_verifier.py`](../src/hivemind/swarm/zk_wsp_federated_hive_verifier.py) + [`tests/test_zk_wsp_federated_hive_verifier_scenarios.py`](../tests/test_zk_wsp_federated_hive_verifier_scenarios.py) (Proof-carrying `ZK-WSP` subspace spot-checks, Lean 4 attestation receipts, and Multi-Krum multi-hive federation).
 
 ---
 
-## 4. Implementation Status of `NEURAL-CTRL-DYN-47` (Gen-3 Direction `D5`)
+## 4. Implementation Status of `NEURAL-CTRL-DYN-48` (Empirical-Bayes James-Stein Spectral-Shrinkage Surgeon)
 
-- **Target Module:** [`src/hivemind/swarm/zk_wsp_federated_hive_verifier.py`](../src/hivemind/swarm/zk_wsp_federated_hive_verifier.py) — **Implemented**
-- **Scenario Suite:** [`tests/test_zk_wsp_federated_hive_verifier_scenarios.py`](../tests/test_zk_wsp_federated_hive_verifier_scenarios.py) — **Implemented (`5` deterministic CPU scenarios: `S1`..`S5`)**
+- **Target Module:** [`src/hivemind/swarm/james_stein_spectral_norm_surgeon.py`](../src/hivemind/swarm/james_stein_spectral_norm_surgeon.py) — **Implemented**
+- **Scenario Suite:** [`tests/test_james_stein_spectral_norm_surgeon_scenarios.py`](../tests/test_james_stein_spectral_norm_surgeon_scenarios.py) — **Implemented (`5` deterministic CPU scenarios: `S1`..`S5`)**
 
-### Implemented Capabilities & Mathematical Guarantees (Zenodo `10.5281/zenodo.24542441` §6 Direction `D5` & Lean 4 `RCD_D5`)
+### Implemented Capabilities & Mathematical Guarantees (`PILOT9`, `PILOT12`, and `PILOT14`)
 
-1. **Orthonormal Prose Subspace Commitments (`build_prose_subspace_commitment`, `build_prose_subspace_commitment_from_keys`, `collect_prose_subspace_from_probe`):**
-   - Validates orthonormal general-prose bases `V_0` (`||V_0^T V_0 - I||_inf <= tol`), synthesizes exact complementary AlphaEdit null-space projectors `P_0 = I - V_0 V_0^T`, and seals `V_0` / `P_0` under deterministic CPU bitwise SHA-256 digests (`v0_sha256`, `p0_sha256`).
-2. **Proof-Carrying ZK-WSP Spot-Check Witness & Fiat-Shamir Challenges (`compute_zkwsp_spotcheck_witness`, `verify_zkwsp_spotcheck_witness`):**
-   - Evaluates the Lean 4 `RCD_D5` completeness/soundness predicate `max_{q, u} |(Delta W V_{:,q})_u| <= tau_zk` across single-matrix and multi-layer MoE parameter deltas together with deterministic `L1`-normalized Rademacher Fiat-Shamir challenge projections seeded from `SHA-256(hive_id, round_id, delta_sha256, v0_sha256)`.
-3. **Lean 4 Theorem Attestation & Multi-Krum Multi-Hive Federation (`build_federated_hive_packet`, `verify_federated_hive_packet`, `verify_and_aggregate_federated_hives`):**
-   - Cross-binds every Hive packet (`hive_id`, `round_id`, `delta_sha256`, `v0_sha256`, `witness_sha256`) to a machine-checked `Lean4WSPAttestationReceipt` over `lean4/HiveMindSpec.lean`, filters surviving honest Hives via CPU `float64` Euclidean Multi-Krum under `n >= 2f + 3`, and projects the consensus delta strictly inside `P_0`.
-4. **ANSE Thermodynamic Ratchet & Atomic Bitwise Rollback (`execute_verified_zkwsp_federated_hive_round`, `verify_zkwsp_federated_round_receipt_provenance`):**
-   - Commits the multi-hive consensus update iff `ANSE Delta E < 0` and general/worst-domain drift `<= +1.0%`; otherwise enforces `ANSE_MAXIMUM_PAIN` (`1e6`) atomic bitwise rollback (`final_state_sha256 == parent_state_sha256`) and issues canonical SHA-256 round receipts.
+1. **Effective Probe-DOF, Spectral Anisotropy & Massive-Activation Outlier Guard (`compute_effective_probe_dof_and_overfit_risk`):**
+   - Diagnoses underdetermined probe regimes (`n_chunks / dim < min_chunks_per_dof`), SVD spectral energy concentration (`top1_sv_energy_frac`, `top8_sv_energy_frac`, effective participation rank separating `PILOT12` `0.5B` `0.3481` from `PILOT9` `3B` `0.6874` and `PILOT14` ModernBERT `0.9334`), massive-activation rogue channels (`dim 490` `22.04x`, `dim 1819` `60.38x`, `dim 245` `10.45x`), and cross-chunk probe SNR.
+2. **Empirical-Bayes James-Stein Rank-`k` Fisher-Norm Step inside `ker(G_D0)` (`fit_james_stein_rank_k_fisher_norm_step`):**
+   - Projects specialist chunk gradients strictly inside `ker(G_D0)`, extracts top-`k` dominant orthonormal variance modes (`max_rank=4`), applies exact per-mode Empirical-Bayes shrinkage `c_j = max(0, 1 - var_noise_j / (mean_signal_j^2 + var_noise_j / n))`, preconditions with damped diagonal Fisher (`ridge_scale=1e-2`), and returns a norm-bounded perturbation `delta_w` satisfying `|G_D0 @ delta_w| < 1e-6`.
+3. **Held-Out Selection Gate, Scalar Fallback & ANSE Bitwise Rollback (`execute_verified_james_stein_norm_surgery`, `verify_james_stein_norm_receipt_provenance`):**
+   - Compares 1-DOF folded-tau scalar calibration against James-Stein rank-`k` surgery on held-out selection splits under `ANSE Delta E < 0` and `D0 <= +1.0%`, automatically falling back to scalar calibration when probe SNR is insufficient or shrinkage contracts toward `0` (preventing `PILOT14` MLM-style `51,136`-DOF overfit), enforcing `ANSE_MAXIMUM_PAIN` (`1e6`) atomic bitwise rollback on guard/energy breach, and sealing canonical SHA-256 receipts.

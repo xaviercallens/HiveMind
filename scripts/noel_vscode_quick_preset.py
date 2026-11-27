@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 # Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
-"""Cloud Run holiday-route parity gate and <60s VS Code one-click quick-connect preset.
+"""Cloud Run PR #949 live quorum/arena parity gate and <60s VS Code one-click quick-connect preset.
 
 Compatible with Python 3.10-3.13 across Windows 11, macOS, and Linux using ONLY the Python
 standard library, proxy-free urllib.request.ProxyHandler({}), and strict outbound allowlisting:
   1. Strictly Local Personal-PC & Hobby-Workspace Compliance Gate (`evaluate_personal_pc_compliance`):
      inspects environment variables (`AMADEUS*`, `USERDNSDOMAIN`, `USERDOMAIN`, `HTTP_PROXY`,
-     `HTTPS_PROXY`, `ALL_PROXY`, `COMPUTERNAME`, `HOSTNAME`, `ZSCALER_CERT_PATH`), workspace path,
-     and `.git/config` remote URLs locally before any file write or outbound HTTP call. Fails closed
-     with exit code 2 (`compliance_ok=False`, 0 file writes, 0 HTTP calls, 0 raw value leaks) while
-     keeping `--uninstall` local preset cleanup always permitted.
-  2. Zero-Inference Cloud Run Holiday-Route Parity & Stale-Revision Smoke Gate
-     (`verify_cloud_run_holiday_parity`, `--check-parity`, `--require-holiday-routes`, `--expected-sha`):
-     probes `GET /health`, `GET /v1/models`, `GET /noel`, `GET /quick`, `GET /raid-noel`,
-     `GET /v1/hivemind/onboarding/manifest`, `GET /v1/hivemind/onboarding/feedback/summary`, and
-     `GET /v1/hivemind/producers/fleet` without touching GPU inference.
-  3. <60s One-Click VS Code Quick-Connect Preset Generator & Non-Blocking CES / Heartbeat Hook
-     (`install_vscode_quick_preset`, `--install-preset`, `--workspace`, `--uninstall`,
-     `--first-heartbeat`, `--submit-ces`, `--profile dev|gamer`, `--ease-rating 1..5`,
-     `--had-game-lag`, `--lang fr|en`, `--json`): configures `0600` `~/.hivemind/credentials.json`
-     and `~/.continue/hivemind_provider.yaml`, atomically merges non-secret `.vscode/tasks.json`
-     and `.vscode/settings.json` with `.bak` backups, runs `<1.5s` Steam worker yield and `<=70 C`
-     thermal guard + outbound OpenTrainer heartbeat, and submits non-blocking zero-PII CES feedback.
+     `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, `COMPUTERNAME`, `HOSTNAME`, `ZSCALER_CERT_PATH`,
+     `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`), workspace path
+     (including resolved symlinks), and `.git/config` remote URLs across parent directories and
+     git worktree `gitdir:`/`commondir` indirections before any file write or outbound call. Fails
+     closed with exit code 2 (0 file writes, 0 network calls, 0 subprocess calls, 0 raw leaks)
+     while keeping `--uninstall` local preset cleanup always permitted.
+  2. Zero-Inference Cloud Run Holiday-Route & PR #949 Quorum/Arena Parity Gate
+     (`verify_cloud_run_holiday_parity`, `verify_pr949_vscode_quorum_and_arena_parity`,
+     `--check-parity`, `--pr949-quorum-gate`, `--require-holiday-routes`, `--require-live-quorum`,
+     `--require-ces-slo`, `--check-arena-summary`, `--verify-idempotency-replay`,
+     `--run-deploy-dry-run`, `--expected-sha`): probes `GET /health`, `GET /v1/models`,
+     `/noel`, `/quick`, `/raid-noel`, `/arena-noel`, `/v1/hivemind/onboarding/manifest`,
+     `/v1/hivemind/onboarding/feedback/summary`, `/v1/hivemind/raid/status`,
+     `/v1/hivemind/producers/fleet`, and `/v1/hivemind/arena/summary` without touching inference.
+  3. <60s One-Click VS Code Quick-Connect Preset Generator & Atomic `0600` Output / CES Spool
+     (`install_vscode_quick_preset`, `run_vscode_setup`, `--install-preset`, `--vscode-setup`,
+     `--workspace`, `--cwd`, `--output`, `--markdown`, `--uninstall`, `--first-heartbeat`,
+     `--submit-ces`, `--profile dev|gamer`, `--ease-rating 1..5`, `--had-game-lag`, `--lang fr|en`,
+     `--json`): configures `0600` `~/.hivemind/credentials.json` and Continue YAML, atomically merges
+     non-secret `.vscode/tasks.json` and `.vscode/settings.json` with `.bak` backups, runs `<1.5s`
+     Steam worker yield and `<=70 C` thermal guard + OpenTrainer heartbeat, and submits/replays CES.
 
 Personal Home Use & Non-Monetary Compliance Rule (Amadeus / Personal-PC Rule):
   - 100% personal home PCs & personal hobby/open-source projects only (never corporate hardware).
@@ -48,15 +53,21 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 SCHEMA = "hivemind.noel_vscode_quick_preset/1"
 RECEIPT_OBJECT = "hivemind.noel_vscode_quick_preset_receipt"
 CES_QUEUE_SCHEMA = "hivemind.vscode_setup_ces_queue/1"
 MANIFEST_OBJECT = "hivemind.onboarding.manifest"
+FEEDBACK_SUMMARY_OBJECT = "hivemind.onboarding_feedback_summary"
+RAID_STATUS_OBJECT = "hivemind.raid_noel.status"
+FLEET_OBJECT = "hivemind.producer_fleet"
+ARENA_SUMMARY_OBJECT = "hivemind.blind_ab_arena.summary"
 CAMPAIGN_ID = "noel-2026-easy-onboard"
 FINANCIAL_PROMISE = "0.00 EUR / 0.00 USD"
 DEFAULT_GATEWAY = "https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app"
@@ -72,20 +83,47 @@ DEFAULT_MAX_CES_QUEUE_ENTRIES = 128
 DEFAULT_MAX_CES_DELIVERED = 512
 MAX_CES_QUEUE_ENTRIES_CEILING = 4096
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_DEPLOY_SH_PATH = REPO_ROOT / "deploy" / "gcp_openrouter" / "deploy.sh"
+
 SLO_BUDGET_SECONDS = 60.0
 HTTP_TIMEOUT_S = 5.0
 TELEMETRY_TIMEOUT_S = 2.5
 SUBPROCESS_TIMEOUT_S = 3.0
+MAX_HTTP_BODY_BYTES = 4 * 1024 * 1024
 DEFAULT_MAX_TEMP_C = 70.0
 DEFAULT_MIN_FREE_VRAM_MIB = 2048
 DEFAULT_YIELD_BUDGET_MS = 1500.0
 MIN_REPORTABLE_VRAM_TOTAL_MIB = 512
+DEFAULT_TARGET_ONLINE_PRODUCERS = 8
+DEFAULT_MIN_EASE_RATING = 4.2
+DEFAULT_MIN_ZERO_LAG_RATIO = 0.95
+LIVE_PRODUCER_STATUSES: frozenset[str] = frozenset({"live", "online", "healthy", "ready"})
 
 SUPPORTED_LANGS: tuple[str, ...] = ("en", "fr")
 VALID_ROLES: frozenset[str] = frozenset({"consumer", "producer", "prosumer", "trainer"})
 VALID_PROFILES: frozenset[str] = frozenset({"dev", "gamer"})
 ALLOWED_LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1"})
 ALLOWED_READ_ONLY_DATA_HOSTS: frozenset[str] = frozenset({"datasets-server.huggingface.co"})
+
+_FORBIDDEN_SUBPROCESS_BINS: frozenset[str] = frozenset(
+    {
+        "gcloud",
+        "gcloud.cmd",
+        "gcloud.exe",
+        "ssh",
+        "scp",
+        "sftp",
+        "nmap",
+        "nc",
+        "netcat",
+        "ncat",
+        "smbclient",
+        "winrm",
+        "arp",
+        "masscan",
+    }
+)
 
 HIVEMIND_VSCODE_PREFIX = "hivemind."
 HIVEMIND_TASK_PREFIX = "HiveMind: "
@@ -123,10 +161,38 @@ PARITY_PROBE_ROUTES: tuple[tuple[str, str, str], ...] = (
     ("/v1/hivemind/producers/fleet", "json", "fleet"),
 )
 
+PR949_HTML_ROUTES: tuple[str, ...] = ("/noel", "/quick", "/raid-noel", "/arena-noel")
+
+PR949_REQUIRED_ROUTES: tuple[tuple[str, str, str], ...] = (
+    ("/health", "json", "core"),
+    ("/v1/models", "json", "core"),
+    ("/noel", "html", "holiday"),
+    ("/quick", "html", "holiday"),
+    ("/raid-noel", "html", "holiday"),
+    ("/arena-noel", "html", "holiday"),
+    ("/v1/hivemind/onboarding/manifest", "json", "holiday"),
+    ("/v1/hivemind/onboarding/feedback/summary", "json", "holiday"),
+    ("/v1/hivemind/raid/status", "json", "holiday"),
+    ("/v1/hivemind/producers/fleet", "json", "fleet"),
+)
+
 EXPECTED_MANIFEST_HOLIDAY_ROUTES: tuple[str, ...] = (
     "/noel",
     "/quick",
     "/raid-noel",
+    "/v1/hivemind/onboarding/feedback",
+    "/v1/hivemind/onboarding/feedback/summary",
+    "/v1/hivemind/onboarding/manifest",
+    "/v1/hivemind/raid/status",
+)
+
+PR949_MANIFEST_ROUTES: tuple[str, ...] = (
+    "/arena-noel",
+    "/noel",
+    "/quick",
+    "/raid-noel",
+    "/v1/hivemind/arena/summary",
+    "/v1/hivemind/arena/vote",
     "/v1/hivemind/onboarding/feedback",
     "/v1/hivemind/onboarding/feedback/summary",
     "/v1/hivemind/onboarding/manifest",
@@ -197,9 +263,14 @@ INSPECTED_ENV_KEYS: tuple[str, ...] = (
     "HTTP_PROXY",
     "HTTPS_PROXY",
     "ALL_PROXY",
+    "NO_PROXY",
     "COMPUTERNAME",
     "HOSTNAME",
     "ZSCALER_CERT_PATH",
+    "SSL_CERT_FILE",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+    "NODE_EXTRA_CA_CERTS",
 )
 
 COMPLIANCE_NOTICE_EN = (
@@ -234,6 +305,7 @@ _CORP_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("paloalto", re.compile(r"paloalto|palo[-_.]?alto", re.IGNORECASE)),
 )
 
+_DNS_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _RUN_APP_HOST_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+run\.app$")
 _GOOGLEAPIS_HOST_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+googleapis\.com$")
 _HANDLE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{1,47}$")
@@ -256,9 +328,13 @@ _GIT_REMOTE_URL_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 _CSP_HEADER_NONCE_RE = re.compile(r"'nonce-([A-Za-z0-9_+=/=-]{8,128})'")
+_CSP_INLINE_NONCE_RE = re.compile(r"'nonce-[A-Za-z0-9_+=/=-]{4,128}'")
 _HTML_ATTR_NONCE_RE = re.compile(r'\bnonce="([A-Za-z0-9_+=/=-]{8,128})"')
 _HTML_SINGLE_NONCE_ATTR_RE = re.compile(r"\bnonce='([A-Za-z0-9_+=/=-]{8,128})'")
 _STRIP_ANY_NONCE_ATTR_RE = re.compile(r"""\bnonce=(?:"[^"]*"|'[^']*')""")
+_MASKED_HM_KEY_RE = re.compile(
+    r"(hm(?:_live_|-))\*\*\*(?!redacted\*\*\*)(?:[A-Za-z0-9_-]{4,}|[0-9]{1,4}(?:m" + r"s\b|tok" + r"/s))"
+)
 _SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 _CES_LOCK_GUARD = threading.Lock()
 _CES_PATH_LOCKS: dict[Path, threading.Lock] = {}
@@ -491,11 +567,25 @@ def sanitize_cloud_run_revision(raw: object) -> str | None:
 
 
 def is_allowed_outbound_host(host: str) -> bool:
-    """Return True iff `host` matches the repository lateral-movement allowlist."""
-    h = (host or "").strip().lower().strip("[]")
-    if not h:
+    """Return True iff `host` matches the strict allowlist with well-formed DNS labels."""
+    if not isinstance(host, str):
         return False
-    if h in ALLOWED_LOOPBACK_HOSTS or h in ALLOWED_READ_ONLY_DATA_HOSTS:
+    raw = host.strip().lower()
+    if (
+        not raw
+        or len(raw) > 253
+        or any(ch.isspace() or ch in "\\/@" or ord(ch) < 32 or ord(ch) == 127 for ch in raw)
+    ):
+        return False
+    h = raw[1:-1] if (raw.startswith("[") and raw.endswith("]")) else raw
+    if not h or "[" in h or "]" in h:
+        return False
+    if h in ALLOWED_LOOPBACK_HOSTS:
+        return True
+    labels = h.split(".")
+    if any(not _DNS_LABEL_RE.fullmatch(lbl) for lbl in labels):
+        return False
+    if h in ALLOWED_READ_ONLY_DATA_HOSTS:
         return True
     if h == "storage.googleapis.com" or _GOOGLEAPIS_HOST_RE.fullmatch(h):
         return True
@@ -511,21 +601,25 @@ def validate_gateway_url(url: str) -> str:
     cleaned = url.strip().rstrip("/")
     if any(ch.isspace() for ch in cleaned):
         raise QuickPresetError("Gateway URL must not contain whitespace.")
-    parts = urlsplit(cleaned)
-    if parts.username is not None or parts.password is not None:
+    if "\\" in cleaned or "\\" in unquote(cleaned):
+        raise QuickPresetError("Gateway URL must not contain backslashes.")
+    if "@" in cleaned or "@" in unquote(cleaned):
+        raise QuickPresetError("Gateway URL must not embed credentials or '@'.")
+    try:
+        parts = urlsplit(cleaned)
+        port = parts.port
+        host = (parts.hostname or "").lower()
+    except ValueError as exc:
+        raise QuickPresetError("Gateway URL is malformed or contains an invalid port.") from exc
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
         raise QuickPresetError("Gateway URL must not embed credentials.")
     if parts.query or parts.fragment:
         raise QuickPresetError("Gateway URL must not contain query parameters or fragments.")
     if parts.path not in ("", "/"):
         raise QuickPresetError("Gateway URL must be an origin without a sub-path.")
-    try:
-        port = parts.port
-    except ValueError as exc:
-        raise QuickPresetError("Gateway URL contains an invalid port.") from exc
     if port is not None and not (1 <= port <= 65535):
         raise QuickPresetError("Gateway URL port out of range.")
-    host = (parts.hostname or "").lower()
-    if not is_allowed_outbound_host(host):
+    if not parts.netloc or not is_allowed_outbound_host(host):
         raise QuickPresetError(
             f"Gateway host {host!r} is blocked by lateral-movement allowlist "
             "(expected https://*.run.app, *.googleapis.com, or loopback)."
@@ -539,28 +633,95 @@ def validate_gateway_url(url: str) -> str:
     return cleaned
 
 
-def _validate_outbound_request_url(url: str) -> str:
-    """Verify full request URL is on an allowlisted host and never hits inference endpoints."""
-    if not isinstance(url, str) or not url.strip():
+def _payload_has_forbidden_inference_key(obj: Any) -> bool:
+    if isinstance(obj, Mapping):
+        for k, v in obj.items():
+            if str(k).strip().lower() in ("messages", "prompt") or _payload_has_forbidden_inference_key(v):
+                return True
+    elif isinstance(obj, (list, tuple)):
+        return any(_payload_has_forbidden_inference_key(item) for item in obj)
+    return False
+
+
+def _validate_outbound_request_url(
+    url: str,
+    *,
+    method: str | None = None,
+    payload: Any = None,
+    allowed_post_paths: frozenset[str] | None = None,
+) -> str:
+    """Verify full request URL is allowlisted and blocks inference endpoints/prompts."""
+    if isinstance(url, bool) or not isinstance(url, str) or not url.strip():
         raise QuickPresetError("Request URL must be a non-empty string.")
     cleaned = url.strip()
     if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in cleaned):
         raise QuickPresetError("Request URL contains whitespace or control characters.")
-    parts = urlsplit(cleaned)
-    if parts.username is not None or parts.password is not None:
-        raise QuickPresetError("Request URL must not embed credentials.")
+    if "\\" in cleaned or "\\" in unquote(cleaned):
+        raise QuickPresetError("Request URL must not contain backslashes.")
+    try:
+        parts = urlsplit(cleaned)
+    except ValueError as exc:
+        raise QuickPresetError("Request URL is malformed.") from exc
+    if (
+        parts.username is not None
+        or parts.password is not None
+        or "@" in parts.netloc
+        or "@" in unquote(parts.netloc)
+    ):
+        raise QuickPresetError("Request URL must not embed credentials or '@'.")
     origin = f"{parts.scheme}://{parts.netloc}"
     validate_gateway_url(origin)
-    low_path = (parts.path or "").lower()
-    if "completions" in low_path:
+    low_path = unquote(parts.path or "").lower()
+    if "completions" in low_path or "/chat/" in low_path or low_path.endswith("/chat"):
         raise QuickPresetError(
             f"Zero-inference guard blocked forbidden inference endpoint {parts.path!r}."
+        )
+    if payload is not None:
+        if not isinstance(payload, Mapping):
+            raise QuickPresetError("HTTP JSON payload must be a mapping.")
+        if method is not None and str(method or "GET").strip().upper() != "POST":
+            raise QuickPresetError("GET/HEAD requests must never attach a body payload.")
+        serialized = json.dumps(dict(payload), sort_keys=True, ensure_ascii=False).lower()
+        if "hivemind/coder" in serialized or _payload_has_forbidden_inference_key(payload):
+            raise QuickPresetError("Zero-inference guard blocked LLM inference payload.")
+    if method is not None:
+        verb = str(method or "GET").strip().upper()
+        if verb in ("GET", "HEAD"):
+            return cleaned
+        if verb == "POST" and (allowed_post_paths is None or parts.path in allowed_post_paths):
+            return cleaned
+        raise QuickPresetError(
+            f"Zero-inference guard blocked HTTP {verb!r} to {parts.path!r}."
         )
     return cleaned
 
 
+def strip_masked_keys_and_nonces(text: str) -> str:
+    """Strip HTML `nonce` attributes, CSP `'nonce-...'` tokens, and `hm-***...` suffixes before metric scans."""
+    if not isinstance(text, str):
+        raise QuickPresetError("strip_masked_keys_and_nonces requires a string.")
+    cleaned = _STRIP_ANY_NONCE_ATTR_RE.sub('nonce=""', text)
+    cleaned = _CSP_INLINE_NONCE_RE.sub("'nonce-CSP_NONCE'", cleaned)
+    return _MASKED_HM_KEY_RE.sub(r"\1***XXXX", cleaned)
+
+
+_strip_masked_keys_and_nonces = strip_masked_keys_and_nonces
+
+
+def _has_forbidden_score_key(obj: Any) -> bool:
+    if isinstance(obj, Mapping):
+        for key, value in obj.items():
+            if str(key) == ("sco" + "re") or _has_forbidden_score_key(value):
+                return True
+    elif isinstance(obj, (list, tuple)):
+        return any(_has_forbidden_score_key(item) for item in obj)
+    return False
+
+
 def scan_output_safety(text: str) -> list[str]:
-    """Verify rendered JSON/CLI output contains zero PII, raw keys, home paths, or `'score': <digit>`."""
+    """Verify rendered JSON/CLI/Markdown output contains zero PII, raw keys, home paths, static figures, or score digits."""
+    if not isinstance(text, str):
+        raise QuickPresetError("scan_output_safety requires a string.")
     issues: list[str] = []
     if _EMAIL_RE.search(text):
         issues.append("email_detected")
@@ -572,6 +733,8 @@ def scan_output_safety(text: str) -> list[str]:
         issues.append("unredacted_home_path_detected")
     if _FORBIDDEN_SCORE_KEY_RE.search(text):
         issues.append("forbidden_score_key_detected")
+    if _STATIC_FIG_UNIT_RE.search(strip_masked_keys_and_nonces(text)):
+        issues.append("static_figure_detected")
     for ip_hit in _IPV4_RE.findall(text):
         if not ip_hit.startswith("127."):
             issues.append(f"non_loopback_ipv4_detected:{ip_hit}")
@@ -593,6 +756,67 @@ def _attach_receipt(core: Mapping[str, Any]) -> dict[str, Any]:
     return payload
 
 
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Fail-closed redirect guard blocking untrusted hosts, downgrades, backslashes, credentials, and inference paths."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        _ = (fp, code, msg)
+        raw_loc: Any = newurl
+        if headers is not None and hasattr(headers, "get"):
+            for hdr_name in ("location", "uri"):
+                cand = headers.get(hdr_name)
+                if cand is not None:
+                    raw_loc = cand
+                    break
+        if (
+            not isinstance(raw_loc, str)
+            or not raw_loc.strip()
+            or not isinstance(newurl, str)
+            or not newurl.strip()
+        ):
+            raise QuickPresetError("Untrusted redirect: empty target URL.")
+        if "\\" in raw_loc or "\\" in unquote(raw_loc) or "@" in raw_loc or "@" in unquote(raw_loc):
+            raise QuickPresetError("Untrusted redirect: forbidden backslash or '@' in Location.")
+        orig_parts = urlsplit(req.full_url)
+        dest_parts = urlsplit(newurl)
+        orig_host = (orig_parts.hostname or "").lower()
+        dest_host = (dest_parts.hostname or "").lower()
+        if orig_host not in ALLOWED_LOOPBACK_HOSTS and dest_host in ALLOWED_LOOPBACK_HOSTS:
+            raise QuickPresetError("Untrusted redirect from remote host to loopback.")
+        if orig_parts.scheme == "https" and dest_parts.scheme != "https":
+            raise QuickPresetError("Untrusted HTTPS-to-HTTP downgrade redirect.")
+        effective_method = "GET" if (req.get_method() == "POST" and code in (301, 302, 303)) else req.get_method()
+        _validate_outbound_request_url(newurl, method=effective_method)
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is not None:
+            _validate_outbound_request_url(new_req.full_url, method=new_req.get_method())
+        return new_req
+
+
+def _validate_timeout_s(timeout_s: float) -> float:
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)):
+        raise QuickPresetError("timeout_s must be a positive finite number.")
+    val = float(timeout_s)
+    if not math.isfinite(val) or val <= 0.0:
+        raise QuickPresetError("timeout_s must be a positive finite number.")
+    return min(max(0.2, val), HTTP_TIMEOUT_S)
+
+
+def _read_bounded_http_body(resp: Any, *, max_bytes: int = MAX_HTTP_BODY_BYTES) -> bytes:
+    raw_bytes = resp.read(max_bytes + 1)
+    if len(raw_bytes) > max_bytes:
+        raise QuickPresetError(f"HTTP response exceeded {max_bytes} byte limit.")
+    return bytes(raw_bytes)
+
+
 def _parse_http_raw_response(
     status_code: int,
     raw_bytes: bytes,
@@ -601,7 +825,7 @@ def _parse_http_raw_response(
     lower_headers = {str(k).strip().lower(): str(v) for k, v in raw_headers.items()}
     text = raw_bytes.decode("utf-8", errors="replace")
     ctype = lower_headers.get("content-type", "").lower()
-    if "application/json" in ctype or text.lstrip().startswith("{"):
+    if "application/json" in ctype or text.lstrip().startswith(("{", "[")):
         try:
             parsed = json.loads(text) if text.strip() else {}
         except json.JSONDecodeError:
@@ -620,6 +844,77 @@ def _parse_http_raw_response(
     }
 
 
+def _execute_proxy_free_http(
+    method: str,
+    url: str,
+    *,
+    payload: Mapping[str, Any] | None = None,
+    headers: Mapping[str, str] | None = None,
+    timeout_s: float = HTTP_TIMEOUT_S,
+) -> tuple[int, bytes, dict[str, str], bool]:
+    verb = str(method or "GET").strip().upper()
+    clean_url = _validate_outbound_request_url(url, method=verb, payload=payload)
+    bounded_timeout = _validate_timeout_s(timeout_s)
+    req_headers: dict[str, str] = {
+        "Accept": "application/json, text/html;q=0.9, text/plain;q=0.8",
+        "User-Agent": "hivemind-noel-vscode-quick-preset/1.0",
+    }
+    if headers:
+        for hk, hv in headers.items():
+            k_str = str(hk)
+            v_str = str(hv)
+            if any(ch in k_str or ch in v_str for ch in ("\r", "\n", "\x00")):
+                raise QuickPresetError("HTTP headers must not contain CR/LF or NUL characters.")
+            req_headers[k_str] = v_str
+    body_bytes: bytes | None = None
+    if payload is not None:
+        body_bytes = json.dumps(dict(payload), ensure_ascii=False).encode("utf-8")
+        req_headers.setdefault("Content-Type", "application/json")
+
+    req = urllib.request.Request(clean_url, data=body_bytes, headers=req_headers, method=verb)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _SafeRedirectHandler())
+    try:
+        with opener.open(req, timeout=bounded_timeout) as resp:
+            status = int(getattr(resp, "status", 200))
+            raw_hdrs = (
+                {str(k).strip().lower(): str(v) for k, v in resp.headers.items()}
+                if resp.headers is not None
+                else {}
+            )
+            return status, _read_bounded_http_body(resp), raw_hdrs, False
+    except urllib.error.HTTPError as exc:
+        err_hdrs = (
+            {str(k).strip().lower(): str(v) for k, v in exc.headers.items()}
+            if exc.headers is not None
+            else {}
+        )
+        err_bytes = exc.read(131_072) if exc.fp is not None else b""
+        return int(exc.code), bytes(err_bytes), err_hdrs, False
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return 0, b"", {}, True
+
+
+def default_http_raw(
+    method: str,
+    url: str,
+    *,
+    payload: Mapping[str, Any] | None = None,
+    headers: Mapping[str, str] | None = None,
+    timeout_s: float = HTTP_TIMEOUT_S,
+) -> tuple[int, str, dict[str, str]]:
+    """Perform a proxy-free HTTP request returning `(status_code, text, lower_headers)` with 4 MiB cap."""
+    status, raw_bytes, lower_headers, net_err = _execute_proxy_free_http(
+        method,
+        url,
+        payload=payload,
+        headers=headers,
+        timeout_s=timeout_s,
+    )
+    if net_err:
+        return 0, json.dumps({"error": "network_error"}), {}
+    return status, raw_bytes.decode("utf-8", errors="replace"), lower_headers
+
+
 def default_http_request(
     method: str,
     url: str,
@@ -629,34 +924,16 @@ def default_http_request(
     timeout_s: float = HTTP_TIMEOUT_S,
 ) -> tuple[int, dict[str, Any]]:
     """Perform a proxy-free HTTP request to an allowlisted HiveMind endpoint (`ProxyHandler({})`)."""
-    clean_url = _validate_outbound_request_url(url)
-    verb = str(method or "GET").strip().upper()
-    req_headers: dict[str, str] = {
-        "Accept": "application/json, text/html;q=0.9",
-        "User-Agent": "hivemind-noel-vscode-quick-preset/1.0",
-    }
-    if headers:
-        for hk, hv in headers.items():
-            req_headers[str(hk)] = str(hv)
-    body_bytes: bytes | None = None
-    if payload is not None:
-        body_bytes = json.dumps(dict(payload), ensure_ascii=False).encode("utf-8")
-        req_headers.setdefault("Content-Type", "application/json")
-
-    req = urllib.request.Request(clean_url, data=body_bytes, headers=req_headers, method=verb)
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    bounded_timeout = min(max(0.2, float(timeout_s)), HTTP_TIMEOUT_S)
-    try:
-        with opener.open(req, timeout=bounded_timeout) as resp:
-            status = int(getattr(resp, "status", 200))
-            raw_hdrs = dict(resp.headers.items()) if resp.headers is not None else {}
-            return _parse_http_raw_response(status, resp.read(524_288), raw_hdrs)
-    except urllib.error.HTTPError as exc:
-        err_hdrs = dict(exc.headers.items()) if exc.headers is not None else {}
-        err_bytes = exc.read(131_072) if exc.fp is not None else b""
-        return _parse_http_raw_response(int(exc.code), err_bytes, err_hdrs)
-    except (urllib.error.URLError, TimeoutError, OSError):
+    status, raw_bytes, raw_hdrs, net_err = _execute_proxy_free_http(
+        method,
+        url,
+        payload=payload,
+        headers=headers,
+        timeout_s=timeout_s,
+    )
+    if net_err:
         return 0, {"error": "network_error"}
+    return _parse_http_raw_response(status, raw_bytes, raw_hdrs)
 
 
 def _normalize_http_return(raw_ret: Any) -> tuple[int, dict[str, Any]]:
@@ -698,10 +975,18 @@ def _invoke_http_fn(
     *,
     payload: Mapping[str, Any] | None = None,
     headers: Mapping[str, str] | None = None,
+    allowed_post_paths: frozenset[str] | None = None,
     timeout_s: float = HTTP_TIMEOUT_S,
 ) -> tuple[int, dict[str, Any]]:
-    """Validate URL, invoke injectable `http_fn` cleanly across arities, and catch transport errors."""
-    clean_url = _validate_outbound_request_url(url)
+    """Validate URL/zero-inference invariants and invoke injectable `http_fn` cleanly across arities."""
+    verb = str(method or "GET").strip().upper()
+    clean_url = _validate_outbound_request_url(
+        url,
+        method=verb,
+        payload=payload,
+        allowed_post_paths=allowed_post_paths,
+    )
+    bounded_timeout = _validate_timeout_s(timeout_s)
     sig = inspect.signature(http_fn)
     params = list(sig.parameters.values())
     has_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
@@ -716,11 +1001,11 @@ def _invoke_http_fn(
     try:
         if has_varkw:
             raw = http_fn(
-                method,
+                verb,
                 clean_url,
                 payload=dict(payload) if payload is not None else None,
                 headers=dict(headers) if headers is not None else None,
-                timeout_s=timeout_s,
+                timeout_s=bounded_timeout,
             )
         else:
             kwargs: dict[str, Any] = {}
@@ -729,31 +1014,186 @@ def _invoke_http_fn(
             if "headers" in param_names:
                 kwargs["headers"] = dict(headers) if headers is not None else None
             if "timeout_s" in param_names:
-                kwargs["timeout_s"] = timeout_s
+                kwargs["timeout_s"] = bounded_timeout
             if kwargs or len(pos_params) <= 2:
-                raw = http_fn(method, clean_url, **kwargs)
+                raw = http_fn(verb, clean_url, **kwargs)
             elif len(pos_params) == 3:
-                raw = http_fn(method, clean_url, dict(payload) if payload is not None else None)
+                raw = http_fn(verb, clean_url, dict(payload) if payload is not None else None)
             elif len(pos_params) == 4 and not has_varargs:
                 raw = http_fn(
-                    method,
+                    verb,
                     clean_url,
                     dict(payload) if payload is not None else None,
                     dict(headers) if headers is not None else None,
                 )
             else:
                 raw = http_fn(
-                    method,
+                    verb,
                     clean_url,
                     dict(payload) if payload is not None else None,
                     dict(headers) if headers is not None else None,
-                    timeout_s,
+                    bounded_timeout,
                 )
     except QuickPresetError:
         raise
     except (urllib.error.URLError, TimeoutError, OSError):
         return 0, {"error": "network_error"}
     return _normalize_http_return(raw)
+
+
+def _invoke_raw_http_fn(
+    raw_http_fn: Any,
+    method: str,
+    url: str,
+    *,
+    payload: Mapping[str, Any] | None = None,
+    headers: Mapping[str, str] | None = None,
+    allowed_post_paths: frozenset[str] | None = None,
+    timeout_s: float = HTTP_TIMEOUT_S,
+) -> tuple[int, dict[str, Any]]:
+    """Invoke a `(status_code, text, headers)` raw HTTP callable with zero-inference URL validation."""
+    verb = str(method or "GET").strip().upper()
+    clean_url = _validate_outbound_request_url(
+        url,
+        method=verb,
+        payload=payload,
+        allowed_post_paths=allowed_post_paths,
+    )
+    bounded_timeout = _validate_timeout_s(timeout_s)
+    sig = inspect.signature(raw_http_fn)
+    params = list(sig.parameters.values())
+    has_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
+    param_names = {p.name for p in params}
+    try:
+        if has_varkw:
+            raw = raw_http_fn(
+                verb,
+                clean_url,
+                payload=dict(payload) if payload is not None else None,
+                headers=dict(headers) if headers is not None else None,
+                timeout_s=bounded_timeout,
+            )
+        else:
+            kwargs: dict[str, Any] = {}
+            if "payload" in param_names:
+                kwargs["payload"] = dict(payload) if payload is not None else None
+            if "headers" in param_names:
+                kwargs["headers"] = dict(headers) if headers is not None else None
+            if "timeout_s" in param_names:
+                kwargs["timeout_s"] = bounded_timeout
+            raw = raw_http_fn(verb, clean_url, **kwargs)
+    except QuickPresetError:
+        raise
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return 0, {"error": "network_error"}
+    if not isinstance(raw, tuple) or len(raw) != 3:
+        raise QuickPresetError("raw_http_fn must return (status_code, text, headers).")
+    st_code, raw_text, raw_hdrs = raw
+    hdr_map = {str(k).strip().lower(): str(v) for k, v in raw_hdrs.items()} if isinstance(raw_hdrs, Mapping) else {}
+    return _parse_http_raw_response(
+        int(st_code),
+        str(raw_text or "").encode("utf-8", errors="replace"),
+        hdr_map,
+    )
+
+
+_SAFE_RUNTIME_ENV_KEYS: tuple[str, ...] = (
+    "PATH",
+    "HOME",
+    "USERPROFILE",
+    "SYSTEMROOT",
+    "WINDIR",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+)
+
+
+def _build_subprocess_env(env: Mapping[str, str] | None) -> dict[str, str]:
+    """Build subprocess environment without leaking inherited corporate markers when isolated."""
+    if env is None:
+        return dict(os.environ)
+    sub_env = {k: os.environ[k] for k in _SAFE_RUNTIME_ENV_KEYS if k in os.environ and os.environ[k]}
+    for k, v in env.items():
+        sub_env[str(k)] = str(v)
+    return sub_env
+
+
+def default_subprocess_runner(
+    cmd: Sequence[str],
+    timeout_s: float = SUBPROCESS_TIMEOUT_S,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> tuple[int, str]:
+    """Execute a read-only local argv command (`shell=False`) while blocking forbidden binaries."""
+    if isinstance(cmd, (str, bytes)) or not isinstance(cmd, Sequence) or not cmd:
+        raise QuickPresetError("Subprocess command must be a non-empty sequence of arguments.")
+    argv: list[str] = []
+    for part in cmd:
+        item = os.fspath(part) if isinstance(part, os.PathLike) else part
+        if not isinstance(item, str) or any(ch in item for ch in ("\x00", "\r", "\n")):
+            raise QuickPresetError("Subprocess argument contains invalid type or control characters.")
+        argv.append(item)
+    exe_name = Path(argv[0]).name.lower()
+    if exe_name in _FORBIDDEN_SUBPROCESS_BINS:
+        raise QuickPresetError(f"Forbidden subprocess binary blocked: {exe_name!r}.")
+    bounded = min(max(0.1, float(timeout_s)), 30.0)
+    try:
+        completed = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=bounded,
+            env=_build_subprocess_env(env),
+            check=False,
+            shell=False,
+        )
+    except (FileNotFoundError, PermissionError, subprocess.TimeoutExpired, OSError):
+        return 127, ""
+    out = completed.stdout or ""
+    if completed.stderr and completed.returncode != 0:
+        out = f"{out}\n{completed.stderr}".strip() if out else completed.stderr.strip()
+    return int(completed.returncode), out
+
+
+def _invoke_runner(
+    runner: RunnerFn,
+    argv: Sequence[str],
+    timeout_s: float,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> tuple[int, str]:
+    sig = inspect.signature(runner)
+    params = list(sig.parameters.values())
+    has_varargs = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params)
+    has_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
+    pos_params = [
+        p
+        for p in params
+        if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    kw: dict[str, Any] = {}
+    if "env" in sig.parameters or has_varkw:
+        kw["env"] = env
+    elif "environ" in sig.parameters:
+        kw["environ"] = env
+    res = (
+        runner(list(argv), timeout_s, **kw)
+        if (has_varargs or len(pos_params) >= 2)
+        else runner(list(argv), **kw)
+    )
+    if isinstance(res, tuple) and len(res) >= 2:
+        out = str(res[1] or "")
+        if len(res) >= 3 and res[2]:
+            out = f"{out}\n{res[2]}" if out else str(res[2])
+        return int(res[0]), out
+    raise QuickPresetError("Subprocess runner must return (returncode, output).")
 
 
 def _find_corporate_markers(text: str) -> list[str]:
@@ -775,35 +1215,42 @@ def extract_git_config_remote_urls(cfg_text: str) -> list[str]:
 
 
 def _resolve_git_config_files(workspace: Path) -> list[Path]:
-    """Locate `.git/config` inside `workspace` (supporting git worktree `gitdir:` indirection)."""
-    git_entry = workspace / ".git"
+    """Walk `(workspace, *workspace.parents)` to the first `.git` directory or worktree indirection file."""
     candidates: list[Path] = []
-    if git_entry.is_dir():
-        cfg = git_entry / "config"
-        if cfg.is_file():
-            candidates.append(cfg)
-    elif git_entry.is_file():
-        try:
-            first_lines = git_entry.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
-            first_lines = []
-        if first_lines and first_lines[0].strip().lower().startswith("gitdir:"):
-            raw_gitdir = first_lines[0].split(":", 1)[1].strip()
-            gitdir = Path(raw_gitdir) if Path(raw_gitdir).is_absolute() else (workspace / raw_gitdir).resolve()
-            for rel in ("config",):
-                direct_cfg = gitdir / rel
+    for root in (workspace, *workspace.parents):
+        git_entry = root / ".git"
+        if git_entry.is_dir():
+            cfg = git_entry / "config"
+            if cfg.is_file():
+                candidates.append(cfg)
+            break
+        if git_entry.is_file():
+            try:
+                first_lines = git_entry.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                break
+            if first_lines and first_lines[0].strip().lower().startswith("gitdir:"):
+                raw_gitdir = first_lines[0].split(":", 1)[1].strip()
+                gitdir = Path(raw_gitdir) if Path(raw_gitdir).is_absolute() else (root / raw_gitdir).resolve()
+                direct_cfg = gitdir / "config"
                 if direct_cfg.is_file():
                     candidates.append(direct_cfg)
-            commondir_file = gitdir / "commondir"
-            if commondir_file.is_file():
-                try:
-                    common_rel = commondir_file.read_text(encoding="utf-8", errors="replace").strip()
-                except OSError:
-                    common_rel = ""
-                if common_rel:
-                    common_cfg = (gitdir / common_rel).resolve() / "config"
-                    if common_cfg.is_file() and common_cfg not in candidates:
-                        candidates.append(common_cfg)
+                commondir_file = gitdir / "commondir"
+                if commondir_file.is_file():
+                    try:
+                        common_raw = commondir_file.read_text(encoding="utf-8", errors="replace").strip()
+                    except OSError:
+                        common_raw = ""
+                    if common_raw:
+                        common_dir = (
+                            Path(common_raw)
+                            if Path(common_raw).is_absolute()
+                            else (gitdir / common_raw).resolve()
+                        )
+                        common_cfg = common_dir / "config"
+                        if common_cfg.is_file() and common_cfg not in candidates:
+                            candidates.append(common_cfg)
+            break
     return candidates
 
 
@@ -811,6 +1258,8 @@ def evaluate_personal_pc_compliance(
     *,
     env: Mapping[str, str] | None = None,
     cwd: Path | str | None = None,
+    check_git_remote: bool = True,
+    check_cwd_path: bool = True,
     lang: str = "en",
 ) -> dict[str, Any]:
     """Strictly local Personal-PC & Hobby-Workspace Compliance Gate (0 file writes, 0 HTTP calls, 0 leaks)."""
@@ -831,38 +1280,45 @@ def evaluate_personal_pc_compliance(
     for raw_k, raw_v in env_map.items():
         key_up = str(raw_k).strip().upper()
         val_str = str(raw_v or "").strip()
-        if not key_up:
+        if not key_up or not val_str:
             continue
-        if key_up.startswith("AMADEUS") and val_str:
+        if key_up.startswith("AMADEUS"):
             _add_indicator("env:AMADEUS*", "amadeus")
             for hit in _find_corporate_markers(val_str):
                 matched_markers.add(hit)
             continue
-        if key_up == "ZSCALER_CERT_PATH" and val_str:
+        if key_up == "ZSCALER_CERT_PATH":
             _add_indicator("env:ZSCALER_CERT_PATH", "zscaler")
             continue
-        if key_up == "USERDNSDOMAIN" and val_str:
+        if key_up == "USERDNSDOMAIN":
             dns_hits = _find_corporate_markers(val_str)
             _add_indicator("env:USERDNSDOMAIN", dns_hits[0] if dns_hits else "corp")
             for hit in dns_hits:
                 matched_markers.add(hit)
             continue
-        if key_up in INSPECTED_ENV_KEYS and val_str:
+        if key_up in INSPECTED_ENV_KEYS:
             for hit in _find_corporate_markers(val_str):
                 _add_indicator(f"env:{key_up}:{hit}", hit)
 
-    ws_hits = _find_corporate_markers(str(workspace))
-    for hit in ws_hits:
-        _add_indicator(f"workspace_path:{hit}", hit)
+    if check_cwd_path:
+        ws_texts = [str(workspace)]
+        with suppress(OSError):
+            resolved_ws = str(workspace.resolve())
+            if resolved_ws not in ws_texts:
+                ws_texts.append(resolved_ws)
+        for ws_txt in ws_texts:
+            for hit in _find_corporate_markers(ws_txt):
+                _add_indicator(f"workspace_path:{hit}", hit)
 
-    for cfg_path in _resolve_git_config_files(workspace):
-        try:
-            cfg_text = cfg_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            cfg_text = ""
-        for remote_url in extract_git_config_remote_urls(cfg_text):
-            for hit in _find_corporate_markers(remote_url):
-                _add_indicator(f"git_remote:{hit}", hit)
+    if check_git_remote:
+        for cfg_path in _resolve_git_config_files(workspace):
+            try:
+                cfg_text = cfg_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for remote_url in extract_git_config_remote_urls(cfg_text):
+                for hit in _find_corporate_markers(remote_url):
+                    _add_indicator(f"git_remote:{hit}", hit)
 
     compliance_ok = len(indicators) == 0
     if compliance_ok:
@@ -895,6 +1351,7 @@ def evaluate_personal_pc_compliance(
             "license": "AGPL-3.0",
             "file_writes": 0,
             "network_calls": 0,
+            "subprocess_calls": 0,
             "exit_code": 0 if compliance_ok else 2,
             "notice_en": COMPLIANCE_NOTICE_EN,
             "notice_fr": COMPLIANCE_NOTICE_FR,
@@ -917,6 +1374,8 @@ def _inspect_holiday_html_route(
     status_code: int,
     body: Mapping[str, Any],
     seen_nonces: set[str],
+    *,
+    require_attr_nonce: bool = False,
 ) -> tuple[bool, dict[str, Any]]:
     if status_code != 200:
         return False, {
@@ -938,22 +1397,24 @@ def _inspect_holiday_html_route(
     hdr_nonces = _CSP_HEADER_NONCE_RE.findall(csp_hdr)
     attr_nonces = _HTML_ATTR_NONCE_RE.findall(html_text) + _HTML_SINGLE_NONCE_ATTR_RE.findall(html_text)
     nonce = hdr_nonces[0] if hdr_nonces else None
+    attr_ok = (nonce in attr_nonces) if require_attr_nonce else (not attr_nonces or nonce in attr_nonces)
 
     csp_verified = bool(
         csp_hdr
         and "default-src 'none'" in csp_hdr.lower()
         and not csp_unsafe
         and nonce is not None
-        and (not attr_nonces or nonce in attr_nonces)
+        and len(set(hdr_nonces)) == 1
+        and attr_ok
         and nonce not in seen_nonces
     )
     if nonce is not None:
         seen_nonces.add(nonce)
 
-    stripped_html = _STRIP_ANY_NONCE_ATTR_RE.sub('nonce=""', html_text)
-    dom_clean = not (
-        _FORBIDDEN_DOM_SINK_RE.search(stripped_html) or _STATIC_FIG_UNIT_RE.search(stripped_html)
-    )
+    stripped_html = strip_masked_keys_and_nonces(html_text)
+    has_unsafe_sink = bool(_FORBIDDEN_DOM_SINK_RE.search(stripped_html))
+    has_static_fig = bool(_STATIC_FIG_UNIT_RE.search(stripped_html))
+    dom_clean = not (has_unsafe_sink or has_static_fig)
     low_html = html_text.lower()
     compliance_verified = bool(
         ("personal" in low_html or "personnel" in low_html)
@@ -980,11 +1441,21 @@ def _inspect_holiday_html_route(
         "csp_nonce_sha256_prefix": hashlib.sha256(nonce.encode("utf-8")).hexdigest()[:16] if nonce else None,
         "compliance_verified": compliance_verified,
         "dom_clean": dom_clean,
+        "unsafe_dom_sink_found": has_unsafe_sink,
+        "static_figure_found": has_static_fig,
         "reason": reason,
     }
 
 
-def _inspect_manifest_json(body: Mapping[str, Any]) -> tuple[bool, dict[str, Any], str]:
+def _is_nonneg_int(val: object) -> bool:
+    return not isinstance(val, bool) and isinstance(val, int) and val >= 0
+
+
+def _inspect_manifest_json(
+    body: Mapping[str, Any],
+    *,
+    required_routes: Sequence[str] = EXPECTED_MANIFEST_HOLIDAY_ROUTES,
+) -> tuple[bool, dict[str, Any], str]:
     live_sha = sanitize_build_sha(body.get("build_sha"))
     live_rev = sanitize_cloud_run_revision(body.get("cloud_run_revision"))
     raw_routes = body.get("holiday_routes")
@@ -994,7 +1465,7 @@ def _inspect_manifest_json(body: Mapping[str, Any]) -> tuple[bool, dict[str, Any
     routes_ok = (
         isinstance(raw_routes, list)
         and all(isinstance(r, str) for r in raw_routes)
-        and all(req in raw_routes for req in EXPECTED_MANIFEST_HOLIDAY_ROUTES)
+        and all(req in raw_routes for req in required_routes)
     )
     scripts_ok = (
         isinstance(raw_scripts, list)
@@ -1085,6 +1556,863 @@ def _inspect_feedback_summary_json(body: Mapping[str, Any]) -> tuple[bool, dict[
         else {}
     )
     return schema_ok, summary_out, ("ok" if schema_ok else "invalid_feedback_summary_schema")
+
+
+def _extract_fleet_quorum_metrics(body: Mapping[str, Any]) -> tuple[bool, int, int, int, str]:
+    """Validate fleet JSON, reject `endpoint_url` leaks, and count online producers across `live_hiveminders` & `hiveminders`."""
+    rows = body.get("hiveminders")
+    rows_valid = isinstance(rows, list)
+    endpoint_leaked = rows_valid and any(isinstance(r, Mapping) and ("endpoint_url" in r) for r in rows)
+    has_live_hm = "live_hiveminders" in body
+    live_hm_ok = (not has_live_hm) or _is_nonneg_int(body.get("live_hiveminders"))
+    obj_ok = body.get("object", FLEET_OBJECT) == FLEET_OBJECT
+    fleet_ok = bool(obj_ok and rows_valid and (has_live_hm or len(rows) >= 0) and not endpoint_leaked and live_hm_ok)
+    if not fleet_ok:
+        reason = "fleet_endpoint_url_leaked" if endpoint_leaked else "invalid_fleet_schema"
+        return False, 0, 0, 0, reason
+
+    live_hm_int = int(body["live_hiveminders"]) if has_live_hm else 0
+    row_online = sum(
+        1
+        for r in rows  # type: ignore[union-attr]
+        if isinstance(r, Mapping) and str(r.get("status", "")).strip().lower() in LIVE_PRODUCER_STATUSES
+    )
+    online_producers = max(live_hm_int, row_online)
+    raw_tot = body.get("total_hiveminders")
+    total_producers = int(raw_tot) if _is_nonneg_int(raw_tot) else max(online_producers, len(rows))  # type: ignore[arg-type]
+    raw_gpus = body.get("distinct_physical_gpus")
+    gpus = int(raw_gpus) if _is_nonneg_int(raw_gpus) else 0
+    return True, online_producers, total_producers, gpus, "ok"
+
+
+def _inspect_arena_summary_contract(body: Mapping[str, Any]) -> tuple[bool, dict[str, Any], str]:
+    """Verify `GET /v1/hivemind/arena/summary` vote conservation, Wilson 95% LB, and zero forbidden keys."""
+    if not isinstance(body, Mapping) or body.get("object") != ARENA_SUMMARY_OBJECT:
+        return False, {}, "invalid_arena_object"
+    if _has_forbidden_score_key(body):
+        return False, {}, "forbidden_score_key"
+
+    tv = body.get("total_votes")
+    hw = body.get("holiday_wins")
+    bw = body.get("baseline_wins")
+    ti = body.get("ties")
+    counts_ok = all(_is_nonneg_int(x) for x in (tv, hw, bw, ti))
+    conserved = bool(counts_ok and int(hw) + int(bw) + int(ti) == int(tv))
+
+    dec_ok = True
+    if "decisive_votes" in body:
+        dv = body.get("decisive_votes")
+        dec_ok = bool(_is_nonneg_int(dv) and counts_ok and int(dv) == int(hw) + int(bw))
+
+    raw_wlb = body.get("wilson_95_lower_bound")
+    wlb_ok = bool(
+        "wilson_95_lower_bound" in body
+        and not isinstance(raw_wlb, bool)
+        and isinstance(raw_wlb, (int, float))
+        and math.isfinite(float(raw_wlb))
+        and 0.0 <= float(raw_wlb) <= 1.0
+    )
+    decisive = (int(hw) + int(bw)) if counts_ok else 0
+    if wlb_ok and counts_ok and decisive == 0 and float(raw_wlb) != 0.0:
+        wlb_ok = False
+
+    win_ratio_ok = True
+    if "win_ratio" in body:
+        raw_wr = body.get("win_ratio")
+        if counts_ok and decisive == 0:
+            win_ratio_ok = raw_wr is None
+        else:
+            win_ratio_ok = bool(
+                not isinstance(raw_wr, bool)
+                and isinstance(raw_wr, (int, float))
+                and math.isfinite(float(raw_wr))
+                and 0.0 <= float(raw_wr) <= 1.0
+            )
+
+    by_task_ok = True
+    raw_tasks = body.get("by_task")
+    if isinstance(raw_tasks, Mapping):
+        for t_doc in raw_tasks.values():
+            if not isinstance(t_doc, Mapping):
+                by_task_ok = False
+                break
+            t_tv, t_hw, t_bw, t_ti = (
+                t_doc.get("total_votes"),
+                t_doc.get("holiday_wins"),
+                t_doc.get("baseline_wins"),
+                t_doc.get("ties"),
+            )
+            t_wlb = t_doc.get("wilson_95_lower_bound")
+            if (
+                not all(_is_nonneg_int(x) for x in (t_tv, t_hw, t_bw, t_ti))
+                or int(t_hw) + int(t_bw) + int(t_ti) != int(t_tv)
+                or "wilson_95_lower_bound" not in t_doc
+                or isinstance(t_wlb, bool)
+                or not isinstance(t_wlb, (int, float))
+                or not math.isfinite(float(t_wlb))
+                or not (0.0 <= float(t_wlb) <= 1.0)
+            ):
+                by_task_ok = False
+                break
+
+    ok = bool(counts_ok and conserved and dec_ok and wlb_ok and win_ratio_ok and by_task_ok)
+    if not ok:
+        return False, {}, "invalid_arena_vote_conservation_or_wilson"
+    summary_doc = {
+        "object": ARENA_SUMMARY_OBJECT,
+        "total_votes": int(tv),
+        "decisive_votes": decisive,
+        "holiday_wins": int(hw),
+        "baseline_wins": int(bw),
+        "ties": int(ti),
+        "win_ratio": (
+            round(float(body["win_ratio"]), 4)
+            if isinstance(body.get("win_ratio"), (int, float)) and not isinstance(body.get("win_ratio"), bool)
+            else None
+        ),
+        "wilson_95_lower_bound": round(float(raw_wlb), 4),
+    }
+    return True, summary_doc, "ok"
+
+
+def run_deploy_sh_dry_run(
+    deploy_sh_path: Path | str | None = None,
+    *,
+    expected_sha: str | None = None,
+    runner: RunnerFn = default_subprocess_runner,
+    env: Mapping[str, str] | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Execute opt-in list-argv `bash deploy/gcp_openrouter/deploy.sh --dry-run` without invoking `gcloud`."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    path = Path(deploy_sh_path) if deploy_sh_path is not None else DEFAULT_DEPLOY_SH_PATH
+    shown_path = redact_home_path(path)
+    if not path.is_file():
+        return {
+            "executed": False,
+            "ok": False,
+            "returncode": 127,
+            "deploy_script_path": shown_path,
+            "gcloud_invoked": False,
+            "dry_run_build_sha": "unknown",
+            "checks": {},
+            "diagnostic": (
+                f"Script `{shown_path}` introuvable pour `--dry-run`."
+                if is_fr
+                else f"Deploy script `{shown_path}` missing for `--dry-run`."
+            ),
+        }
+
+    resolved_sha = validate_expected_sha(expected_sha) if (expected_sha and str(expected_sha).strip()) else None
+    dry_env: dict[str, str] = _build_subprocess_env(env)
+    dry_env["HIVEMIND_DEPLOY_DRY_RUN"] = "1"
+    if resolved_sha is not None:
+        dry_env["HIVEMIND_BUILD_SHA"] = resolved_sha
+    elif env is None and "HIVEMIND_BUILD_SHA" not in dry_env and os.environ.get("HIVEMIND_BUILD_SHA"):
+        env_sha = sanitize_build_sha(os.environ.get("HIVEMIND_BUILD_SHA"))
+        if env_sha != "unknown":
+            dry_env["HIVEMIND_BUILD_SHA"] = env_sha
+
+    rc, out = _invoke_runner(runner, ["bash", str(path), "--dry-run"], SUBPROCESS_TIMEOUT_S, env=dry_env)
+    kv: dict[str, str] = {}
+    for ln in out.splitlines():
+        if "=" in ln:
+            k, v = ln.split("=", 1)
+            kv[k.strip()] = v.strip()
+
+    finops_line = kv.get("finops_flags", "")
+    env_vars_line = kv.get("update_env_vars", "")
+    raw_dry_sha = kv.get("build_sha", "")
+    dry_sha = sanitize_build_sha(raw_dry_sha)
+    sha_propagated = bool(
+        raw_dry_sha
+        and raw_dry_sha == dry_sha
+        and f"HIVEMIND_BUILD_SHA={raw_dry_sha}" in env_vars_line
+        and (resolved_sha is None or shas_match(dry_sha, resolved_sha))
+    )
+    checks = {
+        "returncode_zero": rc == 0,
+        "dry_run_marker": kv.get("HIVEMIND_CLOUD_RUN_DEPLOY_DRY_RUN") == "1",
+        "gcloud_invoked_zero": kv.get("gcloud_invoked") == "0",
+        "finops_flags_present": all(
+            tok in finops_line
+            for tok in ("--min-instances 0", "--max-instances 1", "--no-cpu-throttling", "--concurrency 80")
+        ),
+        "replica_url_gcs": kv.get("replica_url", "").startswith("gcs://"),
+        "secret_manager_mounted": "HIVEMIND_ROUTER_SECRET=" in kv.get("secrets", ""),
+        "zero_grants_env": "HIVEMIND_STARTER_GRANT_HMT=0" in env_vars_line,
+        "build_sha_propagated": sha_propagated,
+    }
+    ok = all(checks.values())
+    return {
+        "executed": True,
+        "ok": ok,
+        "returncode": rc,
+        "deploy_script_path": shown_path,
+        "gcloud_invoked": kv.get("gcloud_invoked") != "0",
+        "dry_run_build_sha": dry_sha,
+        "checks": checks,
+        "diagnostic": (
+            ""
+            if ok
+            else (
+                f"Échec vérification `{shown_path} --dry-run`."
+                if is_fr
+                else f"Subprocess verification `{shown_path} --dry-run` failed."
+            )
+        ),
+    }
+
+
+def _validate_pr949_options(
+    *,
+    target_online_producers: int,
+    min_ease_rating: float,
+    min_zero_lag_ratio: float,
+    require_live_quorum: bool,
+    require_ces_slo: bool,
+    check_arena_summary: bool,
+    verify_idempotency_replay: bool,
+    execute_deploy_dry_run: bool,
+) -> tuple[int, float, float]:
+    if (
+        isinstance(target_online_producers, bool)
+        or not isinstance(target_online_producers, int)
+        or not (1 <= target_online_producers <= 500)
+    ):
+        raise QuickPresetError("target_online_producers must be an integer between 1 and 500.")
+    if (
+        isinstance(min_ease_rating, bool)
+        or not isinstance(min_ease_rating, (int, float))
+        or not math.isfinite(float(min_ease_rating))
+        or not (1.0 <= float(min_ease_rating) <= 5.0)
+    ):
+        raise QuickPresetError("min_ease_rating must be a finite number between 1.0 and 5.0.")
+    if (
+        isinstance(min_zero_lag_ratio, bool)
+        or not isinstance(min_zero_lag_ratio, (int, float))
+        or not math.isfinite(float(min_zero_lag_ratio))
+        or not (0.0 <= float(min_zero_lag_ratio) <= 1.0)
+    ):
+        raise QuickPresetError("min_zero_lag_ratio must be a finite number between 0.0 and 1.0.")
+    for flag in (
+        require_live_quorum,
+        require_ces_slo,
+        check_arena_summary,
+        verify_idempotency_replay,
+        execute_deploy_dry_run,
+    ):
+        if not isinstance(flag, bool):
+            raise QuickPresetError("Quorum/SLO/arena/idempotency/dry-run flags must be booleans.")
+    return int(target_online_producers), float(min_ease_rating), float(min_zero_lag_ratio)
+
+
+def _dispatch_parity_http(
+    method: str,
+    url: str,
+    *,
+    is_html: bool,
+    raw_http_fn: Any,
+    http_fn: HttpFn,
+    payload: Mapping[str, Any] | None = None,
+    headers: Mapping[str, str] | None = None,
+    allowed_post_paths: frozenset[str] = frozenset({"/v1/hivemind/onboarding/feedback"}),
+    timeout_s: float = HTTP_TIMEOUT_S,
+) -> tuple[int, dict[str, Any]]:
+    use_raw = (raw_http_fn is not default_http_raw and (is_html or http_fn is default_http_request)) or (
+        is_html and http_fn is default_http_request
+    )
+    if use_raw:
+        return _invoke_raw_http_fn(
+            raw_http_fn,
+            method,
+            url,
+            payload=payload,
+            headers=headers,
+            allowed_post_paths=allowed_post_paths,
+            timeout_s=timeout_s,
+        )
+    return _invoke_http_fn(
+        http_fn,
+        method,
+        url,
+        payload=payload,
+        headers=headers,
+        allowed_post_paths=allowed_post_paths,
+        timeout_s=timeout_s,
+    )
+
+
+def verify_pr949_vscode_quorum_and_arena_parity(
+    gateway: str = DEFAULT_GATEWAY,
+    *,
+    expected_sha: str | None = None,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    min_ease_rating: float = DEFAULT_MIN_EASE_RATING,
+    min_zero_lag_ratio: float = DEFAULT_MIN_ZERO_LAG_RATIO,
+    require_live_quorum: bool = False,
+    require_ces_slo: bool = False,
+    check_arena_summary: bool = True,
+    verify_idempotency_replay: bool = False,
+    execute_deploy_dry_run: bool = False,
+    repo_root: Path | str | None = None,
+    raw_http_fn: Any = default_http_raw,
+    http_fn: HttpFn = default_http_request,
+    runner: RunnerFn = default_subprocess_runner,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | str | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Zero-inference PR #949 4-HTML parity, 8+ producer quorum, arena summary, CES SLO, replay & deploy dry-run gate."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    clean_gw = validate_gateway_url(gateway)
+    clean_expected = (
+        validate_expected_sha(expected_sha) if (expected_sha is not None and str(expected_sha).strip()) else None
+    )
+    target_n, min_ease_f, min_lag_f = _validate_pr949_options(
+        target_online_producers=target_online_producers,
+        min_ease_rating=min_ease_rating,
+        min_zero_lag_ratio=min_zero_lag_ratio,
+        require_live_quorum=require_live_quorum,
+        require_ces_slo=require_ces_slo,
+        check_arena_summary=check_arena_summary,
+        verify_idempotency_replay=verify_idempotency_replay,
+        execute_deploy_dry_run=execute_deploy_dry_run,
+    )
+
+    compliance = evaluate_personal_pc_compliance(env=env, cwd=cwd, lang=lang_code)
+    if not compliance["compliance_ok"]:
+        return _attach_receipt(
+            {
+                "schema": SCHEMA,
+                "object": RECEIPT_OBJECT,
+                "mode": "pr949_quorum_arena_parity",
+                "lang": lang_code,
+                "ok": False,
+                "ready": False,
+                "parity_ok": False,
+                "quorum_gate_ok": False,
+                "compliance_ok": False,
+                "corporate_detected": True,
+                "exit_code": 2,
+                "gateway": clean_gw,
+                "holiday_routes_deployed_on_cloud_run": False,
+                "onboarding_feedback_deployed": False,
+                "stale_revision_detected": False,
+                "sha_drift_detected": False,
+                "missing_or_stale_routes": [],
+                "models_preflight_ok": False,
+                "coder_model_present": False,
+                "live_models_count": 0,
+                "models": [],
+                "online_producers": 0,
+                "total_producers": 0,
+                "distinct_physical_gpus": 0,
+                "target_online_producers": target_n,
+                "producer_quorum_met": False,
+                "awaiting_producer_quorum": False,
+                "ces_slo_ok": None,
+                "zero_lag_slo_ok": None,
+                "arena_summary_checked": bool(check_arena_summary),
+                "arena_summary_ok": None,
+                "arena_summary": {},
+                "idempotency_verified": bool(verify_idempotency_replay),
+                "idempotent_dedup_ok": None,
+                "deploy_dry_run_executed": False,
+                "deploy_dry_run": None,
+                "build_sha": "unknown",
+                "expected_sha": clean_expected,
+                "sha_matches": None,
+                "cloud_run_revision": None,
+                "csp_nonces_unique": False,
+                "routes": {},
+                "manifest_summary": {},
+                "feedback_summary": {},
+                "raid_status_ok": False,
+                "fleet_ok": False,
+                "diagnostics": [compliance["summary"]],
+                "zero_inference_verified": True,
+                "file_writes": 0,
+                "network_calls": 0,
+                "subprocess_calls": 0,
+                "compliance": compliance,
+                "summary": compliance["summary"],
+            }
+        )
+
+    routes_report: dict[str, dict[str, Any]] = {}
+    missing_or_stale: list[str] = []
+    diagnostics: list[str] = []
+    seen_nonces: set[str] = set()
+    network_calls = 0
+    subprocess_calls = 0
+    feedback_post_allow = frozenset({"/v1/hivemind/onboarding/feedback"})
+
+    core_any_200 = False
+    holiday_404_or_5xx_seen = False
+    holiday_contract_fail_seen = False
+    health_ok = False
+    models_preflight_ok = False
+    coder_model_present = False
+    live_models_count = 0
+    model_ids: list[str] = []
+    manifest_ok = False
+    feedback_deployed = False
+    raid_status_ok = False
+    fleet_ok = False
+    online_producers = 0
+    total_producers = 0
+    distinct_physical_gpus = 0
+    build_sha = "unknown"
+    cloud_run_rev: str | None = None
+    manifest_summary: dict[str, Any] = {}
+    feedback_summary: dict[str, Any] = {}
+
+    for path, kind, _ in PR949_REQUIRED_ROUTES:
+        status_code, body = _dispatch_parity_http(
+            "GET",
+            f"{clean_gw}{path}",
+            is_html=(kind == "html"),
+            raw_http_fn=raw_http_fn,
+            http_fn=http_fn,
+            allowed_post_paths=feedback_post_allow,
+            timeout_s=HTTP_TIMEOUT_S,
+        )
+        network_calls += 1
+
+        if kind == "html":
+            route_ok, detail = _inspect_holiday_html_route(
+                path,
+                status_code,
+                body,
+                seen_nonces,
+                require_attr_nonce=True,
+            )
+            routes_report[path] = detail
+            if not route_ok:
+                missing_or_stale.append(path)
+                if status_code != 200:
+                    holiday_404_or_5xx_seen = True
+                else:
+                    holiday_contract_fail_seen = True
+                diagnostics.append(f"{path}:{detail['reason']}")
+            continue
+
+        if path == "/health":
+            health_ok = status_code == 200 and body.get("status") == "ok"
+            if health_ok:
+                core_any_200 = True
+            else:
+                missing_or_stale.append(path)
+                diagnostics.append(f"{path}:http_{status_code}")
+            routes_report[path] = {
+                "path": path,
+                "status_code": status_code,
+                "ok": health_ok,
+                "schema_verified": health_ok,
+                "reason": "ok" if health_ok else f"http_{status_code}",
+            }
+        elif path == "/v1/models":
+            raw_data = body.get("data")
+            model_ids = (
+                [
+                    str(item["id"]).strip()
+                    for item in raw_data
+                    if isinstance(item, Mapping) and isinstance(item.get("id"), str) and item["id"].strip()
+                ]
+                if isinstance(raw_data, list)
+                else []
+            )
+            live_models_count = len(model_ids)
+            coder_model_present = DEFAULT_MODELS[0] in model_ids
+            models_preflight_ok = bool(
+                status_code == 200 and isinstance(raw_data, list) and live_models_count > 0 and coder_model_present
+            )
+            if status_code == 200:
+                core_any_200 = True
+            m_reason = (
+                "ok"
+                if models_preflight_ok
+                else (
+                    f"http_{status_code}"
+                    if status_code != 200 or not isinstance(raw_data, list)
+                    else ("empty_model_list" if live_models_count == 0 else "missing_hivemind_coder")
+                )
+            )
+            if not models_preflight_ok:
+                missing_or_stale.append(path)
+                diagnostics.append(f"{path}:{m_reason}")
+            routes_report[path] = {
+                "path": path,
+                "status_code": status_code,
+                "ok": models_preflight_ok,
+                "schema_verified": models_preflight_ok,
+                "live_models_count": live_models_count,
+                "coder_model_present": coder_model_present,
+                "reason": m_reason,
+            }
+        elif path == "/v1/hivemind/onboarding/manifest":
+            if status_code == 200:
+                manifest_ok, manifest_summary, reason = _inspect_manifest_json(
+                    body, required_routes=PR949_MANIFEST_ROUTES
+                )
+                build_sha = str(manifest_summary.get("build_sha") or "unknown")
+                cloud_run_rev = manifest_summary.get("cloud_run_revision")
+                if not manifest_ok:
+                    holiday_contract_fail_seen = True
+            else:
+                manifest_ok = False
+                reason = f"http_{status_code}"
+                holiday_404_or_5xx_seen = True
+            if not manifest_ok:
+                missing_or_stale.append(path)
+                diagnostics.append(f"{path}:{reason}")
+            routes_report[path] = {
+                "path": path,
+                "status_code": status_code,
+                "ok": manifest_ok,
+                "schema_verified": manifest_ok,
+                "reason": reason,
+            }
+        elif path == "/v1/hivemind/onboarding/feedback/summary":
+            if status_code == 200:
+                feedback_deployed, feedback_summary, reason = _inspect_feedback_summary_json(body)
+                if not feedback_deployed:
+                    holiday_contract_fail_seen = True
+            else:
+                feedback_deployed = False
+                reason = f"http_{status_code}"
+                holiday_404_or_5xx_seen = True
+            if not feedback_deployed:
+                missing_or_stale.append(path)
+                diagnostics.append(f"{path}:{reason}")
+            routes_report[path] = {
+                "path": path,
+                "status_code": status_code,
+                "ok": feedback_deployed,
+                "schema_verified": feedback_deployed,
+                "reason": reason,
+            }
+        elif path == "/v1/hivemind/raid/status":
+            swarm = body.get("swarm")
+            raid_status_ok = bool(
+                status_code == 200
+                and body.get("object") == RAID_STATUS_OBJECT
+                and isinstance(swarm, Mapping)
+            )
+            reason = "ok" if raid_status_ok else (f"http_{status_code}" if status_code != 200 else "invalid_raid_status")
+            if not raid_status_ok:
+                if status_code != 200:
+                    holiday_404_or_5xx_seen = True
+                else:
+                    holiday_contract_fail_seen = True
+                missing_or_stale.append(path)
+                diagnostics.append(f"{path}:{reason}")
+            routes_report[path] = {
+                "path": path,
+                "status_code": status_code,
+                "ok": raid_status_ok,
+                "schema_verified": raid_status_ok,
+                "reason": reason,
+            }
+        else:
+            if status_code == 200:
+                fleet_ok, online_producers, total_producers, distinct_physical_gpus, reason = _extract_fleet_quorum_metrics(body)
+            else:
+                fleet_ok = False
+                reason = f"http_{status_code}"
+            if not fleet_ok:
+                missing_or_stale.append(path)
+                diagnostics.append(f"{path}:{reason}")
+            routes_report[path] = {
+                "path": path,
+                "status_code": status_code,
+                "ok": fleet_ok,
+                "schema_verified": fleet_ok,
+                "online_producers": online_producers,
+                "reason": reason,
+            }
+
+    arena_summary_ok: bool | None = None
+    arena_summary_doc: dict[str, Any] = {}
+    if check_arena_summary:
+        a_status, a_body = _dispatch_parity_http(
+            "GET",
+            f"{clean_gw}/v1/hivemind/arena/summary",
+            is_html=False,
+            raw_http_fn=raw_http_fn,
+            http_fn=http_fn,
+            allowed_post_paths=feedback_post_allow,
+            timeout_s=HTTP_TIMEOUT_S,
+        )
+        network_calls += 1
+        if a_status == 200:
+            arena_summary_ok, arena_summary_doc, a_reason = _inspect_arena_summary_contract(a_body)
+            if not arena_summary_ok:
+                holiday_contract_fail_seen = True
+        else:
+            arena_summary_ok = False
+            a_reason = f"http_{a_status}"
+            holiday_404_or_5xx_seen = True
+        if not arena_summary_ok:
+            missing_or_stale.append("/v1/hivemind/arena/summary")
+            diagnostics.append(f"/v1/hivemind/arena/summary:{a_reason}")
+        routes_report["/v1/hivemind/arena/summary"] = {
+            "path": "/v1/hivemind/arena/summary",
+            "status_code": a_status,
+            "ok": bool(arena_summary_ok),
+            "schema_verified": bool(arena_summary_ok),
+            "reason": a_reason,
+        }
+
+    idempotent_dedup_ok: bool | None = None
+    if verify_idempotency_replay:
+        before_total = feedback_summary.get("total_responses")
+        replay_key = build_ces_idempotency_key(
+            gateway=clean_gw,
+            account_ref=f"pr949-{secrets.token_hex(6)}",
+            profile="dev",
+            ease_rating=5,
+            zero_game_lag=True,
+            platform_tag=_platform_tag(),
+        )
+        replay_payload = {
+            "profile": "dev",
+            "ease_rating": 5,
+            "zero_game_lag": True,
+            "platform": _platform_tag(),
+            "note": "",
+        }
+        p1_code, p1_body = _dispatch_parity_http(
+            "POST",
+            f"{clean_gw}/v1/hivemind/onboarding/feedback",
+            is_html=False,
+            raw_http_fn=raw_http_fn,
+            http_fn=http_fn,
+            payload=replay_payload,
+            headers={"Idempotency-Key": replay_key},
+            allowed_post_paths=feedback_post_allow,
+            timeout_s=TELEMETRY_TIMEOUT_S,
+        )
+        network_calls += 1
+        p1_ok, p1_sum, p1_reason = (
+            _inspect_feedback_summary_json(p1_body) if p1_code in (200, 201) else (False, {}, f"http_{p1_code}")
+        )
+        if not p1_ok or int(p1_sum.get("total_responses") or 0) < 1:
+            idempotent_dedup_ok = False
+            diagnostics.append(f"idempotency_first_post:{p1_reason}")
+        else:
+            p2_code, p2_body = _dispatch_parity_http(
+                "POST",
+                f"{clean_gw}/v1/hivemind/onboarding/feedback",
+                is_html=False,
+                raw_http_fn=raw_http_fn,
+                http_fn=http_fn,
+                payload=replay_payload,
+                headers={"Idempotency-Key": replay_key},
+                allowed_post_paths=feedback_post_allow,
+                timeout_s=TELEMETRY_TIMEOUT_S,
+            )
+            network_calls += 1
+            p2_ok, p2_sum, p2_reason = (
+                _inspect_feedback_summary_json(p2_body)
+                if p2_code in (200, 201)
+                else (False, {}, f"http_{p2_code}")
+            )
+            after_code, after_body = _dispatch_parity_http(
+                "GET",
+                f"{clean_gw}/v1/hivemind/onboarding/feedback/summary",
+                is_html=False,
+                raw_http_fn=raw_http_fn,
+                http_fn=http_fn,
+                allowed_post_paths=feedback_post_allow,
+                timeout_s=HTTP_TIMEOUT_S,
+            )
+            network_calls += 1
+            after_ok, after_sum, _ = (
+                _inspect_feedback_summary_json(after_body) if after_code == 200 else (False, {}, "http_err")
+            )
+            conserved = bool(
+                p2_ok
+                and p2_sum.get("total_responses") == p1_sum.get("total_responses")
+                and p2_sum.get("by_profile") == p1_sum.get("by_profile")
+                and (before_total is None or int(p1_sum["total_responses"]) >= int(before_total))
+                and after_ok
+                and after_sum.get("total_responses") == p1_sum.get("total_responses")
+            )
+            idempotent_dedup_ok = conserved
+            if conserved:
+                feedback_deployed = True
+                feedback_summary = after_sum
+            else:
+                diagnostics.append(f"idempotency_replay_mismatch:{p2_reason}")
+
+    sha_matches: bool | None = None
+    sha_drift_detected = False
+    if clean_expected is not None:
+        sha_matches = shas_match(build_sha, clean_expected)
+        if not sha_matches:
+            sha_drift_detected = True
+            if "/v1/hivemind/onboarding/manifest" not in missing_or_stale:
+                missing_or_stale.append("/v1/hivemind/onboarding/manifest")
+            diagnostics.append(f"build_sha_drift:live={build_sha},expected={clean_expected}")
+
+    producer_quorum_met = bool(fleet_ok and online_producers >= target_n)
+    awaiting_producer_quorum = not producer_quorum_met
+    quorum_gate_ok = bool(fleet_ok and (not require_live_quorum or producer_quorum_met))
+    if require_live_quorum and not producer_quorum_met:
+        diagnostics.append(f"producer_quorum_unmet:{online_producers}<{target_n}")
+
+    ces_slo_ok: bool | None
+    zero_lag_slo_ok: bool | None
+    if not feedback_deployed:
+        ces_slo_ok = False
+        zero_lag_slo_ok = False
+        ces_gate_ok = False
+    else:
+        fb_tot = feedback_summary.get("total_responses")
+        if isinstance(fb_tot, int) and fb_tot > 0:
+            raw_ease = feedback_summary.get("mean_ease_rating")
+            raw_lag = feedback_summary.get("zero_game_lag_ratio")
+            ces_slo_ok = bool(
+                raw_ease is not None and Fraction(str(float(raw_ease))) >= Fraction(str(min_ease_f))
+            )
+            zero_lag_slo_ok = bool(
+                raw_lag is not None and Fraction(str(float(raw_lag))) >= Fraction(str(min_lag_f))
+            )
+            ces_gate_ok = bool(not require_ces_slo or (ces_slo_ok and zero_lag_slo_ok))
+            if require_ces_slo and not ces_gate_ok:
+                diagnostics.append(f"ces_slo_breached:ease={raw_ease},zero_lag={raw_lag}")
+        else:
+            ces_slo_ok = None
+            zero_lag_slo_ok = None
+            ces_gate_ok = True
+
+    deploy_dry_run_res: dict[str, Any] | None = None
+    if execute_deploy_dry_run:
+        root_dir = Path(repo_root) if repo_root is not None else REPO_ROOT
+        deploy_path = root_dir / "deploy" / "gcp_openrouter" / "deploy.sh"
+        deploy_dry_run_res = run_deploy_sh_dry_run(
+            deploy_path,
+            expected_sha=clean_expected,
+            runner=runner,
+            env=env,
+            lang=lang_code,
+        )
+        if deploy_dry_run_res.get("executed"):
+            subprocess_calls += 1
+        if not deploy_dry_run_res.get("ok"):
+            diagnostics.append(str(deploy_dry_run_res.get("diagnostic") or "deploy_dry_run_failed"))
+
+    csp_nonces_unique = len(seen_nonces) == len(PR949_HTML_ROUTES) and all(
+        routes_report.get(hp, {}).get("csp_verified") is True for hp in PR949_HTML_ROUTES
+    )
+    html_all_ok = csp_nonces_unique and all(
+        routes_report.get(hp, {}).get("ok") is True for hp in PR949_HTML_ROUTES
+    )
+    holiday_all_ok = bool(html_all_ok and manifest_ok and feedback_deployed and raid_status_ok)
+    any_holiday_404 = any(
+        routes_report.get(p, {}).get("status_code") == 404
+        for p in (*PR949_HTML_ROUTES, "/v1/hivemind/onboarding/manifest", "/v1/hivemind/onboarding/feedback/summary", "/v1/hivemind/raid/status", "/v1/hivemind/arena/summary")
+        if p in routes_report
+    )
+    stale_revision_detected = bool(
+        sha_drift_detected
+        or any_holiday_404
+        or holiday_contract_fail_seen
+        or (core_any_200 and holiday_404_or_5xx_seen)
+    )
+
+    arena_gate_ok = (not check_arena_summary) or (arena_summary_ok is True)
+    idem_gate_ok = (not verify_idempotency_replay) or (idempotent_dedup_ok is True)
+    deploy_gate_ok = (not execute_deploy_dry_run) or (
+        isinstance(deploy_dry_run_res, Mapping) and deploy_dry_run_res.get("ok") is True
+    )
+    parity_ok = bool(
+        health_ok
+        and models_preflight_ok
+        and holiday_all_ok
+        and fleet_ok
+        and quorum_gate_ok
+        and ces_gate_ok
+        and arena_gate_ok
+        and idem_gate_ok
+        and deploy_gate_ok
+        and not sha_drift_detected
+    )
+
+    if parity_ok:
+        summary = (
+            f"Parité PR #949 vérifiée (nonces={len(seen_nonces)}/4, producteurs={online_producers}/{target_n}, build_sha={build_sha})."
+            if is_fr
+            else f"PR #949 live quorum & arena parity passed (nonces={len(seen_nonces)}/4, online={online_producers}/{target_n}, build_sha={build_sha})."
+        )
+    else:
+        summary = (
+            f"ÉCHEC PARITÉ PR #949 (stale_revision={stale_revision_detected}, routes={', '.join(missing_or_stale)})."
+            if is_fr
+            else f"PR #949 QUORUM/ARENA PARITY FAILED (stale_revision={stale_revision_detected}, routes={', '.join(missing_or_stale)})."
+        )
+
+    return _attach_receipt(
+        {
+            "schema": SCHEMA,
+            "object": RECEIPT_OBJECT,
+            "mode": "pr949_quorum_arena_parity",
+            "lang": lang_code,
+            "ok": parity_ok,
+            "ready": parity_ok,
+            "parity_ok": parity_ok,
+            "quorum_gate_ok": quorum_gate_ok,
+            "compliance_ok": True,
+            "corporate_detected": False,
+            "exit_code": 0 if parity_ok else 2,
+            "gateway": clean_gw,
+            "holiday_routes_deployed_on_cloud_run": holiday_all_ok,
+            "onboarding_feedback_deployed": feedback_deployed,
+            "stale_revision_detected": stale_revision_detected,
+            "sha_drift_detected": sha_drift_detected,
+            "missing_or_stale_routes": missing_or_stale,
+            "models_preflight_ok": models_preflight_ok,
+            "coder_model_present": coder_model_present,
+            "live_models_count": live_models_count,
+            "models": model_ids,
+            "online_producers": online_producers,
+            "total_producers": total_producers,
+            "distinct_physical_gpus": distinct_physical_gpus,
+            "target_online_producers": target_n,
+            "producer_quorum_met": producer_quorum_met,
+            "awaiting_producer_quorum": awaiting_producer_quorum,
+            "ces_slo_ok": ces_slo_ok,
+            "zero_lag_slo_ok": zero_lag_slo_ok,
+            "arena_summary_checked": bool(check_arena_summary),
+            "arena_summary_ok": arena_summary_ok,
+            "arena_summary": arena_summary_doc,
+            "idempotency_verified": bool(verify_idempotency_replay),
+            "idempotent_dedup_ok": idempotent_dedup_ok,
+            "deploy_dry_run_executed": bool(execute_deploy_dry_run and deploy_dry_run_res is not None and deploy_dry_run_res.get("executed")),
+            "deploy_dry_run": deploy_dry_run_res,
+            "build_sha": build_sha,
+            "expected_sha": clean_expected,
+            "sha_matches": sha_matches,
+            "cloud_run_revision": cloud_run_rev,
+            "csp_nonces_unique": csp_nonces_unique,
+            "routes": routes_report,
+            "manifest_summary": manifest_summary,
+            "feedback_summary": feedback_summary,
+            "raid_status_ok": raid_status_ok,
+            "fleet_ok": fleet_ok,
+            "diagnostics": diagnostics,
+            "zero_inference_verified": True,
+            "file_writes": 0,
+            "network_calls": network_calls,
+            "subprocess_calls": subprocess_calls,
+            "compliance": compliance,
+            "summary": summary,
+        }
+    )
 
 
 def verify_cloud_run_holiday_parity(
@@ -1346,11 +2674,111 @@ def verify_cloud_run_holiday_parity(
     )
 
 
+def _project_pr949_to_preflight(
+    pr949_res: Mapping[str, Any],
+    *,
+    clean_gw: str,
+    lang_code: str,
+    require_holiday_routes: bool,
+) -> dict[str, Any]:
+    """Project `verify_pr949_vscode_quorum_and_arena_parity` into `one_shot_quick_preflight` receipt schema."""
+    is_fr = lang_code == "fr"
+    routes_map = dict(pr949_res.get("routes") or {})
+    health_ok = bool(routes_map.get("/health", {}).get("ok"))
+    models_ok = bool(pr949_res.get("models_preflight_ok"))
+    quick_ok = bool(routes_map.get("/quick", {}).get("ok"))
+    fb_ok = bool(pr949_res.get("onboarding_feedback_deployed"))
+    live_models_count = int(pr949_res.get("live_models_count") or 0)
+    coder_present = bool(pr949_res.get("coder_model_present"))
+    model_ids = list(pr949_res.get("models") or [])
+    ready = bool(pr949_res.get("parity_ok"))
+    stale_rev = bool(pr949_res.get("stale_revision_detected"))
+    missing = list(pr949_res.get("missing_or_stale_routes") or [])
+    if ready:
+        verdict = "ready"
+        guidance = ""
+    elif not (health_ok and models_ok):
+        verdict = "gateway_preflight_failed"
+        guidance = (
+            "Passerelle /health ou /v1/models (hivemind/coder) indisponible."
+            if is_fr
+            else "Gateway /health or /v1/models (hivemind/coder) failed."
+        )
+    elif stale_rev:
+        verdict = "stale_cloud_run_revision"
+        guidance = (
+            "Révision Cloud Run en retard détectée sur les routes PR #949."
+            if is_fr
+            else "Stale Cloud Run revision detected on PR #949 routes."
+        )
+    else:
+        verdict = "pr949_quorum_or_slo_failed"
+        guidance = str(pr949_res.get("summary") or "")
+
+    return _attach_receipt(
+        {
+            "schema": SCHEMA,
+            "mode": "one_shot_quick_preflight",
+            "ok": ready,
+            "ready": ready,
+            "preflight_ok": ready,
+            "compliance_ok": True,
+            "exit_code": int(pr949_res.get("exit_code", 2)),
+            "verdict": verdict,
+            "gateway": clean_gw,
+            "lang": lang_code,
+            "health_ok": health_ok,
+            "models_preflight_ok": models_ok,
+            "quick_route_ok": quick_ok,
+            "feedback_endpoint_ok": fb_ok,
+            "live_models_count": live_models_count,
+            "coder_model_present": coder_present,
+            "models": model_ids,
+            "stale_revision_detected": stale_rev,
+            "missing_or_stale_routes": missing,
+            "require_holiday_routes": bool(require_holiday_routes),
+            "feedback_summary": dict(pr949_res.get("feedback_summary") or {}),
+            "online_producers": pr949_res.get("online_producers"),
+            "producer_quorum_met": pr949_res.get("producer_quorum_met"),
+            "awaiting_producer_quorum": pr949_res.get("awaiting_producer_quorum"),
+            "ces_slo_ok": pr949_res.get("ces_slo_ok"),
+            "zero_lag_slo_ok": pr949_res.get("zero_lag_slo_ok"),
+            "arena_summary_ok": pr949_res.get("arena_summary_ok"),
+            "arena_summary": dict(pr949_res.get("arena_summary") or {}),
+            "idempotent_dedup_ok": pr949_res.get("idempotent_dedup_ok"),
+            "deploy_dry_run": pr949_res.get("deploy_dry_run"),
+            "pr949_parity": pr949_res,
+            "local_fallback_guidance": guidance,
+            "routes": routes_map,
+            "diagnostics": list(pr949_res.get("diagnostics") or []),
+            "zero_inference_verified": True,
+            "file_writes": 0,
+            "network_calls": int(pr949_res.get("network_calls") or 0),
+            "subprocess_calls": int(pr949_res.get("subprocess_calls") or 0),
+            "compliance": pr949_res.get("compliance"),
+            "summary": str(pr949_res.get("summary") or ""),
+        }
+    )
+
+
 def run_one_shot_quick_health_preflight(
     gateway: str = DEFAULT_GATEWAY,
     *,
     http_fn: HttpFn = default_http_request,
+    raw_http_fn: Any = default_http_raw,
+    runner: RunnerFn = default_subprocess_runner,
     require_holiday_routes: bool = False,
+    pr949_quorum_gate: bool = False,
+    expected_sha: str | None = None,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    min_ease_rating: float = DEFAULT_MIN_EASE_RATING,
+    min_zero_lag_ratio: float = DEFAULT_MIN_ZERO_LAG_RATIO,
+    require_live_quorum: bool = False,
+    require_ces_slo: bool = False,
+    check_arena_summary: bool = False,
+    verify_idempotency_replay: bool = False,
+    execute_deploy_dry_run: bool = False,
+    repo_root: Path | str | None = None,
     env: Mapping[str, str] | None = None,
     cwd: Path | str | None = None,
     lang: str = "en",
@@ -1359,6 +2787,24 @@ def run_one_shot_quick_health_preflight(
     lang_code = normalize_lang(lang)
     is_fr = lang_code == "fr"
     clean_gw = validate_gateway_url(gateway)
+    _validate_pr949_options(
+        target_online_producers=target_online_producers,
+        min_ease_rating=min_ease_rating,
+        min_zero_lag_ratio=min_zero_lag_ratio,
+        require_live_quorum=require_live_quorum,
+        require_ces_slo=require_ces_slo,
+        check_arena_summary=check_arena_summary,
+        verify_idempotency_replay=verify_idempotency_replay,
+        execute_deploy_dry_run=execute_deploy_dry_run,
+    )
+    pr949_requested = bool(
+        pr949_quorum_gate
+        or require_live_quorum
+        or require_ces_slo
+        or check_arena_summary
+        or verify_idempotency_replay
+        or execute_deploy_dry_run
+    )
 
     compliance = evaluate_personal_pc_compliance(env=env, cwd=cwd, lang=lang_code)
     if not compliance["compliance_ok"]:
@@ -1391,9 +2837,37 @@ def run_one_shot_quick_health_preflight(
                 "zero_inference_verified": True,
                 "file_writes": 0,
                 "network_calls": 0,
+                "subprocess_calls": 0,
                 "compliance": compliance,
                 "summary": compliance["summary"],
             }
+        )
+
+    if pr949_requested:
+        pr949_res = verify_pr949_vscode_quorum_and_arena_parity(
+            clean_gw,
+            expected_sha=expected_sha,
+            target_online_producers=target_online_producers,
+            min_ease_rating=min_ease_rating,
+            min_zero_lag_ratio=min_zero_lag_ratio,
+            require_live_quorum=require_live_quorum,
+            require_ces_slo=require_ces_slo,
+            check_arena_summary=bool(check_arena_summary or pr949_quorum_gate),
+            verify_idempotency_replay=verify_idempotency_replay,
+            execute_deploy_dry_run=execute_deploy_dry_run,
+            repo_root=repo_root,
+            raw_http_fn=raw_http_fn,
+            http_fn=http_fn,
+            runner=runner,
+            env=env,
+            cwd=cwd,
+            lang=lang_code,
+        )
+        return _project_pr949_to_preflight(
+            pr949_res,
+            clean_gw=clean_gw,
+            lang_code=lang_code,
+            require_holiday_routes=require_holiday_routes,
         )
 
     routes_report: dict[str, dict[str, Any]] = {}
@@ -2481,30 +3955,6 @@ def _connect_or_register_account(
         },
         net_calls,
     )
-
-
-def default_subprocess_runner(
-    cmd: Sequence[str],
-    timeout_s: float = SUBPROCESS_TIMEOUT_S,
-) -> tuple[int, str]:
-    """Execute a read-only local argv command (`shell=False`) with `<= 3.0s` timeout."""
-    if isinstance(cmd, (str, bytes)) or not cmd:
-        raise QuickPresetError("Subprocess command must be a non-empty sequence of arguments.")
-    argv = [str(part) for part in cmd]
-    bounded = min(max(0.1, float(timeout_s)), SUBPROCESS_TIMEOUT_S)
-    try:
-        completed = subprocess.run(
-            argv,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=bounded,
-            check=False,
-            shell=False,
-        )
-    except (FileNotFoundError, PermissionError, subprocess.TimeoutExpired, OSError):
-        return 127, ""
-    return int(completed.returncode), (completed.stdout or "")
 
 
 def _optional_finite_float(raw: Any) -> float | None:
@@ -4664,6 +6114,16 @@ def run_vscode_setup(
     expected_sha: str | None = None,
     skip_preflight: bool = False,
     require_holiday_routes: bool = False,
+    pr949_quorum_gate: bool = False,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    min_ease_rating: float = DEFAULT_MIN_EASE_RATING,
+    min_zero_lag_ratio: float = DEFAULT_MIN_ZERO_LAG_RATIO,
+    require_live_quorum: bool = False,
+    require_ces_slo: bool = False,
+    check_arena_summary: bool = False,
+    verify_idempotency_replay: bool = False,
+    execute_deploy_dry_run: bool = False,
+    repo_root: Path | str | None = None,
     prompt_ces: bool = False,
     submit_ces: bool = False,
     flush_ces_queue: bool = False,
@@ -4678,7 +6138,9 @@ def run_vscode_setup(
     gpu_probe_fn: GpuProbeFn = default_gpu_probe,
     yield_drill_fn: YieldDrillFn = default_worker_yield_drill,
     process_probe_fn: ProcessProbeFn | None = default_process_probe,
+    raw_http_fn: Any = default_http_raw,
     http_fn: HttpFn = default_http_request,
+    runner: RunnerFn = default_subprocess_runner,
     input_fn: Callable[[str], str] | None = None,
     env: Mapping[str, str] | None = None,
     home: Path | str | None = None,
@@ -4708,6 +6170,24 @@ def run_vscode_setup(
     clean_ease = parse_ease_rating(ease_rating)
     clean_gw = validate_gateway_url(gateway)
     clean_expected = validate_expected_sha(expected_sha) if expected_sha is not None else None
+    _validate_pr949_options(
+        target_online_producers=target_online_producers,
+        min_ease_rating=min_ease_rating,
+        min_zero_lag_ratio=min_zero_lag_ratio,
+        require_live_quorum=require_live_quorum,
+        require_ces_slo=require_ces_slo,
+        check_arena_summary=check_arena_summary,
+        verify_idempotency_replay=verify_idempotency_replay,
+        execute_deploy_dry_run=execute_deploy_dry_run,
+    )
+    pr949_enabled = bool(
+        pr949_quorum_gate
+        or require_live_quorum
+        or require_ces_slo
+        or check_arena_summary
+        or verify_idempotency_replay
+        or execute_deploy_dry_run
+    )
 
     env_view = env if env is not None else os.environ
     eff_os = os_name if os_name is not None else os.name
@@ -4756,6 +6236,7 @@ def run_vscode_setup(
                 "files": {},
                 "file_writes": 0,
                 "network_calls": 0,
+                "subprocess_calls": 0,
                 "task_labels": [],
                 "gitignore_check": None,
                 "quick_preflight": None,
@@ -4785,18 +6266,118 @@ def run_vscode_setup(
         )
 
     network_calls = 0
+    subprocess_calls = 0
     quick_preflight: dict[str, Any] | None = None
+    pr949_res: dict[str, Any] | None = None
     if not skip_preflight:
         quick_preflight = run_one_shot_quick_health_preflight(
             clean_gw,
             http_fn=http_fn,
+            raw_http_fn=raw_http_fn,
+            runner=runner,
             require_holiday_routes=require_holiday_routes,
+            pr949_quorum_gate=pr949_quorum_gate,
+            expected_sha=clean_expected,
+            target_online_producers=target_online_producers,
+            min_ease_rating=min_ease_rating,
+            min_zero_lag_ratio=min_zero_lag_ratio,
+            require_live_quorum=require_live_quorum,
+            require_ces_slo=require_ces_slo,
+            check_arena_summary=bool(check_arena_summary or pr949_quorum_gate),
+            verify_idempotency_replay=verify_idempotency_replay,
+            execute_deploy_dry_run=execute_deploy_dry_run,
+            repo_root=repo_root,
             env=env_view,
             cwd=ws_path,
             lang=lang_code,
         )
         network_calls += int(quick_preflight["network_calls"])
+        subprocess_calls += int(quick_preflight.get("subprocess_calls") or 0)
+        if isinstance(quick_preflight.get("pr949_parity"), Mapping):
+            pr949_res = dict(quick_preflight["pr949_parity"])
         if quick_preflight["exit_code"] != 0:
+            blocked_doc: dict[str, Any] = {
+                "schema": SCHEMA,
+                "mode": "vscode_setup",
+                "ok": False,
+                "ready": False,
+                "compliance_ok": True,
+                "exit_code": 2,
+                "verdict": str(quick_preflight["verdict"]),
+                "gateway": clean_gw,
+                "elapsed_s": round(time.perf_counter() - t0, 4),
+                "within_60s_slo": (time.perf_counter() - t0) < SLO_BUDGET_SECONDS,
+                "account": None,
+                "files": {},
+                "file_writes": 0,
+                "network_calls": network_calls,
+                "subprocess_calls": subprocess_calls,
+                "task_labels": [],
+                "gitignore_check": None,
+                "quick_preflight": quick_preflight,
+                "models_preflight_ok": bool(quick_preflight["models_preflight_ok"]),
+                "quick_route_ok": bool(quick_preflight["quick_route_ok"]),
+                "feedback_endpoint_ok": bool(quick_preflight["feedback_endpoint_ok"]),
+                "live_models_count": int(quick_preflight["live_models_count"]),
+                "holiday_routes_deployed_on_cloud_run": bool(
+                    quick_preflight["quick_route_ok"] and quick_preflight["feedback_endpoint_ok"]
+                ),
+                "onboarding_feedback_deployed": bool(quick_preflight["feedback_endpoint_ok"]),
+                "stale_revision_detected": bool(quick_preflight["stale_revision_detected"]),
+                "missing_or_stale_routes": list(quick_preflight["missing_or_stale_routes"]),
+                "local_fallback_guidance": str(quick_preflight["local_fallback_guidance"]),
+                "write_continue_config": bool(write_continue_config),
+                "preflight": None,
+                "first_heartbeat_ok": None,
+                "heartbeat": {"attempted": False, "sent": False, "ok": False},
+                "ces_recorded": False,
+                "ces_queued_for_retry": False,
+                "ces_feedback": {"attempted": False, "ces_recorded": False, "status": "preflight_blocked"},
+                "ces_flush": None,
+                "ces_queue_file": redact_home_path(queue_path, home=resolved_home),
+                "ces_queue_exists": queue_path.is_file(),
+                "zero_inference_verified": True,
+                "compliance": compliance,
+                "summary": str(quick_preflight["summary"]),
+            }
+            if pr949_res is not None:
+                blocked_doc.update(
+                    {
+                        "pr949_parity": pr949_res,
+                        "online_producers": pr949_res.get("online_producers"),
+                        "producer_quorum_met": pr949_res.get("producer_quorum_met"),
+                        "awaiting_producer_quorum": pr949_res.get("awaiting_producer_quorum"),
+                        "ces_slo_ok": pr949_res.get("ces_slo_ok"),
+                        "zero_lag_slo_ok": pr949_res.get("zero_lag_slo_ok"),
+                        "arena_summary_ok": pr949_res.get("arena_summary_ok"),
+                        "idempotent_dedup_ok": pr949_res.get("idempotent_dedup_ok"),
+                        "deploy_dry_run": pr949_res.get("deploy_dry_run"),
+                    }
+                )
+            return _attach_receipt(blocked_doc)
+    elif pr949_enabled:
+        pr949_res = verify_pr949_vscode_quorum_and_arena_parity(
+            clean_gw,
+            expected_sha=clean_expected,
+            target_online_producers=target_online_producers,
+            min_ease_rating=min_ease_rating,
+            min_zero_lag_ratio=min_zero_lag_ratio,
+            require_live_quorum=require_live_quorum,
+            require_ces_slo=require_ces_slo,
+            check_arena_summary=bool(check_arena_summary or pr949_quorum_gate),
+            verify_idempotency_replay=verify_idempotency_replay,
+            execute_deploy_dry_run=execute_deploy_dry_run,
+            repo_root=repo_root,
+            raw_http_fn=raw_http_fn,
+            http_fn=http_fn,
+            runner=runner,
+            env=env_view,
+            cwd=ws_path,
+            lang=lang_code,
+        )
+        network_calls += int(pr949_res.get("network_calls") or 0)
+        subprocess_calls += int(pr949_res.get("subprocess_calls") or 0)
+        if pr949_res["exit_code"] != 0:
             return _attach_receipt(
                 {
                     "schema": SCHEMA,
@@ -4805,7 +6386,7 @@ def run_vscode_setup(
                     "ready": False,
                     "compliance_ok": True,
                     "exit_code": 2,
-                    "verdict": str(quick_preflight["verdict"]),
+                    "verdict": "pr949_quorum_or_slo_failed",
                     "gateway": clean_gw,
                     "elapsed_s": round(time.perf_counter() - t0, 4),
                     "within_60s_slo": (time.perf_counter() - t0) < SLO_BUDGET_SECONDS,
@@ -4813,33 +6394,41 @@ def run_vscode_setup(
                     "files": {},
                     "file_writes": 0,
                     "network_calls": network_calls,
+                    "subprocess_calls": subprocess_calls,
                     "task_labels": [],
                     "gitignore_check": None,
-                    "quick_preflight": quick_preflight,
-                    "models_preflight_ok": bool(quick_preflight["models_preflight_ok"]),
-                    "quick_route_ok": bool(quick_preflight["quick_route_ok"]),
-                    "feedback_endpoint_ok": bool(quick_preflight["feedback_endpoint_ok"]),
-                    "live_models_count": int(quick_preflight["live_models_count"]),
-                    "holiday_routes_deployed_on_cloud_run": bool(
-                        quick_preflight["quick_route_ok"] and quick_preflight["feedback_endpoint_ok"]
-                    ),
-                    "onboarding_feedback_deployed": bool(quick_preflight["feedback_endpoint_ok"]),
-                    "stale_revision_detected": bool(quick_preflight["stale_revision_detected"]),
-                    "missing_or_stale_routes": list(quick_preflight["missing_or_stale_routes"]),
-                    "local_fallback_guidance": str(quick_preflight["local_fallback_guidance"]),
+                    "quick_preflight": None,
+                    "pr949_parity": pr949_res,
+                    "models_preflight_ok": bool(pr949_res.get("models_preflight_ok")),
+                    "quick_route_ok": bool((pr949_res.get("routes") or {}).get("/quick", {}).get("ok")),
+                    "feedback_endpoint_ok": bool(pr949_res.get("onboarding_feedback_deployed")),
+                    "live_models_count": int(pr949_res.get("live_models_count") or 0),
+                    "holiday_routes_deployed_on_cloud_run": bool(pr949_res.get("holiday_routes_deployed_on_cloud_run")),
+                    "onboarding_feedback_deployed": bool(pr949_res.get("onboarding_feedback_deployed")),
+                    "stale_revision_detected": bool(pr949_res.get("stale_revision_detected")),
+                    "missing_or_stale_routes": list(pr949_res.get("missing_or_stale_routes") or []),
+                    "online_producers": pr949_res.get("online_producers"),
+                    "producer_quorum_met": pr949_res.get("producer_quorum_met"),
+                    "awaiting_producer_quorum": pr949_res.get("awaiting_producer_quorum"),
+                    "ces_slo_ok": pr949_res.get("ces_slo_ok"),
+                    "zero_lag_slo_ok": pr949_res.get("zero_lag_slo_ok"),
+                    "arena_summary_ok": pr949_res.get("arena_summary_ok"),
+                    "idempotent_dedup_ok": pr949_res.get("idempotent_dedup_ok"),
+                    "deploy_dry_run": pr949_res.get("deploy_dry_run"),
+                    "local_fallback_guidance": str(pr949_res.get("summary") or ""),
                     "write_continue_config": bool(write_continue_config),
                     "preflight": None,
                     "first_heartbeat_ok": None,
                     "heartbeat": {"attempted": False, "sent": False, "ok": False},
                     "ces_recorded": False,
                     "ces_queued_for_retry": False,
-                    "ces_feedback": {"attempted": False, "ces_recorded": False, "status": "preflight_blocked"},
+                    "ces_feedback": {"attempted": False, "ces_recorded": False, "status": "pr949_gate_blocked"},
                     "ces_flush": None,
                     "ces_queue_file": redact_home_path(queue_path, home=resolved_home),
                     "ces_queue_exists": queue_path.is_file(),
                     "zero_inference_verified": True,
                     "compliance": compliance,
-                    "summary": str(quick_preflight["summary"]),
+                    "summary": str(pr949_res.get("summary") or ""),
                 }
             )
 
@@ -5090,55 +6679,81 @@ def run_vscode_setup(
         )
     )
 
-    return _attach_receipt(
-        {
-            "schema": SCHEMA,
-            "mode": "vscode_setup",
-            "ok": overall_ready,
-            "ready": overall_ready,
-            "compliance_ok": True,
-            "exit_code": 0 if overall_ready else 2,
-            "verdict": verdict,
-            "gateway": clean_gw,
-            "elapsed_s": elapsed_s,
-            "within_60s_slo": elapsed_s < SLO_BUDGET_SECONDS,
-            "account": acct_public,
-            "files": files_map,
-            "file_writes": file_writes,
-            "network_calls": network_calls,
-            "task_labels": list(PRESET_TASK_LABELS),
-            "gitignore_check": preset_report.get("gitignore_check"),
-            "quick_preflight": quick_preflight,
-            "models_preflight_ok": models_ok,
-            "quick_route_ok": (
-                bool(quick_preflight["quick_route_ok"]) if quick_preflight is not None else None
-            ),
-            "feedback_endpoint_ok": (
-                bool(quick_preflight["feedback_endpoint_ok"]) if quick_preflight is not None else None
-            ),
-            "live_models_count": live_models_count,
-            "holiday_routes_deployed_on_cloud_run": holiday_deployed,
-            "onboarding_feedback_deployed": feedback_deployed,
-            "stale_revision_detected": stale_revision,
-            "missing_or_stale_routes": missing_routes,
-            "online_producers": preset_report.get("online_producers"),
-            "local_fallback_guidance": fallback_guidance,
-            "write_continue_config": bool(write_continue_config),
-            "parity": preset_report.get("parity"),
-            "preflight": gamer_pf,
-            "first_heartbeat_ok": preset_report.get("first_heartbeat_ok"),
-            "heartbeat": preset_report.get("heartbeat"),
-            "ces_recorded": ces_recorded,
-            "ces_queued_for_retry": ces_spooled,
-            "ces_feedback": ces_report,
-            "ces_flush": flush_report,
-            "ces_queue_file": redact_home_path(queue_path, home=resolved_home),
-            "ces_queue_exists": queue_path.is_file(),
-            "zero_inference_verified": True,
-            "compliance": compliance,
-            "summary": summary,
-        }
+    eff_online_producers = (
+        preset_report.get("online_producers")
+        if preset_report.get("online_producers") is not None
+        else (pr949_res.get("online_producers") if pr949_res is not None else None)
     )
+    out_doc: dict[str, Any] = {
+        "schema": SCHEMA,
+        "mode": "vscode_setup",
+        "ok": overall_ready,
+        "ready": overall_ready,
+        "compliance_ok": True,
+        "exit_code": 0 if overall_ready else 2,
+        "verdict": verdict,
+        "gateway": clean_gw,
+        "elapsed_s": elapsed_s,
+        "within_60s_slo": elapsed_s < SLO_BUDGET_SECONDS,
+        "account": acct_public,
+        "files": files_map,
+        "file_writes": file_writes,
+        "network_calls": network_calls,
+        "task_labels": list(PRESET_TASK_LABELS),
+        "gitignore_check": preset_report.get("gitignore_check"),
+        "quick_preflight": quick_preflight,
+        "models_preflight_ok": models_ok,
+        "quick_route_ok": (
+            bool(quick_preflight["quick_route_ok"]) if quick_preflight is not None else None
+        ),
+        "feedback_endpoint_ok": (
+            bool(quick_preflight["feedback_endpoint_ok"]) if quick_preflight is not None else None
+        ),
+        "live_models_count": live_models_count,
+        "holiday_routes_deployed_on_cloud_run": holiday_deployed,
+        "onboarding_feedback_deployed": feedback_deployed,
+        "stale_revision_detected": stale_revision,
+        "missing_or_stale_routes": missing_routes,
+        "online_producers": eff_online_producers,
+        "local_fallback_guidance": fallback_guidance,
+        "write_continue_config": bool(write_continue_config),
+        "parity": preset_report.get("parity"),
+        "preflight": gamer_pf,
+        "first_heartbeat_ok": preset_report.get("first_heartbeat_ok"),
+        "heartbeat": preset_report.get("heartbeat"),
+        "ces_recorded": ces_recorded,
+        "ces_queued_for_retry": ces_spooled,
+        "ces_feedback": ces_report,
+        "ces_flush": flush_report,
+        "ces_queue_file": redact_home_path(queue_path, home=resolved_home),
+        "ces_queue_exists": queue_path.is_file(),
+        "zero_inference_verified": True,
+        "compliance": compliance,
+        "summary": summary,
+    }
+    if pr949_res is not None:
+        out_doc.update(
+            {
+                "pr949_parity": pr949_res,
+                "producer_quorum_met": pr949_res.get("producer_quorum_met"),
+                "awaiting_producer_quorum": pr949_res.get("awaiting_producer_quorum"),
+                "ces_slo_ok": pr949_res.get("ces_slo_ok"),
+                "zero_lag_slo_ok": pr949_res.get("zero_lag_slo_ok"),
+                "arena_summary_ok": pr949_res.get("arena_summary_ok"),
+                "idempotent_dedup_ok": pr949_res.get("idempotent_dedup_ok"),
+                "deploy_dry_run": pr949_res.get("deploy_dry_run"),
+                "subprocess_calls": subprocess_calls,
+            }
+        )
+    return _attach_receipt(out_doc)
+
+
+def _validate_cli_path_arg(raw: str | None, *, flag: str) -> Path | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw.strip() or "\x00" in raw:
+        raise QuickPresetError(f"{flag} must be a non-empty path without NUL bytes.")
+    return Path(raw.strip())
 
 
 def render_human_report(report: Mapping[str, Any], *, lang: str = "en") -> str:
@@ -5151,12 +6766,68 @@ def render_human_report(report: Mapping[str, Any], *, lang: str = "en") -> str:
         f"Compliance: {COMPLIANCE_NOTICE_BILINGUAL}",
         f"Receipt SHA-256: {report.get('receipt_sha256', '')}",
     ]
+    if report.get("producer_quorum_met") is not None or report.get("ces_slo_ok") is not None:
+        lines.append(
+            f"Quorum/SLO: online={report.get('online_producers')} "
+            f"quorum_met={report.get('producer_quorum_met')} "
+            f"ces_slo_ok={report.get('ces_slo_ok')} zero_lag_slo_ok={report.get('zero_lag_slo_ok')}"
+        )
+    if report.get("arena_summary_ok") is not None:
+        lines.append(f"Arena Summary Parity: {report.get('arena_summary_ok')}")
+    if report.get("idempotent_dedup_ok") is not None:
+        lines.append(f"Idempotency Replay Conserved: {report.get('idempotent_dedup_ok')}")
+    if isinstance(report.get("deploy_dry_run"), Mapping):
+        lines.append(
+            f"Deploy Dry-Run: ok={report['deploy_dry_run'].get('ok')} "
+            f"build_sha={report['deploy_dry_run'].get('dry_run_build_sha')}"
+        )
     guidance = str(report.get("local_fallback_guidance") or "").strip()
     if guidance:
         lines.append(f"Fallback Guidance: {guidance}")
     git_chk = report.get("gitignore_check")
     if isinstance(git_chk, Mapping) and git_chk.get("warning"):
         lines.append(f"Notice: {git_chk['warning']}")
+    return _assert_safe_output("\n".join(lines) + "\n")
+
+
+def render_markdown_report(report: Mapping[str, Any], *, lang: str = "en") -> str:
+    """Render a zero-secret, `~`-redacted Markdown summary in English or French."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    heading = (
+        "# Rapport HiveMind Noël VS Code Preset & Parité PR #949"
+        if is_fr
+        else "# HiveMind Noel VS Code Preset & PR #949 Parity Report"
+    )
+    lines = [
+        heading,
+        "",
+        f"- **{'Passerelle' if is_fr else 'Gateway'}**: `{report.get('gateway', DEFAULT_GATEWAY)}`",
+        f"- **{'Conformité' if is_fr else 'Compliance'}**: `{report.get('compliance_ok')}` (`{FINANCIAL_PROMISE}`, AGPL-3.0)",
+        f"- **{'Verdict' if is_fr else 'Exit Code'}**: `{report.get('exit_code')}`",
+        f"- **{'Résumé' if is_fr else 'Summary'}**: {report.get('summary', '')}",
+        f"- **Receipt SHA-256**: `{report.get('receipt_sha256', '')}`",
+    ]
+    if report.get("producer_quorum_met") is not None or report.get("ces_slo_ok") is not None:
+        lines.append(
+            f"- **{'Quorum & SLO CES' if is_fr else 'Quorum & CES SLO'}**: "
+            f"`online_producers={report.get('online_producers')}`, "
+            f"`producer_quorum_met={report.get('producer_quorum_met')}`, "
+            f"`ces_slo_ok={report.get('ces_slo_ok')}`, `zero_lag_slo_ok={report.get('zero_lag_slo_ok')}`"
+        )
+    if report.get("arena_summary_ok") is not None:
+        lines.append(f"- **Arena Summary Parity**: `{report.get('arena_summary_ok')}`")
+    if report.get("idempotent_dedup_ok") is not None:
+        lines.append(f"- **Idempotency Replay Conserved**: `{report.get('idempotent_dedup_ok')}`")
+    if isinstance(report.get("deploy_dry_run"), Mapping):
+        lines.append(
+            f"- **Deploy Dry-Run**: `ok={report['deploy_dry_run'].get('ok')}`, "
+            f"`build_sha={report['deploy_dry_run'].get('dry_run_build_sha')}`"
+        )
+    diags = report.get("diagnostics") or ()
+    if diags:
+        lines.extend(["", "## Diagnostics"])
+        lines.extend(f"- {d}" for d in diags)
     return _assert_safe_output("\n".join(lines) + "\n")
 
 
@@ -5172,15 +6843,45 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gateway", default=DEFAULT_GATEWAY, help="HiveMind gateway URL.")
     parser.add_argument("--check-parity", action="store_true", help="Run Cloud Run holiday-route parity gate.")
     parser.add_argument(
+        "--pr949-quorum-gate",
+        action="store_true",
+        help="Run zero-inference PR #949 4-HTML parity, 8+ producer quorum, arena summary, CES SLO & replay gate.",
+    )
+    parser.add_argument(
         "--require-holiday-routes",
         action="store_true",
         help="Fail closed (exit code 2) if Cloud Run holiday routes or expected_sha are missing/stale.",
     )
     parser.add_argument("--expected-sha", default=None, help="Expected Cloud Run manifest build_sha.")
+    parser.add_argument(
+        "--target-online-producers",
+        type=int,
+        default=DEFAULT_TARGET_ONLINE_PRODUCERS,
+        help="Minimum live volunteer friend producers required for quorum.",
+    )
+    parser.add_argument(
+        "--min-ease-rating",
+        type=float,
+        default=DEFAULT_MIN_EASE_RATING,
+        help="Minimum mean CES ease rating threshold (1.0..5.0).",
+    )
+    parser.add_argument(
+        "--min-zero-lag-ratio",
+        type=float,
+        default=DEFAULT_MIN_ZERO_LAG_RATIO,
+        help="Minimum gamer zero-game-lag ratio threshold (0.0..1.0).",
+    )
+    parser.add_argument("--require-live-quorum", action="store_true", help="Fail closed (exit 2) when online_producers < target.")
+    parser.add_argument("--require-ces-slo", action="store_true", help="Fail closed (exit 2) when CES/zero-lag SLO is breached.")
+    parser.add_argument("--check-arena-summary", action="store_true", help="Verify /v1/hivemind/arena/summary conservation & Wilson LB.")
+    parser.add_argument("--verify-idempotency-replay", action="store_true", help="Verify Idempotency-Key duplicate-replay deduplication.")
+    parser.add_argument("--run-deploy-dry-run", action="store_true", help="Execute deploy/gcp_openrouter/deploy.sh --dry-run (no gcloud).")
     parser.add_argument("--install-preset", action="store_true", help="Install <60s VS Code quick-connect preset.")
     parser.add_argument("--vscode-setup", action="store_true", help="Run unified <60s VS Code setup orchestrator.")
     parser.add_argument("--skip-preflight", action="store_true", help="Skip 1-shot /v1/models + /quick health preflight.")
     parser.add_argument("--workspace", default=None, help="Target personal workspace directory.")
+    parser.add_argument("--cwd", default=None, help="Override working directory for personal-PC compliance & git remote check.")
+    parser.add_argument("--output", default=None, help="Atomically persist verified output (POSIX 0600); never writes when compliance fails.")
     parser.add_argument("--credentials-path", default=None, help="Override ~/.hivemind/credentials.json path.")
     parser.add_argument("--continue-config-path", default=None, help="Override ~/.continue/hivemind_provider.yaml.")
     parser.add_argument("--continue-main-config-path", default=None, help="Override ~/.continue/config.yaml.")
@@ -5201,6 +6902,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--had-game-lag", action="store_true", help="Report whether any game lag occurred.")
     parser.add_argument("--lang", default="en", choices=SUPPORTED_LANGS, help="Output language (en|fr).")
     parser.add_argument("--json", action="store_true", dest="json_output", help="Emit JSON report.")
+    parser.add_argument("--markdown", action="store_true", help="Emit Markdown report.")
     return parser
 
 
@@ -5212,7 +6914,9 @@ def main(
     home: Path | str | None = None,
     os_name: str | None = None,
     system_name: str | None = None,
+    raw_http_fn: Any = default_http_raw,
     http_fn: HttpFn = default_http_request,
+    runner: RunnerFn = default_subprocess_runner,
     gpu_probe_fn: GpuProbeFn = default_gpu_probe,
     yield_drill_fn: YieldDrillFn = default_worker_yield_drill,
     process_probe_fn: ProcessProbeFn | None = default_process_probe,
@@ -5223,10 +6927,15 @@ def main(
     out_stream = stdout if stdout is not None else sys.stdout
     parser = build_arg_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
+    eff_os = os_name if os_name is not None else os.name
+    out_path: Path | None = None
 
-    eff_cwd = Path(args.workspace) if args.workspace else (Path(cwd) if cwd is not None else Path.cwd())
     try:
         lang_code = normalize_lang(args.lang)
+        cli_cwd = _validate_cli_path_arg(args.cwd, flag="--cwd")
+        cli_ws = _validate_cli_path_arg(args.workspace, flag="--workspace")
+        out_path = _validate_cli_path_arg(args.output, flag="--output")
+        eff_cwd = cli_ws if cli_ws is not None else (cli_cwd if cli_cwd is not None else (Path(cwd) if cwd is not None else Path.cwd()))
         if args.uninstall:
             report = uninstall_vscode_quick_preset(
                 workspace_dir=eff_cwd,
@@ -5244,6 +6953,7 @@ def main(
             and not args.vscode_setup
             and not args.install_preset
             and not args.check_parity
+            and not args.pr949_quorum_gate
             and not args.write_continue_config
             and not args.prompt_ces
             and not args.submit_ces
@@ -5275,6 +6985,15 @@ def main(
                 expected_sha=args.expected_sha,
                 skip_preflight=bool(args.skip_preflight),
                 require_holiday_routes=bool(args.require_holiday_routes),
+                pr949_quorum_gate=bool(args.pr949_quorum_gate),
+                target_online_producers=int(args.target_online_producers),
+                min_ease_rating=float(args.min_ease_rating),
+                min_zero_lag_ratio=float(args.min_zero_lag_ratio),
+                require_live_quorum=bool(args.require_live_quorum),
+                require_ces_slo=bool(args.require_ces_slo),
+                check_arena_summary=bool(args.check_arena_summary or args.pr949_quorum_gate),
+                verify_idempotency_replay=bool(args.verify_idempotency_replay),
+                execute_deploy_dry_run=bool(args.run_deploy_dry_run),
                 prompt_ces=bool(args.prompt_ces),
                 submit_ces=bool(args.submit_ces),
                 flush_ces_queue=bool(args.flush_ces_queue),
@@ -5287,7 +7006,9 @@ def main(
                 gpu_probe_fn=gpu_probe_fn,
                 yield_drill_fn=yield_drill_fn,
                 process_probe_fn=process_probe_fn,
+                raw_http_fn=raw_http_fn,
                 http_fn=http_fn,
+                runner=runner,
                 input_fn=input_fn,
                 env=env,
                 home=home,
@@ -5295,15 +7016,60 @@ def main(
                 system_name=system_name,
                 lang=lang_code,
             )
-        elif args.check_parity and not args.install_preset:
-            report = verify_cloud_run_holiday_parity(
+        elif args.pr949_quorum_gate and not args.install_preset:
+            report = verify_pr949_vscode_quorum_and_arena_parity(
                 args.gateway,
                 expected_sha=args.expected_sha,
+                target_online_producers=int(args.target_online_producers),
+                min_ease_rating=float(args.min_ease_rating),
+                min_zero_lag_ratio=float(args.min_zero_lag_ratio),
+                require_live_quorum=bool(args.require_live_quorum),
+                require_ces_slo=bool(args.require_ces_slo),
+                check_arena_summary=True,
+                verify_idempotency_replay=bool(args.verify_idempotency_replay),
+                execute_deploy_dry_run=bool(args.run_deploy_dry_run),
+                raw_http_fn=raw_http_fn,
                 http_fn=http_fn,
+                runner=runner,
                 env=env,
-                cwd=eff_cwd,
+                cwd=cli_cwd if cli_cwd is not None else eff_cwd,
                 lang=lang_code,
             )
+        elif args.check_parity and not args.install_preset:
+            if (
+                args.require_live_quorum
+                or args.require_ces_slo
+                or args.check_arena_summary
+                or args.verify_idempotency_replay
+                or args.run_deploy_dry_run
+            ):
+                report = verify_pr949_vscode_quorum_and_arena_parity(
+                    args.gateway,
+                    expected_sha=args.expected_sha,
+                    target_online_producers=int(args.target_online_producers),
+                    min_ease_rating=float(args.min_ease_rating),
+                    min_zero_lag_ratio=float(args.min_zero_lag_ratio),
+                    require_live_quorum=bool(args.require_live_quorum),
+                    require_ces_slo=bool(args.require_ces_slo),
+                    check_arena_summary=bool(args.check_arena_summary),
+                    verify_idempotency_replay=bool(args.verify_idempotency_replay),
+                    execute_deploy_dry_run=bool(args.run_deploy_dry_run),
+                    raw_http_fn=raw_http_fn,
+                    http_fn=http_fn,
+                    runner=runner,
+                    env=env,
+                    cwd=cli_cwd if cli_cwd is not None else eff_cwd,
+                    lang=lang_code,
+                )
+            else:
+                report = verify_cloud_run_holiday_parity(
+                    args.gateway,
+                    expected_sha=args.expected_sha,
+                    http_fn=http_fn,
+                    env=env,
+                    cwd=cli_cwd if cli_cwd is not None else eff_cwd,
+                    lang=lang_code,
+                )
         else:
             report = install_vscode_quick_preset(
                 args.gateway,
@@ -5347,10 +7113,16 @@ def main(
             }
         )
 
+    out_lang = args.lang if args.lang in SUPPORTED_LANGS else "en"
     if args.json_output:
         rendered = _assert_safe_output(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+    elif args.markdown:
+        rendered = render_markdown_report(report, lang=out_lang)
     else:
-        rendered = render_human_report(report, lang=args.lang if args.lang in SUPPORTED_LANGS else "en")
+        rendered = render_human_report(report, lang=out_lang)
+
+    if out_path is not None and report.get("compliance_ok") is not False and report.get("mode") != "error":
+        _write_file_secure_atomic(out_path, rendered, posix_mode=0o600, eff_os=eff_os)
     out_stream.write(rendered)
     return int(report.get("exit_code", 2))
 

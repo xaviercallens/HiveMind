@@ -1189,10 +1189,15 @@ def test_04_posix_dev_60s_and_gamer_whisper_5m_dry_runs_and_launcher_audit(
 
     monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/pwsh" if cmd == "pwsh" else None)
 
-    def _sim_runner(argv: list[str], _t: float) -> tuple[int, str]:
+    pwsh_timeouts: list[float] = []
+
+    def _sim_runner(argv: list[str], timeout_s: float) -> tuple[int, str]:
         joined = " ".join(argv)
         if "pwsh" in str(argv[0]):
-            return 0, json.dumps({"dry_run": True, "target_script": "noel_deploy_smoke_and_win11_verifier.py"})
+            pwsh_timeouts.append(timeout_s)
+            return 0, "PowerShell 7.4\n" + json.dumps(
+                {"dry_run": True, "target_script": "noel_deploy_smoke_and_win11_verifier.py"}
+            )
         if "--help" in argv:
             return 0, "--gamer-whisper --connect --doctor --deploy-smoke"
         if "AMADEUS_PROFILE=" in joined and "--uninstall" not in argv:
@@ -1207,6 +1212,7 @@ def test_04_posix_dev_60s_and_gamer_whisper_5m_dry_runs_and_launcher_audit(
 
     pw_audit = verifier.audit_posix_launcher_contract(runner=_sim_runner, environ=CLEAN_ENV, cwd=REPO_ROOT)
     assert pw_audit["pwsh_checked"] is True and pw_audit["pwsh_dry_run_ok"] is True
+    assert pwsh_timeouts == [verifier.PWSH_SUBPROCESS_TIMEOUT_S] and verifier.PWSH_SUBPROCESS_TIMEOUT_S >= 20.0
 
     pw_bad = verifier.audit_posix_launcher_contract(
         runner=lambda a, _t: (0, "{badjson") if "pwsh" in str(a[0]) else _sim_runner(a, _t),

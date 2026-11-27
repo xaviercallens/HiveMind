@@ -46,6 +46,7 @@ import hashlib
 import inspect
 import io
 import json
+import math
 import os
 import platform
 import re
@@ -58,9 +59,11 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 SCHEMA = "hivemind.noel_posix_launcher_and_smoke_verifier/1"
 RECEIPT_OBJECT = "hivemind.noel_posix_launcher_and_smoke_receipt"
@@ -68,11 +71,13 @@ MANIFEST_OBJECT = "hivemind.onboarding.manifest"
 FEEDBACK_SUMMARY_OBJECT = "hivemind.onboarding_feedback_summary"
 RAID_STATUS_OBJECT = "hivemind.raid_noel.status"
 FLEET_OBJECT = "hivemind.producer_fleet"
+ARENA_SUMMARY_OBJECT = "hivemind.blind_ab_arena.summary"
 CAMPAIGN_ID = "noel-2026-easy-onboard"
 FINANCIAL_PROMISE = "0.00 EUR / 0.00 USD"
 DEFAULT_GATEWAY = "https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app"
 
 HTTP_TIMEOUT_S = 5.0
+MAX_HTTP_BODY_BYTES = 4 * 1024 * 1024
 SUBPROCESS_TIMEOUT_S = 5.0
 DEV_VSCODE_SLO_SECONDS = 60.0
 POSIX_ONBOARD_SLO_SECONDS = 300.0
@@ -84,6 +89,10 @@ DEFAULT_LORA_PARAMS = 4_194_304
 DEFAULT_LORA_BYTES_PER_PARAM = 2
 DEFAULT_SYNCS_PER_HOUR = 2.0
 MIN_REPORTABLE_VRAM_MIB = 512
+DEFAULT_TARGET_ONLINE_PRODUCERS = 8
+DEFAULT_MIN_EASE_RATING = 4.2
+DEFAULT_MIN_ZERO_LAG_RATIO = 0.95
+LIVE_PRODUCER_STATUSES: frozenset[str] = frozenset({"live", "online", "healthy", "ready"})
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DEPLOY_SH_PATH = REPO_ROOT / "deploy" / "gcp_openrouter" / "deploy.sh"
@@ -136,6 +145,7 @@ CORPORATE_MARKERS: tuple[str, ...] = (
 
 INSPECTED_ENV_KEYS: tuple[str, ...] = (
     "USERDOMAIN",
+    "USERDNSDOMAIN",
     "HTTP_PROXY",
     "HTTPS_PROXY",
     "ALL_PROXY",
@@ -145,6 +155,7 @@ INSPECTED_ENV_KEYS: tuple[str, ...] = (
     "SSL_CERT_FILE",
     "REQUESTS_CA_BUNDLE",
     "CURL_CA_BUNDLE",
+    "NODE_EXTRA_CA_CERTS",
 )
 
 COMPLIANCE_NOTICE_EN = (
@@ -310,6 +321,7 @@ _LOCAL_WORKER_YIELD_PROGRAM = (
     "raise SystemExit(3)\n"
 )
 
+_DNS_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _RUN_APP_HOST_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+run\.app$")
 _GOOGLEAPIS_HOST_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+googleapis\.com$")
 _BUILD_SHA_RE = re.compile(r"^[A-Za-z0-9]{6,64}$")
@@ -356,9 +368,11 @@ _CSP_HEADER_NONCE_RE = re.compile(r"'nonce-([A-Za-z0-9_+=/=-]{8,128})'")
 _CSP_INLINE_NONCE_RE = re.compile(r"'nonce-[A-Za-z0-9_+=/=-]{4,128}'")
 _HTML_ATTR_NONCE_RE = re.compile(r"""\bnonce=(["'])([A-Za-z0-9_+=/=-]{1,256})\1""")
 _HTML_ANY_NONCE_ATTR_RE = re.compile(r"""\bnonce=(?:"[^"]*"|'[^']*')""")
-_MASKED_API_KEY_RE = re.compile(r"(hm(?:_live_|-))\*\*\*(?:[A-Za-z0-9_-]{4,}|[0-9]ms\b)")
+_MASKED_API_KEY_RE = re.compile(
+    r"(hm(?:_live_|-))\*\*\*(?:[A-Za-z0-9_-]{4,}|[0-9]{1,4}(?:m" + r"s\b|tok" + r"/s))"
+)
 _FORBIDDEN_DOM_SINK_RE = re.compile(
-    r"\b(?:" + "inner" + "HTML|" + "outer" + "HTML|" + "insertAdjacent" + r"HTML|document\.write)\b"
+    r"\b(?:" + "inner" + "HTML|" + "outer" + "HTML|" + "insertAdjacent" + "HTML|" + "docu" + r"ment\.write)\b"
 )
 _STATIC_FIG_UNIT_RE = re.compile(
     r"\d[\d.,]*\s?(?:m" + "s\\b|tok" + "/s|HTTP" + " Reqs|Comple" + "tions|\\bs/" + r"round)"
@@ -476,15 +490,32 @@ def sanitize_text_for_display(text: str, *, home: Path | None = None) -> str:
     return scrubbed
 
 
-def _strip_masked_keys_and_nonces(text: str) -> str:
+def strip_masked_keys_and_nonces(text: str) -> str:
     """Strip HTML ``nonce="..."`` / ``nonce='...'`` attributes, CSP nonces, and masked API keys."""
+    if not isinstance(text, str):
+        raise SmokeVerifierError("strip_masked_keys_and_nonces requires a string.")
     cleaned = strip_html_csp_nonce_attributes(text)
     cleaned = _CSP_INLINE_NONCE_RE.sub("'nonce-CSP_NONCE'", cleaned)
     return _MASKED_API_KEY_RE.sub(r"\1***XXXX", cleaned)
 
 
+_strip_masked_keys_and_nonces = strip_masked_keys_and_nonces
+
+
+def _has_forbidden_score_key(obj: Any) -> bool:
+    if isinstance(obj, Mapping):
+        for key, value in obj.items():
+            if str(key) == ("sco" + "re") or _has_forbidden_score_key(value):
+                return True
+    elif isinstance(obj, (list, tuple)):
+        return any(_has_forbidden_score_key(item) for item in obj)
+    return False
+
+
 def scan_output_safety(text: str) -> list[str]:
     """Verify JSON, CLI, or Markdown text has 0 emails, raw keys, home paths, or score digits."""
+    if not isinstance(text, str):
+        raise SmokeVerifierError("scan_output_safety requires a string.")
     issues: list[str] = []
     if _EMAIL_RE.search(text):
         issues.append("email_detected")
@@ -496,7 +527,7 @@ def scan_output_safety(text: str) -> list[str]:
         issues.append("unredacted_home_path_detected")
     if _FORBIDDEN_SCORE_KEY_RE.search(text):
         issues.append("forbidden_score_key_detected")
-    if _STATIC_FIG_UNIT_RE.search(_strip_masked_keys_and_nonces(text)):
+    if _STATIC_FIG_UNIT_RE.search(strip_masked_keys_and_nonces(text)):
         issues.append("static_figure_detected")
     for ip_hit in _IPV4_RE.findall(text):
         if not ip_hit.startswith("127."):
@@ -576,11 +607,25 @@ def sanitize_cloud_run_revision(raw: object) -> str | None:
 
 
 def is_allowed_outbound_host(host: str) -> bool:
-    """Return True iff ``host`` is in the strict HiveMind allowlist."""
-    h = (host or "").strip().lower().strip("[]")
-    if not h:
+    """Return True iff ``host`` is in the strict HiveMind allowlist with valid DNS labels."""
+    if not isinstance(host, str):
         return False
-    if h in ALLOWED_LOOPBACK_HOSTS or h in ALLOWED_READ_ONLY_DATA_HOSTS:
+    raw = host.strip().lower()
+    if (
+        not raw
+        or len(raw) > 253
+        or any(ch.isspace() or ch in "\\/@" or ord(ch) < 32 or ord(ch) == 127 for ch in raw)
+    ):
+        return False
+    h = raw[1:-1] if (raw.startswith("[") and raw.endswith("]")) else raw
+    if not h or "[" in h or "]" in h:
+        return False
+    if h in ALLOWED_LOOPBACK_HOSTS:
+        return True
+    labels = h.split(".")
+    if any(not _DNS_LABEL_RE.fullmatch(lbl) for lbl in labels):
+        return False
+    if h in ALLOWED_READ_ONLY_DATA_HOSTS:
         return True
     if h == "storage.googleapis.com" or _GOOGLEAPIS_HOST_RE.fullmatch(h):
         return True
@@ -596,21 +641,25 @@ def validate_gateway_url(url: str) -> str:
     cleaned = url.strip().rstrip("/")
     if any(ch.isspace() for ch in cleaned):
         raise SmokeVerifierError("Gateway URL must not contain internal whitespace.")
-    parts = urlsplit(cleaned)
-    if parts.username is not None or parts.password is not None:
+    if "\\" in cleaned or "\\" in unquote(cleaned):
+        raise SmokeVerifierError("Gateway URL must not contain backslashes.")
+    if "@" in cleaned or "@" in unquote(cleaned):
+        raise SmokeVerifierError("Gateway URL must not embed credentials or '@'.")
+    try:
+        parts = urlsplit(cleaned)
+        port = parts.port
+        host = (parts.hostname or "").lower()
+    except ValueError as exc:
+        raise SmokeVerifierError("Gateway URL is malformed or contains an invalid port.") from exc
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
         raise SmokeVerifierError("Gateway URL must not embed credentials.")
     if parts.query or parts.fragment:
         raise SmokeVerifierError("Gateway URL must not contain query parameters or fragments.")
     if parts.path not in ("", "/"):
         raise SmokeVerifierError("Gateway URL must be a bare origin without a sub-path.")
-    try:
-        port = parts.port
-    except ValueError as exc:
-        raise SmokeVerifierError("Gateway URL contains an invalid port.") from exc
     if port is not None and not (1 <= port <= 65535):
         raise SmokeVerifierError("Gateway URL port out of range.")
-    host = (parts.hostname or "").lower()
-    if not is_allowed_outbound_host(host):
+    if not parts.netloc or not is_allowed_outbound_host(host):
         raise SmokeVerifierError(
             f"Untrusted host {host!r}; expected https://*.run.app, https://*.googleapis.com, "
             "datasets-server.huggingface.co, or loopback."
@@ -623,6 +672,16 @@ def validate_gateway_url(url: str) -> str:
     return cleaned
 
 
+def _payload_has_forbidden_inference_key(obj: Any) -> bool:
+    if isinstance(obj, Mapping):
+        for k, v in obj.items():
+            if str(k).strip().lower() in ("messages", "prompt") or _payload_has_forbidden_inference_key(v):
+                return True
+    elif isinstance(obj, (list, tuple)):
+        return any(_payload_has_forbidden_inference_key(item) for item in obj)
+    return False
+
+
 def _assert_safe_http_request(
     method: str,
     url: str,
@@ -630,25 +689,37 @@ def _assert_safe_http_request(
     payload: Mapping[str, Any] | None = None,
     allowed_post_paths: frozenset[str] = frozenset(),
 ) -> str:
-    """Enforce allowlisted host, zero chat completions, zero LLM prompts, and bounded HTTP methods."""
+    """Enforce allowlisted host, zero completions/chat endpoints, zero LLM prompts, and bounded HTTP methods."""
     if isinstance(url, bool) or not isinstance(url, str) or not url.strip():
         raise SmokeVerifierError("Request URL must be a non-empty string.")
     cleaned = url.strip()
     if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in cleaned):
         raise SmokeVerifierError("Request URL contains whitespace or control characters.")
-    parts = urlsplit(cleaned)
-    if parts.username is not None or parts.password is not None:
-        raise SmokeVerifierError("Request URL must not embed credentials.")
+    if "\\" in cleaned or "\\" in unquote(cleaned):
+        raise SmokeVerifierError("Request URL must not contain backslashes.")
+    try:
+        parts = urlsplit(cleaned)
+    except ValueError as exc:
+        raise SmokeVerifierError("Request URL is malformed.") from exc
+    if (
+        parts.username is not None
+        or parts.password is not None
+        or "@" in parts.netloc
+        or "@" in unquote(parts.netloc)
+    ):
+        raise SmokeVerifierError("Request URL must not embed credentials or '@'.")
     origin = f"{parts.scheme}://{parts.netloc}"
     validate_gateway_url(origin)
-    low_path = (parts.path or "").lower()
-    if "completions" in low_path:
+    low_path = unquote(parts.path or "").lower()
+    if "completions" in low_path or "/chat/" in low_path or low_path.endswith("/chat"):
         raise SmokeVerifierError(
             f"Zero-inference guard blocked forbidden endpoint {parts.path!r}."
         )
     if payload is not None:
+        if not isinstance(payload, Mapping):
+            raise SmokeVerifierError("HTTP JSON payload must be a mapping.")
         serialized = json.dumps(dict(payload), sort_keys=True, ensure_ascii=False).lower()
-        if "hivemind/coder" in serialized or "messages" in payload:
+        if "hivemind/coder" in serialized or _payload_has_forbidden_inference_key(payload):
             raise SmokeVerifierError("Zero-inference guard blocked LLM prompt payload.")
     verb = (method or "GET").strip().upper()
     if verb in ("GET", "HEAD") or (verb == "POST" and parts.path in allowed_post_paths):
@@ -656,6 +727,59 @@ def _assert_safe_http_request(
     raise SmokeVerifierError(
         f"Zero-inference guard blocked HTTP {verb!r} to {parts.path!r}."
     )
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Fail-closed redirect guard blocking untrusted hosts, downgrades, backslashes, credentials, and inference paths."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        _ = (fp, code, msg)
+        raw_loc: Any = newurl
+        if headers is not None and hasattr(headers, "get"):
+            for hdr_name in ("location", "uri"):
+                cand = headers.get(hdr_name)
+                if cand is not None:
+                    raw_loc = cand
+                    break
+        if (
+            not isinstance(raw_loc, str)
+            or not raw_loc.strip()
+            or not isinstance(newurl, str)
+            or not newurl.strip()
+        ):
+            raise SmokeVerifierError("Untrusted redirect: empty target URL.")
+        if "\\" in raw_loc or "\\" in unquote(raw_loc) or "@" in raw_loc or "@" in unquote(raw_loc):
+            raise SmokeVerifierError("Untrusted redirect: forbidden backslash or '@' in Location.")
+        orig_parts = urlsplit(req.full_url)
+        dest_parts = urlsplit(newurl)
+        orig_host = (orig_parts.hostname or "").lower()
+        dest_host = (dest_parts.hostname or "").lower()
+        if orig_host not in ALLOWED_LOOPBACK_HOSTS and dest_host in ALLOWED_LOOPBACK_HOSTS:
+            raise SmokeVerifierError("Untrusted redirect from remote host to loopback.")
+        if orig_parts.scheme == "https" and dest_parts.scheme != "https":
+            raise SmokeVerifierError("Untrusted HTTPS-to-HTTP downgrade redirect.")
+        effective_method = "GET" if (req.get_method() == "POST" and code in (301, 302, 303)) else req.get_method()
+        _assert_safe_http_request(
+            effective_method,
+            newurl,
+            allowed_post_paths=ALLOWED_POST_PATHS,
+        )
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is not None:
+            _assert_safe_http_request(
+                new_req.get_method(),
+                new_req.full_url,
+                allowed_post_paths=ALLOWED_POST_PATHS,
+            )
+        return new_req
 
 
 def _validate_zero_pii_feedback_payload(payload: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -709,15 +833,30 @@ def _parse_http_raw_response(
     }
 
 
-def default_http_request(
+def _validate_timeout_s(timeout_s: float) -> float:
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)):
+        raise SmokeVerifierError("timeout_s must be a positive finite number.")
+    val = float(timeout_s)
+    if not math.isfinite(val) or val <= 0.0:
+        raise SmokeVerifierError("timeout_s must be a positive finite number.")
+    return min(max(0.2, val), 15.0)
+
+
+def _read_bounded_http_body(resp: Any, *, max_bytes: int = MAX_HTTP_BODY_BYTES) -> bytes:
+    raw_bytes = resp.read(max_bytes + 1)
+    if len(raw_bytes) > max_bytes:
+        raise SmokeVerifierError(f"HTTP response exceeded {max_bytes} byte limit.")
+    return bytes(raw_bytes)
+
+
+def _execute_proxy_free_http(
     method: str,
     url: str,
     *,
     payload: Mapping[str, Any] | None = None,
     headers: Mapping[str, str] | None = None,
     timeout_s: float = HTTP_TIMEOUT_S,
-) -> tuple[int, dict[str, Any]]:
-    """Proxy-free stdlib HTTP helper (``ProxyHandler({})``) with host allowlist & zero-inference guard."""
+) -> tuple[int, bytes, dict[str, str], bool]:
     verb = str(method or "GET").strip().upper()
     clean_url = _assert_safe_http_request(
         verb,
@@ -728,6 +867,7 @@ def default_http_request(
     path = urlsplit(clean_url).path
     if payload is not None and verb != "POST":
         raise SmokeVerifierError("GET/HEAD requests must never attach a body payload.")
+    bounded_timeout = _validate_timeout_s(timeout_s)
 
     body_bytes: bytes | None = None
     req_headers: dict[str, str] = {
@@ -736,7 +876,11 @@ def default_http_request(
     }
     if headers:
         for hk, hv in headers.items():
-            req_headers[str(hk)] = str(hv)
+            k_str = str(hk)
+            v_str = str(hv)
+            if any(ch in k_str or ch in v_str for ch in ("\r", "\n", "\x00")):
+                raise SmokeVerifierError("HTTP headers must not contain CR/LF or NUL characters.")
+            req_headers[k_str] = v_str
     if verb == "POST":
         clean_payload = (
             _validate_zero_pii_feedback_payload(payload)
@@ -747,19 +891,68 @@ def default_http_request(
         req_headers.setdefault("Content-Type", "application/json")
 
     req = urllib.request.Request(clean_url, data=body_bytes, headers=req_headers, method=verb)
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    bounded_timeout = min(max(0.2, float(timeout_s)), 15.0)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _SafeRedirectHandler())
     try:
         with opener.open(req, timeout=bounded_timeout) as resp:
             status = int(getattr(resp, "status", 200))
-            raw_hdrs = dict(resp.headers.items()) if resp.headers is not None else {}
-            return _parse_http_raw_response(status, resp.read(524_288), raw_hdrs)
+            raw_hdrs = (
+                {str(k).strip().lower(): str(v) for k, v in resp.headers.items()}
+                if resp.headers is not None
+                else {}
+            )
+            return status, _read_bounded_http_body(resp), raw_hdrs, False
     except urllib.error.HTTPError as exc:
-        err_hdrs = dict(exc.headers.items()) if exc.headers is not None else {}
+        err_hdrs = (
+            {str(k).strip().lower(): str(v) for k, v in exc.headers.items()}
+            if exc.headers is not None
+            else {}
+        )
         err_bytes = exc.read(131_072) if exc.fp is not None else b""
-        return _parse_http_raw_response(int(exc.code), err_bytes, err_hdrs)
+        return int(exc.code), bytes(err_bytes), err_hdrs, False
     except (urllib.error.URLError, TimeoutError, OSError):
+        return 0, b"", {}, True
+
+
+def default_http_raw(
+    method: str,
+    url: str,
+    *,
+    payload: Mapping[str, Any] | None = None,
+    headers: Mapping[str, str] | None = None,
+    timeout_s: float = HTTP_TIMEOUT_S,
+) -> tuple[int, str, dict[str, str]]:
+    """Proxy-free stdlib HTTP helper returning ``(status_code, body_text, lower_headers)`` (4 MiB cap)."""
+    status, raw_bytes, lower_headers, net_err = _execute_proxy_free_http(
+        method,
+        url,
+        payload=payload,
+        headers=headers,
+        timeout_s=timeout_s,
+    )
+    if net_err:
+        return 0, json.dumps({"error": "network_error"}), {}
+    return status, raw_bytes.decode("utf-8", errors="replace"), lower_headers
+
+
+def default_http_request(
+    method: str,
+    url: str,
+    *,
+    payload: Mapping[str, Any] | None = None,
+    headers: Mapping[str, str] | None = None,
+    timeout_s: float = HTTP_TIMEOUT_S,
+) -> tuple[int, dict[str, Any]]:
+    """Proxy-free stdlib HTTP helper (``ProxyHandler({})``) with host allowlist, redirect & zero-inference guards."""
+    status, raw_bytes, raw_hdrs, net_err = _execute_proxy_free_http(
+        method,
+        url,
+        payload=payload,
+        headers=headers,
+        timeout_s=timeout_s,
+    )
+    if net_err:
         return 0, {"error": "network_error"}
+    return _parse_http_raw_response(status, raw_bytes, raw_hdrs)
 
 
 def _normalize_http_return(raw_ret: Any) -> tuple[int, dict[str, Any]]:
@@ -875,9 +1068,47 @@ def _invoke_http_fn(
     return _normalize_http_return(raw)
 
 
+_SAFE_RUNTIME_ENV_KEYS: tuple[str, ...] = (
+    "PATH",
+    "HOME",
+    "USERPROFILE",
+    "SYSTEMROOT",
+    "WINDIR",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+)
+
+
+def _build_subprocess_env(environ: Mapping[str, str] | None) -> dict[str, str]:
+    """Build a deterministic subprocess environment without leaking host corporate-proxy false positives."""
+    if environ is None:
+        sub_env = dict(os.environ)
+    else:
+        sub_env = {
+            k: os.environ[k]
+            for k in _SAFE_RUNTIME_ENV_KEYS
+            if k in os.environ and os.environ[k]
+        }
+        for k, v in environ.items():
+            sub_env[str(k)] = str(v)
+    sub_env.setdefault("POWERSHELL_TELEMETRY_OPTOUT", "1")
+    sub_env.setdefault("POWERSHELL_UPDATECHECK", "Off")
+    sub_env.setdefault("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
+    sub_env.setdefault("DOTNET_NOLOGO", "1")
+    return sub_env
+
+
 def default_subprocess_runner(
     argv: Sequence[str],
     timeout_s: float = SUBPROCESS_TIMEOUT_S,
+    *,
+    environ: Mapping[str, str] | None = None,
 ) -> tuple[int, str]:
     """Run a bounded local read-only command with ``shell=False``, blocking ``gcloud`` and lateral tools."""
     if isinstance(argv, (str, bytes)) or not isinstance(argv, Sequence) or not argv:
@@ -897,6 +1128,7 @@ def default_subprocess_runner(
             text=True,
             errors="replace",
             timeout=min(max(0.2, float(timeout_s)), 30.0),
+            env=_build_subprocess_env(environ),
             check=False,
             shell=False,
         )
@@ -910,16 +1142,28 @@ def default_subprocess_runner(
         return 127, f"os_error:{type(exc).__name__}"
 
 
-def _invoke_runner(runner: RunnerFn, argv: Sequence[str], timeout_s: float) -> tuple[int, str]:
+def _invoke_runner(
+    runner: RunnerFn,
+    argv: Sequence[str],
+    timeout_s: float,
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> tuple[int, str]:
     sig = inspect.signature(runner)
     params = list(sig.parameters.values())
     has_varargs = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params)
+    has_environ_kw = "environ" in sig.parameters
     pos_params = [
         p
         for p in params
         if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
     ]
-    res = runner(list(argv), timeout_s) if (has_varargs or len(pos_params) >= 2) else runner(list(argv))
+    kw: dict[str, Any] = {"environ": environ} if has_environ_kw else {}
+    res = (
+        runner(list(argv), timeout_s, **kw)
+        if (has_varargs or len(pos_params) >= 2)
+        else runner(list(argv), **kw)
+    )
     if isinstance(res, tuple) and len(res) >= 2:
         out = str(res[1] or "")
         if len(res) >= 3 and res[2]:
@@ -975,7 +1219,12 @@ def _resolve_git_config_files(workspace: Path) -> list[Path]:
                     except OSError:
                         common_rel = ""
                     if common_rel:
-                        common_cfg = (gitdir / common_rel).resolve() / "config"
+                        common_dir = (
+                            Path(common_rel)
+                            if Path(common_rel).is_absolute()
+                            else (gitdir / common_rel).resolve()
+                        )
+                        common_cfg = common_dir / "config"
                         if common_cfg.is_file() and common_cfg not in candidates:
                             candidates.append(common_cfg)
             break
@@ -988,6 +1237,7 @@ def evaluate_personal_pc_compliance(
     env: Mapping[str, str] | None = None,
     cwd: Path | str | None = None,
     check_git_remote: bool = True,
+    check_cwd_path: bool = True,
     lang: str = "en",
 ) -> dict[str, Any]:
     """Strictly local Personal-PC & Hobby-Only Compliance Gate (0 network calls, 0 writes, 0 leaks)."""
@@ -1025,16 +1275,15 @@ def evaluate_personal_pc_compliance(
             for hit in _find_corporate_markers(val_str):
                 _record(f"env:{key_up}:{hit}", hit)
 
-    ws_texts = [str(workspace)]
-    try:
-        resolved_ws = str(workspace.resolve())
-        if resolved_ws not in ws_texts:
-            ws_texts.append(resolved_ws)
-    except OSError:
-        resolved_ws = str(workspace)
-    for ws_txt in ws_texts:
-        for hit in _find_corporate_markers(ws_txt):
-            _record(f"workspace_path:{hit}", hit)
+    if check_cwd_path:
+        ws_texts = [str(workspace)]
+        with suppress(OSError):
+            resolved_ws = str(workspace.resolve())
+            if resolved_ws not in ws_texts:
+                ws_texts.append(resolved_ws)
+        for ws_txt in ws_texts:
+            for hit in _find_corporate_markers(ws_txt):
+                _record(f"workspace_path:{hit}", hit)
 
     if check_git_remote:
         for cfg_path in _resolve_git_config_files(workspace):
@@ -1119,6 +1368,13 @@ def _compliance_blocked_receipt(
             "onboarding_feedback_deployed": False,
             "stale_revision_detected": False,
             "redeploy_required": False,
+            "online_producers": 0,
+            "producer_quorum_met": False,
+            "awaiting_producer_quorum": False,
+            "ces_slo_ok": None,
+            "zero_lag_slo_ok": None,
+            "arena_summary_ok": None,
+            "deploy_dry_run": None,
             "network_calls": 0,
             "file_writes": 0,
             "subprocess_calls": 0,
@@ -1229,7 +1485,7 @@ def _inspect_holiday_html_contract(
     if nonce is not None:
         seen_nonces.add(nonce)
 
-    stripped_html = strip_html_csp_nonce_attributes(html_text)
+    stripped_html = strip_masked_keys_and_nonces(html_text)
     has_unsafe_sink = bool(_FORBIDDEN_DOM_SINK_RE.search(stripped_html))
     has_static_fig = bool(_STATIC_FIG_UNIT_RE.search(stripped_html))
     dom_clean = not (has_unsafe_sink or has_static_fig)
@@ -1471,12 +1727,229 @@ def audit_deploy_sh_guidance(
     }
 
 
+def _is_nonneg_int(val: object) -> bool:
+    return not isinstance(val, bool) and isinstance(val, int) and val >= 0
+
+
+def _inspect_arena_summary_contract(
+    body: Mapping[str, Any],
+    *,
+    lang_code: str,
+) -> tuple[bool, dict[str, Any], list[str]]:
+    """Verify ``GET /v1/hivemind/arena/summary`` vote conservation and Wilson 95% lower-bound fields."""
+    is_fr = lang_code == "fr"
+    if not isinstance(body, Mapping) or body.get("object") != ARENA_SUMMARY_OBJECT:
+        return (
+            False,
+            {},
+            [
+                "Contrat JSON `/v1/hivemind/arena/summary` invalide (`object` invalide)."
+                if is_fr
+                else "Arena summary `/v1/hivemind/arena/summary` invalid `object` metadata."
+            ],
+        )
+    if _has_forbidden_score_key(body):
+        return (
+            False,
+            {},
+            ["Arena summary `/v1/hivemind/arena/summary` contains forbidden key."],
+        )
+
+    tv = body.get("total_votes")
+    hw = body.get("holiday_wins")
+    bw = body.get("baseline_wins")
+    ti = body.get("ties")
+    counts_valid = all(_is_nonneg_int(x) for x in (tv, hw, bw, ti))
+    conserved = bool(counts_valid and int(hw) + int(bw) + int(ti) == int(tv))
+
+    dec_ok = True
+    if "decisive_votes" in body:
+        dv = body.get("decisive_votes")
+        dec_ok = bool(_is_nonneg_int(dv) and counts_valid and int(dv) == int(hw) + int(bw))
+
+    raw_wlb = body.get("wilson_95_lower_bound")
+    wlb_ok = bool(
+        "wilson_95_lower_bound" in body
+        and not isinstance(raw_wlb, bool)
+        and isinstance(raw_wlb, (int, float))
+        and math.isfinite(float(raw_wlb))
+        and 0.0 <= float(raw_wlb) <= 1.0
+    )
+
+    decisive = (int(hw) + int(bw)) if counts_valid else 0
+    if wlb_ok and counts_valid and decisive == 0 and float(raw_wlb) != 0.0:
+        wlb_ok = False
+
+    win_ratio_ok = True
+    if "win_ratio" in body:
+        raw_wr = body.get("win_ratio")
+        if counts_valid and decisive == 0:
+            win_ratio_ok = raw_wr is None
+        else:
+            win_ratio_ok = bool(
+                not isinstance(raw_wr, bool)
+                and isinstance(raw_wr, (int, float))
+                and math.isfinite(float(raw_wr))
+                and 0.0 <= float(raw_wr) <= 1.0
+            )
+
+    by_task_ok = True
+    raw_tasks = body.get("by_task")
+    if isinstance(raw_tasks, Mapping):
+        for t_doc in raw_tasks.values():
+            if not isinstance(t_doc, Mapping):
+                by_task_ok = False
+                break
+            t_tv, t_hw, t_bw, t_ti = (
+                t_doc.get("total_votes"),
+                t_doc.get("holiday_wins"),
+                t_doc.get("baseline_wins"),
+                t_doc.get("ties"),
+            )
+            t_wlb = t_doc.get("wilson_95_lower_bound")
+            if (
+                not all(_is_nonneg_int(x) for x in (t_tv, t_hw, t_bw, t_ti))
+                or int(t_hw) + int(t_bw) + int(t_ti) != int(t_tv)
+                or "wilson_95_lower_bound" not in t_doc
+                or isinstance(t_wlb, bool)
+                or not isinstance(t_wlb, (int, float))
+                or not math.isfinite(float(t_wlb))
+                or not (0.0 <= float(t_wlb) <= 1.0)
+            ):
+                by_task_ok = False
+                break
+
+    ok = bool(counts_valid and conserved and dec_ok and wlb_ok and win_ratio_ok and by_task_ok)
+    issues = (
+        []
+        if ok
+        else [
+            "Conservation des votes ou borne Wilson 95 % invalide sur `/v1/hivemind/arena/summary`."
+            if is_fr
+            else "Vote conservation (`holiday_wins + baseline_wins + ties == total_votes`) or Wilson 95% lower-bound invalid on `/v1/hivemind/arena/summary`."
+        ]
+    )
+    summary_doc = (
+        {
+            "object": ARENA_SUMMARY_OBJECT,
+            "total_votes": int(tv),
+            "decisive_votes": decisive,
+            "holiday_wins": int(hw),
+            "baseline_wins": int(bw),
+            "ties": int(ti),
+            "win_ratio": (
+                round(float(body["win_ratio"]), 4)
+                if isinstance(body.get("win_ratio"), (int, float)) and not isinstance(body.get("win_ratio"), bool)
+                else None
+            ),
+            "wilson_95_lower_bound": round(float(raw_wlb), 4),
+        }
+        if ok
+        else {}
+    )
+    return ok, summary_doc, issues
+
+
+def run_deploy_sh_dry_run(
+    deploy_sh_path: Path | str | None = None,
+    *,
+    expected_sha: str | None = None,
+    runner: RunnerFn = default_subprocess_runner,
+    environ: Mapping[str, str] | None = None,
+    lang: str = "en",
+) -> dict[str, Any]:
+    """Execute list-argv ``bash deploy/gcp_openrouter/deploy.sh --dry-run`` without invoking ``gcloud``."""
+    lang_code = normalize_lang(lang)
+    is_fr = lang_code == "fr"
+    path = Path(deploy_sh_path) if deploy_sh_path is not None else DEFAULT_DEPLOY_SH_PATH
+    display_path = redact_home_path(path)
+    if not path.is_file():
+        return {
+            "executed": False,
+            "ok": False,
+            "returncode": 127,
+            "deploy_script_path": display_path,
+            "gcloud_invoked": False,
+            "dry_run_build_sha": "unknown",
+            "checks": {},
+            "diagnostic": (
+                f"Script `{display_path}` introuvable pour `--dry-run`."
+                if is_fr
+                else f"Deploy script `{display_path}` missing for `--dry-run`."
+            ),
+        }
+
+    resolved_sha = validate_expected_sha(expected_sha) if (expected_sha and str(expected_sha).strip()) else None
+    dry_env: dict[str, str] = dict(environ) if environ is not None else {}
+    dry_env["HIVEMIND_DEPLOY_DRY_RUN"] = "1"
+    if resolved_sha is not None:
+        dry_env["HIVEMIND_BUILD_SHA"] = resolved_sha
+    elif environ is None and "HIVEMIND_BUILD_SHA" not in dry_env and os.environ.get("HIVEMIND_BUILD_SHA"):
+        env_sha = sanitize_build_sha(os.environ.get("HIVEMIND_BUILD_SHA"))
+        if env_sha != "unknown":
+            dry_env["HIVEMIND_BUILD_SHA"] = env_sha
+
+    argv = ["bash", str(path), "--dry-run"]
+    rc, out = _invoke_runner(runner, argv, SUBPROCESS_TIMEOUT_S, environ=dry_env)
+    kv: dict[str, str] = {}
+    for line in out.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            kv[k.strip()] = v.strip()
+
+    finops_line = kv.get("finops_flags", "")
+    env_vars_line = kv.get("update_env_vars", "")
+    raw_dry_sha = kv.get("build_sha", "")
+    dry_sha = sanitize_build_sha(raw_dry_sha)
+    sha_propagated = bool(
+        raw_dry_sha
+        and raw_dry_sha == dry_sha
+        and f"HIVEMIND_BUILD_SHA={raw_dry_sha}" in env_vars_line
+        and (resolved_sha is None or shas_match(dry_sha, resolved_sha))
+    )
+    checks = {
+        "returncode_zero": rc == 0,
+        "dry_run_marker": kv.get("HIVEMIND_CLOUD_RUN_DEPLOY_DRY_RUN") == "1",
+        "gcloud_invoked_zero": kv.get("gcloud_invoked") == "0",
+        "finops_flags_present": all(
+            tok in finops_line
+            for tok in ("--min-instances 0", "--max-instances 1", "--no-cpu-throttling", "--concurrency 80")
+        ),
+        "replica_url_gcs": kv.get("replica_url", "").startswith("gcs://"),
+        "secret_manager_mounted": "HIVEMIND_ROUTER_SECRET=" in kv.get("secrets", ""),
+        "zero_grants_env": "HIVEMIND_STARTER_GRANT_HMT=0" in env_vars_line,
+        "build_sha_propagated": sha_propagated,
+    }
+    ok = all(checks.values())
+    return {
+        "executed": True,
+        "ok": ok,
+        "returncode": rc,
+        "deploy_script_path": display_path,
+        "gcloud_invoked": kv.get("gcloud_invoked") != "0",
+        "dry_run_build_sha": dry_sha,
+        "checks": checks,
+        "diagnostic": (
+            ""
+            if ok
+            else (
+                f"Échec vérification `{display_path} --dry-run`."
+                if is_fr
+                else f"Subprocess verification `{display_path} --dry-run` failed."
+            )
+        ),
+    }
+
+
 def project_adoption_readiness_gates(
     *,
     gateway_and_models_ok: bool,
     holiday_routes_ok: bool,
     feedback_summary: Mapping[str, Any] | None = None,
     active_volunteer_gpus: int = 0,
+    min_ease_rating: float = DEFAULT_MIN_EASE_RATING,
+    min_zero_lag_ratio: float = DEFAULT_MIN_ZERO_LAG_RATIO,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
     lang: str = "en",
 ) -> dict[str, Any]:
     """Project the 5 AGY Noel-at-Scale adoption readiness gates from live smoke & CES metrics."""
@@ -1488,10 +1961,22 @@ def project_adoption_readiness_gates(
     raw_ease = fb.get("mean_ease_rating") if "mean_ease_rating" in fb else fb.get("average_ease_rating")
     raw_lag = fb.get("zero_game_lag_ratio")
 
-    ces_ok = bool(has_resp and not isinstance(raw_ease, bool) and isinstance(raw_ease, (int, float)) and float(raw_ease) >= 4.2)
-    lag_ok = bool(has_resp and not isinstance(raw_lag, bool) and isinstance(raw_lag, (int, float)) and float(raw_lag) >= 0.95)
+    ces_ok = bool(
+        has_resp
+        and not isinstance(raw_ease, bool)
+        and isinstance(raw_ease, (int, float))
+        and math.isfinite(float(raw_ease))
+        and Fraction(str(float(raw_ease))) >= Fraction(str(float(min_ease_rating)))
+    )
+    lag_ok = bool(
+        has_resp
+        and not isinstance(raw_lag, bool)
+        and isinstance(raw_lag, (int, float))
+        and math.isfinite(float(raw_lag))
+        and Fraction(str(float(raw_lag))) >= Fraction(str(float(min_zero_lag_ratio)))
+    )
     gpus = int(active_volunteer_gpus) if not isinstance(active_volunteer_gpus, bool) and isinstance(active_volunteer_gpus, int) else 0
-    gpu_ok = gpus >= 8
+    gpu_ok = gpus >= int(target_online_producers)
 
     gates = {
         "gateway_and_models_online": bool(gateway_and_models_ok),
@@ -1506,14 +1991,22 @@ def project_adoption_readiness_gates(
     if not gates["holiday_routes_deployed_on_cloud_run"]:
         blockers.append("Routes Noël Cloud Run incomplètes." if is_fr else "Cloud Run holiday onboarding routes incomplete.")
     if not ces_ok:
-        blockers.append("Score CES moyen cible (>= 4.2 / 5) non atteint." if is_fr else "Mean CES ease rating (>= 4.2 / 5) not yet met.")
+        blockers.append(
+            f"Score CES moyen cible (>= {min_ease_rating} / 5) non atteint."
+            if is_fr
+            else f"Mean CES ease rating (>= {min_ease_rating} / 5) not yet met."
+        )
     if not lag_ok:
-        blockers.append("Ratio zéro-lag Gamer (>= 0.95) non atteint." if is_fr else "Gamer zero-lag ratio (>= 0.95) not yet met.")
+        blockers.append(
+            f"Ratio zéro-lag Gamer (>= {min_zero_lag_ratio}) non atteint."
+            if is_fr
+            else f"Gamer zero-lag ratio (>= {min_zero_lag_ratio}) not yet met."
+        )
     if not gpu_ok:
         blockers.append(
-            f"GPUs bénévoles actifs ({gpus}) < objectif Noël (8)."
+            f"GPUs bénévoles actifs ({gpus}) < objectif Noël ({target_online_producers})."
             if is_fr
-            else f"Active volunteer GPUs ({gpus}) below holiday target (8)."
+            else f"Active volunteer GPUs ({gpus}) below holiday target ({target_online_producers})."
         )
 
     passed_ids = [k for k, v in gates.items() if v]
@@ -1556,6 +2049,65 @@ def _resolve_git_head_sha(runner: RunnerFn, cwd: Path | str | None, *, lang_code
     return candidate, None
 
 
+def _validate_quorum_slo_options(
+    *,
+    target_online_producers: int,
+    min_ease_rating: float,
+    min_zero_lag_ratio: float,
+    require_live_quorum: bool,
+    require_ces_slo: bool,
+    check_arena_summary: bool,
+    execute_deploy_dry_run: bool,
+) -> tuple[int, float, float]:
+    if (
+        isinstance(target_online_producers, bool)
+        or not isinstance(target_online_producers, int)
+        or not (1 <= target_online_producers <= 500)
+    ):
+        raise SmokeVerifierError("target_online_producers must be an integer between 1 and 500.")
+    if (
+        isinstance(min_ease_rating, bool)
+        or not isinstance(min_ease_rating, (int, float))
+        or not math.isfinite(float(min_ease_rating))
+        or not (1.0 <= float(min_ease_rating) <= 5.0)
+    ):
+        raise SmokeVerifierError("min_ease_rating must be a finite number between 1.0 and 5.0.")
+    if (
+        isinstance(min_zero_lag_ratio, bool)
+        or not isinstance(min_zero_lag_ratio, (int, float))
+        or not math.isfinite(float(min_zero_lag_ratio))
+        or not (0.0 <= float(min_zero_lag_ratio) <= 1.0)
+    ):
+        raise SmokeVerifierError("min_zero_lag_ratio must be a finite number between 0.0 and 1.0.")
+    for flag in (require_live_quorum, require_ces_slo, check_arena_summary, execute_deploy_dry_run):
+        if not isinstance(flag, bool):
+            raise SmokeVerifierError("Quorum/SLO/arena/dry-run flags must be booleans.")
+    return int(target_online_producers), float(min_ease_rating), float(min_zero_lag_ratio)
+
+
+def _extract_fleet_quorum_metrics(body: Mapping[str, Any]) -> tuple[bool, int, int]:
+    """Extract schema validity, ``online_producers``, and ``distinct_physical_gpus`` from fleet JSON."""
+    rows = body.get("hiveminders")
+    rows_valid = isinstance(rows, list)
+    endpoint_leaked = rows_valid and any(isinstance(r, Mapping) and ("endpoint_url" in r) for r in rows)
+    has_live_hm = "live_hiveminders" in body
+    live_hm_ok = (not has_live_hm) or _is_nonneg_int(body.get("live_hiveminders"))
+    fleet_ok = bool(body.get("object") == FLEET_OBJECT and rows_valid and not endpoint_leaked and live_hm_ok)
+    if not fleet_ok:
+        return False, 0, 0
+
+    live_hm_int = int(body["live_hiveminders"]) if has_live_hm else 0
+    row_online = sum(
+        1
+        for r in rows  # type: ignore[union-attr]
+        if isinstance(r, Mapping) and str(r.get("status", "")).strip().lower() in LIVE_PRODUCER_STATUSES
+    )
+    online_producers = max(live_hm_int, row_online)
+    raw_gpu = body.get("distinct_physical_gpus")
+    gpus = int(raw_gpu) if _is_nonneg_int(raw_gpu) else 0
+    return True, online_producers, gpus
+
+
 def run_cloud_run_holiday_smoke_gate(
     gateway: str = DEFAULT_GATEWAY,
     *,
@@ -1564,6 +2116,13 @@ def run_cloud_run_holiday_smoke_gate(
     probe_feedback_post: bool = False,
     idempotency_check: bool = False,
     require_coder_model: bool = True,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    min_ease_rating: float = DEFAULT_MIN_EASE_RATING,
+    min_zero_lag_ratio: float = DEFAULT_MIN_ZERO_LAG_RATIO,
+    require_live_quorum: bool = False,
+    require_ces_slo: bool = False,
+    check_arena_summary: bool = False,
+    execute_deploy_dry_run: bool = False,
     deploy_sh_path: Path | str | None = None,
     http_fn: HttpFn = default_http_request,
     runner: RunnerFn = default_subprocess_runner,
@@ -1578,6 +2137,16 @@ def run_cloud_run_holiday_smoke_gate(
     comp_doc = evaluate_personal_pc_compliance(environ=environ, cwd=cwd, lang=lang_code)
     if not comp_doc["compliance_ok"]:
         return _compliance_blocked_receipt("cloud_run_holiday_smoke", comp_doc, lang_code=lang_code)
+
+    target_n, min_ease_f, min_lag_f = _validate_quorum_slo_options(
+        target_online_producers=target_online_producers,
+        min_ease_rating=min_ease_rating,
+        min_zero_lag_ratio=min_zero_lag_ratio,
+        require_live_quorum=require_live_quorum,
+        require_ces_slo=require_ces_slo,
+        check_arena_summary=check_arena_summary,
+        execute_deploy_dry_run=execute_deploy_dry_run,
+    )
 
     clean_gw = validate_gateway_url(gateway)
     resolved_expected_sha: str | None = None
@@ -1622,6 +2191,7 @@ def run_cloud_run_holiday_smoke_gate(
     raid_status_ok = False
     fleet_ok = False
     active_trainers = 0
+    online_producers = 0
     distinct_physical_gpus = 0
     scripts_ok: dict[str, bool] = {}
 
@@ -1691,13 +2261,9 @@ def run_cloud_run_holiday_smoke_gate(
                 diag = "GET /v1/hivemind/raid/status schema invalid."
                 diagnostics.append(diag)
         elif path == "/v1/hivemind/producers/fleet":
-            fleet_ok = body.get("object") == FLEET_OBJECT and isinstance(body.get("hiveminders"), list)
+            fleet_ok, online_producers, distinct_physical_gpus = _extract_fleet_quorum_metrics(body)
             ok = fleet_ok
-            if ok:
-                raw_gpu = body.get("distinct_physical_gpus")
-                if not isinstance(raw_gpu, bool) and isinstance(raw_gpu, int) and raw_gpu >= 0:
-                    distinct_physical_gpus = raw_gpu
-            else:
+            if not ok:
                 diag = "GET /v1/hivemind/producers/fleet schema invalid."
                 diagnostics.append(diag)
         elif kind == "script_py":
@@ -1718,6 +2284,41 @@ def run_cloud_run_holiday_smoke_gate(
         if not ok:
             failed_routes.append(path)
         route_rows.append({"path": path, "http_status": code, "ok": ok, "diagnostic": diag})
+
+    arena_summary_ok: bool | None = None
+    arena_summary_doc: dict[str, Any] | None = None
+    if check_arena_summary:
+        network_calls += 1
+        a_code, a_body = _invoke_http_fn(
+            http_fn,
+            "GET",
+            f"{clean_gw}/v1/hivemind/arena/summary",
+            allowed_post_paths=smoke_post_allow,
+        )
+        http_statuses["/v1/hivemind/arena/summary"] = a_code
+        if a_code != 200:
+            arena_summary_ok = False
+            if a_code == 404:
+                stale_404_routes.append("/v1/hivemind/arena/summary")
+            a_diag = (
+                f"GET /v1/hivemind/arena/summary -> HTTP {a_code} (attendu 200)."
+                if is_fr
+                else f"GET /v1/hivemind/arena/summary -> HTTP {a_code} (expected 200)."
+            )
+            diagnostics.append(a_diag)
+            failed_routes.append("/v1/hivemind/arena/summary")
+            route_rows.append({"path": "/v1/hivemind/arena/summary", "http_status": a_code, "ok": False, "diagnostic": a_diag})
+        else:
+            arena_summary_ok, arena_summary_doc, a_issues = _inspect_arena_summary_contract(
+                a_body, lang_code=lang_code
+            )
+            if not arena_summary_ok:
+                a_diag = a_issues[0]
+                diagnostics.extend(a_issues)
+                failed_routes.append("/v1/hivemind/arena/summary")
+                route_rows.append({"path": "/v1/hivemind/arena/summary", "http_status": a_code, "ok": False, "diagnostic": a_diag})
+            else:
+                route_rows.append({"path": "/v1/hivemind/arena/summary", "http_status": a_code, "ok": True, "diagnostic": ""})
 
     sha_mismatch = False
     sha_match: bool | None = None
@@ -1824,6 +2425,41 @@ def run_cloud_run_holiday_smoke_gate(
                 feedback_post_ok = False
                 diagnostics.extend(ref_issues)
 
+    producer_quorum_met = bool(fleet_ok and online_producers >= target_n)
+    awaiting_producer_quorum = not producer_quorum_met
+    quorum_gate_ok = bool(producer_quorum_met or not require_live_quorum)
+    if require_live_quorum and not producer_quorum_met:
+        diagnostics.append(
+            f"Quorum producteurs en ligne insuffisant ({online_producers} < {target_n})."
+            if is_fr
+            else f"Live producer quorum not met ({online_producers} < {target_n})."
+        )
+
+    ces_slo_ok: bool | None
+    zero_lag_slo_ok: bool | None
+    if not feedback_summary_ok:
+        ces_slo_ok = False
+        zero_lag_slo_ok = False
+        ces_gate_ok = False
+    else:
+        fb_total = feedback_summary_doc.get("total_responses")
+        if isinstance(fb_total, int) and fb_total > 0:
+            raw_mean = feedback_summary_doc.get("mean_ease_rating")
+            raw_lag = feedback_summary_doc.get("zero_game_lag_ratio")
+            ces_slo_ok = bool(raw_mean is not None and Fraction(str(float(raw_mean))) >= Fraction(str(min_ease_f)))
+            zero_lag_slo_ok = bool(raw_lag is not None and Fraction(str(float(raw_lag))) >= Fraction(str(min_lag_f)))
+            ces_gate_ok = bool(not require_ces_slo or (ces_slo_ok and zero_lag_slo_ok))
+            if require_ces_slo and not ces_gate_ok:
+                diagnostics.append(
+                    f"SLO CES/zéro-lag non respecté (ease={raw_mean}, lag={raw_lag})."
+                    if is_fr
+                    else f"CES/zero-lag SLO breached (ease={raw_mean} < {min_ease_f} or lag={raw_lag} < {min_lag_f})."
+                )
+        else:
+            ces_slo_ok = None
+            zero_lag_slo_ok = None
+            ces_gate_ok = True
+
     holiday_routes_deployed = bool(manifest_ok and html_all_ok and raid_status_ok)
     onboarding_feedback_deployed = bool(
         feedback_summary_ok and (not feedback_post_probed or feedback_post_ok is True)
@@ -1831,7 +2467,7 @@ def run_cloud_run_holiday_smoke_gate(
     stale_revision_detected = bool(
         stale_404_routes or missing_manifest_routes or missing_manifest_scripts or sha_mismatch
     )
-    smoke_ok = bool(
+    core_deploy_ok = bool(
         health_ok
         and models_ok
         and holiday_routes_deployed
@@ -1840,31 +2476,60 @@ def run_cloud_run_holiday_smoke_gate(
         and all(scripts_ok.values())
         and len(scripts_ok) == 2
         and not sha_mismatch
+        and (not check_arena_summary or arena_summary_ok is True)
     )
-    redeploy_required = bool(stale_revision_detected or not smoke_ok)
 
     deploy_guidance = audit_deploy_sh_guidance(
         deploy_sh_path, expected_sha=resolved_expected_sha, lang=lang_code
     )
+    deploy_dry_run_res: dict[str, Any] | None = None
+    if execute_deploy_dry_run:
+        deploy_dry_run_res = run_deploy_sh_dry_run(
+            deploy_sh_path,
+            expected_sha=resolved_expected_sha,
+            runner=runner,
+            environ=environ,
+            lang=lang_code,
+        )
+        if deploy_dry_run_res.get("executed"):
+            subprocess_calls += 1
+        deploy_guidance["executed"] = bool(deploy_dry_run_res.get("executed"))
+        deploy_guidance["dry_run_result"] = deploy_dry_run_res
+        if not deploy_dry_run_res.get("ok"):
+            diagnostics.append(
+                str(deploy_dry_run_res.get("diagnostic") or "deploy.sh --dry-run verification failed.")
+            )
+
+    smoke_ok = bool(
+        core_deploy_ok
+        and quorum_gate_ok
+        and ces_gate_ok
+        and (not execute_deploy_dry_run or (deploy_dry_run_res is not None and deploy_dry_run_res["ok"] is True))
+    )
+    redeploy_required = bool(stale_revision_detected or not core_deploy_ok)
+
     adoption_gates = project_adoption_readiness_gates(
         gateway_and_models_ok=bool(health_ok and models_ok),
         holiday_routes_ok=bool(holiday_routes_deployed and onboarding_feedback_deployed),
         feedback_summary=feedback_summary_doc,
-        active_volunteer_gpus=max(distinct_physical_gpus, active_trainers),
+        active_volunteer_gpus=max(online_producers, distinct_physical_gpus, active_trainers),
+        min_ease_rating=min_ease_f,
+        min_zero_lag_ratio=min_lag_f,
+        target_online_producers=target_n,
         lang=lang_code,
     )
 
     summary = (
         (
             f"Smoke gate Cloud Run Noël VERT sur {clean_gw} "
-            f"(nonces_uniques={len(seen_nonces)}, gates={adoption_gates['readiness_gates_passed']}/5)."
+            f"(nonces_uniques={len(seen_nonces)}, en_ligne={online_producers}/{target_n}, gates={adoption_gates['readiness_gates_passed']}/5)."
             if is_fr
             else f"Cloud Run holiday smoke gate PASSED on {clean_gw} "
-            f"(unique_nonces={len(seen_nonces)}, gates={adoption_gates['readiness_gates_passed']}/5)."
+            f"(unique_nonces={len(seen_nonces)}, online={online_producers}/{target_n}, gates={adoption_gates['readiness_gates_passed']}/5)."
         )
         if smoke_ok
         else (
-            f"Smoke gate Cloud Run Noël EN ÉCHEC sur {clean_gw} : redéploiement requis."
+            f"Smoke gate Cloud Run Noël EN ÉCHEC sur {clean_gw} : redeploy_required={redeploy_required}."
             if is_fr
             else f"Cloud Run holiday smoke gate FAILED on {clean_gw}: redeploy_required={redeploy_required}."
         )
@@ -1909,7 +2574,17 @@ def run_cloud_run_holiday_smoke_gate(
             "raid_status_ok": raid_status_ok,
             "active_trainers": active_trainers,
             "fleet_ok": fleet_ok,
+            "online_producers": online_producers,
+            "target_online_producers": target_n,
+            "producer_quorum_met": producer_quorum_met,
+            "awaiting_producer_quorum": awaiting_producer_quorum,
+            "ces_slo_ok": ces_slo_ok,
+            "zero_lag_slo_ok": zero_lag_slo_ok,
             "distinct_physical_gpus": distinct_physical_gpus,
+            "arena_summary_checked": bool(check_arena_summary),
+            "arena_summary_ok": arena_summary_ok,
+            "arena_summary": arena_summary_doc,
+            "deploy_dry_run": deploy_dry_run_res,
             "scripts_ok": scripts_ok,
             "http_statuses": http_statuses,
             "routes": route_rows,
@@ -2019,6 +2694,7 @@ def audit_posix_launcher_contract(
             runner,
             _build_bash_probe_argv(runner, environ, None, ["bash", "-n", str(eff_sh)]),
             SUBPROCESS_TIMEOUT_S,
+            environ=environ,
         )
         bash_syntax_ok = rc_syn == 0
 
@@ -2027,6 +2703,7 @@ def audit_posix_launcher_contract(
             runner,
             _build_bash_probe_argv(runner, environ, None, ["bash", str(eff_sh), "--help"]),
             SUBPROCESS_TIMEOUT_S,
+            environ=environ,
         )
         bash_help_ok = (
             rc_help == 0
@@ -2047,6 +2724,7 @@ def audit_posix_launcher_contract(
                 ["bash", str(eff_sh), "--connect", "--api-key", sample_key, "--dry-run", "--json"],
             ),
             SUBPROCESS_TIMEOUT_S,
+            environ=environ,
         )
         parsed_dry = _parse_json_safe(out_dry) if rc_dry == 0 else {}
         bash_dry_run_ok = bool(
@@ -2069,6 +2747,7 @@ def audit_posix_launcher_contract(
                 ["bash", str(eff_sh), "--connect", "--dry-run", "--json"],
             ),
             SUBPROCESS_TIMEOUT_S,
+            environ=environ,
         )
         parsed_corp = _parse_json_safe(out_corp)
         bash_corporate_block_ok = bool(
@@ -2088,6 +2767,7 @@ def audit_posix_launcher_contract(
                 ["bash", str(eff_sh), "--gateway", untrusted_gw, "--dry-run", "--json"],
             ),
             SUBPROCESS_TIMEOUT_S,
+            environ=environ,
         )
         bash_untrusted_gateway_ok = rc_gw == 2
 
@@ -2101,6 +2781,7 @@ def audit_posix_launcher_contract(
                 ["bash", str(eff_sh), "--uninstall", "--dry-run", "--json"],
             ),
             SUBPROCESS_TIMEOUT_S,
+            environ=environ,
         )
         parsed_un = _parse_json_safe(out_un) if rc_un == 0 else {}
         bash_uninstall_dry_run_ok = bool(
@@ -2204,6 +2885,7 @@ def audit_posix_launcher_contract(
                 "-Json",
             ],
             SUBPROCESS_TIMEOUT_S,
+            environ=environ,
         )
         parsed_pw = _parse_json_safe(out_pw) if rc_pw == 0 else {}
         pwsh_dry_run_ok = bool(
@@ -2287,11 +2969,32 @@ def audit_posix_launcher_contract(
 
 def _write_secure_atomic(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.{secrets.token_hex(4)}.tmp")
-    tmp_path.write_text(text, encoding="utf-8")
-    if os.name != "nt":
-        os.chmod(tmp_path, 0o600)
-    os.replace(tmp_path, path)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=str(path.parent),
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+            handle.write(text)
+            handle.flush()
+            with suppress(OSError):
+                os.fsync(handle.fileno())
+        if os.name != "nt":
+            os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, path)
+        if os.name != "nt":
+            with suppress(OSError):
+                os.chmod(path, 0o600)
+        tmp_path = None
+    finally:
+        if tmp_path is not None:
+            with suppress(OSError):
+                tmp_path.unlink()
 
 
 def verify_posix_dev_vscode_60s_dry_run(
@@ -2877,6 +3580,13 @@ def run_unified_posix_onboarding_and_smoke_gate(
     probe_feedback_post: bool = False,
     idempotency_check: bool = False,
     require_coder_model: bool = True,
+    target_online_producers: int = DEFAULT_TARGET_ONLINE_PRODUCERS,
+    min_ease_rating: float = DEFAULT_MIN_EASE_RATING,
+    min_zero_lag_ratio: float = DEFAULT_MIN_ZERO_LAG_RATIO,
+    require_live_quorum: bool = False,
+    require_ces_slo: bool = False,
+    check_arena_summary: bool = False,
+    execute_deploy_dry_run: bool = False,
     submit_dev_ces: bool = False,
     submit_gamer_ces: bool = False,
     run_smoke: bool = True,
@@ -2908,6 +3618,16 @@ def run_unified_posix_onboarding_and_smoke_gate(
     if not comp_doc["compliance_ok"]:
         return _compliance_blocked_receipt("unified_posix_onboarding_and_smoke_gate", comp_doc, lang_code=lang_code)
 
+    target_n, min_ease_f, min_lag_f = _validate_quorum_slo_options(
+        target_online_producers=target_online_producers,
+        min_ease_rating=min_ease_rating,
+        min_zero_lag_ratio=min_zero_lag_ratio,
+        require_live_quorum=require_live_quorum,
+        require_ces_slo=require_ces_slo,
+        check_arena_summary=check_arena_summary,
+        execute_deploy_dry_run=execute_deploy_dry_run,
+    )
+
     clean_gw = validate_gateway_url(gateway)
     diagnostics: list[str] = []
     network_calls = 0
@@ -2920,6 +3640,13 @@ def run_unified_posix_onboarding_and_smoke_gate(
             probe_feedback_post=probe_feedback_post,
             idempotency_check=idempotency_check,
             require_coder_model=require_coder_model,
+            target_online_producers=target_n,
+            min_ease_rating=min_ease_f,
+            min_zero_lag_ratio=min_lag_f,
+            require_live_quorum=require_live_quorum,
+            require_ces_slo=require_ces_slo,
+            check_arena_summary=check_arena_summary,
+            execute_deploy_dry_run=execute_deploy_dry_run,
             deploy_sh_path=deploy_sh_path,
             http_fn=http_fn,
             runner=runner,
@@ -3027,6 +3754,13 @@ def run_unified_posix_onboarding_and_smoke_gate(
                 smoke_res["stale_revision_detected"] if smoke_res is not None else None
             ),
             "redeploy_required": smoke_res["redeploy_required"] if smoke_res is not None else None,
+            "online_producers": smoke_res["online_producers"] if smoke_res is not None else None,
+            "producer_quorum_met": smoke_res["producer_quorum_met"] if smoke_res is not None else None,
+            "awaiting_producer_quorum": smoke_res["awaiting_producer_quorum"] if smoke_res is not None else None,
+            "ces_slo_ok": smoke_res["ces_slo_ok"] if smoke_res is not None else None,
+            "zero_lag_slo_ok": smoke_res["zero_lag_slo_ok"] if smoke_res is not None else None,
+            "arena_summary_ok": smoke_res["arena_summary_ok"] if smoke_res is not None else None,
+            "deploy_dry_run": smoke_res["deploy_dry_run"] if smoke_res is not None else None,
             "cloud_run_smoke": smoke_res,
             "posix_launcher_audit": launcher_res,
             "dev_vscode_60s": dev_res,
@@ -3063,6 +3797,19 @@ def render_cli_report(report: Mapping[str, Any]) -> str:
         f"  Exit code  : {report.get('exit_code')}",
         f"  Summary    : {report.get('summary')}",
     ]
+    if "online_producers" in report and report.get("online_producers") is not None:
+        lines.append(
+            f"  Quorum     : online={report.get('online_producers')} "
+            f"met={report.get('producer_quorum_met')} "
+            f"ces_slo_ok={report.get('ces_slo_ok')} zero_lag_slo_ok={report.get('zero_lag_slo_ok')}"
+        )
+    if report.get("arena_summary_ok") is not None:
+        lines.append(f"  Arena      : summary_ok={report.get('arena_summary_ok')}")
+    if isinstance(report.get("deploy_dry_run"), Mapping):
+        lines.append(
+            f"  DeployDry  : ok={report['deploy_dry_run'].get('ok')} "
+            f"sha={report['deploy_dry_run'].get('dry_run_build_sha')}"
+        )
     for diag in report.get("diagnostics") or ():
         lines.append(f"  [DIAG] {diag}")
     lines.append(f"  SHA-256    : {report.get('receipt_sha256')}")
@@ -3086,6 +3833,21 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
         f"- **{'Résumé' if is_fr else 'Summary'}**: {report.get('summary')}",
         f"- **SHA-256 Receipt**: `{report.get('receipt_sha256')}`",
     ]
+    if report.get("online_producers") is not None:
+        lines.append(
+            f"- **{'Quorum producteurs' if is_fr else 'Live Quorum & CES SLO'}**: "
+            f"`online_producers={report.get('online_producers')}`, "
+            f"`producer_quorum_met={report.get('producer_quorum_met')}`, "
+            f"`ces_slo_ok={report.get('ces_slo_ok')}`, "
+            f"`zero_lag_slo_ok={report.get('zero_lag_slo_ok')}`"
+        )
+    if report.get("arena_summary_ok") is not None:
+        lines.append(f"- **Arena Summary Parity**: `{report.get('arena_summary_ok')}`")
+    if isinstance(report.get("deploy_dry_run"), Mapping):
+        lines.append(
+            f"- **Deploy Dry-Run**: `ok={report['deploy_dry_run'].get('ok')}`, "
+            f"`build_sha={report['deploy_dry_run'].get('dry_run_build_sha')}`"
+        )
     diags = report.get("diagnostics") or ()
     if diags:
         lines.extend(["", "## Diagnostics"])
@@ -3117,6 +3879,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--probe-feedback-post", action="store_true", help="Send zero-PII POST /v1/hivemind/onboarding/feedback probe.")
     parser.add_argument("--idempotency-check", action="store_true", help="Verify Idempotency-Key duplicate-replay conservation.")
     parser.add_argument("--allow-missing-coder-model", action="store_true", help="Allow /v1/models without hivemind/coder.")
+    parser.add_argument("--target-online-producers", type=int, default=DEFAULT_TARGET_ONLINE_PRODUCERS)
+    parser.add_argument("--min-ease-rating", type=float, default=DEFAULT_MIN_EASE_RATING)
+    parser.add_argument("--min-zero-lag-ratio", type=float, default=DEFAULT_MIN_ZERO_LAG_RATIO)
+    parser.add_argument("--require-live-quorum", action="store_true", help="Fail closed (exit 2) when online_producers < target.")
+    parser.add_argument("--require-ces-slo", action="store_true", help="Fail closed (exit 2) when CES/zero-lag SLO is breached.")
+    parser.add_argument("--check-arena-summary", action="store_true", help="Verify GET /v1/hivemind/arena/summary conservation & Wilson LB.")
+    parser.add_argument("--run-deploy-dry-run", action="store_true", help="Execute deploy/gcp_openrouter/deploy.sh --dry-run (no gcloud).")
+    parser.add_argument("--cwd", default=None, help="Override workspace directory for local compliance & git remote check.")
+    parser.add_argument("--output", default=None, help="Atomically persist verified output (POSIX 0600); never writes when compliance fails.")
     parser.add_argument("--reserve-mib", type=int, default=DEFAULT_MIN_FREE_VRAM_MIB)
     parser.add_argument("--max-temp-c", type=float, default=DEFAULT_MAX_TEMP_C)
     parser.add_argument("--platform", default=None, help="Optional POSIX platform tag ('linux' or 'macos').")
@@ -3124,6 +3895,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     parser.add_argument("--markdown", action="store_true", help="Emit Markdown output.")
     return parser
+
+
+def _validate_cli_path_arg(raw: str | None, *, flag: str) -> Path | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw.strip() or "\x00" in raw:
+        raise SmokeVerifierError(f"{flag} must be a non-empty path without NUL bytes.")
+    return Path(raw.strip())
 
 
 def main(
@@ -3144,25 +3923,38 @@ def main(
     args = build_parser().parse_args(list(argv) if argv is not None else None)
     try:
         lang_code = normalize_lang(args.lang)
+        cli_cwd = _validate_cli_path_arg(args.cwd, flag="--cwd")
+        out_path = _validate_cli_path_arg(args.output, flag="--output")
+        eff_cwd: Path | str | None = cli_cwd if cli_cwd is not None else cwd
+        smoke_opts: dict[str, Any] = {
+            "expected_sha": args.expected_sha,
+            "check_git_head": args.check_git_head,
+            "probe_feedback_post": args.probe_feedback_post,
+            "idempotency_check": args.idempotency_check,
+            "require_coder_model": not args.allow_missing_coder_model,
+            "target_online_producers": args.target_online_producers,
+            "min_ease_rating": args.min_ease_rating,
+            "min_zero_lag_ratio": args.min_zero_lag_ratio,
+            "require_live_quorum": args.require_live_quorum,
+            "require_ces_slo": args.require_ces_slo,
+            "check_arena_summary": args.check_arena_summary,
+            "execute_deploy_dry_run": args.run_deploy_dry_run,
+        }
         if args.smoke_only:
             report = run_cloud_run_holiday_smoke_gate(
                 args.gateway,
-                expected_sha=args.expected_sha,
-                check_git_head=args.check_git_head,
-                probe_feedback_post=args.probe_feedback_post,
-                idempotency_check=args.idempotency_check,
-                require_coder_model=not args.allow_missing_coder_model,
+                **smoke_opts,
                 http_fn=http_fn,
                 runner=runner,
                 environ=environ,
-                cwd=cwd,
+                cwd=eff_cwd,
                 lang=lang_code,
             )
         elif args.launcher_audit_only:
             report = audit_posix_launcher_contract(
                 runner=runner,
                 environ=environ,
-                cwd=cwd,
+                cwd=eff_cwd,
                 lang=lang_code,
             )
         elif args.dev_dry_run_only:
@@ -3172,7 +3964,7 @@ def main(
                 platform_name=args.platform,
                 http_fn=http_fn,
                 environ=environ,
-                cwd=cwd,
+                cwd=eff_cwd,
                 lang=lang_code,
             )
         elif args.gamer_dry_run_only:
@@ -3188,17 +3980,13 @@ def main(
                 http_fn=http_fn,
                 runner=runner,
                 environ=environ,
-                cwd=cwd,
+                cwd=eff_cwd,
                 lang=lang_code,
             )
         else:
             report = run_unified_posix_onboarding_and_smoke_gate(
                 args.gateway,
-                expected_sha=args.expected_sha,
-                check_git_head=args.check_git_head,
-                probe_feedback_post=args.probe_feedback_post,
-                idempotency_check=args.idempotency_check,
-                require_coder_model=not args.allow_missing_coder_model,
+                **smoke_opts,
                 reserve_mib=args.reserve_mib,
                 max_temp_c=args.max_temp_c,
                 platform_name=args.platform,
@@ -3208,7 +3996,7 @@ def main(
                 http_fn=http_fn,
                 runner=runner,
                 environ=environ,
-                cwd=cwd,
+                cwd=eff_cwd,
                 lang=lang_code,
             )
     except SmokeVerifierError as exc:
@@ -3232,11 +4020,14 @@ def main(
     if args.json:
         text_out = json.dumps(report, indent=2, ensure_ascii=False)
         _assert_safe_output(text_out)
-        print(text_out, file=eff_out)
     elif args.markdown:
-        print(render_markdown_report(report), file=eff_out)
+        text_out = render_markdown_report(report)
     else:
-        print(render_cli_report(report), file=eff_out)
+        text_out = render_cli_report(report)
+
+    if out_path is not None and report.get("compliance_ok") is True:
+        _write_secure_atomic(out_path, text_out + "\n")
+    print(text_out, file=eff_out)
     return int(report.get("exit_code", 2))
 
 

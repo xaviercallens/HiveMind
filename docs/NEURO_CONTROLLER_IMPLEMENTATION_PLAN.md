@@ -86,7 +86,7 @@ Each NeuroController improvement slice progresses through five deterministic loc
 
 ---
 
-## 3. Delivered Status of Prior Merged Slices (`NEURAL-CTRL-DYN-38`..`47`)
+## 3. Delivered Status of Prior Merged Slices (`NEURAL-CTRL-DYN-38`..`48`)
 
 - **`NEURAL-CTRL-DYN-38` (`#1040`):** `prefix_cached_causal_attribution.py` (`99%` standalone coverage).
 - **`NEURAL-CTRL-DYN-39` (`#1043`):** `domain_matched_moe_arm_composer.py` (`99%` standalone coverage).
@@ -98,7 +98,7 @@ Each NeuroController improvement slice progresses through five deterministic loc
 - **`NEURAL-CTRL-DYN-45` (Gen-3 Direction `D3`, Merged `#1062`):** [`src/hivemind/swarm/optimal_transport_moe_arm_fuser.py`](../src/hivemind/swarm/optimal_transport_moe_arm_fuser.py) + [`tests/test_optimal_transport_moe_arm_fuser_scenarios.py`](../tests/test_optimal_transport_moe_arm_fuser_scenarios.py) (`O(E^3)` Hungarian + Orthogonal Procrustes cross-arm MoE fuser).
 - **`NEURAL-CTRL-DYN-46` (Gen-3 Direction `D4`, Merged `#1066`):** [`src/hivemind/swarm/alveole_mitosis_hessian_nf4_exporter.py`](../src/hivemind/swarm/alveole_mitosis_hessian_nf4_exporter.py) + [`tests/test_alveole_mitosis_hessian_nf4_exporter_scenarios.py`](../tests/test_alveole_mitosis_hessian_nf4_exporter_scenarios.py) (Dynamic *Alvéole* Mitosis corruptor recycler & diagonal prose-Hessian 4-bit NF4 edge exporter).
 - **`NEURAL-CTRL-DYN-47` (Gen-3 Direction `D5`, Merged `#1069`):** [`src/hivemind/swarm/zk_wsp_federated_hive_verifier.py`](../src/hivemind/swarm/zk_wsp_federated_hive_verifier.py) + [`tests/test_zk_wsp_federated_hive_verifier_scenarios.py`](../tests/test_zk_wsp_federated_hive_verifier_scenarios.py) (Proof-carrying `ZK-WSP` subspace spot-checks, Lean 4 theorem attestation, and Multi-Krum multi-hive federation).
-- **`NEURAL-CTRL-DYN-48` (Empirical-Bayes James-Stein Spectral-Shrinkage Surgeon, Merged `#1073`):** [`src/hivemind/swarm/james_stein_spectral_norm_surgeon.py`](../src/hivemind/swarm/james_stein_spectral_norm_surgeon.py) + [`tests/test_james_stein_spectral_norm_surgeon_scenarios.py`](../tests/test_james_stein_spectral_norm_surgeon_scenarios.py) (`99.08%` standalone coverage — probe-DOF / spectral-anisotropy / massive-activation guard, top-`k` James-Stein `ker(G_D0)` Fisher-Norm shrinkage, 1-DOF folded-tau fallback, and ANSE atomic bitwise rollback).
+- **`NEURAL-CTRL-DYN-48` (Empirical-Bayes James-Stein Spectral-Shrinkage Surgeon, Merged `#1073`, grounded in `PILOT9`, `PILOT12`, and `PILOT14`):** [`src/hivemind/swarm/james_stein_spectral_norm_surgeon.py`](../src/hivemind/swarm/james_stein_spectral_norm_surgeon.py) + [`tests/test_james_stein_spectral_norm_surgeon_scenarios.py`](../tests/test_james_stein_spectral_norm_surgeon_scenarios.py) (`99.08%` standalone coverage — probe-DOF / spectral-anisotropy / massive-activation guard, top-`k` James-Stein `ker(G_D0)` Fisher-Norm shrinkage, 1-DOF folded-tau fallback, and ANSE atomic bitwise rollback).
 
 ---
 

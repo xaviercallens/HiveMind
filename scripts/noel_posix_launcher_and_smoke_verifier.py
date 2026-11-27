@@ -79,6 +79,7 @@ DEFAULT_GATEWAY = "https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app"
 HTTP_TIMEOUT_S = 5.0
 MAX_HTTP_BODY_BYTES = 4 * 1024 * 1024
 SUBPROCESS_TIMEOUT_S = 5.0
+PWSH_SUBPROCESS_TIMEOUT_S = 25.0
 DEV_VSCODE_SLO_SECONDS = 60.0
 POSIX_ONBOARD_SLO_SECONDS = 300.0
 DEFAULT_YIELD_BUDGET_MS = 1500.0
@@ -2884,10 +2885,13 @@ def audit_posix_launcher_contract(
                 "-DryRun",
                 "-Json",
             ],
-            SUBPROCESS_TIMEOUT_S,
+            PWSH_SUBPROCESS_TIMEOUT_S,
             environ=environ,
         )
-        parsed_pw = _parse_json_safe(out_pw) if rc_pw == 0 else {}
+        raw_pw = out_pw.strip()
+        if rc_pw == 0 and raw_pw and not raw_pw.startswith("{") and "{" in raw_pw:
+            raw_pw = raw_pw[raw_pw.find("{") :]
+        parsed_pw = _parse_json_safe(raw_pw) if rc_pw == 0 and raw_pw else {}
         pwsh_dry_run_ok = bool(
             rc_pw == 0
             and parsed_pw.get("dry_run") is True

@@ -716,6 +716,78 @@ def test_s2_pilot5_cross_arm_rescue_beats_naive_graft_and_naive_avg() -> None:
         assert rep["max_p0_leak_after"] <= 1e-6
 
 
+def test_s2b_procrustes_fullseq_probe_invariant_to_svd_nullspace_gauge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """(S2b) Full-sequence Procrustes capture makes PILOT5 fusion invariant to LAPACK SVD nullspace gauge."""
+    orig_svd = torch.linalg.svd
+    cfg = OptimalTransportMoEFuserConfig(
+        alignment_mode="hungarian_procrustes_p0_synergy",
+        orthogonal_synergy_scale=0.90,
+        score_from=8,
+        batch_size=8,
+        inplace=False,
+    )
+    baseline_fix = _build_pilot5_cross_arm_fixture(seed=20264520, rotate_arm_b=True)
+    _, ref_receipt = execute_verified_ot_moe_arm_fusion(
+        baseline_fix["arm_a"],
+        baseline_fix["arm_b"],
+        calibration_chunks=baseline_fix["probe_chunks"],
+        eval_chunks=baseline_fix["eval_chunks"],
+        base_model=baseline_fix["base_model"],
+        config=cfg,
+    )
+    assert ref_receipt["status"] == "ACCEPTED"
+
+    for trial_seed in (101, 202, 303):
+        gen = torch.Generator(device="cpu").manual_seed(trial_seed)
+
+        def _gauge_rotated_svd(
+            mat: torch.Tensor,
+            *args: Any,
+            _gen: torch.Generator = gen,
+            **kwargs: Any,
+        ) -> Any:
+            u_m, s_m, vh_m = orig_svd(mat, *args, **kwargs)
+            null_idx = (s_m < 1e-7).nonzero(as_tuple=False).flatten()
+            if null_idx.numel() >= 1:
+                k = int(null_idx.numel())
+                q1, _ = torch.linalg.qr(torch.randn((k, k), generator=_gen, dtype=u_m.dtype))
+                q2, _ = torch.linalg.qr(torch.randn((k, k), generator=_gen, dtype=vh_m.dtype))
+                u_m = u_m.clone()
+                vh_m = vh_m.clone()
+                u_m[:, null_idx] = u_m[:, null_idx] @ q1
+                vh_m[null_idx, :] = q2 @ vh_m[null_idx, :]
+            return u_m, s_m, vh_m
+
+        monkeypatch.setattr(torch.linalg, "svd", _gauge_rotated_svd)
+        try:
+            fix = _build_pilot5_cross_arm_fixture(seed=20264520, rotate_arm_b=True)
+            _, rec = execute_verified_ot_moe_arm_fusion(
+                fix["arm_a"],
+                fix["arm_b"],
+                calibration_chunks=fix["probe_chunks"],
+                eval_chunks=fix["eval_chunks"],
+                base_model=fix["base_model"],
+                config=cfg,
+            )
+        finally:
+            monkeypatch.setattr(torch.linalg, "svd", orig_svd)
+
+        assert rec["status"] == "ACCEPTED"
+        assert rec["guard_ok"] is True
+        assert math.isclose(
+            float(rec["delta_e_vs_arm_a"]),
+            float(ref_receipt["delta_e_vs_arm_a"]),
+            abs_tol=1e-5,
+        )
+        assert math.isclose(
+            float(rec["delta_e_vs_arm_b"]),
+            float(ref_receipt["delta_e_vs_arm_b"]),
+            abs_tol=1e-5,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Scenario S3: CrowdFineGrainedMoEMLP & HF-Style MoE Modes + Inplace Semantics
 # ---------------------------------------------------------------------------

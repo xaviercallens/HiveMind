@@ -1273,11 +1273,13 @@ def execute_verified_ot_moe_arm_fusion(
         eval_b = _score_domain_nll_vs_ref(ref_nll, nll_b, cfg=cfg)
 
         if ids_cal is not None:
+            # Capture full calibration sequence (score_from=0) so Procrustes cross-covariance
+            # X_b^T X_a spans the full active subspace rather than collapsing onto narrow target tokens.
             probe_a, _ = _capture_mlp_inputs_and_pre_ln(
-                work_model, layers_a, ids_cal, score_from=cfg.score_from, batch_size=cfg.batch_size
+                work_model, layers_a, ids_cal, score_from=0, batch_size=cfg.batch_size
             )
             probe_b, _ = _capture_mlp_inputs_and_pre_ln(
-                arm_b_model, layers_b, ids_cal, score_from=cfg.score_from, batch_size=cfg.batch_size
+                arm_b_model, layers_b, ids_cal, score_from=0, batch_size=cfg.batch_size
             )
         else:
             assert acts_probe_a is not None

@@ -509,7 +509,10 @@ def test_01_compliance_headers_stdlib_lateral_zerostub_static_and_safety_helpers
         readiness_gate.default_subprocess_runner([], 1.0)
     with pytest.raises(readiness_gate.ReadinessGateError):
         readiness_gate.default_subprocess_runner(["gcloud", "run", "services"], 1.0)
-    assert readiness_gate.load_scale_readiness_modules() == MODULES
+    loaded_a = readiness_gate.load_scale_readiness_modules()
+    loaded_b = readiness_gate.load_scale_readiness_modules()
+    assert loaded_a == loaded_b
+    assert Path(str(loaded_a.vscode_autoconfig.__file__)).resolve() == Path(str(MODULES.vscode_autoconfig.__file__)).resolve()
     with pytest.raises(readiness_gate.ReadinessGateError):
         readiness_gate._load_or_reuse_script_module("missing_dyn39", tmp_path / "absent.py")
 
